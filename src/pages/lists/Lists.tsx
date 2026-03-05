@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Eye, Pencil, Trash2, ToggleLeft, ToggleRight, List } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -7,6 +8,7 @@ import { Badge } from '../../components/ui/Badge'
 import { listService } from '../../services/list.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
+import { ListEditModal } from './ListEditModal'
 
 interface ListItem {
   id: number
@@ -28,6 +30,7 @@ export function Lists() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
+  const [editingListId, setEditingListId] = useState<number | null>(null)
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, campaignId, status }: { id: number; campaignId: number; status: number }) =>
@@ -116,7 +119,7 @@ export function Lists() {
               <Eye size={13} />
             </button>
             <button
-              onClick={() => navigate(`/lists/${id}/edit`)}
+              onClick={() => setEditingListId(id)}
               className="btn-ghost btn-sm p-1.5" title="Edit"
             >
               <Pencil size={13} />
@@ -145,6 +148,13 @@ export function Lists() {
 
   return (
     <div className="space-y-5">
+      {editingListId !== null && (
+        <ListEditModal
+          listId={editingListId}
+          onClose={() => setEditingListId(null)}
+        />
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Lists</h1>
         <p className="page-subtitle">Manage your lead lists</p>

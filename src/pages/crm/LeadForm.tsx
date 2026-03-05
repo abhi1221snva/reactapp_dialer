@@ -95,7 +95,8 @@ export function LeadForm() {
   if (isEdit && loadingExisting) return <PageLoader />
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="w-full space-y-5">
+      {/* Page Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/crm')} className="btn-ghost p-2 rounded-lg">
           <ArrowLeft size={18} />
@@ -106,98 +107,114 @@ export function LeadForm() {
         </div>
       </div>
 
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Contact Info</h3>
+      {/* Top row: Contact Info + Location side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">First Name</label>
-            <input className="input" value={form.first_name}
-              onChange={e => set('first_name', e.target.value)} placeholder="John" />
+        {/* Contact Info */}
+        <div className="card space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">Contact Info</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Personal and contact details</p>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="label">First Name</label>
+              <input className="input" value={form.first_name}
+                onChange={e => set('first_name', e.target.value)} placeholder="John" />
+            </div>
+            <div className="form-group">
+              <label className="label">Last Name</label>
+              <input className="input" value={form.last_name}
+                onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
+            </div>
+          </div>
+
           <div className="form-group">
-            <label className="label">Last Name</label>
-            <input className="input" value={form.last_name}
-              onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
+            <label className="label">Phone Number <span className="text-red-500">*</span></label>
+            <input className="input" value={form.phone_number}
+              onChange={e => set('phone_number', e.target.value)} placeholder="+1XXXXXXXXXX" required />
+          </div>
+
+          <div className="form-group">
+            <label className="label">Email</label>
+            <input type="email" className="input" value={form.email}
+              onChange={e => set('email', e.target.value)} placeholder="john@example.com" />
+          </div>
+
+          <div className="form-group">
+            <label className="label">Company</label>
+            <input className="input" value={form.company_name}
+              onChange={e => set('company_name', e.target.value)} placeholder="ACME Corp" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="label">Gender</label>
+              <select className="input" value={form.gender} onChange={e => set('gender', e.target.value)}>
+                <option value="">-- Select --</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="label">Date of Birth</label>
+              <input type="date" className="input" value={form.dob}
+                onChange={e => set('dob', e.target.value)} />
+            </div>
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="label">Phone Number *</label>
-          <input className="input" value={form.phone_number}
-            onChange={e => set('phone_number', e.target.value)} placeholder="+1XXXXXXXXXX" required />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Email</label>
-          <input type="email" className="input" value={form.email}
-            onChange={e => set('email', e.target.value)} placeholder="john@example.com" />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Company</label>
-          <input className="input" value={form.company_name}
-            onChange={e => set('company_name', e.target.value)} placeholder="ACME Corp" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">Gender</label>
-            <select className="input" value={form.gender} onChange={e => set('gender', e.target.value)}>
-              <option value="">-- Select --</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
+        {/* Location */}
+        <div className="card space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">Location</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Address and geographic information</p>
           </div>
+
           <div className="form-group">
-            <label className="label">Date of Birth</label>
-            <input type="date" className="input" value={form.dob}
-              onChange={e => set('dob', e.target.value)} />
+            <label className="label">Address</label>
+            <input className="input" value={form.address}
+              onChange={e => set('address', e.target.value)} placeholder="123 Main St" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="label">City</label>
+              <input className="input" value={form.city}
+                onChange={e => set('city', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="label">State</label>
+              <input className="input" value={form.state}
+                onChange={e => set('state', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="label">Country</label>
+              <input className="input" value={form.country}
+                onChange={e => set('country', e.target.value)} placeholder="US" />
+            </div>
+            <div className="form-group">
+              <label className="label">ZIP Code</label>
+              <input className="input" value={form.zip}
+                onChange={e => set('zip', e.target.value)} />
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Lead Details — full width */}
       <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Location</h3>
-
-        <div className="form-group">
-          <label className="label">Address</label>
-          <input className="input" value={form.address}
-            onChange={e => set('address', e.target.value)} placeholder="123 Main St" />
+        <div className="border-b border-slate-100 pb-3">
+          <h3 className="font-semibold text-slate-900">Lead Details</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Status, source and additional notes</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">City</label>
-            <input className="input" value={form.city}
-              onChange={e => set('city', e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="label">State</label>
-            <input className="input" value={form.state}
-              onChange={e => set('state', e.target.value)} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">Country</label>
-            <input className="input" value={form.country}
-              onChange={e => set('country', e.target.value)} placeholder="US" />
-          </div>
-          <div className="form-group">
-            <label className="label">ZIP Code</label>
-            <input className="input" value={form.zip}
-              onChange={e => set('zip', e.target.value)} />
-          </div>
-        </div>
-      </div>
-
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Lead Details</h3>
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="form-group">
             <label className="label">Lead Status</label>
             <select className="input" value={form.lead_status} onChange={e => set('lead_status', e.target.value)}>

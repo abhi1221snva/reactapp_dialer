@@ -85,7 +85,8 @@ export function DidForm() {
   if (isEdit && loadingExisting) return <PageLoader />
 
   return (
-    <div className="max-w-xl mx-auto space-y-5">
+    <div className="w-full space-y-5">
+      {/* Page Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/dids')} className="btn-ghost p-2 rounded-lg">
           <ArrowLeft size={18} />
@@ -96,98 +97,116 @@ export function DidForm() {
         </div>
       </div>
 
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Phone Number</h3>
+      {/* Top row: Phone Number + Routing side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        <div className="form-group">
-          <label className="label">Phone Number (CLI) *</label>
-          <input className="input font-mono" value={form.cli}
-            onChange={e => set('cli', e.target.value)}
-            placeholder="+1XXXXXXXXXX" disabled={isEdit} />
-          {isEdit && <p className="text-xs text-slate-400 mt-1">Phone number cannot be changed after creation</p>}
-        </div>
+        {/* Phone Number */}
+        <div className="card space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">Phone Number</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Number and identification details</p>
+          </div>
 
-        <div className="form-group">
-          <label className="label">CNAM (Caller ID Name)</label>
-          <input className="input" value={form.cnam}
-            onChange={e => set('cnam', e.target.value)}
-            placeholder="Company Name" />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Operator / Provider</label>
-          <select className="input" value={form.operator} onChange={e => set('operator', e.target.value)}>
-            <option value="">-- Select Operator --</option>
-            {OPERATORS.map(op => (
-              <option key={op} value={op} className="capitalize">{op}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Routing</h3>
-
-        <div className="form-group">
-          <label className="label">Destination Type</label>
-          <select className="input" value={form.dest_type} onChange={e => set('dest_type', e.target.value)}>
-            {DEST_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-          </select>
-        </div>
-
-        {form.dest_type === 'extension' && (
           <div className="form-group">
-            <label className="label">Extension</label>
-            <select className="input" value={form.extension} onChange={e => set('extension', e.target.value)}>
-              <option value="">-- Select Extension --</option>
-              {extensions.map((ext: { id: number; extension: string; first_name?: string; last_name?: string }) => {
-                const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
-                return (
-                  <option key={ext.id} value={ext.extension}>
-                    {ext.extension}{name ? ` (${name})` : ''}
-                  </option>
-                )
-              })}
+            <label className="label">Phone Number (CLI) <span className="text-red-500">*</span></label>
+            <input className="input font-mono" value={form.cli}
+              onChange={e => set('cli', e.target.value)}
+              placeholder="+1XXXXXXXXXX" disabled={isEdit} />
+            {isEdit && <p className="text-xs text-slate-400 mt-1">Phone number cannot be changed after creation</p>}
+          </div>
+
+          <div className="form-group">
+            <label className="label">CNAM (Caller ID Name)</label>
+            <input className="input" value={form.cnam}
+              onChange={e => set('cnam', e.target.value)}
+              placeholder="Company Name" />
+          </div>
+
+          <div className="form-group">
+            <label className="label">Operator / Provider</label>
+            <select className="input" value={form.operator} onChange={e => set('operator', e.target.value)}>
+              <option value="">-- Select Operator --</option>
+              {OPERATORS.map(op => (
+                <option key={op} value={op} className="capitalize">{op}</option>
+              ))}
             </select>
           </div>
-        )}
+        </div>
 
-        {form.dest_type === 'external' && (
-          <div className="form-group">
-            <label className="label">Forward Number</label>
-            <input className="input font-mono" value={form.forward_number}
-              onChange={e => set('forward_number', e.target.value)}
-              placeholder="+1XXXXXXXXXX" />
+        {/* Routing */}
+        <div className="card space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">Routing</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Inbound call routing configuration</p>
           </div>
-        )}
+
+          <div className="form-group">
+            <label className="label">Destination Type</label>
+            <select className="input" value={form.dest_type} onChange={e => set('dest_type', e.target.value)}>
+              {DEST_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+          </div>
+
+          {form.dest_type === 'extension' && (
+            <div className="form-group">
+              <label className="label">Extension</label>
+              <select className="input" value={form.extension} onChange={e => set('extension', e.target.value)}>
+                <option value="">-- Select Extension --</option>
+                {extensions.map((ext: { id: number; extension: string; first_name?: string; last_name?: string }) => {
+                  const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
+                  return (
+                    <option key={ext.id} value={ext.extension}>
+                      {ext.extension}{name ? ` (${name})` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+          )}
+
+          {form.dest_type === 'external' && (
+            <div className="form-group">
+              <label className="label">Forward Number</label>
+              <input className="input font-mono" value={form.forward_number}
+                onChange={e => set('forward_number', e.target.value)}
+                placeholder="+1XXXXXXXXXX" />
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Options — full width */}
       <div className="card space-y-4">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Options</h3>
+        <div className="border-b border-slate-100 pb-3">
+          <h3 className="font-semibold text-slate-900">Options</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Additional settings for this DID</p>
+        </div>
 
-        <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
-          Boolean(form.sms) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-        }`}>
-          <input type="checkbox" checked={Boolean(form.sms)}
-            onChange={e => set('sms', e.target.checked ? 1 : 0)}
-            className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0" />
-          <div>
-            <p className={`text-sm font-semibold ${Boolean(form.sms) ? 'text-indigo-700' : 'text-slate-700'}`}>Enable SMS</p>
-            <p className="text-xs text-slate-400">Allow sending and receiving SMS on this number</p>
-          </div>
-        </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
+            Boolean(form.sms) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
+          }`}>
+            <input type="checkbox" checked={Boolean(form.sms)}
+              onChange={e => set('sms', e.target.checked ? 1 : 0)}
+              className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0" />
+            <div>
+              <p className={`text-sm font-semibold ${Boolean(form.sms) ? 'text-indigo-700' : 'text-slate-700'}`}>Enable SMS</p>
+              <p className="text-xs text-slate-400">Allow sending and receiving SMS on this number</p>
+            </div>
+          </label>
 
-        <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
-          Boolean(form.default_did) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-        }`}>
-          <input type="checkbox" checked={Boolean(form.default_did)}
-            onChange={e => set('default_did', e.target.checked ? 1 : 0)}
-            className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0" />
-          <div>
-            <p className={`text-sm font-semibold ${Boolean(form.default_did) ? 'text-indigo-700' : 'text-slate-700'}`}>Set as Default</p>
-            <p className="text-xs text-slate-400">Use this number as the default outbound caller ID</p>
-          </div>
-        </label>
+          <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
+            Boolean(form.default_did) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
+          }`}>
+            <input type="checkbox" checked={Boolean(form.default_did)}
+              onChange={e => set('default_did', e.target.checked ? 1 : 0)}
+              className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0" />
+            <div>
+              <p className={`text-sm font-semibold ${Boolean(form.default_did) ? 'text-indigo-700' : 'text-slate-700'}`}>Set as Default</p>
+              <p className="text-xs text-slate-400">Use this number as the default outbound caller ID</p>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div className="flex gap-3">

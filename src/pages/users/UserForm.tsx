@@ -102,7 +102,8 @@ export function UserForm() {
   if (isEdit && loadingExisting) return <PageLoader />
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="w-full space-y-5">
+      {/* Page Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/users')} className="btn-ghost p-2 rounded-lg">
           <ArrowLeft size={18} />
@@ -113,68 +114,84 @@ export function UserForm() {
         </div>
       </div>
 
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Personal Info</h3>
+      {/* Top row: Personal Info + Dialer Settings side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">First Name *</label>
-            <input className="input" value={form.first_name}
-              onChange={e => set('first_name', e.target.value)} placeholder="John" />
+        {/* Personal Info */}
+        <div className="card space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">Personal Info</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Basic account information</p>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="label">First Name <span className="text-red-500">*</span></label>
+              <input className="input" value={form.first_name}
+                onChange={e => set('first_name', e.target.value)} placeholder="John" />
+            </div>
+            <div className="form-group">
+              <label className="label">Last Name</label>
+              <input className="input" value={form.last_name}
+                onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
+            </div>
+          </div>
+
           <div className="form-group">
-            <label className="label">Last Name</label>
-            <input className="input" value={form.last_name}
-              onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
+            <label className="label">Email <span className="text-red-500">*</span></label>
+            <input type="email" className="input" value={form.email}
+              onChange={e => set('email', e.target.value)} placeholder="user@company.com" />
+          </div>
+
+          <div className="form-group">
+            <label className="label">{isEdit ? 'New Password (leave blank to keep)' : 'Password *'}</label>
+            <input type="password" className="input" value={form.password}
+              onChange={e => set('password', e.target.value)} placeholder="••••••••" />
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="label">Email *</label>
-          <input type="email" className="input" value={form.email}
-            onChange={e => set('email', e.target.value)} placeholder="user@company.com" />
-        </div>
+        {/* Dialer Settings */}
+        <div className="card space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">Dialer Settings</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Phone and dialer configuration</p>
+          </div>
 
-        <div className="form-group">
-          <label className="label">{isEdit ? 'New Password (leave blank to keep)' : 'Password *'}</label>
-          <input type="password" className="input" value={form.password}
-            onChange={e => set('password', e.target.value)} placeholder="••••••••" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="label">Extension</label>
+              <input className="input font-mono" value={form.extension}
+                onChange={e => set('extension', e.target.value)} placeholder="1001" />
+            </div>
+            <div className="form-group">
+              <label className="label">Alt Extension</label>
+              <input className="input font-mono" value={form.alt_extension}
+                onChange={e => set('alt_extension', e.target.value)} placeholder="1002" />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="label">Dialer Mode</label>
+            <select className="input" value={form.dialer_mode} onChange={e => set('dialer_mode', e.target.value)}>
+              {DIALER_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="label">Timezone</label>
+            <select className="input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
+              {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
+      {/* Role & Access — full width */}
       <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Dialer Settings</h3>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">Extension</label>
-            <input className="input font-mono" value={form.extension}
-              onChange={e => set('extension', e.target.value)} placeholder="1001" />
-          </div>
-          <div className="form-group">
-            <label className="label">Alt Extension</label>
-            <input className="input font-mono" value={form.alt_extension}
-              onChange={e => set('alt_extension', e.target.value)} placeholder="1002" />
-          </div>
+        <div className="border-b border-slate-100 pb-3">
+          <h3 className="font-semibold text-slate-900">Role & Access</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Permissions and group assignments</p>
         </div>
-
-        <div className="form-group">
-          <label className="label">Dialer Mode</label>
-          <select className="input" value={form.dialer_mode} onChange={e => set('dialer_mode', e.target.value)}>
-            {DIALER_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label className="label">Timezone</label>
-          <select className="input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
-            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Role & Access</h3>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="form-group">
@@ -198,7 +215,7 @@ export function UserForm() {
         {groups.length > 0 && (
           <div className="form-group">
             <label className="label">Agent Groups</label>
-            <div className="grid grid-cols-2 gap-2 mt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-1">
               {groups.map((g: { id: number; group_name: string }) => {
                 const checked = form.group_id.includes(g.id)
                 return (

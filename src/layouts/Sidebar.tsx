@@ -71,18 +71,13 @@ export function Sidebar() {
   return (
     <div
       className={cn(
-        'relative flex flex-col h-full flex-shrink-0 transition-all duration-300 overflow-hidden bg-slate-900',
+        'relative flex flex-col h-full flex-shrink-0 transition-all duration-300 overflow-hidden bg-white border-r border-slate-200/80',
         sidebarCollapsed ? 'w-[68px]' : 'w-64'
       )}
-      style={{
-        backgroundImage:
-          'radial-gradient(ellipse at 20% 0%, rgba(99,102,241,0.12) 0%, transparent 60%),' +
-          'radial-gradient(ellipse at 80% 100%, rgba(139,92,246,0.08) 0%, transparent 60%)',
-      }}
     >
       {/* Logo */}
       <div className={cn(
-        'flex items-center gap-3 px-4 py-5 border-b border-slate-800/80 flex-shrink-0',
+        'flex items-center gap-3 px-4 py-5 border-b border-slate-200/80 flex-shrink-0',
         sidebarCollapsed && 'justify-center px-2'
       )}>
         <div
@@ -95,14 +90,7 @@ export function Sidebar() {
           <Phone size={17} className="text-white" />
         </div>
         {!sidebarCollapsed && (
-          <span
-            className="font-bold text-[15px] tracking-tight"
-            style={{
-              background: 'linear-gradient(90deg, #e0e7ff 0%, #c4b5fd 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}
-          >
+          <span className="font-bold text-[15px] tracking-tight text-slate-800">
             DialerCRM
           </span>
         )}
@@ -117,11 +105,11 @@ export function Sidebar() {
           return (
             <div key={section.label} className="mb-5">
               {!sidebarCollapsed ? (
-                <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-widest text-slate-500 uppercase select-none">
+                <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-widest text-slate-400 uppercase select-none">
                   {section.label}
                 </p>
               ) : (
-                <div className="mx-auto mb-2 w-6 border-t border-slate-700/60" />
+                <div className="mx-auto mb-2 w-6 border-t border-slate-200" />
               )}
 
               <div className="space-y-0.5">
@@ -135,22 +123,22 @@ export function Sidebar() {
                         'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 outline-none',
                         sidebarCollapsed && 'justify-center px-2',
                         isActive
-                          ? 'bg-indigo-600/15 text-indigo-400'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
                         {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-indigo-500" />
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-indigo-600" />
                         )}
                         <div className="relative flex-shrink-0">
                           <Icon
                             size={18}
                             className={cn(
                               'transition-colors duration-150',
-                              isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-200'
+                              isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-700'
                             )}
                           />
                           {label === 'SMS Center' && unreadSms > 0 && (
@@ -174,17 +162,17 @@ export function Sidebar() {
 
       {/* User footer */}
       {!sidebarCollapsed && user && (
-        <div className="flex-shrink-0 border-t border-slate-800/80 p-3">
+        <div className="flex-shrink-0 border-t border-slate-200 p-3">
           <div className="flex items-center gap-2.5 px-1">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 shadow-md"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 shadow-sm"
               style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
             >
               {initials(user.name)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-slate-200 truncate leading-snug">{user.name}</p>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-500/20 text-indigo-300 leading-none mt-0.5">
+              <p className="text-[13px] font-semibold text-slate-800 truncate leading-snug">{user.name}</p>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-600 leading-none mt-0.5">
                 {getRoleLabel(user.level)}
               </span>
             </div>
@@ -195,7 +183,7 @@ export function Sidebar() {
       {/* Collapse toggle */}
       <button
         onClick={toggleSidebar}
-        className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full flex items-center justify-center bg-slate-800 border border-slate-700 shadow-md text-slate-400 hover:text-white hover:bg-slate-700 hover:border-slate-600 transition-all duration-150"
+        className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full flex items-center justify-center bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-150"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {sidebarCollapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}

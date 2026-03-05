@@ -19,7 +19,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename="/reactappnew">
+      <BrowserRouter basename="/">
         <App />
         <Toaster
           position="top-right"

@@ -77,7 +77,7 @@ export function ListForm() {
   const isValid = form.title.trim() && form.campaign_id && uploadedFile
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="w-full space-y-5">
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/lists')} className="btn-ghost p-2 rounded-lg">
           <ArrowLeft size={18} />
@@ -88,55 +88,64 @@ export function ListForm() {
         </div>
       </div>
 
-      {/* Basic info */}
-      <div className="card space-y-5">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">List Details</h3>
+      {/* Top row: Details + Upload side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        <div className="form-group">
-          <label className="label">List Name *</label>
-          <input
-            className="input"
-            placeholder="e.g. June 2025 Leads"
-            value={form.title}
-            onChange={e => set('title', e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Assign to Campaign *</label>
-          <select
-            className="input"
-            value={form.campaign_id}
-            onChange={e => set('campaign_id', e.target.value)}
-          >
-            <option value="">— Select Campaign —</option>
-            {campaigns.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.title || c.campaign_name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
-          form.duplicate_check ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-        }`}>
-          <input
-            type="checkbox"
-            checked={form.duplicate_check}
-            onChange={e => set('duplicate_check', e.target.checked)}
-            className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0"
-          />
-          <div>
-            <p className={`text-sm font-semibold ${form.duplicate_check ? 'text-indigo-700' : 'text-slate-700'}`}>Duplicate check</p>
-            <p className="text-xs text-slate-400">Skip leads with phone numbers already in the system</p>
+        {/* Basic info */}
+        <div className="card space-y-5">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-semibold text-slate-900">List Details</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Name and campaign assignment</p>
           </div>
-        </label>
-      </div>
+
+          <div className="form-group">
+            <label className="label">List Name <span className="text-red-500">*</span></label>
+            <input
+              className="input"
+              placeholder="e.g. June 2025 Leads"
+              value={form.title}
+              onChange={e => set('title', e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="label">Assign to Campaign <span className="text-red-500">*</span></label>
+            <select
+              className="input"
+              value={form.campaign_id}
+              onChange={e => set('campaign_id', e.target.value)}
+            >
+              <option value="">— Select Campaign —</option>
+              {campaigns.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.title || c.campaign_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
+            form.duplicate_check ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
+          }`}>
+            <input
+              type="checkbox"
+              checked={form.duplicate_check}
+              onChange={e => set('duplicate_check', e.target.checked)}
+              className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0"
+            />
+            <div>
+              <p className={`text-sm font-semibold ${form.duplicate_check ? 'text-indigo-700' : 'text-slate-700'}`}>Duplicate check</p>
+              <p className="text-xs text-slate-400">Skip leads with phone numbers already in the system</p>
+            </div>
+          </label>
+        </div>
 
       {/* File upload */}
       <div className="card space-y-4">
-        <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-3">Upload File</h3>
+        <div className="border-b border-slate-100 pb-3">
+          <h3 className="font-semibold text-slate-900">Upload File</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Supported: .xls, .xlsx, .csv</p>
+        </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 text-sm text-blue-700">
           <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
@@ -187,6 +196,8 @@ export function ListForm() {
           onChange={handleFileInput}
         />
       </div>
+
+      </div>{/* end grid */}
 
       <div className="flex gap-3">
         <button onClick={() => navigate('/lists')} className="btn-outline flex-1">Cancel</button>

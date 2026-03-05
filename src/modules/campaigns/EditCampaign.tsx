@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Radio, Phone, Clock, Settings2, Tag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
@@ -74,130 +74,96 @@ const editCampaignSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.dial_mode === 'super_power_dial' && (!data.group_id || data.group_id === '')) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Agent group is required for Super Power Dial',
-        path: ['group_id'],
-      })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Agent group is required for Super Power Dial', path: ['group_id'] })
     }
     if (data.caller_id === 'custom' && (!data.custom_caller_id || data.custom_caller_id.trim() === '')) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Custom caller ID is required when caller type is Custom',
-        path: ['custom_caller_id'],
-      })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Custom caller ID is required when caller type is Custom', path: ['custom_caller_id'] })
     }
     if (data.time_based_calling === 1) {
-      if (!data.call_time_start) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Start time is required when time-based calling is enabled',
-          path: ['call_time_start'],
-        })
-      }
-      if (!data.call_time_end) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'End time is required when time-based calling is enabled',
-          path: ['call_time_end'],
-        })
-      }
+      if (!data.call_time_start) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Start time is required', path: ['call_time_start'] })
+      if (!data.call_time_end) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'End time is required', path: ['call_time_end'] })
     }
-    if (
-      data.call_ratio &&
-      data.call_ratio.trim() !== '' &&
-      !/^\d+$/.test(data.call_ratio.trim()) &&
-      !/^\d+:\d+$/.test(data.call_ratio.trim())
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Call ratio must be numeric (e.g. 2 or 2:1)',
-        path: ['call_ratio'],
-      })
+    if (data.call_ratio && data.call_ratio.trim() !== '' && !/^\d+$/.test(data.call_ratio.trim()) && !/^\d+:\d+$/.test(data.call_ratio.trim())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Call ratio must be numeric (e.g. 2 or 2:1)', path: ['call_ratio'] })
     }
   })
 
 type EditCampaignFormValues = z.infer<typeof editCampaignSchema>
 
 // ─────────────────────────────────────────────
-//  Helper components
+//  Type for API campaign data
+// ─────────────────────────────────────────────
+interface CampaignApiData {
+  id?: number; title?: string; description?: string; status?: number | string
+  dial_mode?: string; group_id?: number | string | null; call_ratio?: string | null
+  duration?: string | null; automated_duration?: string | null; hopper_mode?: number | null
+  max_lead_temp?: number; min_lead_temp?: number; caller_id?: string
+  custom_caller_id?: number | string | null; country_code?: number | string | null
+  voip_configuration_id?: number | string | null; time_based_calling?: number | string
+  call_time_start?: string | null; call_time_end?: string | null; amd?: string | number
+  amd_drop_action?: number | null; voicedrop_option_user_id?: number | string | null
+  no_agent_available_action?: number | null; redirect_to?: string | null
+  call_transfer?: number | string; percentage_inc_dec?: string | null
+  call_metric?: string | number; send_report?: number | string; api?: number | string
+  disposition?: Array<{ id: number; title: string }>
+}
+
+// ─────────────────────────────────────────────
+//  Sub-components (identical to CreateCampaign)
 // ─────────────────────────────────────────────
 function FieldError({ message }: { message?: string }) {
   if (!message) return null
-  return <p className="mt-1 text-xs text-red-500">{message}</p>
+  return <p className="mt-1 text-[11px] text-red-500">{message}</p>
 }
 
-function SectionHeader({ title, description }: { title: string; description?: string }) {
+function CardSection({
+  icon: Icon, title, description, children, className = '',
+}: {
+  icon: React.ElementType
+  title: string; description?: string; children: React.ReactNode; className?: string
+}) {
   return (
-    <div className="border-b border-slate-100 pb-3 mb-5">
-      <h3 className="font-semibold text-slate-900">{title}</h3>
-      {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+    <div className={`bg-white rounded-2xl border border-slate-200 overflow-hidden ${className}`}
+      style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)' }}>
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+        <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+          <Icon size={14} className="text-indigo-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-slate-800 leading-none">{title}</h3>
+          {description && <p className="text-[11px] text-slate-400 mt-0.5 leading-none">{description}</p>}
+        </div>
+      </div>
+      <div className="p-5">{children}</div>
     </div>
   )
 }
 
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (val: boolean) => void
-}) {
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (val: boolean) => void; label?: string }) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer select-none">
-      <div
+    <div className="flex items-center gap-2.5">
+      <button
+        type="button"
         onClick={() => onChange(!checked)}
-        className={`relative w-10 h-5 rounded-full transition-colors ${
-          checked ? 'bg-indigo-600' : 'bg-slate-200'
-        }`}
+        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-indigo-600' : 'bg-slate-200'}`}
       >
-        <span
-          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </div>
-      <span className="text-sm text-slate-700">{label}</span>
-    </label>
+        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
+      </button>
+      {label && <span className={`text-xs font-medium ${checked ? 'text-indigo-700' : 'text-slate-400'}`}>{label}</span>}
+    </div>
   )
 }
 
-// ─────────────────────────────────────────────
-//  Type for API campaign data
-// ─────────────────────────────────────────────
-interface CampaignApiData {
-  id?: number
-  title?: string
-  description?: string
-  status?: number | string
-  dial_mode?: string
-  group_id?: number | string | null
-  call_ratio?: string | null
-  duration?: string | null
-  automated_duration?: string | null
-  hopper_mode?: number | null
-  max_lead_temp?: number
-  min_lead_temp?: number
-  caller_id?: string
-  custom_caller_id?: number | string | null
-  country_code?: number | string | null
-  voip_configuration_id?: number | string | null
-  time_based_calling?: number | string
-  call_time_start?: string | null
-  call_time_end?: string | null
-  amd?: string | number
-  amd_drop_action?: number | null
-  voicedrop_option_user_id?: number | string | null
-  no_agent_available_action?: number | null
-  redirect_to?: string | null
-  call_transfer?: number | string
-  percentage_inc_dec?: string | null
-  call_metric?: string | number
-  send_report?: number | string
-  api?: number | string
-  disposition?: Array<{ id: number; title: string }>
+function ToggleRow({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (val: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <div className="min-w-0 pr-4">
+        <p className="text-sm font-medium text-slate-700 leading-none">{label}</p>
+        {hint && <p className="text-[11px] text-slate-400 mt-0.5 leading-none">{hint}</p>}
+      </div>
+      <Toggle checked={checked} onChange={onChange} label={checked ? 'On' : 'Off'} />
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────
@@ -209,63 +175,35 @@ export function EditCampaign() {
   const campaignId = Number(id)
 
   const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    setValue,
-    reset,
+    register, handleSubmit, control, watch, setValue, reset,
     formState: { errors, isSubmitting },
   } = useForm<EditCampaignFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(editCampaignSchema) as any,
     defaultValues: {
-      campaign_id: campaignId,
-      title: '',
-      description: '',
-      status: 1,
-      dial_mode: 'power_dial',
-      group_id: '',
-      call_ratio: '',
-      duration: '',
-      automated_duration: '',
-      max_lead_temp: 100,
-      min_lead_temp: 500,
-      caller_id: 'area_code',
-      custom_caller_id: '',
-      country_code: '',
-      voip_configuration_id: '',
-      time_based_calling: 0,
-      call_time_start: '08:00',
-      call_time_end: '20:00',
-      amd: '0',
-      amd_drop_action: null,
-      voicedrop_option_user_id: '',
-      no_agent_available_action: null,
-      redirect_to: '',
-      call_transfer: 0,
-      percentage_inc_dec: '',
-      call_metric: '0',
-      send_report: 0,
-      api: 1,
-      disposition_id: [],
+      campaign_id: campaignId, title: '', description: '', status: 1,
+      dial_mode: 'power_dial', group_id: '', call_ratio: '', duration: '',
+      automated_duration: '', max_lead_temp: 100, min_lead_temp: 500,
+      caller_id: 'area_code', custom_caller_id: '', country_code: '',
+      voip_configuration_id: '', time_based_calling: 0,
+      call_time_start: '08:00', call_time_end: '20:00', amd: '0',
+      amd_drop_action: null, voicedrop_option_user_id: '', no_agent_available_action: null,
+      redirect_to: '', call_transfer: 0, percentage_inc_dec: '', call_metric: '0',
+      send_report: 0, api: 1, disposition_id: [],
     },
   })
 
-  // Watch conditional fields
   const dialMode = watch('dial_mode')
   const callerIdType = watch('caller_id')
   const timeBasedCalling = watch('time_based_calling')
   const amd = watch('amd')
 
-  // Fetch existing campaign data
   const { data: campaignData, isLoading: loadingCampaign } = useQuery({
     queryKey: ['campaign', campaignId],
     queryFn: () => campaignService.getById(campaignId),
     enabled: Boolean(campaignId),
   })
 
-  // Fetch extension groups
   const { data: groupsData } = useQuery({
     queryKey: ['extension-groups'],
     queryFn: () => userService.getGroups(),
@@ -273,7 +211,6 @@ export function EditCampaign() {
   const groups: Array<{ id: number; group_name: string }> =
     (groupsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; group_name: string }> ?? []
 
-  // Fetch users for voicedrop
   const { data: usersData } = useQuery({
     queryKey: ['users-all'],
     queryFn: () => userService.getAll(),
@@ -281,7 +218,6 @@ export function EditCampaign() {
   const users: Array<{ id: number; name?: string; first_name?: string; username?: string }> =
     (usersData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; name?: string; first_name?: string; username?: string }> ?? []
 
-  // Fetch dispositions
   const { data: dispositionsData } = useQuery({
     queryKey: ['dispositions-all'],
     queryFn: () => dispositionService.list({ page: 1, limit: 200, search: '', filters: {} }),
@@ -289,18 +225,11 @@ export function EditCampaign() {
   const dispositions: Array<{ id: number; title: string }> =
     (dispositionsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; title: string }> ?? []
 
-  // Populate form when campaign data loads
   useEffect(() => {
     const raw = (campaignData as { data?: { data?: CampaignApiData } })?.data?.data
     if (!raw) return
-
     const c = raw as CampaignApiData
-
-    // Extract existing disposition IDs from campaign data
-    const existingDispositionIds = Array.isArray(c.disposition)
-      ? c.disposition.map((d) => d.id)
-      : []
-
+    const existingDispositionIds = Array.isArray(c.disposition) ? c.disposition.map(d => d.id) : []
     reset({
       campaign_id: campaignId,
       title: c.title ?? '',
@@ -357,393 +286,277 @@ export function EditCampaign() {
     },
   })
 
-  const onSubmit = (data: EditCampaignFormValues) => {
-    updateMutation.mutate(data)
-  }
+  const onSubmit = (data: EditCampaignFormValues) => updateMutation.mutate(data)
 
   const watchedDispositions = watch('disposition_id') ?? []
   const toggleDisposition = (dispId: number) => {
     const current = watchedDispositions
-    if (current.includes(dispId)) {
-      setValue('disposition_id', current.filter((d) => d !== dispId))
-    } else {
-      setValue('disposition_id', [...current, dispId])
-    }
+    setValue('disposition_id', current.includes(dispId) ? current.filter(d => d !== dispId) : [...current, dispId])
   }
 
   if (loadingCampaign) return <PageLoader />
 
+  const isPending = isSubmitting || updateMutation.isPending
+
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
-      {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/campaigns')}
-          className="btn-ghost p-2 rounded-lg"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="page-title">Edit Campaign</h1>
-          <p className="page-subtitle">Editing campaign #{campaignId}</p>
+    <div className="w-full space-y-4 animate-fadeIn">
+
+      {/* ── Page Header with actions ── */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate('/campaigns')} className="btn-ghost p-2 rounded-lg">
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 leading-none">Edit Campaign</h1>
+            <p className="text-xs text-slate-500 mt-1">Campaign #{campaignId}</p>
+          </div>
         </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        {/* Hidden campaign_id */}
         <input type="hidden" {...register('campaign_id', { valueAsNumber: true })} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-          {/* ── Section 1: General Settings ── */}
-          <div className="card space-y-4 lg:col-span-2">
-            <SectionHeader title="General Settings" description="Basic campaign information" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Title */}
-              <div className="form-group md:col-span-2">
-                <label className="label">Campaign Title <span className="text-red-500">*</span></label>
-                <input
-                  {...register('title')}
-                  className={`input ${errors.title ? 'border-red-400 focus:ring-red-300' : ''}`}
-                  placeholder="e.g. Summer Sales 2025"
-                />
-                <FieldError message={errors.title?.message} />
-              </div>
-
-              {/* Description */}
-              <div className="form-group md:col-span-2">
-                <label className="label">Description</label>
-                <textarea
-                  {...register('description')}
-                  rows={3}
-                  className={`input resize-none ${errors.description ? 'border-red-400' : ''}`}
-                  placeholder="Campaign description..."
-                />
-                <FieldError message={errors.description?.message} />
-              </div>
-
-              {/* Status */}
-              <div className="form-group flex items-center justify-between">
-                <label className="label mb-0">Status (Active)</label>
-                <Controller
-                  name="status"
-                  control={control}
-                  render={({ field }) => (
-                    <Toggle
-                      label={field.value === 1 ? 'Active' : 'Inactive'}
-                      checked={field.value === 1}
-                      onChange={(val) => field.onChange(val ? 1 : 0)}
-                    />
-                  )}
-                />
-              </div>
-
-              {/* Send Report */}
-              <div className="form-group flex items-center justify-between">
-                <label className="label mb-0">Send Report</label>
-                <Controller
-                  name="send_report"
-                  control={control}
-                  render={({ field }) => (
-                    <Toggle
-                      label={field.value === 1 ? 'Enabled' : 'Disabled'}
-                      checked={field.value === 1}
-                      onChange={(val) => field.onChange(val ? 1 : 0)}
-                    />
-                  )}
-                />
-              </div>
+        {/* ── Row 1: Campaign Overview ── */}
+        <CardSection icon={Radio} title="Campaign Overview" description="Name and basic configuration" className="mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="lg:col-span-5 form-group">
+              <label className="label text-xs">Campaign Title <span className="text-red-500">*</span></label>
+              <input {...register('title')} className={`input text-sm py-2 ${errors.title ? 'border-red-400' : ''}`} placeholder="e.g. Summer Sales 2025" />
+              <FieldError message={errors.title?.message} />
             </div>
-          </div>
-
-          {/* ── Section 2: Dialer Settings ── */}
-          <div className="card space-y-4">
-            <SectionHeader title="Dialer Settings" description="Configure dial mode and call behavior" />
-
-            {/* Dial Mode */}
-            <div className="form-group">
-              <label className="label">Dial Mode <span className="text-red-500">*</span></label>
-              <select
-                {...register('dial_mode')}
-                className={`input ${errors.dial_mode ? 'border-red-400' : ''}`}
-              >
-                {DIAL_MODES.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-              <FieldError message={errors.dial_mode?.message} />
+            <div className="lg:col-span-5 form-group">
+              <label className="label text-xs">Description</label>
+              <input {...register('description')} className={`input text-sm py-2 ${errors.description ? 'border-red-400' : ''}`} placeholder="Brief campaign description (optional)" />
+              <FieldError message={errors.description?.message} />
             </div>
-
-            {/* Group ID — required for super_power_dial */}
-            <div className="form-group">
-              <label className="label">
-                Agent Group
-                {dialMode === 'super_power_dial' && <span className="text-red-500"> *</span>}
-              </label>
-              <select
-                {...register('group_id')}
-                className={`input ${errors.group_id ? 'border-red-400' : ''}`}
-              >
-                <option value="">-- Select Group --</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.group_name}</option>
-                ))}
-              </select>
-              <FieldError message={errors.group_id?.message as string} />
-            </div>
-
-            {/* Call Ratio — for predictive_dial */}
-            {dialMode === 'predictive_dial' && (
-              <div className="form-group">
-                <label className="label">Call Ratio</label>
-                <input
-                  {...register('call_ratio')}
-                  className={`input ${errors.call_ratio ? 'border-red-400' : ''}`}
-                  placeholder="e.g. 2 or 2:1"
-                />
-                <FieldError message={errors.call_ratio?.message} />
-              </div>
-            )}
-
-            {/* Duration */}
-            <div className="form-group">
-              <label className="label">Duration</label>
-              <input
-                {...register('duration')}
-                className="input"
-                placeholder="e.g. 60 (seconds)"
-              />
-              <FieldError message={errors.duration?.message} />
-            </div>
-
-            {/* Automated Duration */}
-            <div className="form-group">
-              <label className="label">Automated Duration</label>
-              <input
-                {...register('automated_duration')}
-                className="input"
-                placeholder="e.g. 30 (seconds)"
-              />
-              <FieldError message={errors.automated_duration?.message} />
-            </div>
-
-            {/* Percentage Inc/Dec */}
-            <div className="form-group">
-              <label className="label">Percentage Inc/Dec</label>
-              <input
-                {...register('percentage_inc_dec')}
-                className="input"
-                placeholder="e.g. 10"
-              />
-              <FieldError message={errors.percentage_inc_dec?.message} />
-            </div>
-
-            {/* Lead Temp Range */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="form-group">
-                <label className="label">Max Lead Temp</label>
-                <input
-                  type="number"
-                  {...register('max_lead_temp', { valueAsNumber: true })}
-                  className="input"
-                  min={0}
-                />
-                <FieldError message={errors.max_lead_temp?.message} />
-              </div>
-              <div className="form-group">
-                <label className="label">Min Lead Temp</label>
-                <input
-                  type="number"
-                  {...register('min_lead_temp', { valueAsNumber: true })}
-                  className="input"
-                  min={0}
-                />
-                <FieldError message={errors.min_lead_temp?.message} />
-              </div>
-            </div>
-
-            {/* Hopper Mode */}
-            <div className="form-group">
-              <label className="label">Hopper Mode</label>
-              <select
-                {...register('hopper_mode', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
-                className="input"
-              >
-                <option value="">-- Select --</option>
-                <option value="0">Disabled</option>
-                <option value="1">Enabled</option>
-              </select>
-            </div>
-          </div>
-
-          {/* ── Section 3: Caller ID Settings ── */}
-          <div className="card space-y-4">
-            <SectionHeader title="Caller ID Settings" description="Configure outbound caller identification" />
-
-            {/* Caller ID Type */}
-            <div className="form-group">
-              <label className="label">Caller ID Type <span className="text-red-500">*</span></label>
-              <select
-                {...register('caller_id')}
-                className={`input ${errors.caller_id ? 'border-red-400' : ''}`}
-              >
-                <option value="area_code">Area Code</option>
-                <option value="custom">Custom</option>
-              </select>
-              <FieldError message={errors.caller_id?.message} />
-            </div>
-
-            {/* Custom Caller ID */}
-            {callerIdType === 'custom' && (
-              <div className="form-group">
-                <label className="label">Custom Caller ID <span className="text-red-500">*</span></label>
-                <input
-                  {...register('custom_caller_id')}
-                  className={`input ${errors.custom_caller_id ? 'border-red-400' : ''}`}
-                  placeholder="e.g. 5551234567"
-                  type="tel"
-                />
-                <FieldError message={errors.custom_caller_id?.message} />
-              </div>
-            )}
-
-            {/* Country Code */}
-            <div className="form-group">
-              <label className="label">Country Code</label>
-              <input
-                {...register('country_code')}
-                className="input"
-                placeholder="e.g. 1"
-              />
-              <FieldError message={errors.country_code?.message} />
-            </div>
-
-            {/* VoIP Configuration */}
-            <div className="form-group">
-              <label className="label">VoIP Configuration ID</label>
-              <input
-                {...register('voip_configuration_id')}
-                className="input"
-                placeholder="VoIP config ID"
-                type="number"
-              />
-              <FieldError message={errors.voip_configuration_id?.message as string} />
-            </div>
-
-            {/* Call Transfer */}
-            <div className="form-group flex items-center justify-between">
-              <label className="label mb-0">Call Transfer</label>
-              <Controller
-                name="call_transfer"
-                control={control}
+            <div className="lg:col-span-2 flex flex-col gap-3 justify-center">
+              <Controller name="status" control={control}
                 render={({ field }) => (
-                  <Toggle
-                    label={field.value === 1 ? 'Enabled' : 'Disabled'}
-                    checked={field.value === 1}
-                    onChange={(val) => field.onChange(val ? 1 : 0)}
-                  />
+                  <ToggleRow label="Active" checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} />
+                )}
+              />
+              <Controller name="send_report" control={control}
+                render={({ field }) => (
+                  <ToggleRow label="Send Report" checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} />
                 )}
               />
             </div>
           </div>
+        </CardSection>
 
-          {/* ── Section 4: Time Based Calling ── */}
-          <div className="card space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-semibold text-slate-900">Time Based Calling</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Restrict calls to specific hours</p>
-              </div>
-              <Controller
-                name="time_based_calling"
-                control={control}
-                render={({ field }) => (
-                  <Toggle
-                    label={field.value === 1 ? 'On' : 'Off'}
-                    checked={field.value === 1}
-                    onChange={(val) => field.onChange(val ? 1 : 0)}
-                  />
-                )}
-              />
-            </div>
+        {/* ── Row 2: Three-column grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
 
-            {timeBasedCalling === 1 && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="form-group">
-                  <label className="label">Start Time <span className="text-red-500">*</span></label>
-                  <input
-                    type="time"
-                    {...register('call_time_start')}
-                    className={`input ${errors.call_time_start ? 'border-red-400' : ''}`}
-                  />
-                  <FieldError message={errors.call_time_start?.message} />
-                </div>
-                <div className="form-group">
-                  <label className="label">End Time <span className="text-red-500">*</span></label>
-                  <input
-                    type="time"
-                    {...register('call_time_end')}
-                    className={`input ${errors.call_time_end ? 'border-red-400' : ''}`}
-                  />
-                  <FieldError message={errors.call_time_end?.message} />
-                </div>
-              </div>
-            )}
-
-            {timeBasedCalling === 0 && (
-              <p className="text-sm text-slate-400 text-center py-3">
-                Enable time-based calling to set call hours
-              </p>
-            )}
-          </div>
-
-          {/* ── Section 5: Advanced Settings ── */}
-          <div className="card space-y-4">
-            <SectionHeader title="Advanced Settings" description="AMD, voicemail, and routing options" />
-
-            {/* AMD Toggle */}
-            <div className="form-group flex items-center justify-between">
-              <label className="label mb-0">AMD (Answering Machine Detection)</label>
-              <Controller
-                name="amd"
-                control={control}
-                render={({ field }) => (
-                  <Toggle
-                    label={field.value === '1' ? 'On' : 'Off'}
-                    checked={field.value === '1'}
-                    onChange={(val) => field.onChange(val ? '1' : '0')}
-                  />
-                )}
-              />
-            </div>
-
-            {/* AMD Drop Action */}
-            {amd === '1' && (
+          {/* Dialing Configuration */}
+          <CardSection icon={Phone} title="Dialing" description="Dial mode & call behavior">
+            <div className="space-y-3">
               <div className="form-group">
-                <label className="label">AMD Drop Action</label>
-                <select
-                  {...register('amd_drop_action', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
-                  className="input"
-                >
-                  <option value="">-- Select Action --</option>
-                  {AMD_DROP_ACTIONS.map((a) => (
-                    <option key={a.value} value={a.value}>{a.label}</option>
-                  ))}
+                <label className="label text-xs">Dial Mode <span className="text-red-500">*</span></label>
+                <select {...register('dial_mode')} className={`input text-sm py-2 ${errors.dial_mode ? 'border-red-400' : ''}`}>
+                  {DIAL_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
-                <FieldError message={errors.amd_drop_action?.message} />
+                <FieldError message={errors.dial_mode?.message} />
               </div>
-            )}
 
-            {/* Voicedrop User */}
+              <div className="form-group">
+                <label className="label text-xs">
+                  Agent Group {dialMode === 'super_power_dial' && <span className="text-red-500">*</span>}
+                </label>
+                <select {...register('group_id')} className={`input text-sm py-2 ${errors.group_id ? 'border-red-400' : ''}`}>
+                  <option value="">— None —</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.group_name}</option>)}
+                </select>
+                <FieldError message={errors.group_id?.message as string} />
+              </div>
+
+              {dialMode === 'predictive_dial' && (
+                <div className="form-group">
+                  <label className="label text-xs">Call Ratio</label>
+                  <input {...register('call_ratio')} className={`input text-sm py-2 ${errors.call_ratio ? 'border-red-400' : ''}`} placeholder="e.g. 2:1" />
+                  <FieldError message={errors.call_ratio?.message} />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="form-group">
+                  <label className="label text-xs">Duration <span className="text-slate-400 font-normal">(sec)</span></label>
+                  <input {...register('duration')} className="input text-sm py-2" placeholder="60" />
+                </div>
+                <div className="form-group">
+                  <label className="label text-xs">Auto Duration <span className="text-slate-400 font-normal">(sec)</span></label>
+                  <input {...register('automated_duration')} className="input text-sm py-2" placeholder="30" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="form-group">
+                  <label className="label text-xs">% Inc/Dec</label>
+                  <input {...register('percentage_inc_dec')} className="input text-sm py-2" placeholder="10" />
+                </div>
+                <div className="form-group">
+                  <label className="label text-xs">Hopper Mode</label>
+                  <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
+                    <option value="">— None —</option>
+                    <option value="0">Disabled</option>
+                    <option value="1">Enabled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="form-group">
+                  <label className="label text-xs">Max Lead Temp</label>
+                  <input type="number" {...register('max_lead_temp', { valueAsNumber: true })} className="input text-sm py-2" min={0} />
+                  <FieldError message={errors.max_lead_temp?.message} />
+                </div>
+                <div className="form-group">
+                  <label className="label text-xs">Min Lead Temp</label>
+                  <input type="number" {...register('min_lead_temp', { valueAsNumber: true })} className="input text-sm py-2" min={0} />
+                  <FieldError message={errors.min_lead_temp?.message} />
+                </div>
+              </div>
+            </div>
+          </CardSection>
+
+          {/* Caller ID */}
+          <CardSection icon={Radio} title="Caller ID" description="Outbound caller identification">
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="form-group">
+                  <label className="label text-xs">Caller ID Type <span className="text-red-500">*</span></label>
+                  <select {...register('caller_id')} className={`input text-sm py-2 ${errors.caller_id ? 'border-red-400' : ''}`}>
+                    <option value="area_code">Area Code</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                  <FieldError message={errors.caller_id?.message} />
+                </div>
+                <div className="form-group">
+                  <label className="label text-xs">Country Code</label>
+                  <input {...register('country_code')} className="input text-sm py-2" placeholder="e.g. 1" />
+                </div>
+              </div>
+
+              {callerIdType === 'custom' && (
+                <div className="form-group">
+                  <label className="label text-xs">Custom Caller ID <span className="text-red-500">*</span></label>
+                  <input {...register('custom_caller_id')} type="tel" className={`input text-sm py-2 ${errors.custom_caller_id ? 'border-red-400' : ''}`} placeholder="e.g. 5551234567" />
+                  <FieldError message={errors.custom_caller_id?.message} />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="label text-xs">VoIP Configuration ID</label>
+                <input {...register('voip_configuration_id')} type="number" className="input text-sm py-2" placeholder="VoIP config ID" />
+              </div>
+
+              <div className="pt-1">
+                <Controller name="call_transfer" control={control}
+                  render={({ field }) => (
+                    <ToggleRow label="Call Transfer" checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} />
+                  )}
+                />
+              </div>
+            </div>
+          </CardSection>
+
+          {/* Schedule & System */}
+          <CardSection icon={Clock} title="Schedule & Limits" description="Call timing and lead controls">
+            <div className="space-y-3">
+              <Controller name="time_based_calling" control={control}
+                render={({ field }) => (
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Time-Based Calling</p>
+                      <p className="text-[11px] text-slate-400">Restrict calls to set hours</p>
+                    </div>
+                    <Toggle checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} label={field.value === 1 ? 'On' : 'Off'} />
+                  </div>
+                )}
+              />
+
+              {timeBasedCalling === 1 ? (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="form-group">
+                    <label className="label text-xs">Start Time <span className="text-red-500">*</span></label>
+                    <input type="time" {...register('call_time_start')} className={`input text-sm py-2 ${errors.call_time_start ? 'border-red-400' : ''}`} />
+                    <FieldError message={errors.call_time_start?.message} />
+                  </div>
+                  <div className="form-group">
+                    <label className="label text-xs">End Time <span className="text-red-500">*</span></label>
+                    <input type="time" {...register('call_time_end')} className={`input text-sm py-2 ${errors.call_time_end ? 'border-red-400' : ''}`} />
+                    <FieldError message={errors.call_time_end?.message} />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <Clock size={13} className="text-slate-300 flex-shrink-0" />
+                  <p className="text-xs text-slate-400">Enable to restrict calling hours</p>
+                </div>
+              )}
+
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System</p>
+                <Controller name="call_metric" control={control}
+                  render={({ field }) => (
+                    <ToggleRow label="Call Metrics" hint="Track detailed performance" checked={field.value === '1'} onChange={val => field.onChange(val ? '1' : '0')} />
+                  )}
+                />
+                <Controller name="api" control={control}
+                  render={({ field }) => (
+                    <ToggleRow label="API Access" hint="API-based management" checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} />
+                  )}
+                />
+              </div>
+            </div>
+          </CardSection>
+        </div>
+
+        {/* ── Row 3: Advanced Settings ── */}
+        <CardSection icon={Settings2} title="Advanced Settings" description="AMD, routing, voicedrop and agent behavior" className="mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-3">
+              <Controller name="amd" control={control}
+                render={({ field }) => (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">AMD Detection</p>
+                      <p className="text-[11px] text-slate-400">Answering machine detection</p>
+                    </div>
+                    <Toggle checked={field.value === '1'} onChange={val => field.onChange(val ? '1' : '0')} label={field.value === '1' ? 'On' : 'Off'} />
+                  </div>
+                )}
+              />
+              {amd === '1' && (
+                <div className="form-group">
+                  <label className="label text-xs">AMD Drop Action</label>
+                  <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
+                    <option value="">— Select —</option>
+                    {AMD_DROP_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="form-group">
+                <label className="label text-xs">No Agent Available Action</label>
+                <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
+                  <option value="">— Select —</option>
+                  {NO_AGENT_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="label text-xs">Redirect To</label>
+                <input {...register('redirect_to')} className="input text-sm py-2" placeholder="Extension, DID, or queue" />
+              </div>
+            </div>
+
             <div className="form-group">
-              <label className="label">Voicedrop Option User</label>
-              <select
-                {...register('voicedrop_option_user_id')}
-                className="input"
-              >
-                <option value="">-- Select User --</option>
-                {users.map((u) => (
+              <label className="label text-xs">Voicedrop Option User</label>
+              <select {...register('voicedrop_option_user_id')} className="input text-sm py-2">
+                <option value="">— Select User —</option>
+                {users.map(u => (
                   <option key={u.id} value={u.id}>
                     {u.name ?? u.first_name ?? u.username ?? `User #${u.id}`}
                   </option>
@@ -751,118 +564,46 @@ export function EditCampaign() {
               </select>
             </div>
 
-            {/* No Agent Available Action */}
-            <div className="form-group">
-              <label className="label">No Agent Available Action</label>
-              <select
-                {...register('no_agent_available_action', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
-                className="input"
-              >
-                <option value="">-- Select Action --</option>
-                {NO_AGENT_ACTIONS.map((a) => (
-                  <option key={a.value} value={a.value}>{a.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Redirect To */}
-            <div className="form-group">
-              <label className="label">Redirect To</label>
-              <input
-                {...register('redirect_to')}
-                className="input"
-                placeholder="Extension, DID, or queue"
-              />
-            </div>
+            <div className="hidden lg:block" />
           </div>
+        </CardSection>
 
-          {/* ── Section 6: AI / Metrics Settings ── */}
-          <div className="card space-y-4">
-            <SectionHeader title="AI / Metrics Settings" description="Configure call metrics and API access" />
-
-            {/* Call Metric */}
-            <div className="form-group flex items-center justify-between">
-              <div>
-                <label className="label mb-0">Call Metrics</label>
-                <p className="text-xs text-slate-400 mt-0.5">Track detailed call performance data</p>
-              </div>
-              <Controller
-                name="call_metric"
-                control={control}
-                render={({ field }) => (
-                  <Toggle
-                    label={field.value === '1' ? 'Enabled' : 'Disabled'}
-                    checked={field.value === '1'}
-                    onChange={(val) => field.onChange(val ? '1' : '0')}
-                  />
-                )}
-              />
-            </div>
-
-            {/* API */}
-            <div className="form-group flex items-center justify-between">
-              <div>
-                <label className="label mb-0">API Access</label>
-                <p className="text-xs text-slate-400 mt-0.5">Allow API-based campaign management</p>
-              </div>
-              <Controller
-                name="api"
-                control={control}
-                render={({ field }) => (
-                  <Toggle
-                    label={field.value === 1 ? 'Enabled' : 'Disabled'}
-                    checked={field.value === 1}
-                    onChange={(val) => field.onChange(val ? 1 : 0)}
-                  />
-                )}
-              />
-            </div>
-          </div>
-
-          {/* ── Section 7: Dispositions ── */}
-          {dispositions.length > 0 && (
-            <div className="card space-y-4 lg:col-span-2">
-              <SectionHeader title="Dispositions" description="Select dispositions available for this campaign" />
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {dispositions.map((d) => (
+        {/* ── Row 4: Dispositions ── */}
+        {dispositions.length > 0 && (
+          <CardSection icon={Tag} title="Dispositions" description="Select call outcomes for this campaign" className="mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
+              {dispositions.map(d => {
+                const isChecked = watchedDispositions.includes(d.id)
+                return (
                   <label
                     key={d.id}
-                    className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors"
+                    className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
+                      isChecked
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
                   >
                     <input
                       type="checkbox"
-                      checked={watchedDispositions.includes(d.id)}
+                      checked={isChecked}
                       onChange={() => toggleDisposition(d.id)}
-                      className="rounded text-indigo-600"
+                      className="rounded accent-indigo-600 w-3 h-3 flex-shrink-0"
                     />
-                    <span className="text-sm text-slate-700 truncate">{d.title}</span>
+                    <span className="truncate">{d.title}</span>
                   </label>
-                ))}
-              </div>
-              {errors.disposition_id && (
-                <p className="mt-1 text-xs text-red-500">Please select at least one disposition</p>
-              )}
+                )
+              })}
             </div>
-          )}
+            {errors.disposition_id && <FieldError message="Please select at least one disposition" />}
+          </CardSection>
+        )}
 
-        </div>
-
-        {/* Submit Row */}
-        <div className="flex gap-3 mt-5">
-          <button
-            type="button"
-            onClick={() => navigate('/campaigns')}
-            className="btn-outline flex-1"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting || updateMutation.isPending}
-            className="btn-primary flex-1 flex items-center justify-center gap-2"
-          >
-            <Save size={16} />
-            {updateMutation.isPending ? 'Saving...' : 'Update Campaign'}
+        {/* ── Bottom Action Row ── */}
+        <div className="flex items-center justify-end gap-2.5 py-2">
+          <button type="button" onClick={() => navigate('/campaigns')} className="btn-outline px-6">Cancel</button>
+          <button type="submit" disabled={isPending} className="btn-primary px-6">
+            <Save size={15} />
+            {isPending ? 'Saving…' : 'Update Campaign'}
           </button>
         </div>
       </form>
