@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { LogIn, LogOut, Radio, Zap, TrendingUp, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -23,7 +23,7 @@ export function Dialer() {
   const {
     callState, activeCampaign, isExtensionLoggedIn,
     setActiveCampaign, setExtensionLoggedIn, setCallState,
-    setActiveLead, setDispositions, startCallTimer, stopCallTimer, resetDialer,
+    setActiveLead, setDispositions, startCallTimer, resetDialer,
   } = useDialerStore()
 
   const { data: campaignsData, isLoading } = useQuery({
@@ -56,10 +56,19 @@ export function Dialer() {
     },
   })
 
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+  }
+
   const hangUpMutation = useMutation({
     mutationFn: () => dialerService.hangUp({ campaign_id: activeCampaign!.id, lead_id: 0 }),
     onSuccess: () => {
-      stopCallTimer()
+      stopTimer()
       setCallState('wrapping')
     },
   })
@@ -79,7 +88,13 @@ export function Dialer() {
   })
 
   useEffect(() => {
-    if (callState === 'in-call') startCallTimer()
+    if (callState === 'in-call') {
+      startCallTimer() // resets callDuration to 0 in store
+      timerRef.current = setInterval(() => {
+        useDialerStore.setState((s) => ({ callDuration: s.callDuration + 1 }))
+      }, 1000)
+    }
+    return () => stopTimer()
   }, [callState])
 
   if (isLoading) return <PageLoader />

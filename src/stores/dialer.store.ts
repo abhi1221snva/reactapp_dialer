@@ -11,7 +11,6 @@ interface DialerState {
   isMuted: boolean
   isOnHold: boolean
   incomingCall: IncomingCall | null
-  callTimer: ReturnType<typeof setInterval> | null
   activeCallId: string | null
 
   setCallState: (state: CallState) => void
@@ -23,12 +22,12 @@ interface DialerState {
   setOnHold: (val: boolean) => void
   setIncomingCall: (call: IncomingCall | null) => void
   setActiveCallId: (id: string | null) => void
+  // Resets callDuration to 0; the interval itself lives in a React ref (Dialer.tsx)
   startCallTimer: () => void
-  stopCallTimer: () => void
   resetDialer: () => void
 }
 
-export const useDialerStore = create<DialerState>((set, get) => ({
+export const useDialerStore = create<DialerState>((set) => ({
   callState: 'idle',
   activeCampaign: null,
   activeLead: null,
@@ -38,7 +37,6 @@ export const useDialerStore = create<DialerState>((set, get) => ({
   isMuted: false,
   isOnHold: false,
   incomingCall: null,
-  callTimer: null,
   activeCallId: null,
 
   setCallState: (callState) => set({ callState }),
@@ -51,33 +49,15 @@ export const useDialerStore = create<DialerState>((set, get) => ({
   setIncomingCall: (incomingCall) => set({ incomingCall }),
   setActiveCallId: (activeCallId) => set({ activeCallId }),
 
-  startCallTimer: () => {
-    const existing = get().callTimer
-    if (existing) clearInterval(existing)
-    set({ callDuration: 0 })
-    const timer = setInterval(() => {
-      set((state) => ({ callDuration: state.callDuration + 1 }))
-    }, 1000)
-    set({ callTimer: timer })
-  },
+  startCallTimer: () => set({ callDuration: 0 }),
 
-  stopCallTimer: () => {
-    const timer = get().callTimer
-    if (timer) clearInterval(timer)
-    set({ callTimer: null })
-  },
-
-  resetDialer: () => {
-    const timer = get().callTimer
-    if (timer) clearInterval(timer)
+  resetDialer: () =>
     set({
       callState: 'ready',
       activeLead: null,
       callDuration: 0,
       isMuted: false,
       isOnHold: false,
-      callTimer: null,
       activeCallId: null,
-    })
-  },
+    }),
 }))

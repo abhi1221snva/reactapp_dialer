@@ -5,6 +5,7 @@ import { smsService } from '../../services/sms.service'
 import { formatPhoneNumber, timeAgo } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import { useAuth } from '../../hooks/useAuth'
+import { useNotificationStore } from '../../stores/notification.store'
 
 interface Conversation { id: number; contact_number: string; last_message: string; unread_count: number; updated_at: string; [key: string]: unknown }
 interface Message { id: number; message: string; direction: 'inbound' | 'outbound'; created_at: string; [key: string]: unknown }
@@ -16,6 +17,7 @@ function getInitial(num: string): string {
 
 export function SMSCenter() {
   const { user } = useAuth()
+  const lastSmsAt = useNotificationStore((s) => s.lastSmsAt)
   const [selectedDid, setSelectedDid] = useState<number | null>(null)
   const [selectedContact, setSelectedContact] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState('')
@@ -38,7 +40,6 @@ export function SMSCenter() {
     queryKey: ['sms-thread', selectedDid, selectedContact],
     queryFn: () => smsService.getThread(selectedDid!, selectedContact!),
     enabled: !!selectedDid && !!selectedContact,
-    refetchInterval: 5000,
   })
 
   const sendMutation = useMutation({
@@ -49,6 +50,13 @@ export function SMSCenter() {
       refetchConversations()
     },
   })
+
+  // Refetch thread + conversations whenever a new inbound SMS Pusher event fires
+  useEffect(() => {
+    if (!lastSmsAt) return
+    if (selectedDid) refetchConversations()
+    if (selectedDid && selectedContact) refetchThread()
+  }, [lastSmsAt])
 
   const dids = didsData?.data?.data || []
   const conversations: Conversation[] = conversationsData?.data?.data || []

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Phone, Eye, EyeOff, Mail, Lock, ArrowLeft, Shield } from 'lucide-react'
 import { useAuthStore } from '../../stores/auth.store'
 import { authService } from '../../services/auth.service'
@@ -160,10 +160,10 @@ export function Login() {
         </div>
       </div>
       <div className="flex items-center justify-end">
-        <a href="/reactappnew/forgot-password"
+        <Link to="/forgot-password"
           className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors">
           Forgot password?
-        </a>
+        </Link>
       </div>
       <button type="submit" disabled={loading}
         className="btn-primary w-full h-11 font-semibold rounded-xl shadow-lg flex items-center justify-center gap-2">

@@ -24,6 +24,7 @@ export const reportService = {
   getDispositionList: () =>
     api.post('/disposition', {}),
 
+  // B14 fixed: /export-report added to backend routes/web.php → ReportController@exportReport
   exportCsv: (params: Record<string, unknown>) =>
     api.post('/export-report', params, { responseType: 'blob' }),
 }

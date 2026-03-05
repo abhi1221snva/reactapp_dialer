@@ -13,6 +13,7 @@ import { ForgotPassword } from './pages/auth/ForgotPassword'
 // App pages
 import { Dashboard } from './pages/dashboard/Dashboard'
 import { Dialer } from './pages/dialer/Dialer'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { CrmLeads } from './pages/crm/CrmLeads'
 import { LeadForm } from './pages/crm/LeadForm'
 import { LeadDetail } from './pages/crm/LeadDetail'
@@ -67,7 +68,7 @@ export default function App() {
       {/* Protected routes */}
       <Route element={<ProtectedRoute><AppWithPusher /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dialer" element={<Dialer />} />
+        <Route path="/dialer" element={<ErrorBoundary fallbackTitle="Dialer Error"><Dialer /></ErrorBoundary>} />
 
         {/* CRM */}
         <Route path="/crm" element={<CrmLeads />} />

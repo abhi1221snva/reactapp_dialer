@@ -17,9 +17,11 @@ export function usePusher() {
       cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER || 'mt1',
     })
 
-    const channel = pusher.subscribe('my-channel')
+    const channelName = import.meta.env.VITE_PUSHER_CHANNEL || 'my-channel'
+    const eventName = import.meta.env.VITE_PUSHER_EVENT || 'my-event'
+    const channel = pusher.subscribe(channelName)
 
-    channel.bind('my-event', (data: { message: Record<string, unknown> }) => {
+    channel.bind(eventName, (data: { message: Record<string, unknown> }) => {
       const msg = data?.message
       if (!msg) return
 
@@ -49,7 +51,7 @@ export function usePusher() {
 
     return () => {
       channel.unbind_all()
-      pusher.unsubscribe('my-channel')
+      pusher.unsubscribe(channelName)
       pusher.disconnect()
     }
   }, [user?.id])

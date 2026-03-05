@@ -35,11 +35,11 @@ export function ForgotPassword() {
           We sent a password reset link to{' '}
           <span className="font-semibold text-slate-700">{email}</span>
         </p>
-        <a href="/reactappnew/login"
+        <button type="button" onClick={() => navigate('/login')}
           className="inline-flex items-center justify-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 transition-colors mt-4">
           <ArrowLeft className="w-4 h-4" />
           Back to login
-        </a>
+        </button>
       </div>
     )
   }
