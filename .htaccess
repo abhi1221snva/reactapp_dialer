@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /reactappnew/
+
+    # Serve dist/assets directly
+    RewriteCond %{REQUEST_URI} ^/reactappnew/assets/
+    RewriteRule ^assets/(.*)$ dist/assets/$1 [L]
+
+    # For all other requests (SPA routes), serve dist/index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ dist/index.html [L]
+
+    # Root request → dist/index.html
+    RewriteRule ^$ dist/index.html [L]
+</IfModule>
