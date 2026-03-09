@@ -7,6 +7,8 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { dncService } from '../../services/dnc.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
+import { confirmDelete } from '../../utils/confirmDelete'
+import { RowActions } from '../../components/ui/RowActions'
 import { AddDncModal } from './AddDncModal'
 import { EditDncModal, type DncItem } from './EditDncModal'
 
@@ -68,30 +70,27 @@ export function DncList() {
     },
     {
       key: 'actions',
-      header: '',
-      headerClassName: 'w-px',
+      header: 'Actions',
       render: (row) => (
-        <div className="flex items-center gap-1 justify-end">
-          <button
-            onClick={() => setEditItem(row)}
-            className="btn-ghost btn-sm p-1.5"
-            title="Edit"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Remove ${row.number} from DNC list?`)) {
+        <RowActions actions={[
+          {
+            label: 'Edit',
+            icon: <Pencil size={12} />,
+            variant: 'edit',
+            onClick: () => setEditItem(row),
+          },
+          {
+            label: 'Remove',
+            icon: <Trash2 size={12} />,
+            variant: 'delete',
+            onClick: async () => {
+              if (await confirmDelete(String(row.number))) {
                 deleteMutation.mutate(String(row.number))
               }
-            }}
-            disabled={deleteMutation.isPending}
-            className="btn-ghost btn-sm p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50"
-            title="Remove from DNC"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+            },
+            disabled: deleteMutation.isPending,
+          },
+        ]} />
       ),
     },
   ]

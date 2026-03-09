@@ -1,5 +1,6 @@
 export * from './auth.types'
 export * from './dialer.types'
+export * from './crm.types'
 
 export interface ApiResponse<T = unknown> {
   status: boolean

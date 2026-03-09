@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Phone, Eye, EyeOff, Mail, Lock, ArrowLeft, Shield } from 'lucide-react'
 import { useAuthStore } from '../../stores/auth.store'
@@ -6,6 +6,30 @@ import { authService } from '../../services/auth.service'
 import api from '../../api/axios'
 import type { User } from '../../types'
 import toast from 'react-hot-toast'
+
+// Google Identity Services type declaration
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string
+            callback: (response: { credential: string }) => void
+            auto_select?: boolean
+          }) => void
+          renderButton: (element: HTMLElement, config: {
+            theme?: string
+            size?: string
+            width?: number
+            text?: string
+            shape?: string
+          }) => void
+        }
+      }
+    }
+  }
+}
 
 async function fetchUserLevel(userId: number, token: string): Promise<number> {
   try {
@@ -27,10 +51,55 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [otpStep, setOtpStep] = useState(false)
   const [otp, setOtp] = useState('')
   const [otpId, setOtpId] = useState('')
   const [pendingData, setPendingData] = useState<(User & { token: string }) | null>(null)
+  const googleBtnRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id || !googleBtnRef.current) return
+      window.google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID as string,
+        callback: async (response: { credential: string }) => {
+          setGoogleLoading(true)
+          try {
+            const res = await authService.googleLogin(response.credential)
+            const payload = res.data?.data ?? res.data
+            if (!payload?.token) {
+              toast.error('Google login failed. Please try again.')
+              return
+            }
+            const user = await buildUser(payload)
+            setAuth(payload.token, user)
+            navigate('/dashboard')
+          } catch {
+            // errors handled by axios interceptor
+          } finally {
+            setGoogleLoading(false)
+          }
+        },
+      })
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: Math.min(googleBtnRef.current.offsetWidth || 400, 400),
+        text: 'continue_with',
+        shape: 'rectangular',
+      })
+    }
+
+    if (window.google?.accounts?.id) {
+      initGoogle()
+    } else {
+      const gsiScript = document.querySelector('script[src*="gsi/client"]')
+      gsiScript?.addEventListener('load', initGoogle)
+      return () => gsiScript?.removeEventListener('load', initGoogle)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buildUser = async (payload: any): Promise<User> => {
@@ -182,6 +251,31 @@ export function Login() {
           </>
         )}
       </button>
+      {/* Divider */}
+      <div className="relative my-1">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-white px-3 text-slate-400 font-medium">or continue with</span>
+        </div>
+      </div>
+
+      {/* Google Sign-In button rendered by GSI SDK */}
+      {/* Keep ref div always mounted so GSI button stays rendered after failed attempts */}
+      <div className="relative">
+        <div ref={googleBtnRef} className="w-full" style={{ visibility: googleLoading ? 'hidden' : 'visible' }} />
+        {googleLoading && (
+          <div className="absolute inset-0 flex items-center justify-center h-10 text-sm text-slate-500">
+            <svg className="animate-spin w-4 h-4 text-indigo-500 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            Signing in with Google…
+          </div>
+        )}
+      </div>
+
       <p className="text-sm text-slate-500 text-center mt-2">
         Don&apos;t have an account?{' '}
         <span className="text-indigo-600 font-medium">Contact your administrator</span>

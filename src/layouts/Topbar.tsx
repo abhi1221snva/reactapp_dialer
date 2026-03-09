@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Bell, ChevronDown, LogOut, User, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -22,6 +22,12 @@ export function Topbar() {
   const [status, setStatus] = useState<AgentStatus>('available')
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [clock, setClock] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const totalNotifications = unreadSms + unreadVoicemail
 
@@ -40,10 +46,14 @@ export function Topbar() {
         boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
       }}
     >
-      {/* Left: date */}
+      {/* Left: date + live clock */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-slate-400 tracking-wide">
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          {clock.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </span>
+        <span className="text-slate-300 text-sm select-none">|</span>
+        <span className="text-sm font-medium text-slate-500" style={{ marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
+          {clock.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
         </span>
       </div>
 
@@ -99,15 +109,15 @@ export function Topbar() {
         <div className="relative">
           <button
             onClick={() => { setShowProfileMenu(!showProfileMenu); setShowStatusMenu(false) }}
-            className="flex items-center gap-2.5 pl-1 pr-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors duration-150"
+            className="flex items-center gap-2 pl-1 pr-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors duration-150"
+            title={user?.name}
           >
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm flex-shrink-0"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shadow-sm flex-shrink-0"
               style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
             >
               {user ? initials(user.name) : '?'}
             </div>
-            <span className="hidden sm:block text-sm font-medium text-slate-700 max-w-[120px] truncate">{user?.name}</span>
             <ChevronDown size={13} className={cn('text-slate-400 transition-transform duration-150', showProfileMenu && 'rotate-180')} />
           </button>
 

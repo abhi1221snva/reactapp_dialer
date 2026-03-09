@@ -11,6 +11,8 @@ import { Badge } from '../../components/ui/Badge'
 import { labelService } from '../../services/label.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
+import { confirmDelete } from '../../utils/confirmDelete'
+import { RowActions } from '../../components/ui/RowActions'
 
 interface LabelItem {
   id: number
@@ -317,38 +319,32 @@ export function Labels() {
     },
     {
       key: 'actions',
-      header: '',
-      headerClassName: 'w-px',
+      header: 'Actions',
       render: (row) => (
-        <div className="flex items-center gap-1 justify-end">
-          <button
-            onClick={() => setEditLabel(row)}
-            className="btn-ghost btn-sm p-1.5"
-            title="Edit"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={() => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) })}
-            disabled={toggleMutation.isPending}
-            className="btn-ghost btn-sm p-1.5 text-slate-500 hover:text-indigo-600"
-            title={Number(row.status) === 1 ? 'Disable' : 'Enable'}
-          >
-            {Number(row.status) === 1
-              ? <ToggleRight size={16} className="text-emerald-500" />
-              : <ToggleLeft size={16} />}
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Delete label "${row.title}"?`)) deleteMutation.mutate(row.id)
-            }}
-            disabled={deleteMutation.isPending}
-            className="btn-ghost btn-sm p-1.5 text-red-500 hover:bg-red-50"
-            title="Delete"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <RowActions actions={[
+          {
+            label: 'Edit',
+            icon: <Pencil size={12} />,
+            variant: 'edit',
+            onClick: () => setEditLabel(row),
+          },
+          {
+            label: Number(row.status) === 1 ? 'Disable' : 'Enable',
+            icon: Number(row.status) === 1 ? <ToggleRight size={12} /> : <ToggleLeft size={12} />,
+            variant: Number(row.status) === 1 ? 'warning' : 'success',
+            onClick: () => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) }),
+            disabled: toggleMutation.isPending,
+          },
+          {
+            label: 'Delete',
+            icon: <Trash2 size={12} />,
+            variant: 'delete',
+            onClick: async () => {
+              if (await confirmDelete(row.title)) deleteMutation.mutate(row.id)
+            },
+            disabled: deleteMutation.isPending,
+          },
+        ]} />
       ),
     },
   ]

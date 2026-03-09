@@ -8,7 +8,8 @@ import { Badge } from '../../components/ui/Badge'
 import { listService } from '../../services/list.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
-import { ListEditModal } from './ListEditModal'
+import { confirmDelete } from '../../utils/confirmDelete'
+import { RowActions } from '../../components/ui/RowActions'
 
 interface ListItem {
   id: number
@@ -30,8 +31,6 @@ export function Lists() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
-  const [editingListId, setEditingListId] = useState<number | null>(null)
-
   const toggleMutation = useMutation({
     mutationFn: ({ id, campaignId, status }: { id: number; campaignId: number; status: number }) =>
       listService.toggleStatus(id, campaignId, status === 1 ? 0 : 1),
@@ -105,42 +104,39 @@ export function Lists() {
       ),
     },
     {
-      key: 'actions', header: '',
-      headerClassName: 'w-px',
+      key: 'actions', header: 'Actions',
       render: (row) => {
         const id = listId(row)
         const cid = row.campaign_id ?? 0
         return (
-          <div className="flex items-center gap-1 justify-end">
-            <button
-              onClick={() => navigate(`/lists/${id}/leads`)}
-              className="btn-ghost btn-sm p-1.5" title="View Leads"
-            >
-              <Eye size={13} />
-            </button>
-            <button
-              onClick={() => setEditingListId(id)}
-              className="btn-ghost btn-sm p-1.5" title="Edit"
-            >
-              <Pencil size={13} />
-            </button>
-            <button
-              onClick={() => toggleMutation.mutate({ id, campaignId: cid, status: row.is_active })}
-              disabled={toggleMutation.isPending}
-              className="btn-ghost btn-sm p-1.5 text-slate-500 hover:text-indigo-600" title="Toggle Status"
-            >
-              {row.is_active === 1
-                ? <ToggleRight size={16} className="text-emerald-500" />
-                : <ToggleLeft size={16} />}
-            </button>
-            <button
-              onClick={() => { if (confirm(`Delete list "${listName(row)}"?`)) deleteMutation.mutate({ id, campaignId: cid }) }}
-              disabled={deleteMutation.isPending}
-              className="btn-ghost btn-sm p-1.5 text-red-500 hover:bg-red-50" title="Delete"
-            >
-              <Trash2 size={13} />
-            </button>
-          </div>
+          <RowActions actions={[
+            {
+              label: 'Leads',
+              icon: <Eye size={12} />,
+              variant: 'view',
+              onClick: () => navigate(`/lists/${id}/leads`),
+            },
+            {
+              label: 'Edit',
+              icon: <Pencil size={12} />,
+              variant: 'edit',
+              onClick: () => navigate(`/lists/${id}/mapping`),
+            },
+            {
+              label: row.is_active === 1 ? 'Deactivate' : 'Activate',
+              icon: row.is_active === 1 ? <ToggleRight size={12} /> : <ToggleLeft size={12} />,
+              variant: row.is_active === 1 ? 'warning' : 'success',
+              onClick: () => toggleMutation.mutate({ id, campaignId: cid, status: row.is_active }),
+              disabled: toggleMutation.isPending,
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 size={12} />,
+              variant: 'delete',
+              onClick: async () => { if (await confirmDelete(listName(row))) deleteMutation.mutate({ id, campaignId: cid }) },
+              disabled: deleteMutation.isPending,
+            },
+          ]} />
         )
       },
     },
@@ -148,13 +144,6 @@ export function Lists() {
 
   return (
     <div className="space-y-5">
-      {editingListId !== null && (
-        <ListEditModal
-          listId={editingListId}
-          onClose={() => setEditingListId(null)}
-        />
-      )}
-
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Lists</h1>
         <p className="page-subtitle">Manage your lead lists</p>

@@ -34,4 +34,18 @@ export const campaignService = {
 
   getTypes: () =>
     api.get('/campaign-type'),
+
+  assignLists: (campaignId: number, listIds: number[]) =>
+    api.post('/campaign/assign-lists', { campaign_id: campaignId, lead_list_ids: listIds }),
+
+  // Dropdown data for campaign form
+  getExtensions: () => api.get('/extension'),
+  getDids: () => api.get('/did'),
+  getIvrList: () => api.post('/ivr', { start: 0, limit: 500 }),
+  getRingGroups: () => api.post('/ring-group', { start: 0, limit: 500 }),
+  getVoiceTemplates: () => api.get('/voice-templete'),
+  getAudioMessages: () => api.get('/audio-message'),
+  getPrompts: () => api.get('/prompts'),
+  getCountryCodes: () => api.post('/country-list', {}),
+  getVoipConfigs: () => api.get('/voip-configurations'),
 }

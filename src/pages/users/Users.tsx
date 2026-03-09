@@ -8,6 +8,8 @@ import { userService } from '../../services/user.service'
 import { initials } from '../../utils/format'
 import { useServerTable } from '../../hooks/useServerTable'
 import { cn } from '../../utils/cn'
+import { confirmDelete } from '../../utils/confirmDelete'
+import { RowActions } from '../../components/ui/RowActions'
 
 interface Agent {
   id: number
@@ -102,25 +104,23 @@ export function Users() {
       ),
     },
     {
-      key: 'actions', header: '',
-      headerClassName: 'w-px',
+      key: 'actions', header: 'Actions',
       render: (row) => (
-        <div className="flex items-center gap-1 justify-end">
-          <button
-            onClick={() => navigate(`/users/${row.id}/edit`)}
-            className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
-            title="Edit"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={() => { if (confirm('Delete this user?')) deleteMutation.mutate(row.id) }}
-            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
-            title="Delete"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <RowActions actions={[
+          {
+            label: 'Edit',
+            icon: <Pencil size={12} />,
+            variant: 'edit',
+            onClick: () => navigate(`/users/${row.id}/edit`),
+          },
+          {
+            label: 'Delete',
+            icon: <Trash2 size={12} />,
+            variant: 'delete',
+            onClick: async () => { if (await confirmDelete()) deleteMutation.mutate(row.id) },
+            disabled: deleteMutation.isPending,
+          },
+        ]} />
       ),
     },
   ]

@@ -124,14 +124,14 @@
   .divider       { @apply border-t border-slate-100 my-5; }
 
   /* === Table === */
-  .table-wrapper { @apply overflow-x-auto rounded-2xl border border-slate-200 bg-white; }
+  .table-wrapper { @apply overflow-hidden rounded-2xl border border-slate-200 bg-white; }
   .table         { @apply w-full text-sm border-collapse; }
   .table thead   { @apply border-b border-slate-200; background: rgba(248,250,252,0.80); }
-  .table th      { @apply px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap; }
-  .table td      { @apply px-4 py-3.5 text-slate-700 border-b border-slate-100; }
+  .table th      { @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap; }
+  .table td      { @apply px-4 py-3 border-b border-slate-100; }
   .table tbody tr:last-child td { @apply border-b-0; }
-  .table tbody tr { transition: background-color 0.1s ease; }
-  .table tbody tr:hover { background-color: rgba(248,250,252,0.80); }
+  .table tbody tr { transition: background-color 0.12s ease; }
+  .table tbody tr:hover { @apply bg-slate-50; }
 
   /* === Skeleton === */
   .skeleton {
@@ -157,6 +157,197 @@
   .avatar-sm { @apply avatar w-7 h-7 text-xs; }
   .avatar-md { @apply avatar w-9 h-9 text-sm; }
   .avatar-lg { @apply avatar w-11 h-11 text-base; }
+
+  /* === Modal === */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .modal-card {
+    @apply w-full rounded-2xl bg-white;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  }
+
+  /* === Icon action buttons === */
+  .action-btn {
+    @apply p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700
+           transition-colors duration-150 disabled:opacity-30 disabled:cursor-not-allowed;
+  }
+  .action-btn-danger {
+    @apply p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600
+           transition-colors duration-150;
+  }
+
+  /* === Pagination bar === */
+  .pagination-bar {
+    @apply flex items-center justify-between px-4 py-3 border-t border-slate-200
+           bg-slate-50 text-xs text-slate-500;
+  }
+  .pagination-btn {
+    @apply text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600
+           hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors;
+  }
+
+  /* === CRM card (approval rows, detail cards) === */
+  .crm-card {
+    @apply rounded-xl border border-slate-200 bg-white p-4;
+  }
+
+  /* === Section label === */
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3;
+  }
+
+  /* ─── Tab Navigation ────────────────────────────────────────────────── */
+  .tab-bar {
+    @apply flex gap-0.5 p-1 rounded-xl overflow-x-auto;
+    background: #EEF0F6;
+  }
+  .tab-btn {
+    @apply px-4 py-2 rounded-lg text-sm font-medium text-slate-500
+           transition-all duration-150 whitespace-nowrap flex-shrink-0;
+  }
+  .tab-btn:hover { @apply text-slate-700; }
+  .tab-btn-active {
+    @apply bg-white text-indigo-700 font-semibold;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  /* ─── Period Selector ───────────────────────────────────────────────── */
+  .period-bar {
+    @apply flex gap-0.5 p-1 rounded-lg;
+    background: #EEF0F6;
+  }
+  .period-btn {
+    @apply px-3 py-1.5 rounded-md text-xs font-medium text-slate-500
+           transition-all duration-150 whitespace-nowrap;
+  }
+  .period-btn:hover { @apply text-slate-700; }
+  .period-btn-active {
+    @apply bg-white text-indigo-600 font-semibold;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+  }
+
+  /* ─── Metric / Stat Cards ───────────────────────────────────────────── */
+  .metric-card {
+    @apply bg-white rounded-2xl border border-slate-100 p-4
+           hover:shadow-md hover:-translate-y-0.5
+           transition-all duration-200 cursor-default;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .metric-icon-wrap {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
+  }
+  .metric-value {
+    @apply text-2xl font-bold text-slate-900 leading-tight tracking-tight;
+  }
+  .metric-label {
+    @apply text-[11px] font-medium text-slate-400 mt-0.5;
+  }
+
+  /* ─── Chart Cards ───────────────────────────────────────────────────── */
+  .chart-card {
+    @apply bg-white rounded-2xl border border-slate-100 p-5;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .chart-header {
+    @apply flex items-center justify-between mb-4;
+  }
+  .chart-title {
+    @apply text-sm font-semibold text-slate-800;
+  }
+
+  /* ─── Field Display (Lead Detail key/value grid) ────────────────────── */
+  .field-label {
+    @apply text-[11px] font-medium text-slate-400 uppercase tracking-wide;
+  }
+  .field-value {
+    @apply text-sm font-medium text-slate-800 mt-0.5;
+  }
+  .field-empty {
+    @apply text-sm text-slate-300 mt-0.5;
+  }
+
+  /* ─── Dropdown Menus ────────────────────────────────────────────────── */
+  .dropdown-menu {
+    @apply absolute right-0 top-full mt-1.5 rounded-xl border border-slate-200
+           bg-white py-1.5 z-20 overflow-hidden;
+    min-width: 180px;
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -4px rgba(0, 0, 0, 0.08);
+  }
+  .dropdown-item {
+    @apply w-full text-left px-4 py-2.5 text-sm text-slate-700
+           hover:bg-indigo-50 hover:text-indigo-700
+           transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  /* ─── Progress Bars ─────────────────────────────────────────────────── */
+  .progress-track {
+    @apply h-1.5 rounded-full bg-slate-100 overflow-hidden;
+  }
+  .progress-fill {
+    @apply h-1.5 rounded-full transition-all duration-700;
+  }
+
+  /* ─── Kanban ────────────────────────────────────────────────────────── */
+  .kanban-col {
+    @apply flex-shrink-0 flex flex-col rounded-2xl bg-slate-50
+           border border-slate-200 transition-colors duration-150;
+    width: 272px;
+  }
+  .kanban-col-over { @apply border-indigo-400 bg-indigo-50/20; }
+  .kanban-col-header {
+    @apply flex items-center justify-between px-4 py-3 border-b border-slate-200;
+  }
+  .kanban-col-body {
+    @apply flex-1 p-2 space-y-2 overflow-y-auto;
+    min-height: 200px;
+    max-height: calc(100vh - 280px);
+  }
+  .kanban-card {
+    @apply rounded-xl border border-slate-200 bg-white p-3
+           cursor-grab active:cursor-grabbing select-none
+           hover:shadow-md hover:border-slate-300
+           transition-all duration-150;
+  }
+  .kanban-card-dragging { @apply opacity-50 shadow-2xl border-indigo-300; }
+
+  /* ─── Lead Avatar circles ───────────────────────────────────────────── */
+  .lead-avatar {
+    @apply w-8 h-8 rounded-full flex items-center justify-center
+           text-[11px] font-bold text-white flex-shrink-0;
+  }
+  .lead-avatar-lg {
+    @apply w-10 h-10 rounded-full flex items-center justify-center
+           text-sm font-bold text-white flex-shrink-0;
+  }
+
+  /* ─── Dashed Empty States ───────────────────────────────────────────── */
+  .empty-dashed {
+    @apply flex flex-col items-center justify-center py-14 text-center
+           rounded-xl border-2 border-dashed border-slate-200;
+  }
+  .empty-dashed-over { @apply border-indigo-400 bg-indigo-50/20; }
+
+  /* ─── Detail Sections (Lead Detail / Lead Create) ───────────────────── */
+  .detail-section {
+    @apply bg-white rounded-2xl border border-slate-100 overflow-hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  .detail-section-header {
+    @apply flex items-center gap-2.5 px-5 py-4 border-b border-slate-100;
+  }
+  .detail-section-body { @apply p-5; }
+
+  /* ─── Generic item rows (documents, lenders) ────────────────────────── */
+  .item-row {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl
+           border border-slate-200 bg-white hover:bg-slate-50
+           transition-colors;
+  }
+  .item-icon-wrap {
+    @apply w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0;
+  }
 }
 
 /* =============================================================

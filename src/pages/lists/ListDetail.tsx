@@ -103,12 +103,20 @@ export function ListDetail() {
           )}
           <p className="page-subtitle">List #{id}</p>
         </div>
-        <button
-          onClick={() => navigate(`/lists/${id}/leads`)}
-          className="btn-primary"
-        >
-          <Eye size={15} /> View Leads
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate(`/lists/${id}/mapping`)}
+            className="btn-outline"
+          >
+            <Pencil size={15} /> Edit Mapping
+          </button>
+          <button
+            onClick={() => navigate(`/lists/${id}/leads`)}
+            className="btn-primary"
+          >
+            <Eye size={15} /> View Leads
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

@@ -8,6 +8,9 @@ export const authService = {
   verifyOtp: (data: OtpVerifyRequest) =>
     api.post('/verify_google_otp', data),
 
+  googleLogin: (credential: string) =>
+    api.post('/auth/google/callback', { credential }),
+
   forgotPassword: (email: string) =>
     api.post('/forget_password', { email }),
 

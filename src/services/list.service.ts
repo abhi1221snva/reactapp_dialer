@@ -10,6 +10,10 @@ export const listService = {
       ...(params.search ? { title: params.search } : {}),
     }),
 
+  // Fetch all lists without pagination (up to 500)
+  getAll: () =>
+    api.post('/raw-list', { start: 0, limit: 500 }),
+
   // Get list by id — POST /raw-list with list_id returns single object
   getById: (listId: number) =>
     api.post('/raw-list', { list_id: listId }),
@@ -42,4 +46,28 @@ export const listService = {
   // Get list headers
   getHeaders: (listId: number) =>
     api.post('/list-header', { id: listId, list_data: [0] }),
+
+  // Step 1: parse headers from uploaded file (returns temp_key, headers[], labels[], row_count)
+  parseHeaders: (data: FormData) =>
+    api.post('/parse-list-headers', data),
+
+  // Step 2: import with column-to-label mapping + dialing column
+  importWithMapping: (data: {
+    temp_key: string
+    title: string
+    campaign: string
+    dial_column: string   // Excel header name to use as the dialing number
+    duplicate_check?: string
+    mapping: string       // JSON string: { "ExcelHeader": label_id | null }
+  }) => api.post('/import-list-with-mapping', data),
+
+  // Fetch existing column mapping for a list (for edit page)
+  getMapping: (listId: number) =>
+    api.post('/get-list-mapping', { list_id: listId }),
+
+  // Update column mapping (label_id, is_dialing) for an existing list
+  updateMapping: (data: {
+    list_id: number
+    columns: Array<{ id: number; label_id: number | null; is_dialing: 0 | 1 }>
+  }) => api.post('/update-list-mapping', data),
 }

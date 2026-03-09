@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Save, Radio, Phone, Clock, Settings2, BarChart2, Tag } from 'lucide-react'
+import { ArrowLeft, Save, Radio, Phone, Clock, Settings2, Tag, Globe, ChevronDown, X, Search, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
@@ -12,39 +12,14 @@ import { userService } from '../../services/user.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 
 // ─────────────────────────────────────────────
-//  Constants
-// ─────────────────────────────────────────────
-const DIAL_MODES = [
-  { value: 'preview_and_dial', label: 'Preview & Dial' },
-  { value: 'power_dial', label: 'Power Dial' },
-  { value: 'super_power_dial', label: 'Super Power Dial' },
-  { value: 'predictive_dial', label: 'Predictive Dial' },
-  { value: 'outbound_ai', label: 'Outbound AI' },
-]
-
-const AMD_DROP_ACTIONS = [
-  { value: 1, label: 'Hang Up' },
-  { value: 2, label: 'Leave Voicemail' },
-  { value: 3, label: 'Play Message' },
-]
-
-const NO_AGENT_ACTIONS = [
-  { value: 0, label: 'Hang Up' },
-  { value: 1, label: 'Redirect' },
-  { value: 2, label: 'Play Message' },
-]
-
-// ─────────────────────────────────────────────
 //  Zod Schema
 // ─────────────────────────────────────────────
 const campaignSchema = z
   .object({
-    title: z.string().min(1, 'Campaign title is required').max(255, 'Title must be 255 characters or less'),
-    description: z.string().max(255, 'Description must be 255 characters or less').optional().default(''),
+    title: z.string().min(1, 'Campaign title is required').max(255),
+    description: z.string().max(255).optional().default(''),
     status: z.number().int().default(1),
-    dial_mode: z.enum(['preview_and_dial', 'power_dial', 'super_power_dial', 'predictive_dial', 'outbound_ai'], {
-      required_error: 'Dial mode is required',
-    }),
+    dial_mode: z.string().min(1, 'Dial mode is required'),
     group_id: z.string().or(z.number()).optional().nullable(),
     call_ratio: z.string().optional().default(''),
     duration: z.string().optional().default(''),
@@ -52,65 +27,67 @@ const campaignSchema = z
     hopper_mode: z.number().int().optional().nullable(),
     max_lead_temp: z.number().int().min(0).max(10000).default(100),
     min_lead_temp: z.number().int().min(0).max(10000).default(500),
-    caller_id: z.enum(['area_code', 'custom'], {
-      required_error: 'Caller ID type is required',
-    }).default('area_code'),
+    percentage_inc_dec: z.string().optional().default(''),
+    caller_id: z.enum(['area_code', 'area_code_random', 'custom']).default('area_code'),
     custom_caller_id: z.string().optional().default(''),
     country_code: z.string().optional().default(''),
     voip_configuration_id: z.string().or(z.number()).optional().nullable(),
+    call_transfer: z.number().int().default(0),
     time_based_calling: z.number().int().default(0),
     call_time_start: z.string().optional().nullable(),
     call_time_end: z.string().optional().nullable(),
+    email: z.number().int().default(0),
+    sms: z.number().int().default(0),
+    send_crm: z.number().int().default(0),
+    send_report: z.number().int().default(0),
+    call_metric: z.enum(['0', '1']).default('0'),
+    api: z.number().int().default(1),
     amd: z.enum(['0', '1']).default('0'),
     amd_drop_action: z.number().int().optional().nullable(),
-    voicedrop_option_user_id: z.string().or(z.number()).optional().nullable(),
-    no_agent_available_action: z.number().int().optional().nullable(),
+    audio_message_amd: z.string().or(z.number()).optional().nullable(),
+    voice_message_amd: z.string().or(z.number()).optional().nullable(),
     redirect_to: z.string().optional().default(''),
-    call_transfer: z.number().int().default(0),
-    percentage_inc_dec: z.string().optional().default(''),
-    call_metric: z.enum(['0', '1']).default('0'),
-    send_report: z.number().int().default(0),
-    api: z.number().int().default(1),
+    redirect_to_dropdown: z.string().or(z.number()).optional().nullable(),
+    no_agent_available_action: z.number().int().optional().nullable(),
+    no_agent_dropdown_action: z.string().or(z.number()).optional().nullable(),
     disposition_id: z.array(z.number()).optional().default([]),
   })
   .superRefine((data, ctx) => {
     if (data.dial_mode === 'super_power_dial' && (!data.group_id || data.group_id === '')) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Agent group is required for Super Power Dial', path: ['group_id'] })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Caller group is required for Super Power Dial', path: ['group_id'] })
     }
-    if (data.caller_id === 'custom' && (!data.custom_caller_id || data.custom_caller_id.trim() === '')) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Custom caller ID is required when caller type is Custom', path: ['custom_caller_id'] })
+    if (data.caller_id === 'custom' && (!data.custom_caller_id || data.custom_caller_id === '')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Custom Caller ID is required', path: ['custom_caller_id'] })
     }
     if (data.time_based_calling === 1) {
       if (!data.call_time_start) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Start time is required', path: ['call_time_start'] })
       if (!data.call_time_end) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'End time is required', path: ['call_time_end'] })
-    }
-    if (data.call_ratio && data.call_ratio.trim() !== '' && !/^\d+$/.test(data.call_ratio.trim()) && !/^\d+:\d+$/.test(data.call_ratio.trim())) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Call ratio must be numeric (e.g. 2 or 2:1)', path: ['call_ratio'] })
     }
   })
 
 type CampaignFormValues = z.infer<typeof campaignSchema>
 
 // ─────────────────────────────────────────────
-//  Sub-components
+//  Helpers
 // ─────────────────────────────────────────────
+const PREDICTIVE_CALL_RATIO = ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5']
+const OUTBOUND_CALL_RATIO = Array.from({ length: 30 }, (_, i) => String(i + 1))
+const PREDICTIVE_DURATION = Array.from({ length: 16 }, (_, i) => ({ value: String(i), label: `${i}` }))
+const OUTBOUND_DURATION = [
+  { value: '60', label: '1 Min' }, { value: '120', label: '2 Min' },
+  { value: '300', label: '5 Min' }, { value: '600', label: '10 Min' },
+  { value: '1200', label: '20 Min' }, { value: '1800', label: '30 Min' },
+]
+
 function FieldError({ message }: { message?: string }) {
   if (!message) return null
-  return <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">{message}</p>
+  return <p className="mt-1 text-[11px] text-red-500">{message}</p>
 }
 
 function CardSection({
-  icon: Icon,
-  title,
-  description,
-  children,
-  className = '',
+  icon: Icon, title, description, children, className = '',
 }: {
-  icon: React.ElementType
-  title: string
-  description?: string
-  children: React.ReactNode
-  className?: string
+  icon: React.ElementType; title: string; description?: string; children: React.ReactNode; className?: string
 }) {
   return (
     <div className={`bg-white rounded-2xl border border-slate-200 overflow-hidden ${className}`}
@@ -129,50 +106,19 @@ function CardSection({
   )
 }
 
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean
-  onChange: (val: boolean) => void
-  label?: string
-}) {
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <div className="flex items-center gap-2.5">
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-          checked ? 'bg-indigo-600' : 'bg-slate-200'
-        }`}
-      >
-        <span
-          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-            checked ? 'translate-x-4' : 'translate-x-0'
-          }`}
-        />
+      <button type="button" onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
       </button>
-      {label && (
-        <span className={`text-xs font-medium ${checked ? 'text-indigo-700' : 'text-slate-400'}`}>
-          {label}
-        </span>
-      )}
+      {label && <span className={`text-xs font-medium ${checked ? 'text-indigo-700' : 'text-slate-400'}`}>{label}</span>}
     </div>
   )
 }
 
-function ToggleRow({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string
-  hint?: string
-  checked: boolean
-  onChange: (val: boolean) => void
-}) {
+function ToggleRow({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
       <div className="min-w-0 pr-4">
@@ -185,49 +131,174 @@ function ToggleRow({
 }
 
 // ─────────────────────────────────────────────
+//  Disposition Multi-Select Dropdown
+// ─────────────────────────────────────────────
+function DispositionMultiSelect({
+  dispositions,
+  selected,
+  onChange,
+}: {
+  dispositions: Array<{ id: number; title: string }>
+  selected: number[]
+  onChange: (ids: number[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = dispositions.filter(d =>
+    d.title.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const toggle = (id: number) => {
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
+  }
+
+  const removeOne = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    onChange(selected.filter(x => x !== id))
+  }
+
+  const clearAll = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onChange([])
+  }
+
+  const selectedDisps = dispositions.filter(d => selected.includes(d.id))
+
+  return (
+    <div className="relative" ref={ref}>
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all text-left ${
+          open ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'
+        } bg-white`}
+      >
+        <span className={`flex-1 truncate ${selected.length === 0 ? 'text-slate-400' : 'text-slate-700 font-medium'}`}>
+          {selected.length === 0
+            ? 'Select dispositions…'
+            : `${selected.length} disposition${selected.length !== 1 ? 's' : ''} selected`}
+        </span>
+        {selected.length > 0 && (
+          <span
+            onClick={clearAll}
+            className="text-slate-400 hover:text-red-500 transition-colors p-0.5 rounded cursor-pointer"
+          >
+            <X size={13} />
+          </span>
+        )}
+        <ChevronDown size={14} className={`text-slate-400 flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+          {/* Search */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/80">
+            <Search size={13} className="text-slate-400 flex-shrink-0" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search dispositions…"
+              className="flex-1 text-sm bg-transparent outline-none text-slate-700 placeholder-slate-400"
+            />
+            {search && (
+              <button type="button" onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">No dispositions found</p>
+            ) : (
+              filtered.map(d => {
+                const isChecked = selected.includes(d.id)
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => toggle(d.id)}
+                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-left transition-colors ${
+                      isChecked ? 'bg-indigo-50 text-indigo-800' : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                      isChecked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                    }`}>
+                      {isChecked && <CheckCircle2 size={10} className="text-white" strokeWidth={3} />}
+                    </span>
+                    <span className="truncate">{d.title}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          {selected.length > 0 && (
+            <div className="px-3.5 py-2 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <span className="text-xs text-slate-500">{selected.length} selected</span>
+              <button type="button" onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 font-medium">
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Selected chips */}
+      {selectedDisps.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selectedDisps.map(d => (
+            <span key={d.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200">
+              {d.title}
+              <button type="button" onClick={(e) => removeOne(d.id, e)} className="hover:text-red-600 transition-colors ml-0.5">
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────
 export function CreateCampaign() {
   const navigate = useNavigate()
 
   const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    setValue,
+    register, handleSubmit, control, watch, setValue,
     formState: { errors, isSubmitting },
   } = useForm<CampaignFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(campaignSchema) as any,
     defaultValues: {
-      title: '',
-      description: '',
-      status: 1,
-      dial_mode: 'power_dial',
-      group_id: '',
-      call_ratio: '',
-      duration: '',
-      automated_duration: '',
-      max_lead_temp: 100,
-      min_lead_temp: 500,
-      caller_id: 'area_code',
-      custom_caller_id: '',
-      country_code: '',
-      voip_configuration_id: '',
-      time_based_calling: 0,
-      call_time_start: '08:00',
-      call_time_end: '20:00',
-      amd: '0',
-      amd_drop_action: null,
-      voicedrop_option_user_id: '',
-      no_agent_available_action: null,
-      redirect_to: '',
-      call_transfer: 0,
-      percentage_inc_dec: '',
-      call_metric: '0',
-      send_report: 0,
-      api: 1,
+      title: '', description: '', status: 1, dial_mode: '',
+      group_id: '', call_ratio: '', duration: '', automated_duration: '',
+      hopper_mode: 1, max_lead_temp: 100, min_lead_temp: 500, percentage_inc_dec: '',
+      caller_id: 'area_code', custom_caller_id: '', country_code: '', voip_configuration_id: '',
+      call_transfer: 0, time_based_calling: 0, call_time_start: '08:00', call_time_end: '20:00',
+      email: 0, sms: 0, send_crm: 0, send_report: 0, call_metric: '0', api: 1,
+      amd: '0', amd_drop_action: null, audio_message_amd: null, voice_message_amd: null,
+      redirect_to: '', redirect_to_dropdown: null,
+      no_agent_available_action: null, no_agent_dropdown_action: null,
       disposition_id: [],
     },
   })
@@ -236,43 +307,104 @@ export function CreateCampaign() {
   const callerIdType = watch('caller_id')
   const timeBasedCalling = watch('time_based_calling')
   const amd = watch('amd')
+  const amdDropAction = watch('amd_drop_action')
+  const redirectTo = watch('redirect_to')
+  const noAgentAction = watch('no_agent_available_action')
 
-  const { data: groupsData, isLoading: loadingGroups } = useQuery({
-    queryKey: ['extension-groups'],
-    queryFn: () => userService.getGroups(),
-  })
-  const groups: Array<{ id: number; group_name: string }> =
-    (groupsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; group_name: string }> ?? []
+  // Reset dependent fields when dial_mode changes
+  useEffect(() => {
+    setValue('call_ratio', '')
+    setValue('duration', '')
+    setValue('redirect_to', '')
+    setValue('redirect_to_dropdown', null)
+    setValue('no_agent_dropdown_action', null)
+  }, [dialMode, setValue])
 
-  const { data: usersData } = useQuery({
-    queryKey: ['users-all'],
-    queryFn: () => userService.getAll(),
-  })
-  const users: Array<{ id: number; name?: string; first_name?: string; username?: string }> =
-    (usersData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; name?: string; first_name?: string; username?: string }> ?? []
+  useEffect(() => { setValue('redirect_to_dropdown', null) }, [redirectTo, setValue])
+  useEffect(() => { setValue('no_agent_dropdown_action', null) }, [noAgentAction, setValue])
 
-  const { data: dispositionsData } = useQuery({
+  // Derived flags
+  const showCallRatioDuration = dialMode === 'predictive_dial' || dialMode === 'outbound_ai'
+  const showAutomatedDuration = dialMode === 'predictive_dial'
+  const showAmd = dialMode === 'predictive_dial' || dialMode === 'outbound_ai'
+  const showNoAgent = dialMode === 'predictive_dial'
+  const showRedirectTo = dialMode === 'outbound_ai'
+  const showAdvanced = showCallRatioDuration
+
+  // Dropdown queries
+  const { data: campaignTypesData } = useQuery({ queryKey: ['campaign-types'], queryFn: () => campaignService.getTypes() })
+  const dialModes: Array<{ value: string; label: string }> =
+    ((campaignTypesData as { data?: { data?: unknown[] } })?.data?.data as Array<{ title: string; title_url: string }> ?? [])
+      .map(t => ({ value: t.title_url, label: t.title }))
+
+  const { data: groupsData } = useQuery({ queryKey: ['extension-groups'], queryFn: () => userService.getGroups() })
+  const groups: Array<{ id: number; group_name?: string; title?: string }> =
+    (groupsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; group_name?: string; title?: string }> ?? []
+
+  const { data: dispositionsData, isLoading: dispositionsLoading } = useQuery({
     queryKey: ['dispositions-all'],
     queryFn: () => dispositionService.list({ page: 1, limit: 200, search: '', filters: {} }),
   })
   const dispositions: Array<{ id: number; title: string }> =
     (dispositionsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; title: string }> ?? []
 
+  const { data: didsData } = useQuery({ queryKey: ['dids-all'], queryFn: () => campaignService.getDids() })
+  const dids: Array<{ cli: string; cnam?: string }> =
+    ((didsData as { data?: { data?: unknown[] } })?.data?.data ?? (didsData as { data?: unknown[] })?.data ?? []) as Array<{ cli: string; cnam?: string }>
+
+  const { data: countriesData } = useQuery({ queryKey: ['country-codes'], queryFn: () => campaignService.getCountryCodes() })
+  const countries: Array<{ phonecode: string; name: string }> =
+    ((countriesData as { data?: { data?: unknown[] } })?.data?.data ?? (countriesData as { data?: unknown[] })?.data ?? []) as Array<{ phonecode: string; name: string }>
+
+  const { data: extensionsData } = useQuery({ queryKey: ['extensions-all'], queryFn: () => campaignService.getExtensions(), enabled: showNoAgent || showRedirectTo })
+  const extensions: Array<{ id: number; first_name?: string; last_name?: string; extension?: string }> =
+    ((extensionsData as { data?: { data?: unknown[] } })?.data?.data ?? (extensionsData as { data?: unknown[] })?.data ?? []) as Array<{ id: number; first_name?: string; last_name?: string; extension?: string }>
+
+  const { data: ivrData } = useQuery({ queryKey: ['ivr-list'], queryFn: () => campaignService.getIvrList(), enabled: showNoAgent || showRedirectTo })
+  const ivrList: Array<{ ivr_id: string; ivr_desc: string }> =
+    ((ivrData as { data?: { data?: unknown[] } })?.data?.data ?? (ivrData as { data?: unknown[] })?.data ?? []) as Array<{ ivr_id: string; ivr_desc: string }>
+
+  const { data: ringGroupData } = useQuery({ queryKey: ['ring-groups'], queryFn: () => campaignService.getRingGroups(), enabled: showRedirectTo })
+  const ringGroups: Array<{ id: number; title: string; description?: string }> =
+    ((ringGroupData as { data?: { data?: unknown[] } })?.data?.data ?? (ringGroupData as { data?: unknown[] })?.data ?? []) as Array<{ id: number; title: string; description?: string }>
+
+  const { data: voiceTemplatesData } = useQuery({ queryKey: ['voice-templates'], queryFn: () => campaignService.getVoiceTemplates(), enabled: showAmd || showRedirectTo })
+  const voiceTemplates: Array<{ templete_id: string; templete_name: string }> =
+    ((voiceTemplatesData as { data?: { data?: unknown[] } })?.data?.data ?? (voiceTemplatesData as { data?: unknown[] })?.data ?? []) as Array<{ templete_id: string; templete_name: string }>
+
+  const { data: audioMessagesData } = useQuery({ queryKey: ['audio-messages'], queryFn: () => campaignService.getAudioMessages(), enabled: showAmd || showRedirectTo })
+  const audioMessages: Array<{ ivr_id: string; ivr_desc: string }> =
+    ((audioMessagesData as { data?: { data?: unknown[] } })?.data?.data ?? (audioMessagesData as { data?: unknown[] })?.data ?? []) as Array<{ ivr_id: string; ivr_desc: string }>
+
+  const { data: promptsData } = useQuery({ queryKey: ['prompts-all'], queryFn: () => campaignService.getPrompts(), enabled: showRedirectTo })
+  const prompts: Array<{ id: number; title: string }> =
+    ((promptsData as { data?: { data?: unknown[] } })?.data?.data ?? (promptsData as { data?: unknown[] })?.data ?? []) as Array<{ id: number; title: string }>
+
+  // Mutation
   const createMutation = useMutation({
     mutationFn: (data: CampaignFormValues) => {
       const payload: Record<string, unknown> = {
         ...data,
         group_id: data.group_id ? Number(data.group_id) : 0,
-        custom_caller_id: data.custom_caller_id ? Number(data.custom_caller_id) : undefined,
+        // DB NOT NULL columns — send safe defaults instead of null
+        amd_drop_action: data.amd_drop_action ?? 1,
+        no_agent_available_action: data.no_agent_available_action ?? 1,
+        no_agent_dropdown_action: data.no_agent_dropdown_action ? Number(data.no_agent_dropdown_action) : 0,
+        voicedrop_option_user_id: 0,
         country_code: data.country_code ? Number(data.country_code) : undefined,
         voip_configuration_id: data.voip_configuration_id ? Number(data.voip_configuration_id) : undefined,
-        voicedrop_option_user_id: data.voicedrop_option_user_id ? Number(data.voicedrop_option_user_id) : undefined,
+        redirect_to_dropdown: data.redirect_to_dropdown ? Number(data.redirect_to_dropdown) : undefined,
+        audio_message_amd: data.audio_message_amd ? Number(data.audio_message_amd) : undefined,
+        voice_message_amd: data.voice_message_amd ? Number(data.voice_message_amd) : undefined,
       }
       return campaignService.create(payload)
     },
-    onSuccess: () => {
+    onSuccess: (res: unknown) => {
+      const r = res as { data?: { data?: { id?: number } } }
+      const newId = r?.data?.data?.id
       toast.success('Campaign created successfully')
-      navigate('/campaigns')
+      if (newId) navigate(`/campaigns/${newId}/attach-leads`)
+      else navigate('/campaigns')
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -283,235 +415,158 @@ export function CreateCampaign() {
   const onSubmit = (data: CampaignFormValues) => createMutation.mutate(data)
 
   const watchedDispositions = watch('disposition_id') ?? []
-  const toggleDisposition = (id: number) => {
-    const current = watchedDispositions
-    setValue('disposition_id', current.includes(id) ? current.filter(d => d !== id) : [...current, id])
-  }
-
-  if (loadingGroups) return <PageLoader />
 
   const isPending = isSubmitting || createMutation.isPending
 
+  const callRatioOptions = dialMode === 'predictive_dial' ? PREDICTIVE_CALL_RATIO : OUTBOUND_CALL_RATIO
+  const durationOptions = dialMode === 'predictive_dial' ? PREDICTIVE_DURATION : OUTBOUND_DURATION
+
   return (
     <div className="w-full space-y-4 animate-fadeIn">
-
-      {/* ── Sticky Page Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/campaigns')} className="btn-ghost p-2 rounded-lg">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-none">New Campaign</h1>
-            <p className="text-xs text-slate-500 mt-1">Configure and launch a new dialing campaign</p>
-          </div>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => navigate('/campaigns')} className="btn-ghost p-2 rounded-lg">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 leading-none">New Campaign</h1>
+          <p className="text-xs text-slate-500 mt-1">Configure and launch a new dialing campaign</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
 
-        {/* ── Row 1: Campaign Overview (full width, compact) ── */}
+        {/* ── Campaign Overview ── */}
         <CardSection icon={Radio} title="Campaign Overview" description="Name and basic configuration" className="mb-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* Title - wide */}
             <div className="lg:col-span-5 form-group">
-              <label className="label text-xs">Campaign Title <span className="text-red-500">*</span></label>
-              <input
-                {...register('title')}
-                className={`input text-sm py-2 ${errors.title ? 'border-red-400' : ''}`}
-                placeholder="e.g. Summer Sales 2025"
-              />
+              <label className="label text-xs">Campaign Name <span className="text-red-500">*</span></label>
+              <input {...register('title')} className={`input text-sm py-2 ${errors.title ? 'border-red-400' : ''}`} placeholder="e.g. Summer Sales 2025" />
               <FieldError message={errors.title?.message} />
             </div>
-            {/* Description - medium */}
             <div className="lg:col-span-5 form-group">
               <label className="label text-xs">Description</label>
-              <input
-                {...register('description')}
-                className={`input text-sm py-2 ${errors.description ? 'border-red-400' : ''}`}
-                placeholder="Brief campaign description (optional)"
-              />
-              <FieldError message={errors.description?.message} />
+              <input {...register('description')} className="input text-sm py-2" placeholder="Brief campaign description (optional)" />
             </div>
-            {/* Status + Send Report - compact right column */}
-            <div className="lg:col-span-2 flex flex-col gap-3 justify-center">
-              <Controller
-                name="status"
-                control={control}
+            <div className="lg:col-span-2 flex flex-col gap-1 justify-center">
+              <Controller name="status" control={control}
                 render={({ field }) => (
-                  <ToggleRow
-                    label="Active"
-                    checked={field.value === 1}
-                    onChange={(val) => field.onChange(val ? 1 : 0)}
-                  />
+                  <ToggleRow label="Active" checked={field.value === 1} onChange={v => field.onChange(v ? 1 : 0)} />
                 )}
               />
-              <Controller
-                name="send_report"
-                control={control}
+              <Controller name="send_report" control={control}
                 render={({ field }) => (
-                  <ToggleRow
-                    label="Send Report"
-                    checked={field.value === 1}
-                    onChange={(val) => field.onChange(val ? 1 : 0)}
-                  />
+                  <ToggleRow label="Send Report" checked={field.value === 1} onChange={v => field.onChange(v ? 1 : 0)} />
                 )}
               />
             </div>
           </div>
         </CardSection>
 
-        {/* ── Row 2: Three-column grid ── */}
+        {/* ── Row 2: Dialing | Caller ID | Schedule ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
 
-          {/* ── Card: Dialing Configuration ── */}
-          <CardSection icon={Phone} title="Dialing" description="Dial mode & call behavior">
+          {/* Dialing Card */}
+          <CardSection icon={Phone} title="Dialing Mode" description="Dial strategy & lead flow">
             <div className="space-y-3">
-              {/* Dial Mode */}
               <div className="form-group">
-                <label className="label text-xs">Dial Mode <span className="text-red-500">*</span></label>
+                <label className="label text-xs">Dialing Mode <span className="text-red-500">*</span></label>
                 <select {...register('dial_mode')} className={`input text-sm py-2 ${errors.dial_mode ? 'border-red-400' : ''}`}>
-                  {DIAL_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  <option value="">— Select Mode —</option>
+                  {dialModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
                 <FieldError message={errors.dial_mode?.message} />
               </div>
 
-              {/* Agent Group */}
               <div className="form-group">
-                <label className="label text-xs">
-                  Agent Group {dialMode === 'super_power_dial' && <span className="text-red-500">*</span>}
-                </label>
+                <label className="label text-xs">Caller Group {dialMode === 'super_power_dial' && <span className="text-red-500">*</span>}</label>
                 <select {...register('group_id')} className={`input text-sm py-2 ${errors.group_id ? 'border-red-400' : ''}`}>
                   <option value="">— None —</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.group_name}</option>)}
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.group_name ?? g.title}</option>)}
                 </select>
                 <FieldError message={errors.group_id?.message as string} />
               </div>
 
-              {/* Predictive: Call Ratio */}
-              {dialMode === 'predictive_dial' && (
-                <div className="form-group">
-                  <label className="label text-xs">Call Ratio</label>
-                  <input {...register('call_ratio')} className={`input text-sm py-2 ${errors.call_ratio ? 'border-red-400' : ''}`} placeholder="e.g. 2:1" />
-                  <FieldError message={errors.call_ratio?.message} />
-                </div>
-              )}
-
-              {/* Duration | Auto Duration */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="form-group">
-                  <label className="label text-xs">Duration <span className="text-slate-400 font-normal">(sec)</span></label>
-                  <input {...register('duration')} className="input text-sm py-2" placeholder="60" />
-                </div>
-                <div className="form-group">
-                  <label className="label text-xs">Auto Duration <span className="text-slate-400 font-normal">(sec)</span></label>
-                  <input {...register('automated_duration')} className="input text-sm py-2" placeholder="30" />
-                </div>
+              <div className="form-group">
+                <label className="label text-xs">Hopper Mode</label>
+                <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
+                  <option value="1">Linear</option>
+                  <option value="2">Random</option>
+                </select>
               </div>
 
-              {/* % Inc/Dec | Hopper Mode */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="form-group">
-                  <label className="label text-xs">% Inc/Dec</label>
-                  <input {...register('percentage_inc_dec')} className="input text-sm py-2" placeholder="10" />
-                </div>
-                <div className="form-group">
-                  <label className="label text-xs">Hopper Mode</label>
-                  <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
-                    <option value="">— None —</option>
-                    <option value="0">Disabled</option>
-                    <option value="1">Enabled</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Lead Temp Range */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
                   <label className="label text-xs">Max Lead Temp</label>
                   <input type="number" {...register('max_lead_temp', { valueAsNumber: true })} className="input text-sm py-2" min={0} />
-                  <FieldError message={errors.max_lead_temp?.message} />
                 </div>
                 <div className="form-group">
                   <label className="label text-xs">Min Lead Temp</label>
                   <input type="number" {...register('min_lead_temp', { valueAsNumber: true })} className="input text-sm py-2" min={0} />
-                  <FieldError message={errors.min_lead_temp?.message} />
                 </div>
               </div>
             </div>
           </CardSection>
 
-          {/* ── Card: Caller ID ── */}
-          <CardSection icon={Radio} title="Caller ID" description="Outbound caller identification">
+          {/* Caller ID Card */}
+          <CardSection icon={Globe} title="Caller ID" description="Outbound identification">
             <div className="space-y-3">
-              {/* Caller Type | Country Code */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="form-group">
-                  <label className="label text-xs">Caller ID Type <span className="text-red-500">*</span></label>
-                  <select {...register('caller_id')} className={`input text-sm py-2 ${errors.caller_id ? 'border-red-400' : ''}`}>
-                    <option value="area_code">Area Code</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                  <FieldError message={errors.caller_id?.message} />
-                </div>
-                <div className="form-group">
-                  <label className="label text-xs">Country Code</label>
-                  <input {...register('country_code')} className="input text-sm py-2" placeholder="e.g. 1" />
-                </div>
-              </div>
-
-              {/* Custom Caller ID */}
-              {callerIdType === 'custom' && (
-                <div className="form-group">
-                  <label className="label text-xs">Custom Caller ID <span className="text-red-500">*</span></label>
-                  <input {...register('custom_caller_id')} type="tel" className={`input text-sm py-2 ${errors.custom_caller_id ? 'border-red-400' : ''}`} placeholder="e.g. 5551234567" />
-                  <FieldError message={errors.custom_caller_id?.message} />
-                </div>
-              )}
-
-              {/* VoIP Config */}
               <div className="form-group">
-                <label className="label text-xs">VoIP Configuration ID</label>
-                <input {...register('voip_configuration_id')} type="number" className="input text-sm py-2" placeholder="VoIP config ID" />
+                <label className="label text-xs">Caller ID Type <span className="text-red-500">*</span></label>
+                <select {...register('caller_id')} className="input text-sm py-2">
+                  <option value="area_code">Area Code</option>
+                  <option value="area_code_random">Area Code &amp; Randomizer</option>
+                  <option value="custom">Custom</option>
+                </select>
               </div>
 
-              {/* Toggles */}
-              <div className="pt-1 space-y-0">
-                <Controller
-                  name="call_transfer"
-                  control={control}
-                  render={({ field }) => (
-                    <ToggleRow label="Call Transfer" checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} />
-                  )}
-                />
+              <div className="form-group">
+                <label className="label text-xs">Custom Caller ID {callerIdType === 'custom' && <span className="text-red-500">*</span>}</label>
+                <select
+                  {...register('custom_caller_id')}
+                  disabled={callerIdType !== 'custom'}
+                  className={`input text-sm py-2 ${callerIdType !== 'custom' ? 'opacity-50' : ''} ${errors.custom_caller_id ? 'border-red-400' : ''}`}
+                >
+                  <option value="">— Select DID —</option>
+                  {dids.map(d => (
+                    <option key={d.cli} value={d.cli}>{d.cli}{d.cnam ? ` — ${d.cnam}` : ''}</option>
+                  ))}
+                </select>
+                <FieldError message={errors.custom_caller_id?.message} />
+              </div>
+
+              <div className="form-group">
+                <label className="label text-xs">Country Code</label>
+                <select {...register('country_code')} className="input text-sm py-2">
+                  <option value="">— Select Country —</option>
+                  {countries.map(c => (
+                    <option key={c.phonecode} value={c.phonecode}>{c.name} (+{c.phonecode})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="label text-xs">Call Transfer</label>
+                <select {...register('call_transfer', { valueAsNumber: true })} className="input text-sm py-2">
+                  <option value="0">No</option>
+                  <option value="1">Yes</option>
+                </select>
               </div>
             </div>
           </CardSection>
 
-          {/* ── Card: Schedule & Limits ── */}
-          <CardSection icon={Clock} title="Schedule & Limits" description="Call timing and lead controls">
+          {/* Schedule & Communication Card */}
+          <CardSection icon={Clock} title="Schedule & Communication" description="Call timing & messaging">
             <div className="space-y-3">
-              {/* Time-based calling toggle */}
-              <Controller
-                name="time_based_calling"
-                control={control}
-                render={({ field }) => (
-                  <div className="flex items-center justify-between py-1">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">Time-Based Calling</p>
-                      <p className="text-[11px] text-slate-400">Restrict calls to set hours</p>
-                    </div>
-                    <Toggle
-                      checked={field.value === 1}
-                      onChange={val => field.onChange(val ? 1 : 0)}
-                      label={field.value === 1 ? 'On' : 'Off'}
-                    />
-                  </div>
-                )}
-              />
+              <div className="form-group">
+                <label className="label text-xs">Time Based Calling</label>
+                <select {...register('time_based_calling', { valueAsNumber: true })} className="input text-sm py-2">
+                  <option value="0">No</option>
+                  <option value="1">Yes</option>
+                </select>
+              </div>
 
-              {timeBasedCalling === 1 ? (
-                <div className="grid grid-cols-2 gap-2 pt-1">
+              {timeBasedCalling === 1 && (
+                <div className="grid grid-cols-2 gap-2">
                   <div className="form-group">
                     <label className="label text-xs">Start Time <span className="text-red-500">*</span></label>
                     <input type="time" {...register('call_time_start')} className={`input text-sm py-2 ${errors.call_time_start ? 'border-red-400' : ''}`} />
@@ -523,23 +578,38 @@ export function CreateCampaign() {
                     <FieldError message={errors.call_time_end?.message} />
                   </div>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <Clock size={13} className="text-slate-300 flex-shrink-0" />
-                  <p className="text-xs text-slate-400">Enable to restrict calling hours</p>
-                </div>
               )}
 
-              <div className="border-t border-slate-100 pt-3 space-y-0">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System</p>
+              <div className="form-group">
+                <label className="label text-xs">Send Email</label>
+                <select {...register('email', { valueAsNumber: true })} className="input text-sm py-2">
+                  <option value="0">No</option>
+                  <option value="1">With User Email</option>
+                  <option value="2">With Campaign Email</option>
+                  <option value="3">With System Email</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="label text-xs">Send SMS</label>
+                <select {...register('sms', { valueAsNumber: true })} className="input text-sm py-2">
+                  <option value="0">No</option>
+                  <option value="1">With User Phone No</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="label text-xs">Send to CRM</label>
+                <select {...register('send_crm', { valueAsNumber: true })} className="input text-sm py-2">
+                  <option value="0">No</option>
+                  <option value="1">Yes</option>
+                </select>
+              </div>
+
+              <div className="border-t border-slate-100 pt-2">
                 <Controller name="call_metric" control={control}
                   render={({ field }) => (
-                    <ToggleRow label="Call Metrics" hint="Track detailed performance" checked={field.value === '1'} onChange={val => field.onChange(val ? '1' : '0')} />
-                  )}
-                />
-                <Controller name="api" control={control}
-                  render={({ field }) => (
-                    <ToggleRow label="API Access" hint="API-based management" checked={field.value === 1} onChange={val => field.onChange(val ? 1 : 0)} />
+                    <ToggleRow label="Call Metrics" hint="Track detailed performance" checked={field.value === '1'} onChange={v => field.onChange(v ? '1' : '0')} />
                   )}
                 />
               </div>
@@ -547,97 +617,255 @@ export function CreateCampaign() {
           </CardSection>
         </div>
 
-        {/* ── Row 3: Advanced Settings (full width, compact 2-col) ── */}
-        <CardSection icon={Settings2} title="Advanced Settings" description="AMD, routing, voicedrop and agent behavior" className="mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* AMD */}
-            <div className="space-y-3">
-              <Controller name="amd" control={control}
-                render={({ field }) => (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">AMD Detection</p>
-                      <p className="text-[11px] text-slate-400">Answering machine detection</p>
-                    </div>
-                    <Toggle checked={field.value === '1'} onChange={val => field.onChange(val ? '1' : '0')} label={field.value === '1' ? 'On' : 'Off'} />
+        {/* ── Advanced: Call Ratio, AMD, No-Agent, Redirect ── */}
+        {showAdvanced && (
+          <CardSection icon={Settings2} title="Advanced Dialing Settings" description="Call ratio, AMD, and routing" className="mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+              {/* Call Ratio & Duration */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  {dialMode === 'predictive_dial' ? 'Call Ratio & Duration' : 'Simultaneous Calls & Interval'}
+                </p>
+                <div className="form-group">
+                  <label className="label text-xs">{dialMode === 'predictive_dial' ? 'Call Ratio' : 'Simultaneous Calls'}</label>
+                  <select {...register('call_ratio')} className="input text-sm py-2">
+                    <option value="">— Select —</option>
+                    {callRatioOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label text-xs">{dialMode === 'predictive_dial' ? 'Duration (sec)' : 'Duration'}</label>
+                  <select {...register('duration')} className="input text-sm py-2">
+                    <option value="">— Select —</option>
+                    {durationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                {showAutomatedDuration && (
+                  <div className="form-group">
+                    <label className="label text-xs">Automated Duration</label>
+                    <select {...register('automated_duration')} className="input text-sm py-2">
+                      <option value="0">No</option>
+                      <option value="1">Yes</option>
+                    </select>
                   </div>
                 )}
-              />
-              {amd === '1' && (
-                <div className="form-group">
-                  <label className="label text-xs">AMD Drop Action</label>
-                  <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
-                    <option value="">— Select —</option>
-                    {AMD_DROP_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                  </select>
+              </div>
+
+              {/* AMD Section */}
+              {showAmd && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">AMD Detection</p>
+                  <div className="form-group">
+                    <label className="label text-xs">AMD</label>
+                    <select {...register('amd')} className="input text-sm py-2">
+                      <option value="0">Off</option>
+                      <option value="1">On</option>
+                    </select>
+                  </div>
+                  {amd === '1' && (
+                    <>
+                      <div className="form-group">
+                        <label className="label text-xs">AMD Drop Action</label>
+                        <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
+                          <option value="">— Select —</option>
+                          <option value="1">Hang Up</option>
+                          <option value="2">Audio Message</option>
+                          <option value="3">Voice Template</option>
+                        </select>
+                      </div>
+                      {amdDropAction === 2 && (
+                        <div className="form-group">
+                          <label className="label text-xs">Audio Message AMD</label>
+                          <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                            <option value="">— Select —</option>
+                            {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc} — {a.ivr_id}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {amdDropAction === 3 && (
+                        <div className="form-group">
+                          <label className="label text-xs">Voice Template AMD</label>
+                          <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                            <option value="">— Select —</option>
+                            {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* No Agent Action (predictive only) */}
+              {showNoAgent && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">No Agent Available</p>
+                  <div className="form-group">
+                    <label className="label text-xs">No Agent Action</label>
+                    <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
+                      <option value="">— Select —</option>
+                      <option value="1">Hang Up</option>
+                      <option value="2">Voice Drop</option>
+                      <option value="3">Inbound IVR</option>
+                      <option value="4">Extension</option>
+                      <option value="5">Assistant AI</option>
+                    </select>
+                  </div>
+                  {noAgentAction === 2 && (
+                    <div className="form-group">
+                      <label className="label text-xs">Voice Drop Option</label>
+                      <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select Extension —</option>
+                        {extensions.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} — {e.extension}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {noAgentAction === 3 && (
+                    <div className="form-group">
+                      <label className="label text-xs">Inbound IVR Option</label>
+                      <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select IVR —</option>
+                        {ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc} — {ivr.ivr_id}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {noAgentAction === 4 && (
+                    <div className="form-group">
+                      <label className="label text-xs">Extension</label>
+                      <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select Extension —</option>
+                        {extensions.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} — {e.extension}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {noAgentAction === 5 && (
+                    <div className="form-group">
+                      <label className="label text-xs">Assistant ID</label>
+                      <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="123">Assistant</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Redirect To (outbound_ai only) */}
+              {showRedirectTo && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Redirect To</p>
+                  <div className="form-group">
+                    <label className="label text-xs">Redirect To</label>
+                    <select {...register('redirect_to')} className="input text-sm py-2">
+                      <option value="">— Select —</option>
+                      <option value="1">Audio Message</option>
+                      <option value="2">Voice Template</option>
+                      <option value="3">Extension</option>
+                      <option value="4">Ring Group</option>
+                      <option value="5">IVR</option>
+                      <option value="6">Voice AI</option>
+                    </select>
+                  </div>
+                  {redirectTo === '1' && (
+                    <div className="form-group">
+                      <label className="label text-xs">Audio Message</label>
+                      <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select —</option>
+                        {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc} — {a.ivr_id}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {redirectTo === '2' && (
+                    <div className="form-group">
+                      <label className="label text-xs">Voice Message</label>
+                      <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select —</option>
+                        {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {redirectTo === '3' && (
+                    <div className="form-group">
+                      <label className="label text-xs">Extension</label>
+                      <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select —</option>
+                        {extensions.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} — {e.extension}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {redirectTo === '4' && (
+                    <div className="form-group">
+                      <label className="label text-xs">Ring Group</label>
+                      <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select —</option>
+                        {ringGroups.map(rg => <option key={rg.id} value={rg.id}>{rg.description} — {rg.title}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {redirectTo === '5' && (
+                    <div className="form-group">
+                      <label className="label text-xs">IVR</label>
+                      <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select —</option>
+                        {ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc} — {ivr.ivr_id}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {redirectTo === '6' && (
+                    <div className="form-group">
+                      <label className="label text-xs">Voice AI</label>
+                      <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm py-2">
+                        <option value="">— Select Prompt —</option>
+                        {prompts.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
-            {/* No Agent Action + Redirect */}
-            <div className="space-y-3">
-              <div className="form-group">
-                <label className="label text-xs">No Agent Available Action</label>
-                <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm py-2">
-                  <option value="">— Select —</option>
-                  {NO_AGENT_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="label text-xs">Redirect To</label>
-                <input {...register('redirect_to')} className="input text-sm py-2" placeholder="Extension, DID, or queue" />
-              </div>
-            </div>
-
-            {/* Voicedrop User */}
-            <div className="form-group">
-              <label className="label text-xs">Voicedrop Option User</label>
-              <select {...register('voicedrop_option_user_id')} className="input text-sm py-2">
-                <option value="">— Select User —</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.name ?? u.first_name ?? u.username ?? `User #${u.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Empty/spacer for 4th col on large screens */}
-            <div className="hidden lg:block" />
-          </div>
-        </CardSection>
-
-        {/* ── Row 4: Dispositions ── */}
-        {dispositions.length > 0 && (
-          <CardSection icon={Tag} title="Dispositions" description="Select call outcomes for this campaign" className="mb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
-              {dispositions.map(d => {
-                const isChecked = watchedDispositions.includes(d.id)
-                return (
-                  <label
-                    key={d.id}
-                    className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
-                      isChecked
-                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-                        : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleDisposition(d.id)}
-                      className="rounded accent-indigo-600 w-3 h-3 flex-shrink-0"
-                    />
-                    <span className="truncate">{d.title}</span>
-                  </label>
-                )
-              })}
-            </div>
-            {errors.disposition_id && <FieldError message="Please select at least one disposition" />}
           </CardSection>
         )}
 
-        {/* ── Bottom Action Row ── */}
+        {/* ── Dispositions ── compact row, NO overflow-hidden wrapper ── */}
+        <div
+          className="bg-white rounded-2xl border border-slate-200 px-5 py-4 mb-4"
+          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)' }}
+        >
+          <div className="flex items-start gap-4">
+            {/* Label */}
+            <div className="flex items-center gap-2.5 w-32 flex-shrink-0 pt-1.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                <Tag size={14} className="text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-700 leading-none">Dispositions</p>
+                <p className="text-[10px] text-slate-400 mt-0.5 leading-none">Call outcomes</p>
+              </div>
+            </div>
+
+            {/* Dropdown — rendered outside overflow-hidden so it never gets clipped */}
+            <div className="flex-1 min-w-0">
+              {dispositionsLoading ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                  <div className="w-3.5 h-3.5 border border-slate-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
+                  Loading dispositions…
+                </div>
+              ) : (
+                <Controller name="disposition_id" control={control}
+                  render={({ field }) => (
+                    <DispositionMultiSelect
+                      dispositions={dispositions}
+                      selected={field.value ?? []}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Actions ── */}
         <div className="flex items-center justify-end gap-2.5 py-2">
           <button type="button" onClick={() => navigate('/campaigns')} className="btn-outline px-6">Cancel</button>
           <button type="submit" disabled={isPending} className="btn-primary px-6">

@@ -8,6 +8,8 @@ import { Badge } from '../../components/ui/Badge'
 import { faxService } from '../../services/fax.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
+import { confirmDelete } from '../../utils/confirmDelete'
+import { RowActions } from '../../components/ui/RowActions'
 import { CreateFaxModal } from './CreateFaxModal'
 import { ViewFaxModal, type FaxItem } from './ViewFaxModal'
 
@@ -124,28 +126,25 @@ export function FaxList() {
     },
     {
       key: 'actions',
-      header: '',
-      headerClassName: 'w-px',
+      header: 'Actions',
       render: (row) => (
-        <div className="flex items-center gap-1 justify-end">
-          <button
-            onClick={() => setViewItem(row)}
-            className="btn-ghost btn-sm p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-            title="View details"
-          >
-            <Eye size={14} />
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Delete Fax #${row.id}?`)) deleteMutation.mutate(row.id)
-            }}
-            disabled={deleteMutation.isPending}
-            className="btn-ghost btn-sm p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50"
-            title="Delete fax"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <RowActions actions={[
+          {
+            label: 'View',
+            icon: <Eye size={12} />,
+            variant: 'view',
+            onClick: () => setViewItem(row),
+          },
+          {
+            label: 'Delete',
+            icon: <Trash2 size={12} />,
+            variant: 'delete',
+            onClick: async () => {
+              if (await confirmDelete(`Fax #${row.id}`)) deleteMutation.mutate(row.id)
+            },
+            disabled: deleteMutation.isPending,
+          },
+        ]} />
       ),
     },
   ]
