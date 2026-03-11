@@ -126,18 +126,20 @@ export function FaxList() {
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'View',
-            icon: <Eye size={12} />,
+            icon: <Eye size={13} />,
             variant: 'view',
             onClick: () => setViewItem(row),
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(`Fax #${row.id}`)) deleteMutation.mutate(row.id)

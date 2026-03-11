@@ -519,24 +519,26 @@ export function Ivr() {
       },
     },
     {
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'View Menu',
-            icon: <Menu size={12} />,
+            icon: <Menu size={13} />,
             variant: 'view',
             onClick: () => setMenuIvr(row),
           },
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => { setEditingIvr(row); setIvrModal(true) },
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(row.ivr_desc))
@@ -578,18 +580,20 @@ export function Ivr() {
       render: (row) => <Badge variant="gray">{String(row.prompt_option) || '—'}</Badge>,
     },
     {
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => { setEditingAudio(row); setAudioModal(true) },
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(row.ivr_desc))

@@ -112,12 +112,20 @@ export function Topbar() {
             className="flex items-center gap-2 pl-1 pr-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors duration-150"
             title={user?.name}
           >
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shadow-sm flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
-            >
-              {user ? initials(user.name) : '?'}
-            </div>
+            {user?.profile_pic ? (
+              <img
+                src={user.profile_pic}
+                alt={user.name}
+                className="w-9 h-9 rounded-full object-cover shadow-sm flex-shrink-0"
+              />
+            ) : (
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shadow-sm flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
+              >
+                {user ? initials(user.name) : '?'}
+              </div>
+            )}
             <ChevronDown size={13} className={cn('text-slate-400 transition-transform duration-150', showProfileMenu && 'rotate-180')} />
           </button>
 

@@ -4,7 +4,9 @@ import { Plus, Pencil, Trash2, Loader2, X, Check, Building2, Phone, Mail, Zap } 
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
+import { RowActions } from '../../components/ui/RowActions'
 import type { Lender, LenderApiCredentials } from '../../types/crm.types'
+import { confirmDelete } from '../../utils/confirmDelete'
 
 const LENDER_API_TYPES = [
   { value: 'ondeck',           label: 'OnDeck' },
@@ -319,8 +321,8 @@ export function CrmLenders() {
           <table className="table">
             <thead>
               <tr>
-                {['Lender', 'Contact', 'Industry', 'Location', 'API', 'Status', 'Actions'].map(h => (
-                  <th key={h}>{h}</th>
+                {['Lender', 'Contact', 'Industry', 'Location', 'API', 'Status', 'Action'].map(h => (
+                  <th key={h} className={h === 'Action' ? 'text-right' : ''}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -387,18 +389,22 @@ export function CrmLenders() {
                         {Number(l.status) === 1 ? <><Check size={10} /> Active</> : 'Inactive'}
                       </button>
                     </td>
-                    <td>
-                      <div className="flex items-center gap-0.5">
-                        <button onClick={() => { setEditing(l); setShowModal(true) }} className="action-btn">
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => { if (window.confirm(`Delete "${l.lender_name}"?`)) deleteMutation.mutate(l.id) }}
-                          className="action-btn-danger"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                    <td className="w-px whitespace-nowrap">
+                      <RowActions actions={[
+                        {
+                          label: 'Edit',
+                          icon: <Pencil size={13} />,
+                          variant: 'edit',
+                          onClick: () => { setEditing(l); setShowModal(true) },
+                        },
+                        {
+                          label: 'Delete',
+                          icon: <Trash2 size={13} />,
+                          variant: 'delete',
+                          onClick: async () => { if (await confirmDelete(l.lender_name)) deleteMutation.mutate(l.id) },
+                          disabled: deleteMutation.isPending,
+                        },
+                      ]} />
                     </td>
                   </tr>
                 )

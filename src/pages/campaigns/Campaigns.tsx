@@ -327,8 +327,6 @@ export function Campaigns() {
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
-  const [viewCampaign, setViewCampaign] = useState<Campaign | null>(null)
-
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string | number }) =>
       campaignService.toggle(id, isActive(status) ? 'inactive' : 'active'),
@@ -444,13 +442,15 @@ export function Campaigns() {
     },
     {
       key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'View Campaign',
             icon: <Eye size={13} />,
             variant: 'view',
-            onClick: () => setViewCampaign(row),
+            onClick: () => navigate(`/campaigns/${row.id}`),
           },
           {
             label: isActive(row.status) ? 'Pause Campaign' : 'Activate Campaign',
@@ -486,14 +486,6 @@ export function Campaigns() {
 
   return (
     <>
-      {/* Campaign Detail Modal */}
-      {viewCampaign && (
-        <CampaignDetailModal
-          campaign={viewCampaign}
-          onClose={() => setViewCampaign(null)}
-        />
-      )}
-
       <div className="space-y-5">
         <div className="page-header">
           <div>

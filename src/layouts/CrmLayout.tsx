@@ -8,7 +8,6 @@ const CRM_TITLES: Record<string, string> = {
   '/crm/leads':           'All Leads',
   '/crm/leads/create':    'Add Lead',
   '/crm/lead-status':     'Lead Status',
-  '/crm/custom-fields':   'Custom Fields',
   '/crm/email-templates': 'Email Templates',
   '/crm/sms-templates':   'SMS Templates',
   '/crm/lenders':         'Lenders',

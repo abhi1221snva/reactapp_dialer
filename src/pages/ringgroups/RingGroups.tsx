@@ -173,59 +173,92 @@ function RingGroupFormModal({
   const qc = useQueryClient()
   const [form, setForm] = useState(EMPTY_FORM)
 
+  // Tracks whether form.extension has been set for the current modal open.
+  // Prevents Effect 2 from re-running if the extensions query refetches.
+  const extInitializedRef = useRef(false)
+
   const { data: extData } = useQuery({
     queryKey: ['extensions-for-rg'],
     queryFn: () => ringgroupService.getExtensions(),
   })
   const extensions: Extension[] = (extData as { data?: { data?: Extension[] } })?.data?.data ?? []
 
-  const { data: ringDetail } = useQuery({
-    queryKey: ['ring-group-detail', editing?.id],
-    queryFn: () => ringgroupService.getById(editing!.id),
-    enabled: isOpen && !!editing?.id,
-    staleTime: 0,
-    retry: false,
-  })
-
+  // Effect 1: Initialize non-extension fields when modal opens or editing row changes.
+  // Extensions are intentionally left empty here — Effect 2 sets them once the picker
+  // is available, using extension_id (user DB IDs) to resolve MAIN extension numbers only.
   useEffect(() => {
-    if (!isOpen) return
-
+    if (!isOpen) {
+      extInitializedRef.current = false
+      return
+    }
     if (editing) {
-      const detail = (ringDetail as { data?: unknown })?.data
-      const d = (detail as Record<string, unknown>) ?? {}
-
-      const rawTitle       = d.title       ?? d.name        ?? editing.title       ?? editing.name        ?? ''
-      const rawDescription = d.description ?? editing.description ?? ''
-      const rawRingType    = d.ring_type   ?? editing.ring_type   ?? 1
-      const rawReceiveOn   = d.receive_on  ?? editing.receive_on  ?? 'web_phone'
-      const rawEmail       = d.emails      ?? d.email       ?? editing.emails      ?? ''
-
-      const rawExts =
-        d.extensions   ?? d.extension_name ?? d.extension ??
-        editing.extensions ?? editing.extension_name ?? ''
-
-      // emails field can be a comma-joined string from backend; take the first one for single-email form
-      const emailStr = Array.isArray(rawEmail)
-        ? (rawEmail[0] ?? '')
-        : String(rawEmail).split(',')[0]?.trim() ?? ''
-
+      const emailStr = Array.isArray(editing.emails)
+        ? String((editing.emails as string[])[0] ?? '')
+        : String(editing.emails ?? '').split(',')[0]?.trim() ?? ''
       setForm({
-        title:       String(rawTitle),
-        description: String(rawDescription),
-        extension:   parseExtensions(rawExts),
+        title:       String(editing.title ?? editing.name ?? ''),
+        description: String(editing.description ?? ''),
+        extension:   [],   // populated by Effect 2 once picker is available
         email:       emailStr,
-        ring_type:   Number(rawRingType),
-        receive_on:  normaliseReceiveOn(rawReceiveOn),
+        ring_type:   Number(editing.ring_type ?? 1),
+        receive_on:  normaliseReceiveOn(editing.receive_on),
       })
+      extInitializedRef.current = false  // let Effect 2 set extensions
     } else {
       setForm(EMPTY_FORM)
+      extInitializedRef.current = true   // new group: user picks from picker directly
     }
-  }, [isOpen, editing, ringDetail])
+  }, [isOpen, editing])
+
+  // Effect 2: Set form.extension once the extension picker list is available.
+  //
+  // The DB stores e.g. "SIP/1001&SIP/38429" where 38429 is the ALT extension of user 1001.
+  // ringGroupUpdate() only accepts MAIN extension numbers (User::where('extension', $value)),
+  // so sending alt extension numbers causes "Extension not found" errors.
+  //
+  // Primary approach: use editing.extension_id (array of user DB IDs from ringGroupDetail)
+  //   to look up each user's MAIN extension in the picker — guaranteed to be only main exts.
+  // Fallback: filter the raw extension string against the picker (strips alt exts by exclusion).
+  useEffect(() => {
+    if (!isOpen || !editing || extInitializedRef.current || extensions.length === 0) return
+    extInitializedRef.current = true
+
+    const userIds: number[] = Array.isArray(editing.extension_id)
+      ? (editing.extension_id as number[])
+      : []
+
+    let mainExts: string[] = []
+
+    if (userIds.length > 0) {
+      // Map user DB IDs → main extension numbers using the picker
+      mainExts = userIds
+        .map(uid => extensions.find(e => e.id === uid))
+        .filter(Boolean)
+        .map(e => String(e!.extension ?? e!.ext ?? ''))
+        .filter(Boolean)
+    }
+
+    if (mainExts.length === 0) {
+      // Fallback: strip alt exts by filtering the raw string against the picker
+      const rawExts = parseExtensions(String(editing.extensions ?? editing.extension_name ?? ''))
+      mainExts = rawExts.filter(v =>
+        extensions.some(e => String(e.extension ?? e.ext ?? '') === v)
+      )
+    }
+
+    setForm(prev => ({ ...prev, extension: mainExts }))
+  }, [isOpen, editing, extensions])
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       editing ? ringgroupService.update(data) : ringgroupService.create(data),
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      const body = (response as { data?: { success?: string | boolean; message?: string } })?.data
+      const succeeded = body?.success === true || body?.success === 'true'
+      if (!succeeded) {
+        toast.error(body?.message ?? 'Failed to save Ring Group')
+        return
+      }
       toast.success(editing ? 'Ring Group updated' : 'Ring Group created')
       await qc.invalidateQueries({ queryKey: ['ring-groups'] })
       onClose()
@@ -235,16 +268,28 @@ function RingGroupFormModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // Block submit until the picker has loaded so Effect 2 can set the correct main extensions
+    if (editing && extensions.length === 0) {
+      toast.error('Extension data is still loading — please try again in a moment')
+      return
+    }
     if (!form.title.trim()) { toast.error('Title is required'); return }
     if (form.extension.length === 0) { toast.error('Select at least one extension'); return }
+
+    // Safety net: ensure only main extensions reach the backend.
+    // Effect 2 should have already set form.extension to main-only values via extension_id lookup,
+    // but filter here as well in case the user manually added values through the picker.
+    const mainExts = extensions.length > 0
+      ? form.extension.filter(v => extensions.some(e => String(e.extension ?? e.ext ?? '') === v))
+      : form.extension  // new group only: user picked from picker, all values are main exts
 
     const payload: Record<string, unknown> = {
       title:       form.title,
       description: form.description,
       // Backend addRingGroup / ringGroupUpdate both do is_array($request->input('extension'))
-      extension:   form.extension,
+      extension:   mainExts,
       // Backend does is_array($request->input('emails')) — must be an array
-      emails:      form.email ? [form.email] : [],
+      emails:      [form.email],
       ring_type:   form.ring_type,
       // DB enum: 'web_phone' | 'mobile' | 'desk_phone'
       receive_on:  form.receive_on,
@@ -394,13 +439,13 @@ export function RingGroups() {
         <RowActions actions={[
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => { setEditing(row); setModal(true) },
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(row.title ?? row.name))

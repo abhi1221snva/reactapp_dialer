@@ -10,6 +10,12 @@ import { CrmLayout } from './layouts/CrmLayout'
 // Auth pages
 import { Login } from './pages/auth/Login'
 import { ForgotPassword } from './pages/auth/ForgotPassword'
+import { Register } from './pages/auth/Register'
+import { ResetPassword } from './pages/auth/ResetPassword'
+
+// Onboarding & Agents
+import { Onboarding } from './pages/onboarding/Onboarding'
+import { Agents } from './pages/agents/Agents'
 
 // App pages
 import { Dashboard } from './pages/dashboard/Dashboard'
@@ -26,11 +32,12 @@ import { CrmLeadCreate } from './pages/crm/CrmLeadCreate'
 import { CrmAffiliateLinks } from './pages/crm/CrmAffiliateLinks'
 import { CrmApprovals } from './pages/crm/CrmApprovals'
 import { CrmLeadStatus } from './pages/crm/CrmLeadStatus'
-import { CrmCustomFields } from './pages/crm/CrmCustomFields'
+import { CrmLeadFields } from './pages/crm/CrmLeadFields'
 import { CrmEmailTemplates } from './pages/crm/CrmEmailTemplates'
 import { CrmSmsTemplates } from './pages/crm/CrmSmsTemplates'
 import { CrmLenders } from './pages/crm/CrmLenders'
 import { Campaigns } from './pages/campaigns/Campaigns'
+import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
 import { EditCampaign } from './modules/campaigns/EditCampaign'
 import { AttachLeads } from './modules/campaigns/AttachLeads'
@@ -45,13 +52,36 @@ import { ListLeads } from './pages/lists/ListLeads'
 import { ListEditForm } from './pages/lists/ListEditForm'
 import { EditMapping } from './modules/lists/EditMapping'
 import { Reports } from './pages/reports/Reports'
+import { DailyReport } from './pages/reports/DailyReport'
+import { AgentSummary } from './pages/reports/AgentSummary'
+import { DispositionReport } from './pages/reports/DispositionReport'
+import { LiveCalls } from './pages/reports/LiveCalls'
+import { CampaignPerformance } from './pages/reports/CampaignPerformance'
+import { Profile } from './pages/profile/Profile'
+import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
+import { AiSettings } from './pages/ai/AiSettings'
+import { AiCoach } from './pages/ai/AiCoach'
 import { SMSCenter } from './pages/sms/SMSCenter'
 import { TeamChat } from './pages/chat/TeamChat'
 import { AgentMonitoring } from './pages/monitoring/AgentMonitoring'
 import { Attendance } from './pages/attendance/Attendance'
 import { Billing } from './pages/billing/Billing'
+import { TwilioDashboard } from './pages/twilio/TwilioDashboard'
+import { TwilioNumbers }   from './pages/twilio/TwilioNumbers'
+import { TwilioTrunks }    from './pages/twilio/TwilioTrunks'
+import { TwilioCallLogs }  from './pages/twilio/TwilioCallLogs'
+import { TwilioSmsLogs }   from './pages/twilio/TwilioSmsLogs'
+import { TwilioUsage }     from './pages/twilio/TwilioUsage'
+import { PlivoDashboard }  from './pages/plivo/PlivoDashboard'
+import { PlivoNumbers }    from './pages/plivo/PlivoNumbers'
+import { PlivoTrunks }     from './pages/plivo/PlivoTrunks'
+import { PlivoCallLogs }   from './pages/plivo/PlivoCallLogs'
+import { PlivoSmsLogs }    from './pages/plivo/PlivoSmsLogs'
+import { PlivoUsage }      from './pages/plivo/PlivoUsage'
 import { Settings } from './pages/settings/Settings'
 import { Labels } from './pages/settings/Labels'
+import { TwoFactorSetup } from './pages/settings/TwoFactorSetup'
+import { SecuritySettings } from './pages/settings/SecuritySettings'
 import { DispositionList } from './modules/dispositions/DispositionList'
 import { DncList } from './modules/dnc/DncList'
 import { FaxList } from './modules/fax/FaxList'
@@ -60,6 +90,15 @@ import { RingGroups } from './pages/ringgroups/RingGroups'
 import { ExtensionGroups } from './pages/extensiongroups/ExtensionGroups'
 import { VoicemailDrops } from './pages/voicemail/VoicemailDrops'
 import { Mailbox } from './pages/voicemail/Mailbox'
+import { GmailMailbox } from './pages/gmail/GmailMailbox'
+import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
+import { AdminClients } from './pages/admin/AdminClients'
+import SystemHealth from './pages/admin/SystemHealth'
+import { WorkforceDashboard } from './pages/workforce/WorkforceDashboard'
+import { ShiftManagement } from './pages/workforce/ShiftManagement'
+import { CampaignStaffing } from './pages/workforce/CampaignStaffing'
+import { WorkforceReports } from './pages/workforce/WorkforceReports'
+import { WorkforceAnalytics } from './pages/workforce/WorkforceAnalytics'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -83,6 +122,8 @@ export default function App() {
       <Route element={<PublicRoute><AuthLayout /></PublicRoute>}>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
 
       {/* Protected routes */}
@@ -107,7 +148,7 @@ export default function App() {
           <Route path="/crm/affiliate-links" element={<CrmAffiliateLinks />} />
           <Route path="/crm/approvals" element={<CrmApprovals />} />
           <Route path="/crm/lead-status" element={<CrmLeadStatus />} />
-          <Route path="/crm/custom-fields" element={<CrmCustomFields />} />
+          <Route path="/crm/lead-fields" element={<CrmLeadFields />} />
           <Route path="/crm/email-templates" element={<CrmEmailTemplates />} />
           <Route path="/crm/sms-templates" element={<CrmSmsTemplates />} />
           <Route path="/crm/lenders" element={<CrmLenders />} />
@@ -118,6 +159,7 @@ export default function App() {
         <Route path="/campaigns/create" element={<CreateCampaign />} />
         <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
         <Route path="/campaigns/:id/attach-leads" element={<AttachLeads />} />
+        <Route path="/campaigns/:id" element={<CampaignDetail />} />
 
         {/* Users */}
         <Route path="/users" element={<Users />} />
@@ -138,6 +180,11 @@ export default function App() {
         <Route path="/lists/:id/leads" element={<ListLeads />} />
 
         <Route path="/reports" element={<Reports />} />
+        <Route path="/reports/daily" element={<DailyReport />} />
+        <Route path="/reports/agent-summary" element={<AgentSummary />} />
+        <Route path="/reports/disposition" element={<DispositionReport />} />
+        <Route path="/reports/live" element={<LiveCalls />} />
+        <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
         <Route path="/sms" element={<SMSCenter />} />
         <Route path="/chat" element={<TeamChat />} />
         <Route path="/monitoring" element={<AgentMonitoring />} />
@@ -148,9 +195,25 @@ export default function App() {
         <Route path="/settings/dispositions" element={<DispositionList />} />
         <Route path="/settings/dnc" element={<DncList />} />
         <Route path="/settings/fax" element={<FaxList />} />
+        <Route path="/settings/security" element={<SecuritySettings />} />
+        <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
+
+        {/* Profile */}
+        <Route path="/profile" element={<Profile />} />
+
+        {/* Ringless Voicemail */}
+        <Route path="/ringless" element={<RinglessVoicemail />} />
+
+        {/* AI Tools */}
+        <Route path="/ai/settings" element={<AiSettings />} />
+        <Route path="/ai/coach" element={<AiCoach />} />
 
         {/* IVR */}
         <Route path="/ivr" element={<Ivr />} />
+
+        {/* Gmail Mailbox */}
+        <Route path="/gmail-mailbox" element={<GmailMailbox />} />
+        <Route path="/google-calendar" element={<GoogleCalendar />} />
 
         {/* Voicemail */}
         <Route path="/voicemail" element={<VoicemailDrops />} />
@@ -161,6 +224,39 @@ export default function App() {
 
         {/* Extension Groups */}
         <Route path="/extension-groups" element={<ExtensionGroups />} />
+
+        {/* Agents */}
+        <Route path="/agents" element={<Agents />} />
+
+        {/* Onboarding */}
+        <Route path="/onboarding" element={<Onboarding />} />
+
+        {/* Twilio Telecom */}
+        <Route path="/twilio"         element={<TwilioDashboard />} />
+        <Route path="/twilio/numbers" element={<TwilioNumbers />} />
+        <Route path="/twilio/trunks"  element={<TwilioTrunks />} />
+        <Route path="/twilio/calls"   element={<TwilioCallLogs />} />
+        <Route path="/twilio/sms"     element={<TwilioSmsLogs />} />
+        <Route path="/twilio/usage"   element={<TwilioUsage />} />
+
+        {/* Plivo Telecom */}
+        <Route path="/plivo"          element={<PlivoDashboard />} />
+        <Route path="/plivo/numbers"  element={<PlivoNumbers />} />
+        <Route path="/plivo/trunks"   element={<PlivoTrunks />} />
+        <Route path="/plivo/calls"    element={<PlivoCallLogs />} />
+        <Route path="/plivo/sms"      element={<PlivoSmsLogs />} />
+        <Route path="/plivo/usage"    element={<PlivoUsage />} />
+
+        {/* Workforce Management */}
+        <Route path="/workforce"          element={<WorkforceDashboard />} />
+        <Route path="/workforce/shifts"   element={<ShiftManagement />} />
+        <Route path="/workforce/staffing" element={<CampaignStaffing />} />
+        <Route path="/workforce/reports"  element={<WorkforceReports />} />
+        <Route path="/workforce/analytics" element={<WorkforceAnalytics />} />
+
+        {/* System Admin */}
+        <Route path="/admin/clients" element={<AdminClients />} />
+        <Route path="/admin/system-health" element={<SystemHealth />} />
       </Route>
 
       {/* Default redirect */}

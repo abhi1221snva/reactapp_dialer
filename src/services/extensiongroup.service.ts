@@ -12,13 +12,16 @@ export const extensiongroupService = {
     }),
   getById: (id: number) => api.get(`/extension-group/${id}`),
   create: (data: Record<string, unknown>) => api.put('/extension-group', data),
+  // Use patchNew endpoint — uses save() instead of saveOrFail(), avoiding nested-transaction crash
   update: (id: number, data: Record<string, unknown>) =>
     api.patch('/extension-group-update', { group_id: id, ...data }),
   delete: (id: number) =>
-    api.delete('/extension-group-delete', { data: { group_id: id } }),
+    api.delete(`/extension-group/${id}`),
   updateStatus: (id: number, status: boolean) =>
     api.post('/status-update-group', { listId: id, status }),
   deleteExtensionFromGroup: (groupId: number, extensionId: number) =>
     api.post('/extension/deleteFromGroup', { group_id: groupId, extension_id: extensionId }),
   getExtensions: () => api.get('/extension'),
+  getExtensionsForGroup: (groupId: number) =>
+    api.get('/extension-group-map', { params: { group_id: groupId } }),
 }

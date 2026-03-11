@@ -6,7 +6,7 @@ import {
   Trash2, Download, Building2, Send, AlertCircle, X, Eye,
   Settings2, Mail, Phone, MapPin, Calendar, User, Briefcase,
   Hash, UserCheck, Clock, FolderOpen,
-  ClipboardList, CheckSquare, MoreVertical, Globe, Tag,
+  ClipboardList, CheckSquare, MoreVertical, Tag,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
@@ -18,6 +18,7 @@ import { MerchantPortalSection } from '../../components/crm/MerchantPortalSectio
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDocumentTypesManager'
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
+import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
 import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSendRecord } from '../../types/crm.types'
 
@@ -351,7 +352,7 @@ function DocumentsTab({ leadId }: { leadId: number }) {
                   <button onClick={() => downloadFile(doc.file_path, doc.file_name)} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors" title="Download">
                     <Download size={14} />
                   </button>
-                  <button onClick={() => { if (window.confirm('Delete this document?')) deleteMutation.mutate(doc.id) }} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
+                  <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -718,61 +719,16 @@ export function CrmLeadDetail() {
       {activeTab === 'Overview' && (
         <div className="space-y-4">
 
-          {/* ── All Lead Fields — single compact card ── */}
+          {/* ── All Lead Fields — driven by lead-fields configuration ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
-            {/* Personal & Contact */}
-            <div className="px-5 pt-4 pb-4">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Personal &amp; Contact</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-3.5">
-                {[
-                  { label: 'First Name',  value: lead.first_name },
-                  { label: 'Last Name',   value: lead.last_name },
-                  { label: 'Email',       value: lead.email },
-                  { label: 'Phone',       value: lead.phone_number ? formatPhoneNumber(String(lead.phone_number)) : null },
-                  { label: 'Date of Birth', value: lead.dob },
-                  { label: 'Gender',      value: lead.gender },
-                  { label: 'Address',     value: lead.address },
-                  { label: 'City',        value: lead.city },
-                  { label: 'State',       value: lead.state },
-                  { label: 'Country',     value: lead.country },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-1">{label}</p>
-                    {value
-                      ? <p className="text-sm font-medium text-slate-800 leading-snug break-words">{String(value)}</p>
-                      : <p className="text-sm text-slate-300">—</p>
-                    }
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="h-px bg-slate-100 mx-5" />
-
-            {/* Business */}
-            <div className="px-5 pt-4 pb-4">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Business</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-3.5">
-                {[
-                  { label: 'Company Name', value: lead.company_name },
-                  { label: 'Lead Type',    value: lead.lead_type },
-                  { label: 'Assigned To',  value: (lead.assigned_name as string | undefined) },
-                  { label: 'Lead Source',  value: lead.lead_source_id ? `#${lead.lead_source_id}` : null },
-                  { label: 'Opener',       value: lead.opener_id ? `#${lead.opener_id}` : null },
-                  { label: 'Closer',       value: lead.closer_id ? `#${lead.closer_id}` : null },
-                  { label: 'Group',        value: lead.group_id ? `#${lead.group_id}` : null },
-                  { label: 'Unique Token', value: (lead.unique_token as string | undefined) },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-1">{label}</p>
-                    {value
-                      ? <p className="text-sm font-medium text-slate-800 leading-snug break-words">{String(value)}</p>
-                      : <p className="text-sm text-slate-300">—</p>
-                    }
-                  </div>
-                ))}
-              </div>
+            {/* Dynamic fields (column + EAV) in read-only mode */}
+            <div className="px-5 py-4">
+              <DynamicFieldForm
+                register={(() => {}) as never}
+                defaultValues={lead as Record<string, unknown>}
+                readOnly
+              />
             </div>
 
             <div className="h-px bg-slate-100 mx-5" />
@@ -798,21 +754,6 @@ export function CrmLeadDetail() {
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-
-          {/* ── Custom Fields ── */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
-              <Settings2 size={13} className="text-indigo-500" />
-              <p className="text-xs font-semibold text-slate-700">Custom Fields</p>
-            </div>
-            <div className="px-5 py-4">
-              <DynamicFieldForm
-                register={(() => {}) as never}
-                defaultValues={lead as Record<string, unknown>}
-                readOnly
-              />
             </div>
           </div>
 

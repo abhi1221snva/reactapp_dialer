@@ -104,18 +104,20 @@ export function Users() {
       ),
     },
     {
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => navigate(`/users/${row.id}/edit`),
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => { if (await confirmDelete()) deleteMutation.mutate(row.id) },
             disabled: deleteMutation.isPending,
@@ -127,9 +129,11 @@ export function Users() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Users & Agents</h1>
-        <p className="page-subtitle">Manage team members and their access levels</p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Users & Agents</h1>
+          <p className="page-subtitle">Manage team members and their access levels</p>
+        </div>
       </div>
 
       <ServerDataTable<Agent>

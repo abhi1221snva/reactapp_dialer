@@ -104,7 +104,9 @@ export function Lists() {
       ),
     },
     {
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => {
         const id = listId(row)
         const cid = row.campaign_id ?? 0
@@ -112,26 +114,26 @@ export function Lists() {
           <RowActions actions={[
             {
               label: 'Leads',
-              icon: <Eye size={12} />,
+              icon: <Eye size={13} />,
               variant: 'view',
               onClick: () => navigate(`/lists/${id}/leads`),
             },
             {
               label: 'Edit',
-              icon: <Pencil size={12} />,
+              icon: <Pencil size={13} />,
               variant: 'edit',
               onClick: () => navigate(`/lists/${id}/mapping`),
             },
             {
               label: row.is_active === 1 ? 'Deactivate' : 'Activate',
-              icon: row.is_active === 1 ? <ToggleRight size={12} /> : <ToggleLeft size={12} />,
+              icon: row.is_active === 1 ? <ToggleRight size={13} /> : <ToggleLeft size={13} />,
               variant: row.is_active === 1 ? 'warning' : 'success',
               onClick: () => toggleMutation.mutate({ id, campaignId: cid, status: row.is_active }),
               disabled: toggleMutation.isPending,
             },
             {
               label: 'Delete',
-              icon: <Trash2 size={12} />,
+              icon: <Trash2 size={13} />,
               variant: 'delete',
               onClick: async () => { if (await confirmDelete(listName(row))) deleteMutation.mutate({ id, campaignId: cid }) },
               disabled: deleteMutation.isPending,
@@ -144,9 +146,11 @@ export function Lists() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Lists</h1>
-        <p className="page-subtitle">Manage your lead lists</p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Lists</h1>
+          <p className="page-subtitle">Manage your lead lists</p>
+        </div>
       </div>
 
       <ServerDataTable<ListItem>

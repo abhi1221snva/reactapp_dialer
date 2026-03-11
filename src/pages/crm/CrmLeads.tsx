@@ -106,18 +106,20 @@ export function CrmLeads() {
         : <Badge variant="gray">New</Badge>,
     },
     {
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => navigate(`/crm/${row.id}/edit`),
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => { if (await confirmDelete()) deleteMutation.mutate(row.id) },
             disabled: deleteMutation.isPending,
@@ -129,9 +131,11 @@ export function CrmLeads() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">CRM Leads</h1>
-        <p className="page-subtitle">Manage contacts and prospects</p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">CRM Leads</h1>
+          <p className="page-subtitle">Manage contacts and prospects</p>
+        </div>
       </div>
 
       <ServerDataTable<Lead>

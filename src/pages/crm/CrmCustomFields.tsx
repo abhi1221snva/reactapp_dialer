@@ -91,9 +91,9 @@ function FieldModal({
 }) {
   const qc = useQueryClient()
   const isEdit = !!editing
-  const [name, setName] = useState(editing?.title ?? '')
+  const [name, setName] = useState(editing?.label_name ?? '')
 
-  useEffect(() => { setName(editing?.title ?? '') }, [editing])
+  useEffect(() => { setName(editing?.label_name ?? '') }, [editing])
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -209,7 +209,7 @@ export function CrmCustomFields() {
     .slice()
     .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
 
-  const filtered   = allLabels.filter(l => !search || l.title.toLowerCase().includes(search.toLowerCase()))
+  const filtered   = allLabels.filter(l => !search || l.label_name.toLowerCase().includes(search.toLowerCase()))
   const total      = filtered.length
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
@@ -217,7 +217,7 @@ export function CrmCustomFields() {
   // ── Mutations ──────────────────────────────────────────────────────────────
   const toggleMutation = useMutation({
     mutationFn: (l: CrmLabel) => {
-      const current = l.status === 1 || l.status === '1' ? 1 : 0
+      const current = l.status === true || (l.status as unknown) == 1 ? 1 : 0
       return crmService.toggleCrmLabel({ crm_label_id: l.id, status: current === 1 ? 0 : 1 })
     },
     onSuccess: () => { toast.success('Field updated'); qc.invalidateQueries({ queryKey: ['crm-labels'] }) },
@@ -231,7 +231,7 @@ export function CrmCustomFields() {
   })
 
   const handleDelete = async (l: CrmLabel) => {
-    if (await confirmDelete(l.title)) deleteMutation.mutate(l.id)
+    if (await confirmDelete(l.label_name)) deleteMutation.mutate(l.id)
   }
 
   const openAdd  = () => { setEditing(null); setShowModal(true) }
@@ -327,7 +327,7 @@ export function CrmCustomFields() {
                 </tr>
               ) : (
                 paginated.map(l => {
-                  const active = l.status === 1 || l.status === '1'
+                  const active = l.status === true || (l.status as unknown) == 1
                   return (
                     <tr key={l.id} className="group">
                       {/* Name */}
@@ -336,7 +336,7 @@ export function CrmCustomFields() {
                           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
                             <SlidersHorizontal size={13} className="text-indigo-600" />
                           </div>
-                          <span className="text-sm font-medium text-slate-900">{l.title}</span>
+                          <span className="text-sm font-medium text-slate-900">{l.label_name}</span>
                         </div>
                       </td>
 
@@ -352,13 +352,13 @@ export function CrmCustomFields() {
                         <RowActions actions={[
                           {
                             label: 'Edit',
-                            icon: <Pencil size={12} />,
+                            icon: <Pencil size={13} />,
                             variant: 'edit',
                             onClick: () => openEdit(l),
                           },
                           {
                             label: 'Delete',
-                            icon: <Trash2 size={12} />,
+                            icon: <Trash2 size={13} />,
                             variant: 'delete',
                             onClick: () => handleDelete(l),
                             disabled: deleteMutation.isPending,

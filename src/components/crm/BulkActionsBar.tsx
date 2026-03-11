@@ -3,6 +3,7 @@ import { X, UserCheck, ArrowRightLeft, Trash2, Download, Loader2 } from 'lucide-
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
+import { showConfirm } from '../../utils/confirmDelete'
 import type { LeadStatus } from '../../types/crm.types'
 
 interface Props {
@@ -139,8 +140,12 @@ export function BulkActionsBar({ selectedIds, statuses, agents, onClear, onRefre
 
       {/* Delete */}
       <button
-        onClick={() => {
-          if (window.confirm(`Delete ${selectedIds.length} lead(s)? This cannot be undone.`)) {
+        onClick={async () => {
+          if (await showConfirm({
+            title:       `Delete ${selectedIds.length} Lead${selectedIds.length > 1 ? 's' : ''}?`,
+            message:     `${selectedIds.length} lead${selectedIds.length > 1 ? 's' : ''} will be permanently deleted. This cannot be undone.`,
+            confirmText: 'Yes, delete',
+          })) {
             deleteMutation.mutate()
           }
         }}

@@ -224,24 +224,26 @@ export function VoicemailDrops() {
       },
     },
     {
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'Send to Email',
-            icon: <Mail size={12} />,
+            icon: <Mail size={13} />,
             variant: 'default',
             onClick: () => setEmailModal({ open: true, path: String(row.vm_drop_location ?? '') }),
           },
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => { setEditing(row); setModal(true) },
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(row.ivr_desc)) deleteMutation.mutate(row.id ?? 0)

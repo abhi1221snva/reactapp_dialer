@@ -1,52 +1,159 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid,
 } from 'recharts'
-import { Users, TrendingUp, Target, Activity, Loader2, Award, Zap } from 'lucide-react'
+import {
+  Users, TrendingUp, TrendingDown, Target, Activity,
+  Award, DollarSign, ArrowRight, FileText,
+  Kanban, UserPlus, BarChart3, CheckCircle2,
+  Building2, RefreshCw,
+} from 'lucide-react'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
+import { initials } from '../../utils/format'
+import { cn } from '../../utils/cn'
 import type { AnalyticsPeriod } from '../../types/crm.types'
 
+// ─── Palette ──────────────────────────────────────────────────────────────────
+const PIE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899']
+const FUNNEL_COLORS = ['#6366f1','#8b5cf6','#a78bfa','#10b981','#34d399','#f59e0b','#fbbf24','#ef4444']
+const AGENT_GRADIENTS = [
+  'from-indigo-500 to-violet-600','from-emerald-500 to-teal-600',
+  'from-amber-500 to-orange-500','from-rose-500 to-pink-600',
+  'from-sky-500 to-cyan-600','from-purple-500 to-indigo-500',
+]
+
 const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
-  { value: 'today',   label: 'Today' },
-  { value: 'week',    label: 'Week' },
-  { value: 'month',   label: 'Month' },
+  { value: 'today',   label: 'Today'   },
+  { value: 'week',    label: 'Week'    },
+  { value: 'month',   label: 'Month'   },
   { value: 'quarter', label: 'Quarter' },
 ]
 
-const PIE_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#0EA5E9', '#F97316', '#EC4899']
-const AVATAR_BG  = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-purple-500', 'bg-sky-500']
-
-function Sk({ h = 'h-4' }: { h?: string }) {
-  return <div className={`${h} skeleton`} />
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K'
+  return String(n)
+}
+function fmtMoney(n: number): string {
+  if (n >= 1_000_000) return '$' + (n / 1_000_000).toFixed(2) + 'M'
+  if (n >= 1_000)     return '$' + (n / 1_000).toFixed(1) + 'K'
+  return '$' + Number(n).toFixed(2)
 }
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('animate-pulse bg-slate-100 rounded-xl', className)} />
+}
+
+// ─── Trend badge ──────────────────────────────────────────────────────────────
+function TrendBadge({ pct }: { pct: number }) {
+  const up = pct >= 0
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full',
+      up ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+    )}>
+      {up ? <TrendingUp size={10}/> : <TrendingDown size={10}/>}
+      {Math.abs(pct).toFixed(1)}%
+    </span>
+  )
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+function KpiCard({
+  label, value, icon: Icon, gradient, sub, trend, onClick, loading,
+}: {
+  label: string; value: string | number; icon: React.ElementType
+  gradient: string; sub?: string; trend?: number
+  onClick?: () => void; loading?: boolean
+}) {
+  if (loading) return <Skeleton className="h-[86px]" />
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        'rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden',
+        'bg-white border border-slate-100 shadow-sm',
+        onClick && 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200'
+      )}
+    >
+      <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shadow-sm bg-gradient-to-br flex-shrink-0', gradient)}>
+        <Icon size={18} className="text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide truncate">{label}</p>
+        <p className="font-bold text-slate-900 text-xl leading-none mt-0.5">{value}</p>
+        {sub && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{sub}</p>}
+      </div>
+      {trend !== undefined && <TrendBadge pct={trend} />}
+    </div>
+  )
+}
+
+// ─── Period selector ──────────────────────────────────────────────────────────
+function PeriodSelector({ value, onChange }: { value: AnalyticsPeriod; onChange: (p: AnalyticsPeriod) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 bg-slate-100 rounded-full px-1 py-1">
+      {PERIODS.map(p => (
+        <button key={p.value} onClick={() => onChange(p.value)}
+          className={cn(
+            'px-3 py-1 rounded-full text-[11px] font-semibold transition-all',
+            value === p.value ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          )}
+        >{p.label}</button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Section header ───────────────────────────────────────────────────────────
+function SectionHeader({ title, sub, right }: { title: string; sub?: string; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div>
+        <h3 className="font-bold text-slate-900 text-[15px]">{title}</h3>
+        {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+      </div>
+      {right}
+    </div>
+  )
+}
+
+// ─── Custom tooltip ───────────────────────────────────────────────────────────
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white rounded-xl shadow-xl border border-slate-100 px-3 py-2 text-xs">
+      {label && <p className="text-slate-500 mb-1.5 font-medium">{label}</p>}
+      {payload.map(p => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="text-slate-700 font-semibold">{p.value.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export function CrmDashboard() {
+  const navigate = useNavigate()
   const [period, setPeriod] = useState<AnalyticsPeriod>('month')
   const { setDescription, setActions } = useCrmHeader()
 
   useEffect(() => {
-    setDescription('Pipeline analytics & performance')
-    setActions(
-      <div className="period-bar">
-        {PERIODS.map(p => (
-          <button
-            key={p.value}
-            onClick={() => setPeriod(p.value)}
-            className={period === p.value ? 'period-btn period-btn-active' : 'period-btn'}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-    )
+    setDescription('Pipeline analytics & lead performance')
+    setActions(null)
     return () => { setDescription(undefined); setActions(undefined) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period])
+  }, [])
 
-  // ── Queries ───────────────────────────────────────────────────────────────
+  // ── Queries ────────────────────────────────────────────────────────────────
   const { data: distribution, isLoading: loadingDist } = useQuery({
     queryKey: ['crm-status-distribution', period],
     queryFn: async () => {
@@ -79,282 +186,522 @@ export function CrmDashboard() {
     },
   })
 
-  // ── Derived data ──────────────────────────────────────────────────────────
-  const distItems = (distribution?.distribution ?? []).map((d: Record<string, unknown>) => ({
-    status_name: String(d.title ?? d.status_name ?? d.status ?? ''),
-    count:       Number(d.count ?? 0),
-    percentage:  Number(d.percentage ?? 0),
-  }))
+  const { data: lenderPerf, isLoading: loadingLender } = useQuery({
+    queryKey: ['crm-lender-performance', period],
+    queryFn: async () => {
+      const res = await crmService.getLenderPerformance(period)
+      return res.data?.data ?? res.data
+    },
+  })
 
-  const velocityItems = (velocity?.daily ?? []).map((d: Record<string, unknown>) => ({
-    date:  String(d.date ?? '').slice(5),
-    count: Number(d.new_leads ?? d.count ?? 0),
-  }))
+  const { data: mcaData, isLoading: loadingMca } = useQuery({
+    queryKey: ['mca-metrics', period],
+    queryFn: async () => {
+      const res = await crmService.getMcaMetrics({ period })
+      return res.data?.data ?? res.data
+    },
+  })
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const distItems: { status_name: string; count: number; percentage: number; color?: string }[] =
+    (distribution?.distribution ?? []).map((d: Record<string, unknown>) => ({
+      status_name: String(d.title ?? d.status_name ?? d.status ?? ''),
+      count:       Number(d.count ?? 0),
+      percentage:  Number(d.percentage ?? 0),
+      color:       d.color as string | undefined,
+    }))
+
+  const velocityItems: { date: string; count: number }[] =
+    (velocity?.daily ?? []).map((d: Record<string, unknown>) => ({
+      date:  String(d.date ?? '').slice(5),
+      count: Number(d.new_leads ?? d.count ?? 0),
+    }))
 
   const agents: { user_name: string; total: number; by_status: Record<string, number> }[] = agentPerf ?? []
 
-  const funnelItems = (funnel?.funnel ?? funnel?.stages ?? []).map((f: Record<string, unknown>) => ({
-    status_name: String(f.title ?? f.status_name ?? f.status ?? ''),
-    count:       Number(f.count ?? 0),
-    percentage:  Number(f.conversion_from_previous ?? f.percentage ?? 0),
-  }))
+  const funnelItems: { status_name: string; count: number; percentage: number }[] =
+    (funnel?.funnel ?? funnel?.stages ?? []).map((f: Record<string, unknown>) => ({
+      status_name: String(f.title ?? f.status_name ?? f.status ?? ''),
+      count:       Number(f.count ?? 0),
+      percentage:  Number(f.conversion_from_previous ?? f.percentage ?? 0),
+    }))
+
+  const lenders: { lender_name?: string; name?: string; total_sent?: number; total_approved?: number; total_funded?: number; approval_rate?: number }[] =
+    Array.isArray(lenderPerf) ? lenderPerf : (lenderPerf?.lenders ?? [])
+
+  // MCA-derived
+  const mcaFunding    = mcaData?.funding ?? {}
+  const mcaConv       = mcaData?.conversions ?? {}
+  const mcaComparison = mcaData?.comparison ?? {}
 
   const distTotal     = distribution?.total ?? 0
   const velocityTotal = velocity?.total_leads ?? 0
+  const activeAgents  = agents.length
   const topDistItem   = distItems.reduce(
-    (prev: { count: number; status_name: string }, cur: { count: number; status_name: string }) =>
-      cur.count > prev.count ? cur : prev,
-    { count: 0, status_name: '—' }
+    (prev, cur) => cur.count > prev.count ? cur : prev,
+    { count: 0, status_name: '—', percentage: 0 }
   )
-  const fundedCount  = agents.reduce((s, a) => s + ((a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)), 0)
-  const activeAgents = agents.length
+  const fundedCount   = agents.reduce((s, a) => s + ((a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)), 0)
 
-  const statCards = [
-    { label: 'Active Leads',    value: distTotal,                  icon: Users,      bgClass: 'bg-indigo-50',  iconClass: 'text-indigo-600' },
-    { label: 'New This Period', value: velocityTotal,              icon: Activity,   bgClass: 'bg-emerald-50', iconClass: 'text-emerald-600' },
-    { label: 'Avg / Day',       value: velocity?.avg_per_day ?? 0, icon: TrendingUp, bgClass: 'bg-amber-50',   iconClass: 'text-amber-600' },
-    { label: 'Top Stage',       value: topDistItem.status_name,    icon: Target,     bgClass: 'bg-violet-50',  iconClass: 'text-violet-600' },
-    { label: 'Active Agents',   value: activeAgents,               icon: Award,      bgClass: 'bg-sky-50',     iconClass: 'text-sky-600' },
-    { label: 'Funded',          value: fundedCount,                icon: Zap,        bgClass: 'bg-rose-50',    iconClass: 'text-rose-600' },
-  ]
+  // Funnel max for bar sizing
+  const funnelMax = funnelItems.length > 0 ? Math.max(...funnelItems.map(f => f.count), 1) : 1
+
+  const statsLoading = loadingDist || loadingVel
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-6">
 
-      {/* ── Row 1 — 6 metric stat cards ─────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
-        {statCards.map(card => {
-          const Icon = card.icon
-          return (
-            <div key={card.label} className="metric-card">
-              <div className="flex items-center gap-3">
-                <div className={`metric-icon-wrap ${card.bgClass}`}>
-                  <Icon size={18} className={card.iconClass} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="metric-value truncate">{card.value}</p>
-                  <p className="metric-label truncate">{card.label}</p>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* ── Hero header ─────────────────────────────────────────────────────── */}
+      <div
+        className="rounded-2xl px-6 py-5 flex items-center justify-between relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #065f46 40%, #047857 100%)',
+          boxShadow: '0 8px 32px rgba(16,185,129,0.28)',
+        }}
+      >
+        <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-white/5" />
+        <div className="absolute right-32 -bottom-12 w-40 h-40 rounded-full bg-white/5" />
 
-      {/* ── Row 2 — Pipeline Distribution + Lead Velocity ───────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-        {/* Pipeline Status Distribution */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <h2 className="chart-title">Pipeline Distribution</h2>
-            <span className="badge badge-indigo">{distTotal} total</span>
-          </div>
-
-          {loadingDist ? (
-            <div className="space-y-2.5 py-1">
-              {[...Array(4)].map((_, i) => <Sk key={i} />)}
-            </div>
-          ) : distItems.length === 0 ? (
-            <div className="flex justify-center items-center py-12 text-sm text-slate-400">No data</div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <div className="flex-shrink-0">
-                <ResponsiveContainer width={160} height={160}>
-                  <PieChart>
-                    <Pie
-                      data={distItems}
-                      dataKey="count"
-                      nameKey="status_name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={48}
-                      outerRadius={72}
-                      strokeWidth={2}
-                      stroke="#fff"
-                    >
-                      {distItems.map((_: unknown, i: number) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(v: number) => [v, 'Leads']}
-                      contentStyle={{ borderRadius: '10px', fontSize: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1 space-y-2 min-w-0">
-                {distItems.slice(0, 7).map((item: { status_name: string; count: number; percentage: number }, i: number) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs flex-1 truncate text-slate-700">{item.status_name}</span>
-                    <span className="text-xs font-semibold text-slate-900 flex-shrink-0">{item.count}</span>
-                    <span className="text-[10px] w-8 text-right text-slate-400 flex-shrink-0">{item.percentage}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="relative">
+          <p className="text-emerald-300 text-sm font-medium">CRM Analytics</p>
+          <h1 className="text-white text-2xl font-bold mt-0.5">Pipeline Dashboard</h1>
+          <p className="text-emerald-300 text-sm mt-1">
+            {distTotal.toLocaleString()} active leads · {activeAgents} agents · {funnelItems.length} pipeline stages
+          </p>
         </div>
 
-        {/* Lead Velocity */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <h2 className="chart-title">Lead Velocity</h2>
-            {velocity && (
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] text-slate-400">
-                  avg <span className="font-semibold text-slate-600">{velocity.avg_per_day}/day</span>
-                </span>
-                <span className="badge badge-green">{velocity.total_leads} leads</span>
-              </div>
-            )}
-          </div>
+        <div className="relative flex items-center gap-2">
+          <PeriodSelector value={period} onChange={setPeriod} />
+          {[
+            { label: 'Pipeline',  icon: Kanban,   to: '/crm/pipeline' },
+            { label: 'Add Lead',  icon: UserPlus, to: '/crm/leads/create' },
+            { label: 'All Leads', icon: Users,    to: '/crm/leads' },
+          ].map(({ label, icon: Icon, to }) => (
+            <button
+              key={label}
+              onClick={() => navigate(to)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold bg-white/10 hover:bg-white/20 transition-all"
+            >
+              <Icon size={15} /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
+      {/* ── Primary KPIs ────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="Active Leads"
+          value={fmtNum(distTotal)}
+          icon={Users}
+          gradient="bg-gradient-to-br from-indigo-500 to-indigo-600"
+          sub="In pipeline"
+          trend={mcaComparison?.change?.leads}
+          onClick={() => navigate('/crm/leads')}
+          loading={statsLoading}
+        />
+        <KpiCard
+          label="New This Period"
+          value={fmtNum(velocityTotal)}
+          icon={Activity}
+          gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+          sub={`~${velocity?.avg_per_day ?? 0}/day average`}
+          onClick={() => navigate('/crm/leads')}
+          loading={loadingVel}
+        />
+        <KpiCard
+          label="Total Funded"
+          value={loadingMca ? '—' : fmtMoney(mcaFunding.totalFunded ?? 0)}
+          icon={DollarSign}
+          gradient="bg-gradient-to-br from-amber-500 to-orange-500"
+          sub={loadingMca ? '' : `${mcaFunding.totalDeals ?? 0} funded deals`}
+          trend={mcaComparison?.change?.volume}
+          loading={statsLoading && loadingMca}
+        />
+        <KpiCard
+          label="Conversion Rate"
+          value={loadingMca ? '—' : `${(mcaConv.overallConversion ?? 0).toFixed(1)}%`}
+          icon={Target}
+          gradient="bg-gradient-to-br from-violet-500 to-purple-600"
+          sub={loadingMca ? '' : `${mcaConv.funded ?? fundedCount} closed deals`}
+          loading={statsLoading && loadingMca}
+        />
+      </div>
+
+      {/* ── Secondary KPIs ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="Commission Earned"
+          value={loadingMca ? '—' : fmtMoney(mcaFunding.totalCommission ?? 0)}
+          icon={Award}
+          gradient="bg-gradient-to-br from-rose-500 to-pink-600"
+          sub="This period"
+          loading={loadingMca}
+        />
+        <KpiCard
+          label="Active Agents"
+          value={activeAgents}
+          icon={Users}
+          gradient="bg-gradient-to-br from-sky-500 to-cyan-600"
+          sub="Working leads"
+          onClick={() => navigate('/agents')}
+          loading={loadingAgent}
+        />
+        <KpiCard
+          label="Top Stage"
+          value={topDistItem.status_name || '—'}
+          icon={BarChart3}
+          gradient="bg-gradient-to-br from-teal-500 to-emerald-600"
+          sub={`${topDistItem.count} leads`}
+          loading={loadingDist}
+        />
+        <KpiCard
+          label="Submitted"
+          value={loadingMca ? '—' : fmtNum(mcaConv.submitted ?? 0)}
+          icon={FileText}
+          gradient="bg-gradient-to-br from-orange-500 to-amber-500"
+          sub={loadingMca ? '' : `${(mcaConv.submissionRate ?? 0).toFixed(1)}% submission rate`}
+          loading={loadingMca}
+        />
+      </div>
+
+      {/* ── Charts row — Pipeline donut + Lead Velocity area ─────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Lead Velocity — area chart (2/3) */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 lg:col-span-2">
+          <SectionHeader title="Lead Velocity" sub="New leads added per day" />
           {loadingVel ? (
-            <div className="flex justify-center py-14">
-              <Loader2 size={18} className="animate-spin text-indigo-500" />
-            </div>
-          ) : velocityItems.length === 0 ? (
-            <div className="flex justify-center items-center py-12 text-sm text-slate-400">No data</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={velocityItems} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+            <Skeleton className="h-[220px]" />
+          ) : velocityItems.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={velocityItems} margin={{ left: -10, right: 8 }}>
                 <defs>
-                  <linearGradient id="velocityGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#6366F1" stopOpacity={0.18} />
-                    <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
+                  <linearGradient id="crmAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#10b981" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0}    />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ borderRadius: '10px', fontSize: '11px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '6px 10px' }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  name="Leads"
-                  stroke="#6366F1"
-                  strokeWidth={2}
-                  fill="url(#velocityGrad)"
-                  dot={false}
-                  activeDot={{ r: 3, strokeWidth: 0 }}
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip content={<ChartTooltip />} />
+                <Area type="monotone" dataKey="count" name="Leads"
+                  stroke="#10b981" strokeWidth={2.5}
+                  fill="url(#crmAreaGrad)" dot={false}
+                  activeDot={{ r: 4, fill: '#10b981' }}
                 />
               </AreaChart>
             </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex flex-col items-center justify-center gap-2 text-slate-300">
+              <Activity size={36} />
+              <p className="text-sm text-slate-400">No velocity data for this period</p>
+            </div>
+          )}
+        </div>
+
+        {/* Pipeline distribution donut (1/3) */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader
+            title="Pipeline Distribution"
+            sub="Leads by stage"
+            right={<span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">{distTotal.toLocaleString()} total</span>}
+          />
+          {loadingDist ? (
+            <Skeleton className="h-[200px]" />
+          ) : distItems.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={155}>
+                <PieChart>
+                  <Pie data={distItems} dataKey="count" nameKey="status_name"
+                    cx="50%" cy="50%" innerRadius={42} outerRadius={72}
+                    paddingAngle={2} stroke="none"
+                  >
+                    {distItems.map((d, i) => (
+                      <Cell key={i} fill={d.color || PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.10)', fontSize: 12 }}
+                    formatter={(v: number, name: string) => [`${v} (${distTotal ? Math.round(v/distTotal*100) : 0}%)`, name]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2 mt-1">
+                {distItems.slice(0, 6).map((d, i) => (
+                  <div key={d.status_name} className="flex items-center gap-2 text-xs">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ background: d.color || PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="text-slate-600 truncate flex-1">{d.status_name}</span>
+                    <span className="font-bold text-slate-800 tabular-nums">{d.count}</span>
+                    <span className="text-slate-400 w-7 text-right tabular-nums">{d.percentage}%</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-[200px] flex flex-col items-center justify-center gap-2 text-slate-300">
+              <Target size={32} />
+              <p className="text-sm text-slate-400">No pipeline data</p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ── Row 3 — Conversion Funnel + Agent Leaderboard ───────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* ── Conversion funnel + MCA conversion strip ─────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* Conversion Funnel */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <h2 className="chart-title">Conversion Funnel</h2>
-            <span className="text-[11px] text-slate-400">current pipeline</span>
-          </div>
-
+        {/* Conversion Funnel — horizontal bars (2/3) */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 lg:col-span-2">
+          <SectionHeader title="Conversion Funnel" sub="Lead progression through pipeline stages" />
           {loadingFunnel ? (
-            <div className="space-y-3 py-1">
-              {[...Array(5)].map((_, i) => <Sk key={i} h="h-5" />)}
-            </div>
-          ) : funnelItems.length === 0 ? (
-            <div className="flex justify-center items-center py-12 text-sm text-slate-400">No funnel data</div>
-          ) : (
+            <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : funnelItems.length > 0 ? (
             <div className="space-y-3">
-              {funnelItems.map((stage: { status_name: string; count: number; percentage: number }, i: number) => (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs truncate mr-2 text-slate-700">{stage.status_name}</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs font-semibold text-slate-900">{stage.count}</span>
-                      <span className="text-[10px] w-8 text-right text-slate-400">{stage.percentage}%</span>
+              {funnelItems.map((stage, i) => {
+                const barPct = funnelMax > 0 ? Math.max((stage.count / funnelMax) * 100, 2) : 2
+                return (
+                  <div key={stage.status_name} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold"
+                      style={{ background: FUNNEL_COLORS[i % FUNNEL_COLORS.length] }}>
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[13px] font-medium text-slate-700 truncate">{stage.status_name}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          <span className="text-[13px] font-bold text-slate-900 tabular-nums">{stage.count.toLocaleString()}</span>
+                          {stage.percentage > 0 && (
+                            <span className="text-[10px] text-slate-400 tabular-nums w-9 text-right">{stage.percentage}%</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${barPct}%`, background: FUNNEL_COLORS[i % FUNNEL_COLORS.length] }}
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="progress-track">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${Math.max(stage.percentage, 2)}%`, background: PIE_COLORS[i % PIE_COLORS.length] }}
-                    />
+                )
+              })}
+            </div>
+          ) : (
+            <div className="h-40 flex flex-col items-center justify-center gap-2 text-slate-300">
+              <Target size={28} />
+              <p className="text-sm text-slate-400">No funnel data</p>
+            </div>
+          )}
+        </div>
+
+        {/* MCA Conversion KPIs (1/3) */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader title="MCA Conversion" sub="Funnel rates" />
+          {loadingMca ? (
+            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { label: 'Total Leads',      value: fmtNum(mcaConv.totalLeads ?? 0),           color: 'bg-indigo-500',  rate: null },
+                { label: 'Contacted',         value: fmtNum(mcaConv.contacted ?? 0),             color: 'bg-sky-500',     rate: mcaConv.contactRate },
+                { label: 'Submitted',         value: fmtNum(mcaConv.submitted ?? 0),             color: 'bg-violet-500',  rate: mcaConv.submissionRate },
+                { label: 'Approved',          value: fmtNum(mcaConv.approved ?? 0),              color: 'bg-emerald-500', rate: mcaConv.approvalRate },
+                { label: 'Funded',            value: fmtNum(mcaConv.funded ?? fundedCount),      color: 'bg-amber-500',   rate: mcaConv.fundingRate },
+                { label: 'Overall Conv.',     value: `${(mcaConv.overallConversion ?? 0).toFixed(1)}%`, color: 'bg-rose-500', rate: null },
+              ].map(({ label, value, color, rate }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <div className={cn('w-2 h-8 rounded-full flex-shrink-0', color)} />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-slate-600">{label}</span>
+                      <span className="text-[13px] font-bold text-slate-900 tabular-nums">{value}</span>
+                    </div>
+                    {rate != null && (
+                      <div className="h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                        <div className={cn('h-full rounded-full', color)} style={{ width: `${Math.min(rate, 100)}%` }} />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Agent Leaderboard + Lender Performance ──────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Agent Leaderboard */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <h2 className="chart-title">Agent Leaderboard</h2>
-            <span className="badge badge-blue">{activeAgents} agents</span>
-          </div>
-
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader
+            title="Agent Leaderboard"
+            sub="Lead volume & conversion rate"
+            right={
+              <button onClick={() => navigate('/agents')}
+                className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
+                View all <ArrowRight size={12} />
+              </button>
+            }
+          />
           {loadingAgent ? (
-            <div className="space-y-3 py-1">
-              {[...Array(4)].map((_, i) => <Sk key={i} h="h-7" />)}
+            <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : agents.length > 0 ? (
+            <div className="space-y-2.5">
+              {agents.slice(0, 8).map((a, idx) => {
+                const funded   = (a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)
+                const convRate = a.total > 0 ? Math.round((funded / a.total) * 100) : 0
+                const medal    = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
+                const maxTotal = agents[0]?.total ?? 1
+                const barPct   = maxTotal > 0 ? Math.round((a.total / maxTotal) * 100) : 0
+                return (
+                  <div key={a.user_name ?? idx} className="flex items-center gap-3">
+                    <div className={cn(
+                      'w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 bg-gradient-to-br',
+                      AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
+                    )}>
+                      {medal ?? initials(a.user_name ?? '?')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-[13px] font-semibold text-slate-800 truncate">{a.user_name ?? `Agent #${idx+1}`}</p>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          <span className="text-[11px] font-bold text-slate-700 tabular-nums">{a.total} leads</span>
+                          <span className={cn('text-[11px] font-bold tabular-nums', convRate >= 50 ? 'text-emerald-600' : 'text-amber-600')}>
+                            {convRate}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={cn('h-full rounded-full bg-gradient-to-r transition-all', AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length])}
+                          style={{ width: `${barPct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          ) : agents.length === 0 ? (
-            <div className="flex justify-center items-center py-12 text-sm text-slate-400">No data</div>
           ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-xs" style={{ minWidth: '300px' }}>
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    {['#', 'Agent', 'Leads', 'Funded', 'Rate'].map(h => (
-                      <th key={h} className="pb-2 text-left font-semibold px-1 text-slate-400">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {agents.slice(0, 8).map((a, idx) => {
-                    const funded   = (a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)
-                    const convRate = a.total > 0 ? Math.round((funded / a.total) * 100) : 0
-                    const rankCls  = idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-amber-700' : 'text-slate-300'
-                    return (
-                      <tr key={a.user_name ?? idx} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
-                        <td className="py-2.5 px-1">
-                          <span className={`font-bold text-[11px] ${rankCls}`}>#{idx + 1}</span>
-                        </td>
-                        <td className="py-2.5 px-1">
-                          <div className="flex items-center gap-2">
-                            <div className={`lead-avatar ${AVATAR_BG[idx % AVATAR_BG.length]}`}>
-                              {(a.user_name ?? '?')[0].toUpperCase()}
-                            </div>
-                            <span className="font-medium text-slate-800 truncate" style={{ maxWidth: '80px' }}>
-                              {a.user_name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-1 text-slate-600">{a.total}</td>
-                        <td className="py-2.5 px-1 text-slate-600">{funded}</td>
-                        <td className="py-2.5 px-1">
-                          <div className="flex items-center gap-1.5">
-                            <div className="progress-track flex-1" style={{ minWidth: '30px' }}>
-                              <div
-                                className="progress-fill"
-                                style={{ width: `${convRate}%`, background: convRate >= 50 ? '#10B981' : '#F59E0B' }}
-                              />
-                            </div>
-                            <span className={`text-[10px] font-semibold flex-shrink-0 ${convRate >= 50 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                              {convRate}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
+              <Users size={28} />
+              <p className="text-sm text-slate-400">No agent data available</p>
+            </div>
+          )}
+        </div>
+
+        {/* Lender Performance */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader
+            title="Lender Performance"
+            sub="Approval & funding rates"
+            right={
+              <button onClick={() => navigate('/crm/lenders')}
+                className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
+                View all <ArrowRight size={12} />
+              </button>
+            }
+          />
+          {loadingLender ? (
+            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : lenders.length > 0 ? (
+            <div className="space-y-2.5">
+              {lenders.slice(0, 8).map((l, i) => {
+                const name       = l.lender_name ?? l.name ?? `Lender #${i+1}`
+                const approvalR  = Number(l.approval_rate ?? (l.total_sent && l.total_approved ? Math.round(l.total_approved / l.total_sent * 100) : 0))
+                const lColors    = ['from-indigo-500 to-violet-500','from-emerald-500 to-teal-500','from-amber-500 to-orange-500','from-rose-500 to-pink-500','from-sky-500 to-cyan-500']
+                return (
+                  <div key={name + i} className="flex items-center gap-3">
+                    <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white bg-gradient-to-br', lColors[i % lColors.length])}>
+                      <Building2 size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-[13px] font-semibold text-slate-800 truncate">{name}</p>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          {l.total_funded != null && (
+                            <span className="text-[11px] font-bold text-emerald-600">{l.total_funded} funded</span>
+                          )}
+                          <span className={cn('text-[11px] font-bold tabular-nums', approvalR >= 50 ? 'text-emerald-600' : 'text-amber-600')}>
+                            {approvalR}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={cn('h-full rounded-full bg-gradient-to-r transition-all', lColors[i % lColors.length])}
+                          style={{ width: `${Math.min(approvalR, 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
+              <Building2 size={28} />
+              <p className="text-sm text-slate-400">No lender data available</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* ── MCA Funding bar chart + Renewal strip ───────────────────────────── */}
+      {!loadingMca && (mcaData?.funding?.dailyFunding?.length > 0 || mcaData?.renewals) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Daily funding bar */}
+          {mcaData?.funding?.dailyFunding?.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 lg:col-span-2">
+              <SectionHeader title="Daily Funding Volume" sub="Funded deal amounts per day" />
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={(mcaData.funding.dailyFunding as { date: string; deals: number; amount: number }[]).slice(-20)} barSize={16} margin={{ left: -16 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                    tickFormatter={(d: string) => d.slice(5)} interval={2} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                    tickFormatter={(v: number) => fmtMoney(v)} />
+                  <Tooltip
+                    formatter={(v: number) => [fmtMoney(v), 'Funded']}
+                    contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.10)', fontSize: 12 }}
+                  />
+                  <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Renewal pipeline */}
+          {mcaData?.renewals && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <SectionHeader title="Renewal Pipeline" sub="Merchant renewals" />
+              <div className="space-y-3">
+                {[
+                  { label: 'Eligible',     value: mcaData.renewals.eligible ?? 0,   icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  { label: 'In Progress',  value: mcaData.renewals.inProgress ?? 0, icon: RefreshCw,   color: 'text-amber-600',   bg: 'bg-amber-50' },
+                  { label: 'Completed',    value: mcaData.renewals.completed ?? 0,   icon: Award,       color: 'text-indigo-600',  bg: 'bg-indigo-50' },
+                ].map(({ label, value, icon: Icon, color, bg }) => (
+                  <div key={label} className="flex items-center gap-3 rounded-xl p-3 bg-slate-50">
+                    <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', bg)}>
+                      <Icon size={16} className={color} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-slate-500">{label}</p>
+                      <p className="text-lg font-bold text-slate-900">{value}</p>
+                    </div>
+                  </div>
+                ))}
+                {mcaData.renewals.renewalVolume != null && (
+                  <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100">
+                    <p className="text-[11px] text-emerald-600 font-medium">Renewal Volume</p>
+                    <p className="text-lg font-bold text-emerald-700">{fmtMoney(mcaData.renewals.renewalVolume)}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   )

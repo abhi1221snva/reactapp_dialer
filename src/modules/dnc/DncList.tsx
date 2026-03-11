@@ -70,18 +70,20 @@ export function DncList() {
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => setEditItem(row),
           },
           {
             label: 'Remove',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(String(row.number))) {

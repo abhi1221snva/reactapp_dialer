@@ -24,6 +24,7 @@ export interface User {
   did?: string
   otpId?: string
   two_factor_enabled?: number
+  is_2fa_google_enabled?: number
 }
 
 export interface LoginRequest {

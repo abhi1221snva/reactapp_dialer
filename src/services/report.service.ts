@@ -1,17 +1,19 @@
 import api from '../api/axios'
 
 export interface CdrFilters {
-  start_date?: string
-  end_date?: string
-  extension?: string
-  campaign?: number | string
-  disposition?: number[]
-  route?: string
-  type?: string
-  number?: string
-  cli_filter?: string
-  lower_limit?: number
-  upper_limit?: number
+  start_date?:       string
+  end_date?:         string
+  extension?:        string
+  campaign?:         number | string
+  disposition?:      number[]
+  disposition_name?: string
+  status?:           string
+  route?:            string
+  type?:             string
+  number?:           string
+  cli_filter?:       string
+  lower_limit?:      number
+  upper_limit?:      number
 }
 
 export const reportService = {

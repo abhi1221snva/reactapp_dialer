@@ -99,25 +99,27 @@ export function DispositionList() {
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: 'Action',
+      headerClassName: 'text-right',
+      className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => setEditItem(row),
           },
           {
             label: Number(row.status) === 1 ? 'Disable' : 'Enable',
-            icon: Number(row.status) === 1 ? <ToggleRight size={12} /> : <ToggleLeft size={12} />,
+            icon: Number(row.status) === 1 ? <ToggleRight size={13} /> : <ToggleLeft size={13} />,
             variant: Number(row.status) === 1 ? 'warning' : 'success',
             onClick: () => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) }),
             disabled: toggleMutation.isPending,
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(row.title)) {

@@ -134,10 +134,13 @@ function ExtGroupFormModal({
   })
   const extensions: Extension[] = (extData as { data?: { data?: Extension[] } })?.data?.data ?? []
 
-  // retry: false — degrade gracefully if the endpoint doesn't exist
-  const { data: groupDetail } = useQuery({
-    queryKey: ['ext-group-detail', editing?.id],
-    queryFn: () => extensiongroupService.getById(editing!.id),
+  // Fetch existing extension mappings for this group.
+  // The JOIN ON egm.extension = up.extension means only main-extension entries are returned,
+  // so these values are safe to send directly to the PATCH endpoint.
+  // This also avoids the spurious 403 that GET /extension-group/{id} returns for non-admin users.
+  const { data: groupMapData } = useQuery({
+    queryKey: ['ext-group-map', editing?.id],
+    queryFn: () => extensiongroupService.getExtensionsForGroup(editing!.id),
     enabled: isOpen && !!editing?.id,
     staleTime: 0,
     retry: false,
@@ -147,28 +150,18 @@ function ExtGroupFormModal({
     if (!isOpen) return
 
     if (editing) {
-      // Handle both { data: {...} } and { data: { data: {...} } } response shapes
-      const raw   = groupDetail as { data?: unknown } | undefined
-      const root  = raw?.data
-      const d1    = (root                  as Record<string, unknown>) ?? {}
-      const d2    = (d1.data               as Record<string, unknown>) ?? {}
-
-      // Resolve extensions from most-specific source first
-      const rawExts =
-        d1.extensions    ?? d1.extension_name ?? d1.extension_list ??
-        d2.extensions    ?? d2.extension_name ?? d2.extension_list ??
-        editing.extensions ?? editing.extension_name ?? editing.extension_list ?? ''
-
-      const rawTitle = d1.title ?? d2.title ?? editing.title ?? ''
+      // Response shape: axios wraps body in .data, so groupMapData.data = { success, data: [...items] }
+      const mapArr = (groupMapData as { data?: { data?: Array<Record<string, unknown>> } })?.data?.data ?? []
+      const groupExts = mapArr.map(item => String(item.extension ?? '')).filter(Boolean)
 
       setForm({
-        title:      String(rawTitle),
-        extensions: parseExtensionField(rawExts),
+        title:      String(editing.title ?? ''),
+        extensions: groupExts,
       })
     } else {
       setForm(EMPTY_FORM)
     }
-  }, [isOpen, editing, groupDetail])
+  }, [isOpen, editing, groupMapData])
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -304,20 +297,20 @@ export function ExtensionGroups() {
         <RowActions actions={[
           {
             label: isActive(row) ? 'Deactivate' : 'Activate',
-            icon: isActive(row) ? <ToggleLeft size={12} /> : <ToggleRight size={12} />,
+            icon: isActive(row) ? <ToggleLeft size={13} /> : <ToggleRight size={13} />,
             variant: isActive(row) ? 'warning' : 'success',
             onClick: () => toggleMutation.mutate({ id: row.id, status: !!isActive(row) }),
             disabled: toggleMutation.isPending,
           },
           {
             label: 'Edit',
-            icon: <Pencil size={12} />,
+            icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => { setEditing(row); setModal(true) },
           },
           {
             label: 'Delete',
-            icon: <Trash2 size={12} />,
+            icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(row.title)) deleteMutation.mutate(row.id)

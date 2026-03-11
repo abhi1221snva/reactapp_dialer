@@ -55,16 +55,26 @@ export function TopHeader() {
 
         {/* User avatar */}
         {user && (
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 select-none"
-            style={{
-              background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
-              boxShadow: '0 1px 4px rgba(99,102,241,0.30)',
-            }}
-            title={user.name}
-          >
-            {initials(user.name)}
-          </div>
+          user.profile_pic ? (
+            <img
+              src={user.profile_pic}
+              alt={user.name}
+              title={user.name}
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0 select-none"
+              style={{ boxShadow: '0 1px 4px rgba(99,102,241,0.30)' }}
+            />
+          ) : (
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 select-none"
+              style={{
+                background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+                boxShadow: '0 1px 4px rgba(99,102,241,0.30)',
+              }}
+              title={user.name}
+            >
+              {initials(user.name)}
+            </div>
+          )
         )}
       </div>
     </header>

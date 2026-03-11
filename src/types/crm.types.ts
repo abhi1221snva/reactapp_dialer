@@ -30,22 +30,36 @@ export interface CrmLead {
   [key: string]: unknown
 }
 
-// ─── CRM Label (Dynamic Field Definition) ────────────────────────────────────
+// ─── Field Conditions (for conditional visibility) ────────────────────────────
+
+export type ConditionOperator = 'equals' | 'not_equals' | 'contains' | 'not_empty' | 'empty'
+
+export interface FieldCondition {
+  field: string          // column_name of the controlling field (e.g. "option_5")
+  operator: ConditionOperator
+  value: string          // comparison value (unused for not_empty / empty)
+}
+
+// ─── CRM Label (Dynamic Field Definition) — from crm_labels (new EAV arch) ───
 
 export interface CrmLabel {
   id: number
-  column_name: string
-  title: string
-  label_title_url?: string
-  heading_type: 'owner' | 'business' | 'second_owner' | string
-  data_type: string
-  status: number | string
-  storage_type?: 'column' | 'eav'
-  values?: string
-  display_order?: number
-  required?: number | string
-  edit_mode?: number | string
+  label_name: string      // display label (e.g. "First Name")
+  field_key: string       // unique EAV key  (e.g. "first_name")
+  field_type: string      // text|number|email|phone_number|date|textarea|dropdown|radio|checkbox
+  section: string         // owner|contact|business|address|general…
+  options?: string | null // JSON-encoded string array for dropdown/radio
+  placeholder?: string
+  conditions?: FieldCondition[] | null
+  required: boolean
+  display_order: number
+  status: boolean
+  created_at?: string
+  updated_at?: string
 }
+
+/** Alias for semantic clarity in form-builder contexts */
+export type LeadField = CrmLabel
 
 // ─── Lead Status ──────────────────────────────────────────────────────────────
 

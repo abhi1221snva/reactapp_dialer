@@ -729,13 +729,13 @@ export function CrmLeadStatus() {
                         <RowActions actions={[
                           {
                             label: 'Edit',
-                            icon: <Pencil size={12} />,
+                            icon: <Pencil size={13} />,
                             variant: 'edit',
                             onClick: () => openEdit(s),
                           },
                           {
                             label: 'Delete',
-                            icon: <Trash2 size={12} />,
+                            icon: <Trash2 size={13} />,
                             variant: 'delete',
                             onClick: () => handleDelete(s),
                             disabled: deleteMutation.isPending,

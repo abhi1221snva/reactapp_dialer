@@ -135,6 +135,12 @@ export const crmService = {
   getLenderPerformance: (period: AnalyticsPeriod = 'month') =>
     api.get('/crm/analytics/lender-performance', { params: { period } }),
 
+  getMcaMetrics: (data?: { period?: string; start_date?: string; end_date?: string }) =>
+    api.post('/mca/dashboard-metrics', data || { period: 'month' }),
+
+  getLeadStatusOverview: () =>
+    api.get('/dashboard-lead-status'),
+
   // ── Lead Status Management ──────────────────────────────────────────────────
   getLeadStatusesPaginated: (params?: { page?: number; per_page?: number; search?: string }) =>
     api.get('/crm/lead-status', { params }),
@@ -173,6 +179,27 @@ export const crmService = {
   // Matches the same payload key used by labelService.updateDisplayOrder
   updateLeadStatusOrder: (ids: number[]) =>
     api.post('/lead-status/updateDisplayOrder', { display_order: ids }),
+
+  // ── Lead Fields (REST API — for dynamic form rendering) ────────────────────
+  getLeadFields: () =>
+    api.get('/crm/lead-fields'),
+
+  createLeadField: (data: {
+    label_name: string
+    field_key: string
+    field_type: string
+    section?: string
+    placeholder?: string
+    required?: boolean
+    options?: string
+    conditions?: unknown
+  }) => api.post('/crm/lead-fields', data),
+
+  updateLeadField: (id: number, data: Record<string, unknown>) =>
+    api.post(`/crm/lead-fields/${id}`, data),
+
+  deleteLeadField: (id: number) =>
+    api.delete(`/crm/lead-fields/${id}`),
 
   // ── CRM Labels (Custom Field Builder) ──────────────────────────────────────
   getCrmLabels: () =>

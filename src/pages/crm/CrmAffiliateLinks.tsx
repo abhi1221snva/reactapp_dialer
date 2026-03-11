@@ -5,7 +5,9 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
+import { RowActions } from '../../components/ui/RowActions'
 import type { AffiliateLink } from '../../types/crm.types'
+import { showConfirm } from '../../utils/confirmDelete'
 
 interface CreateForm {
   label: string
@@ -197,8 +199,8 @@ export function CrmAffiliateLinks() {
             <table className="table">
               <thead>
                 <tr>
-                  {['Label', 'Token', 'Clicks', 'Leads', 'Status', ''].map(h => (
-                    <th key={h}>{h}</th>
+                  {['Label', 'Token', 'Clicks', 'Leads', 'Status', 'Action'].map(h => (
+                    <th key={h} className={h === 'Action' ? 'text-right' : ''}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -224,27 +226,23 @@ export function CrmAffiliateLinks() {
                         {link.status ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => setViewingStats(link)}
-                          className="action-btn"
-                          title="View stats"
-                        >
-                          <BarChart2 size={14} />
-                        </button>
-                        {link.status === 1 && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Deactivate this link?')) deactivateMutation.mutate(link.id)
-                            }}
-                            className="action-btn-danger"
-                            title="Deactivate"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
+                    <td className="w-px whitespace-nowrap">
+                      <RowActions actions={[
+                        {
+                          label: 'View Stats',
+                          icon: <BarChart2 size={13} />,
+                          variant: 'view',
+                          onClick: () => setViewingStats(link),
+                        },
+                        {
+                          label: 'Deactivate',
+                          icon: <Trash2 size={13} />,
+                          variant: 'delete',
+                          onClick: async () => { if (await showConfirm({ message: 'Deactivate this link?', confirmText: 'Yes, deactivate' })) deactivateMutation.mutate(link.id) },
+                          hidden: !link.status,
+                          disabled: deactivateMutation.isPending,
+                        },
+                      ]} />
                     </td>
                   </tr>
                 ))}

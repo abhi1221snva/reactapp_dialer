@@ -4,35 +4,24 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, User, Building2, MapPin, Mail, Tag, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, Tag, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
-import type { CrmLead } from '../../types/crm.types'
+import type { CrmLabel, CrmLead } from '../../types/crm.types'
 
+// Only sidebar system fields need schema-level validation; all other fields are driven by lead-fields config
 const schema = z.object({
-  first_name:   z.string().min(1, 'First name is required'),
-  last_name:    z.string().optional(),
-  email:        z.string().email('Invalid email').or(z.literal('')).optional(),
-  phone_number: z.string().optional(),
-  company_name: z.string().optional(),
-  lead_status:  z.string().min(1, 'Status is required'),
-  lead_type:    z.string().optional(),
-  gender:       z.string().optional(),
-  dob:          z.string().optional(),
-  assigned_to:  z.string().optional(),
-  address:      z.string().optional(),
-  city:         z.string().optional(),
-  state:        z.string().optional(),
-  country:      z.string().optional(),
+  lead_status: z.string().min(1, 'Status is required'),
+  lead_type:   z.string().optional(),
+  assigned_to: z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
 
-// ── Section wrapper ────────────────────────────────────────────────────────────
+// ── Section wrapper (sidebar only) ────────────────────────────────────────────
 interface SectionProps { icon: React.ReactNode; title: string; children: React.ReactNode }
-
 function Section({ icon, title, children }: SectionProps) {
   return (
     <div className="detail-section">
@@ -45,14 +34,9 @@ function Section({ icon, title, children }: SectionProps) {
   )
 }
 
-// ── Field wrapper ──────────────────────────────────────────────────────────────
-function Field({
-  label, required, error, children, className,
-}: {
-  label: string; required?: boolean; error?: string; children: React.ReactNode; className?: string
-}) {
+function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
-    <div className={className}>
+    <div>
       <label className="label">
         {label}
         {required && <span className="ml-0.5 text-red-500">*</span>}
@@ -76,7 +60,7 @@ export function CrmLeadCreate() {
   const [apiError, setApiError] = useState<string | null>(null)
 
   const {
-    register, handleSubmit, reset, setValue, watch,
+    register, handleSubmit, setValue, watch, getValues, setError,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -85,6 +69,15 @@ export function CrmLeadCreate() {
 
   const inp = (hasError?: boolean) =>
     hasError ? 'input-error w-full' : 'input w-full'
+
+  const { data: leadFields } = useQuery({
+    queryKey: ['crm-lead-fields'],
+    queryFn: async () => {
+      const res = await crmService.getLeadFields()
+      return (res.data?.data ?? res.data ?? []) as CrmLabel[]
+    },
+    staleTime: 0,
+  })
 
   const { data: statuses } = useQuery({
     queryKey: ['lead-statuses'],
@@ -107,30 +100,28 @@ export function CrmLeadCreate() {
     enabled: isEdit && !!leadId,
   })
 
+  // Set sidebar fields when lead data loads; DynamicFieldForm's own useEffect handles all body fields
   useEffect(() => {
     if (existing) {
-      reset({
-        first_name:   existing.first_name,
-        last_name:    existing.last_name ?? '',
-        email:        existing.email ? String(existing.email) : '',
-        phone_number: existing.phone_number ? String(existing.phone_number) : '',
-        company_name: existing.company_name ? String(existing.company_name) : '',
-        lead_status:  String(existing.lead_status),
-        lead_type:    existing.lead_type ? String(existing.lead_type) : '',
-        gender:       existing.gender ? String(existing.gender) : '',
-        dob:          existing.dob ? String(existing.dob) : '',
-        assigned_to:  existing.assigned_to ? String(existing.assigned_to) : '',
-        address:      existing.address ? String(existing.address) : '',
-        city:         existing.city ? String(existing.city) : '',
-        state:        existing.state ? String(existing.state) : '',
-        country:      existing.country ? String(existing.country) : '',
-      })
+      setValue('lead_status', String(existing.lead_status))
+      setValue('lead_type', existing.lead_type ? String(existing.lead_type) : '')
+      setValue('assigned_to', existing.assigned_to ? String(existing.assigned_to) : '')
     }
-  }, [existing, reset])
+  }, [existing, setValue])
 
-  const extractApiError = (err: unknown): string => {
+  const handleApiError = (err: unknown): string | null => {
     if (err && typeof err === 'object' && 'response' in err) {
-      const res = (err as { response?: { data?: { message?: string } } }).response
+      const res = (err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response
+      const fieldErrors = res?.data?.errors
+      if (fieldErrors && Object.keys(fieldErrors).length > 0) {
+        // First error message for the toast
+        const firstMsg = Object.values(fieldErrors).flat()[0]
+        Object.entries(fieldErrors).forEach(([field, messages]) => {
+          const msg = Array.isArray(messages) ? messages[0] : String(messages)
+          setError(field as keyof FormData, { type: 'server', message: msg })
+        })
+        return firstMsg ?? res?.data?.message ?? null
+      }
       if (res?.data?.message) return res.data.message
     }
     return 'An unexpected error occurred. Please try again.'
@@ -145,7 +136,11 @@ export function CrmLeadCreate() {
       if (newId) navigate(`/crm/leads/${newId}`)
       else navigate('/crm/leads')
     },
-    onError: (err) => { setApiError(extractApiError(err)); toast.error('Failed to create lead') },
+    onError: (err) => {
+      const msg = handleApiError(err)
+      toast.error(msg ?? 'Failed to create lead')
+      setApiError(null) // field errors shown inline; only set banner for generic errors
+    },
   })
 
   const updateMutation = useMutation({
@@ -155,12 +150,22 @@ export function CrmLeadCreate() {
       toast.success('Lead updated successfully')
       navigate(`/crm/leads/${leadId}`)
     },
-    onError: (err) => { setApiError(extractApiError(err)); toast.error('Failed to update lead') },
+    onError: (err) => {
+      const msg = handleApiError(err)
+      toast.error(msg ?? 'Failed to update lead')
+      setApiError(null)
+    },
   })
 
   const onSubmit = (data: FormData) => {
     setApiError(null)
-    const payload: Record<string, unknown> = { ...data }
+    // getValues() includes EAV fields registered by DynamicFieldForm (zod strips unknown keys from `data`)
+    const rawAll = getValues() as Record<string, unknown>
+    // Normalize checkbox booleans → "1"/"0" strings for EAV storage
+    const payload: Record<string, unknown> = {}
+    Object.entries({ ...rawAll, ...data } as Record<string, unknown>).forEach(([k, v]) => {
+      payload[k] = v === true ? '1' : v === false ? '0' : v
+    })
     if (isEdit) updateMutation.mutate(payload)
     else createMutation.mutate(payload)
   }
@@ -200,71 +205,19 @@ export function CrmLeadCreate() {
           {/* ── LEFT: Main content ─────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Basic Information */}
-            <Section icon={<User size={16} />} title="Basic Information">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                <Field label="First Name" required error={errors.first_name?.message}>
-                  <input {...register('first_name')} className={inp(!!errors.first_name)} placeholder="First name" />
-                </Field>
-                <Field label="Last Name">
-                  <input {...register('last_name')} className={inp()} placeholder="Last name" />
-                </Field>
-                <Field label="Gender">
-                  <select {...register('gender')} className={inp()}>
-                    <option value="">— Select —</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                </Field>
-                <Field label="Date of Birth">
-                  <input type="date" {...register('dob')} className={inp()} />
-                </Field>
+            {/* All lead fields — column + EAV — driven by lead-fields configuration */}
+            <div className="detail-section">
+              <div className="detail-section-body">
+                <DynamicFieldForm
+                  register={register}
+                  setValue={setValue}
+                  defaultValues={existing as Record<string, unknown> | undefined}
+                  labels={leadFields}
+                  errors={errors}
+                  formValues={watch() as Record<string, unknown>}
+                />
               </div>
-            </Section>
-
-            {/* Contact Details */}
-            <Section icon={<Mail size={16} />} title="Contact Details">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                <Field label="Email" error={errors.email?.message}>
-                  <input type="email" {...register('email')} className={inp(!!errors.email)} placeholder="email@example.com" />
-                </Field>
-                <Field label="Phone Number">
-                  <input type="tel" {...register('phone_number')} className={inp()} placeholder="+1 (555) 000-0000" />
-                </Field>
-                <Field label="Company Name">
-                  <input {...register('company_name')} className={inp()} placeholder="Company name" />
-                </Field>
-              </div>
-            </Section>
-
-            {/* Address */}
-            <Section icon={<MapPin size={16} />} title="Address">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                <Field label="Street Address" className="sm:col-span-2 xl:col-span-3">
-                  <input {...register('address')} className={inp()} placeholder="123 Main St" />
-                </Field>
-                <Field label="City">
-                  <input {...register('city')} className={inp()} placeholder="City" />
-                </Field>
-                <Field label="State / Province">
-                  <input {...register('state')} className={inp()} placeholder="State" />
-                </Field>
-                <Field label="Country">
-                  <input {...register('country')} className={inp()} placeholder="Country" />
-                </Field>
-              </div>
-            </Section>
-
-            {/* Custom Fields (EAV) */}
-            <Section icon={<Building2 size={16} />} title="Custom Fields">
-              <DynamicFieldForm
-                register={register}
-                setValue={setValue}
-                watch={watch}
-                defaultValues={existing as Record<string, unknown> | undefined}
-              />
-            </Section>
+            </div>
           </div>
 
           {/* ── RIGHT: Sidebar ─────────────────────────────────────────── */}
@@ -281,16 +234,16 @@ export function CrmLeadCreate() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Lead Type">
-                  <select {...register('lead_type')} className={inp()}>
+                <Field label="Lead Type" error={errors.lead_type?.message}>
+                  <select {...register('lead_type')} className={inp(!!errors.lead_type)}>
                     <option value="">— Select type —</option>
                     <option value="hot">Hot</option>
                     <option value="warm">Warm</option>
                     <option value="cold">Cold</option>
                   </select>
                 </Field>
-                <Field label="Assigned To">
-                  <select {...register('assigned_to')} className={inp()}>
+                <Field label="Assigned To" error={errors.assigned_to?.message}>
+                  <select {...register('assigned_to')} className={inp(!!errors.assigned_to)}>
                     <option value="">— Unassigned —</option>
                     {(agents ?? []).map(a => (
                       <option key={a.id} value={a.id}>{a.name}</option>

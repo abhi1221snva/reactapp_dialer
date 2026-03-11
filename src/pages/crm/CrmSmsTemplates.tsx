@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { SmsTemplate } from '../../types/crm.types'
+import { confirmDelete } from '../../utils/confirmDelete'
 
 const VARIABLES = [
   '[[first_name]]', '[[last_name]]', '[[phone_number]]',
@@ -253,7 +254,7 @@ export function CrmSmsTemplates() {
                     <Pencil size={11} /> Edit
                   </button>
                   <button
-                    onClick={() => { if (window.confirm(`Delete "${t.sms_template_name}"?`)) deleteMutation.mutate(t.id) }}
+                    onClick={async () => { if (await confirmDelete(t.sms_template_name)) deleteMutation.mutate(t.id) }}
                     className="action-btn-danger"
                   >
                     <Trash2 size={13} />

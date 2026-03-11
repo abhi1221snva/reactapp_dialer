@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Loader2, Tag, ChevronDown, ChevronUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
+import { confirmDelete } from '../../utils/confirmDelete'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface DocumentType {
@@ -287,8 +288,8 @@ export function CrmDocumentTypesManager({ onClose }: Props) {
 
                       {/* Delete */}
                       <button
-                        onClick={() => {
-                          if (window.confirm(`Delete "${dt.title}"? This cannot be undone.`))
+                        onClick={async () => {
+                          if (await confirmDelete(dt.title))
                             deleteMut.mutate(dt.id)
                         }}
                         disabled={deleteMut.isPending}
