@@ -186,13 +186,12 @@ export const crmService = {
 
   createLeadField: (data: {
     label_name: string
-    field_key: string
+    field_key?: string   // optional — backend auto-generates from label_name
     field_type: string
     section?: string
     placeholder?: string
     required?: boolean
     options?: string
-    conditions?: unknown
   }) => api.post('/crm/lead-fields', data),
 
   updateLeadField: (id: number, data: Record<string, unknown>) =>

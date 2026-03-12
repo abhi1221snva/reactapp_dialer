@@ -27,11 +27,15 @@ interface Props {
 const KNOWN_SECTIONS: Record<string, string> = {
   owner:        'Owner Information',
   business:     'Business Information',
-  second_owner: 'Second Owner',
-  other:        'Other',
-  general:      'General Information',
-  contact:      'Contact Details',
+  funding:      'Funding Information',
+  contact:      'Contact Information',
   financial:    'Financial Information',
+  documents:    'Documents / Verification',
+  custom:       'Custom Fields',
+  // legacy aliases kept for backward compatibility
+  second_owner: 'Second Owner',
+  general:      'General Information',
+  other:        'Other',
   address:      'Address',
 }
 

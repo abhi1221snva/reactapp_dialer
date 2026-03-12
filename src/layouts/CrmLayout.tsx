@@ -5,7 +5,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 const CRM_TITLES: Record<string, string> = {
   '/crm/dashboard':       'CRM Dashboard',
   '/crm/pipeline':        'Pipeline Board',
-  '/crm/leads':           'All Leads',
+  '/crm/leads':           'Leads',
   '/crm/leads/create':    'Add Lead',
   '/crm/lead-status':     'Lead Status',
   '/crm/email-templates': 'Email Templates',

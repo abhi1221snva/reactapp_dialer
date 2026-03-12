@@ -380,7 +380,7 @@ export function Sidebar() {
       items: [
         { to: '/crm/dashboard',        label: 'CRM Dashboard',   icon: PieChart,      minLevel: 1 },
         { to: '/crm/pipeline',         label: 'Pipeline Board',  icon: Kanban,        minLevel: 1 },
-        { to: '/crm/leads',            label: 'All Leads',       icon: Users,         minLevel: 1 },
+        { to: '/crm/leads',            label: 'Leads',       icon: Users,         minLevel: 1 },
         { to: '/crm/lead-status',      label: 'Lead Status',     icon: Tag,           minLevel: LEVELS.MANAGER },
         { to: '/crm/lead-fields',      label: 'Lead Fields',     icon: Settings2,     minLevel: LEVELS.MANAGER },
         { to: '/crm/email-templates',  label: 'Email Templates', icon: Mail,          minLevel: LEVELS.MANAGER },

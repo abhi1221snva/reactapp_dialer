@@ -688,7 +688,6 @@ export function CrmLeadStatus() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-900 truncate">{s.lead_title}</p>
-                            <code className="text-[11px] text-slate-400 font-mono">{s.lead_title_url}</code>
                           </div>
                         </div>
                       </td>

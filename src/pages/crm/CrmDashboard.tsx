@@ -275,7 +275,7 @@ export function CrmDashboard() {
           {[
             { label: 'Pipeline',  icon: Kanban,   to: '/crm/pipeline' },
             { label: 'Add Lead',  icon: UserPlus, to: '/crm/leads/create' },
-            { label: 'All Leads', icon: Users,    to: '/crm/leads' },
+            { label: 'Leads', icon: Users,    to: '/crm/leads' },
           ].map(({ label, icon: Icon, to }) => (
             <button
               key={label}
