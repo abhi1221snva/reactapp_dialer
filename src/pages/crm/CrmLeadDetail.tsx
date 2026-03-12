@@ -855,11 +855,6 @@ export function CrmLeadDetail() {
         {/* ── RIGHT SIDEBAR ────────────────────────────────────────────── */}
         <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 space-y-4 lg:sticky lg:top-[108px] lg:self-start lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:pb-4">
 
-          {/* Lead Summary */}
-          <SidebarCard title="Lead Summary" icon={ClipboardList}>
-            <LeadSummaryWidget lead={lead} statuses={statuses} />
-          </SidebarCard>
-
           {/* Quick Actions */}
           <SidebarCard title="Quick Actions" icon={Zap} iconColor="text-amber-600" iconBg="bg-amber-50">
             <QuickActionsWidget

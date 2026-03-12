@@ -267,11 +267,6 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
               onChange={e => set('label_name', e.target.value)}
               placeholder="e.g. Business Revenue"
             />
-            {!isEdit && form.label_name.trim().length > 0 && (
-              <p className="text-[11px] text-slate-400 mt-1">
-                Key will be auto-generated: <span className="font-mono text-slate-600">{form.label_name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}</span>
-              </p>
-            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

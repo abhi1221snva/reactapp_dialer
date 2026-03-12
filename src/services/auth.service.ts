@@ -21,10 +21,16 @@ export const authService = {
     api.get('/profile'),
 
   updateProfile: (data: FormData | Record<string, unknown>) =>
-    api.post('/update_profile', data),
+    api.post('/update-profile', data),
 
-  changePassword: (data: { old_password: string; password: string; password_confirmation: string }) =>
-    api.post('/change_password', data),
+  uploadAvatar: (file: File) => {
+    const fd = new FormData()
+    fd.append('avatar', file)
+    return api.post('/profile/upload-avatar', fd)
+  },
+
+  changePassword: (data: { old_password: string; password: string; password_confirmation: string; id?: number | string }) =>
+    api.post('/update-user-password', { id: data.id, password: data.old_password, new_password: data.password }),
 
   logout: () =>
     api.post('/logout'),

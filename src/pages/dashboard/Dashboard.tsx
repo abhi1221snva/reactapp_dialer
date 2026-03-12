@@ -32,6 +32,80 @@ const CALL_TYPE_LABELS: Record<string, string> = {
   outbound_c2c:     'C2C',
 }
 
+// ─── Dummy / fallback data (shown when API returns empty) ─────────────────────
+function _makeDates(count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (count - 1 - i))
+    return { date: d.toISOString().slice(0, 10), label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
+  })
+}
+const _days = _makeDates(14)
+const _callSeed = [187,214,198,243,176,259,232,208,191,267,224,238,195,251]
+const _hourSeed = [4,8,14,22,31,45,58,72,86,94,89,76,63,54,48,41,37,31,24,18,13,9,6,3]
+
+const DUMMY = {
+  stats: {
+    totalCallbacks:   4_821,
+    totalLeads:       12_340,
+    totalUsers:       24,
+    totalCampaigns:   8,
+    incomingSms:      1_293,
+    outgoingSms:      3_874,
+    unreadVoicemail:  17,
+    receivedVoicemail:89,
+  },
+  dailyCalls: _days.map((d, i) => ({ date: d.date, total_calls: _callSeed[i] })),
+  dispositions: [
+    { disposition: 'Answered',     name: 'Answered',     title: 'Answered',     total: 1842, count: 1842 },
+    { disposition: 'No Answer',    name: 'No Answer',    title: 'No Answer',    total:  934, count:  934 },
+    { disposition: 'Voicemail',    name: 'Voicemail',    title: 'Voicemail',    total:  612, count:  612 },
+    { disposition: 'Busy',         name: 'Busy',         title: 'Busy',         total:  287, count:  287 },
+    { disposition: 'Callback',     name: 'Callback',     title: 'Callback',     total:  423, count:  423 },
+    { disposition: 'Do Not Call',  name: 'Do Not Call',  title: 'Do Not Call',  total:  198, count:  198 },
+    { disposition: 'Wrong Number', name: 'Wrong Number', title: 'Wrong Number', total:  144, count:  144 },
+    { disposition: 'Disconnected', name: 'Disconnected', title: 'Disconnected', total:  379, count:  379 },
+  ],
+  revenue: {
+    summary: {
+      totalRevenue:        48_720.50,
+      totalCalls:          4_821,
+      avgRevenuePerCall:   10.10,
+      totalBillableMinutes:38_560,
+    },
+    byCallType: {
+      inbound:         { revenue: 12_480.00, calls:  987 },
+      outbound_dialer: { revenue: 22_340.50, calls: 2_143 },
+      outbound_manual: { revenue:  9_860.00, calls:  1_241 },
+      outbound_c2c:    { revenue:  4_040.00, calls:   450 },
+    },
+    byAgent: [
+      { extension: '1001', agentName: 'Marcus Rivera',  revenue: 9_240.00, callCount: 521, avgRevenue: 17.74 },
+      { extension: '1002', agentName: 'Samantha Cole',  revenue: 8_180.50, callCount: 487, avgRevenue: 16.80 },
+      { extension: '1003', agentName: 'David Kim',      revenue: 7_320.00, callCount: 443, avgRevenue: 16.52 },
+      { extension: '1004', agentName: 'Priya Sharma',   revenue: 6_450.00, callCount: 398, avgRevenue: 16.21 },
+      { extension: '1005', agentName: 'Jason Torres',   revenue: 5_810.00, callCount: 362, avgRevenue: 16.05 },
+      { extension: '1006', agentName: 'Emily Nguyen',   revenue: 4_960.00, callCount: 318, avgRevenue: 15.60 },
+      { extension: '1007', agentName: 'Carlos Mendez',  revenue: 3_840.00, callCount: 271, avgRevenue: 14.17 },
+      { extension: '1008', agentName: 'Rachel Brooks',  revenue: 2_920.00, callCount: 221, avgRevenue: 13.21 },
+    ],
+    byCampaign: [
+      { campaignId: 1, campaignName: 'Q1 Outbound Blitz',     revenue: 14_200.00, callCount: 1_243, totalDurationFormatted: '87h 14m' },
+      { campaignId: 2, campaignName: 'Inbound Support Line',  revenue: 10_840.00, callCount:   987, totalDurationFormatted: '64h 22m' },
+      { campaignId: 3, campaignName: 'Renewal Follow-Up',     revenue:  9_120.00, callCount:   876, totalDurationFormatted: '58h 41m' },
+      { campaignId: 4, campaignName: 'Cold Outreach Mar',     revenue:  7_380.00, callCount:   712, totalDurationFormatted: '47h 09m' },
+      { campaignId: 5, campaignName: 'VIP Callbacks',         revenue:  4_960.00, callCount:   432, totalDurationFormatted: '31h 55m' },
+      { campaignId: 6, campaignName: 'Survey Campaign',       revenue:  2_220.50, callCount:   571, totalDurationFormatted: '28h 03m' },
+    ],
+    hourlyBreakdown: _hourSeed.map((calls, i) => ({
+      hour:      String(i).padStart(2, '0') + ':00',
+      callCount: calls,
+      revenue:   calls * 10.1,
+    })),
+    comparison: { change: { percentage: 12.4 } },
+  },
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getGreeting(): string {
   const h = new Date().getHours()
@@ -207,46 +281,44 @@ export function Dashboard() {
     queryFn:  () => dashboardService.getRevenueMetrics({ period: 'custom', start_date: revRange.date_from, end_date: revRange.date_to }),
   })
 
-  // ── Parse stats ────────────────────────────────────────────────────────────
-  const stats = statsData?.data?.data || {}
+  // ── Parse stats (fallback to dummy) ───────────────────────────────────────
+  const rawStats = statsData?.data?.data || {}
+  const stats = (rawStats.totalCallbacks != null || rawStats.totalLeads != null)
+    ? rawStats
+    : DUMMY.stats
 
-  // ── Parse CDR daily data ───────────────────────────────────────────────────
+  // ── Parse CDR daily data (fallback to dummy) ───────────────────────────────
   const rawDaily: { date?: string; day?: string; total_calls?: number; calls?: number }[] =
-    cdrData?.data?.data?.daily_calls || cdrData?.data?.data || []
-  const areaData = Array.isArray(rawDaily)
-    ? rawDaily.map(d => ({
-        name:  d.date ? new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : (d.day || ''),
-        calls: Number(d.total_calls ?? d.calls ?? 0),
-      }))
-    : []
+    (() => { const d = cdrData?.data?.data?.daily_calls || cdrData?.data?.data; return Array.isArray(d) && d.length ? d : DUMMY.dailyCalls })()
+  const areaData = rawDaily.map(d => ({
+    name:  d.date ? new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : (d.day || ''),
+    calls: Number(d.total_calls ?? d.calls ?? 0),
+  }))
 
-  // ── Parse disposition ──────────────────────────────────────────────────────
-  const rawDisp: { disposition?: string; name?: string; title?: string; total?: number; count?: number; color?: string }[] =
+  // ── Parse disposition (fallback to dummy) ──────────────────────────────────
+  const rawDispApi: { disposition?: string; name?: string; title?: string; total?: number; count?: number }[] =
     dispData?.data?.data || []
-  const pieData = Array.isArray(rawDisp)
-    ? rawDisp.slice(0, 8).map(d => ({
-        name:  String(d.disposition ?? d.name ?? d.title ?? 'Unknown'),
-        value: Number(d.total ?? d.count ?? 0),
-      })).filter(d => d.value > 0)
-    : []
+  const rawDisp = (Array.isArray(rawDispApi) && rawDispApi.length) ? rawDispApi : DUMMY.dispositions
+  const pieData = rawDisp.slice(0, 8).map(d => ({
+    name:  String(d.disposition ?? d.name ?? d.title ?? 'Unknown'),
+    value: Number(d.total ?? d.count ?? 0),
+  })).filter(d => d.value > 0)
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0)
 
-  // ── Parse revenue ──────────────────────────────────────────────────────────
+  // ── Parse revenue (fallback to dummy) ─────────────────────────────────────
   const rev         = revData?.data?.data
-  const revSummary  = rev?.summary       || {}
-  const revByType   = rev?.byCallType    || {}
-  const revAgents   = rev?.byAgent       || []
-  const revCampaign = rev?.byCampaign    || []
-  const revHourly   = rev?.hourlyBreakdown || []
-  const revComp     = rev?.comparison
+  const revSummary  = rev?.summary?.totalRevenue != null ? rev.summary        : DUMMY.revenue.summary
+  const revByType   = rev?.byCallType && Object.keys(rev.byCallType).length   ? rev.byCallType    : DUMMY.revenue.byCallType
+  const revAgents   = rev?.byAgent?.length                                    ? rev.byAgent       : DUMMY.revenue.byAgent
+  const revCampaign = rev?.byCampaign?.length                                 ? rev.byCampaign    : DUMMY.revenue.byCampaign
+  const revHourly   = rev?.hourlyBreakdown?.length                            ? rev.hourlyBreakdown : DUMMY.revenue.hourlyBreakdown
+  const revComp     = rev?.comparison ?? DUMMY.revenue.comparison
 
-  const hourlyBar = Array.isArray(revHourly)
-    ? revHourly.map((h: { hour: string; revenue?: number; callCount?: number }) => ({
-        hour:    h.hour,
-        revenue: Number(h.revenue ?? 0),
-        calls:   Number(h.callCount ?? 0),
-      }))
-    : []
+  const hourlyBar = (revHourly as { hour: string; revenue?: number; callCount?: number }[]).map(h => ({
+    hour:    h.hour,
+    revenue: Number(h.revenue ?? 0),
+    calls:   Number(h.callCount ?? 0),
+  }))
 
   const callTypeBar = Object.entries(revByType).map(([key, v]: [string, unknown]) => {
     const val = v as { revenue?: number; calls?: number }

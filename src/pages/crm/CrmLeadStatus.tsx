@@ -19,9 +19,16 @@ const DEFAULT_COLOR = '#6366F1'
 const PER_PAGE = 15
 
 const PRESET_COLORS = [
-  '#6366F1', '#3B82F6', '#06B6D4', '#10B981', '#22C55E',
-  '#F59E0B', '#EF4444', '#EC4899', '#8B5CF6', '#F97316',
-  '#64748B', '#0F172A',
+  '#EF4444', // Red
+  '#22C55E', // Green
+  '#3B82F6', // Blue
+  '#F97316', // Orange
+  '#8B5CF6', // Purple
+  '#EAB308', // Yellow
+  '#14B8A6', // Teal
+  '#6366F1', // Indigo
+  '#EC4899', // Pink
+  '#64748B', // Gray
 ]
 
 const WEBHOOK_METHODS = ['POST', 'GET', 'PUT', 'PATCH']
@@ -275,39 +282,18 @@ function StatusModal({
 
             <div className="form-group">
               <label className="label">Color</label>
-              <div className="flex flex-wrap gap-1.5 mb-2.5">
+              <div className="flex flex-wrap gap-2">
                 {PRESET_COLORS.map(c => (
                   <button key={c} type="button" onClick={() => set('color_code', c)} title={c}
-                    className={`w-6 h-6 rounded-md transition-transform hover:scale-110 ${
-                      form.color_code === c ? 'ring-2 ring-offset-1 ring-indigo-500 scale-110 shadow-sm' : 'shadow-sm border border-black/10'
+                    className={`w-9 h-9 rounded-lg transition-transform hover:scale-110 ${
+                      form.color_code === c ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110 shadow-md' : 'shadow-sm border border-black/10'
                     }`}
                     style={{ background: c }}
                   />
                 ))}
               </div>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.color_code} onChange={e => set('color_code', e.target.value)}
-                  className="h-9 w-12 rounded-lg border border-slate-200 cursor-pointer p-0.5 flex-shrink-0" />
-                <input
-                  className="input flex-1 font-mono text-sm"
-                  value={form.color_code}
-                  onChange={e => { if (/^#[0-9A-Fa-f]{0,6}$/.test(e.target.value)) set('color_code', e.target.value) }}
-                  placeholder="#6366F1" maxLength={7}
-                />
-              </div>
             </div>
 
-            <div className="form-group">
-              <label className="label">Vector Image</label>
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center flex-shrink-0">
-                  <Tag size={14} className="text-slate-400" />
-                </div>
-                <input className="input flex-1 font-mono text-sm" value={form.vector_image}
-                  onChange={e => set('vector_image', e.target.value)} placeholder="fa-th" />
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Font Awesome icon class (e.g. fa-th, fa-star, fa-check)</p>
-            </div>
           </div>
 
           {/* Webhook */}

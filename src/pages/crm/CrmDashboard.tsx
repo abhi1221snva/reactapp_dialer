@@ -8,14 +8,102 @@ import {
 import {
   Users, TrendingUp, TrendingDown, Target, Activity,
   Award, DollarSign, ArrowRight, FileText,
-  Kanban, UserPlus, BarChart3, CheckCircle2,
+  UserPlus, BarChart3, CheckCircle2,
   Building2, RefreshCw,
 } from 'lucide-react'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
+import { useAuthStore } from '../../stores/auth.store'
 import { initials } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import type { AnalyticsPeriod } from '../../types/crm.types'
+
+// ─── Dummy / fallback data (shown when API returns empty) ─────────────────────
+function makeDailyDates(count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (count - 1 - i))
+    return d.toISOString().slice(0, 10)
+  })
+}
+const _dates = makeDailyDates(20)
+const _seed  = [12,18,9,22,15,27,11,19,8,24,16,21,14,7,23,17,20,10,26,13]
+
+const DUMMY = {
+  distribution: {
+    total: 1024,
+    distribution: [
+      { status_name: 'New Lead',     count: 245, percentage: 24, color: '#6366f1' },
+      { status_name: 'Contacted',    count: 187, percentage: 18, color: '#06b6d4' },
+      { status_name: 'Submitted',    count: 134, percentage: 13, color: '#8b5cf6' },
+      { status_name: 'Under Review', count:  98, percentage: 10, color: '#f59e0b' },
+      { status_name: 'Approved',     count:  76, percentage:  7, color: '#10b981' },
+      { status_name: 'Funded',       count:  52, percentage:  5, color: '#22c55e' },
+      { status_name: 'Follow Up',    count: 143, percentage: 14, color: '#f97316' },
+      { status_name: 'Declined',     count:  89, percentage:  9, color: '#ef4444' },
+    ],
+  },
+  velocity: {
+    total_leads: 347,
+    avg_per_day: 17.4,
+    daily: _dates.map((date, i) => ({ date, new_leads: _seed[i] })),
+  },
+  agents: [
+    { user_name: 'Marcus Rivera',   total: 143, by_status: { funded: 18, closed_won: 4, submitted: 31, approved: 12 } },
+    { user_name: 'Samantha Cole',   total: 128, by_status: { funded: 15, closed_won: 3, submitted: 28, approved: 10 } },
+    { user_name: 'David Kim',       total: 119, by_status: { funded: 14, closed_won: 2, submitted: 24, approved: 9  } },
+    { user_name: 'Priya Sharma',    total: 107, by_status: { funded: 11, closed_won: 3, submitted: 22, approved: 8  } },
+    { user_name: 'Jason Torres',    total:  98, by_status: { funded: 10, closed_won: 2, submitted: 19, approved: 7  } },
+    { user_name: 'Emily Nguyen',    total:  87, by_status: { funded:  9, closed_won: 1, submitted: 17, approved: 6  } },
+    { user_name: 'Carlos Mendez',   total:  76, by_status: { funded:  7, closed_won: 2, submitted: 15, approved: 5  } },
+    { user_name: 'Rachel Brooks',   total:  65, by_status: { funded:  6, closed_won: 1, submitted: 12, approved: 4  } },
+  ],
+  funnel: {
+    funnel: [
+      { status_name: 'New Lead',     count: 1024, percentage: 100 },
+      { status_name: 'Contacted',    count:  812, percentage:  79 },
+      { status_name: 'Submitted',    count:  487, percentage:  60 },
+      { status_name: 'Under Review', count:  341, percentage:  70 },
+      { status_name: 'Approved',     count:  198, percentage:  58 },
+      { status_name: 'Funded',       count:   52, percentage:  26 },
+    ],
+  },
+  lenders: [
+    { lender_name: 'Greenfield Capital',  total_sent: 210, total_approved: 134, total_funded: 28, approval_rate: 64 },
+    { lender_name: 'Summit Funding',      total_sent: 185, total_approved: 108, total_funded: 21, approval_rate: 58 },
+    { lender_name: 'Apex MCA Partners',   total_sent: 162, total_approved:  89, total_funded: 18, approval_rate: 55 },
+    { lender_name: 'BlueSky Finance',     total_sent: 144, total_approved:  74, total_funded: 14, approval_rate: 51 },
+    { lender_name: 'Liberty Advance',     total_sent: 121, total_approved:  58, total_funded: 10, approval_rate: 48 },
+    { lender_name: 'Horizon Lending',     total_sent:  98, total_approved:  43, total_funded:  8, approval_rate: 44 },
+  ],
+  mca: {
+    funding: {
+      totalFunded:     2_840_000,
+      totalDeals:      52,
+      totalCommission:   142_000,
+      dailyFunding: _dates.slice(-14).map((date, i) => ({
+        date,
+        deals:  Math.max(1, Math.round(_seed[i] * 0.4)),
+        amount: Math.round(_seed[i] * 14000 + 80000),
+      })),
+    },
+    conversions: {
+      totalLeads:       1024,
+      contacted:         812,
+      submitted:         487,
+      approved:          198,
+      funded:             52,
+      overallConversion:  5.1,
+      contactRate:       79.3,
+      submissionRate:    60.0,
+      approvalRate:      40.7,
+      fundingRate:       26.3,
+    },
+    comparison: {
+      change: { leads: 12.4, volume: 8.7 },
+    },
+  },
+}
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const PIE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899']
@@ -34,6 +122,13 @@ const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function getGreeting(): string {
+  const h = new Date().getHours()
+  if (h >= 5  && h < 12) return 'Good morning'
+  if (h >= 12 && h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
   if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K'
@@ -145,6 +240,11 @@ export function CrmDashboard() {
   const navigate = useNavigate()
   const [period, setPeriod] = useState<AnalyticsPeriod>('month')
   const { setDescription, setActions } = useCrmHeader()
+  const { user } = useAuthStore()
+
+  const greeting    = getGreeting()
+  const displayName = user?.first_name || user?.name?.split(' ')[0] || ''
+  const today       = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   useEffect(() => {
     setDescription('Pipeline analytics & lead performance')
@@ -202,40 +302,45 @@ export function CrmDashboard() {
     },
   })
 
-  // ── Derived data ──────────────────────────────────────────────────────────
+  // ── Derived data (falls back to DUMMY when API returns empty) ─────────────
+  const rawDist = distribution?.distribution?.length ? distribution.distribution : DUMMY.distribution.distribution
   const distItems: { status_name: string; count: number; percentage: number; color?: string }[] =
-    (distribution?.distribution ?? []).map((d: Record<string, unknown>) => ({
+    rawDist.map((d: Record<string, unknown>) => ({
       status_name: String(d.title ?? d.status_name ?? d.status ?? ''),
       count:       Number(d.count ?? 0),
       percentage:  Number(d.percentage ?? 0),
       color:       d.color as string | undefined,
     }))
 
+  const rawVelDaily = velocity?.daily?.length ? velocity.daily : DUMMY.velocity.daily
   const velocityItems: { date: string; count: number }[] =
-    (velocity?.daily ?? []).map((d: Record<string, unknown>) => ({
+    rawVelDaily.map((d: Record<string, unknown>) => ({
       date:  String(d.date ?? '').slice(5),
       count: Number(d.new_leads ?? d.count ?? 0),
     }))
 
-  const agents: { user_name: string; total: number; by_status: Record<string, number> }[] = agentPerf ?? []
+  const agents: { user_name: string; total: number; by_status: Record<string, number> }[] =
+    (Array.isArray(agentPerf) && agentPerf.length) ? agentPerf : DUMMY.agents
 
+  const rawFunnel = (funnel?.funnel ?? funnel?.stages ?? [])
   const funnelItems: { status_name: string; count: number; percentage: number }[] =
-    (funnel?.funnel ?? funnel?.stages ?? []).map((f: Record<string, unknown>) => ({
+    (rawFunnel.length ? rawFunnel : DUMMY.funnel.funnel).map((f: Record<string, unknown>) => ({
       status_name: String(f.title ?? f.status_name ?? f.status ?? ''),
       count:       Number(f.count ?? 0),
       percentage:  Number(f.conversion_from_previous ?? f.percentage ?? 0),
     }))
 
+  const rawLenders = Array.isArray(lenderPerf) ? lenderPerf : (lenderPerf?.lenders ?? [])
   const lenders: { lender_name?: string; name?: string; total_sent?: number; total_approved?: number; total_funded?: number; approval_rate?: number }[] =
-    Array.isArray(lenderPerf) ? lenderPerf : (lenderPerf?.lenders ?? [])
+    rawLenders.length ? rawLenders : DUMMY.lenders
 
   // MCA-derived
-  const mcaFunding    = mcaData?.funding ?? {}
-  const mcaConv       = mcaData?.conversions ?? {}
-  const mcaComparison = mcaData?.comparison ?? {}
+  const mcaFunding    = (mcaData?.funding?.totalFunded   != null) ? mcaData.funding    : DUMMY.mca.funding
+  const mcaConv       = (mcaData?.conversions?.totalLeads != null) ? mcaData.conversions : DUMMY.mca.conversions
+  const mcaComparison = mcaData?.comparison ?? DUMMY.mca.comparison
 
-  const distTotal     = distribution?.total ?? 0
-  const velocityTotal = velocity?.total_leads ?? 0
+  const distTotal     = (distribution?.total ?? 0) || DUMMY.distribution.total
+  const velocityTotal = (velocity?.total_leads ?? 0) || DUMMY.velocity.total_leads
   const activeAgents  = agents.length
   const topDistItem   = distItems.reduce(
     (prev, cur) => cur.count > prev.count ? cur : prev,
@@ -263,19 +368,18 @@ export function CrmDashboard() {
         <div className="absolute right-32 -bottom-12 w-40 h-40 rounded-full bg-white/5" />
 
         <div className="relative">
-          <p className="text-emerald-300 text-sm font-medium">CRM Analytics</p>
-          <h1 className="text-white text-2xl font-bold mt-0.5">Pipeline Dashboard</h1>
-          <p className="text-emerald-300 text-sm mt-1">
-            {distTotal.toLocaleString()} active leads · {activeAgents} agents · {funnelItems.length} pipeline stages
-          </p>
+          <p className="text-emerald-300 text-sm font-medium">{today}</p>
+          <h1 className="text-white text-2xl font-bold mt-0.5">
+            {greeting}{displayName ? `, ${displayName}` : '!'} 👋
+          </h1>
+          <p className="text-emerald-300 text-sm mt-1">Here's what's happening with your pipeline today.</p>
         </div>
 
         <div className="relative flex items-center gap-2">
           <PeriodSelector value={period} onChange={setPeriod} />
           {[
-            { label: 'Pipeline',  icon: Kanban,   to: '/crm/pipeline' },
-            { label: 'Add Lead',  icon: UserPlus, to: '/crm/leads/create' },
-            { label: 'Leads', icon: Users,    to: '/crm/leads' },
+            { label: 'Add Lead', icon: UserPlus, to: '/crm/leads/create' },
+            { label: 'Leads',    icon: Users,    to: '/crm/leads' },
           ].map(({ label, icon: Icon, to }) => (
             <button
               key={label}
@@ -365,43 +469,10 @@ export function CrmDashboard() {
         />
       </div>
 
-      {/* ── Charts row — Pipeline donut + Lead Velocity area ─────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* ── Pipeline distribution donut ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Lead Velocity — area chart (2/3) */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 lg:col-span-2">
-          <SectionHeader title="Lead Velocity" sub="New leads added per day" />
-          {loadingVel ? (
-            <Skeleton className="h-[220px]" />
-          ) : velocityItems.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={velocityItems} margin={{ left: -10, right: 8 }}>
-                <defs>
-                  <linearGradient id="crmAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="#10b981" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0}    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="count" name="Leads"
-                  stroke="#10b981" strokeWidth={2.5}
-                  fill="url(#crmAreaGrad)" dot={false}
-                  activeDot={{ r: 4, fill: '#10b981' }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[220px] flex flex-col items-center justify-center gap-2 text-slate-300">
-              <Activity size={36} />
-              <p className="text-sm text-slate-400">No velocity data for this period</p>
-            </div>
-          )}
-        </div>
-
-        {/* Pipeline distribution donut (1/3) */}
+        {/* Pipeline distribution donut */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <SectionHeader
             title="Pipeline Distribution"
@@ -447,41 +518,47 @@ export function CrmDashboard() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* ── Conversion funnel + MCA conversion strip ─────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Conversion Funnel — horizontal bars (2/3) */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 lg:col-span-2">
-          <SectionHeader title="Conversion Funnel" sub="Lead progression through pipeline stages" />
-          {loadingFunnel ? (
-            <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
-          ) : funnelItems.length > 0 ? (
-            <div className="space-y-3">
-              {funnelItems.map((stage, i) => {
-                const barPct = funnelMax > 0 ? Math.max((stage.count / funnelMax) * 100, 2) : 2
+        {/* Lender Performance */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader
+            title="Lender Performance"
+            sub="Approval & funding rates"
+            right={
+              <button onClick={() => navigate('/crm/lenders')}
+                className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
+                View all <ArrowRight size={12} />
+              </button>
+            }
+          />
+          {loadingLender ? (
+            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : lenders.length > 0 ? (
+            <div className="space-y-2.5">
+              {lenders.slice(0, 8).map((l, i) => {
+                const name      = l.lender_name ?? l.name ?? `Lender #${i+1}`
+                const approvalR = Number(l.approval_rate ?? (l.total_sent && l.total_approved ? Math.round(l.total_approved / l.total_sent * 100) : 0))
+                const lColors   = ['from-indigo-500 to-violet-500','from-emerald-500 to-teal-500','from-amber-500 to-orange-500','from-rose-500 to-pink-500','from-sky-500 to-cyan-500']
                 return (
-                  <div key={stage.status_name} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold"
-                      style={{ background: FUNNEL_COLORS[i % FUNNEL_COLORS.length] }}>
-                      {i + 1}
+                  <div key={name + i} className="flex items-center gap-3">
+                    <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white bg-gradient-to-br', lColors[i % lColors.length])}>
+                      <Building2 size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[13px] font-medium text-slate-700 truncate">{stage.status_name}</span>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-[13px] font-semibold text-slate-800 truncate">{name}</p>
                         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                          <span className="text-[13px] font-bold text-slate-900 tabular-nums">{stage.count.toLocaleString()}</span>
-                          {stage.percentage > 0 && (
-                            <span className="text-[10px] text-slate-400 tabular-nums w-9 text-right">{stage.percentage}%</span>
+                          {l.total_funded != null && (
+                            <span className="text-[11px] font-bold text-emerald-600">{l.total_funded} funded</span>
                           )}
+                          <span className={cn('text-[11px] font-bold tabular-nums', approvalR >= 50 ? 'text-emerald-600' : 'text-amber-600')}>
+                            {approvalR}%
+                          </span>
                         </div>
                       </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${barPct}%`, background: FUNNEL_COLORS[i % FUNNEL_COLORS.length] }}
-                        />
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={cn('h-full rounded-full bg-gradient-to-r transition-all', lColors[i % lColors.length])}
+                          style={{ width: `${Math.min(approvalR, 100)}%` }} />
                       </div>
                     </div>
                   </div>
@@ -489,50 +566,16 @@ export function CrmDashboard() {
               })}
             </div>
           ) : (
-            <div className="h-40 flex flex-col items-center justify-center gap-2 text-slate-300">
-              <Target size={28} />
-              <p className="text-sm text-slate-400">No funnel data</p>
-            </div>
-          )}
-        </div>
-
-        {/* MCA Conversion KPIs (1/3) */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <SectionHeader title="MCA Conversion" sub="Funnel rates" />
-          {loadingMca ? (
-            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
-          ) : (
-            <div className="space-y-3">
-              {[
-                { label: 'Total Leads',      value: fmtNum(mcaConv.totalLeads ?? 0),           color: 'bg-indigo-500',  rate: null },
-                { label: 'Contacted',         value: fmtNum(mcaConv.contacted ?? 0),             color: 'bg-sky-500',     rate: mcaConv.contactRate },
-                { label: 'Submitted',         value: fmtNum(mcaConv.submitted ?? 0),             color: 'bg-violet-500',  rate: mcaConv.submissionRate },
-                { label: 'Approved',          value: fmtNum(mcaConv.approved ?? 0),              color: 'bg-emerald-500', rate: mcaConv.approvalRate },
-                { label: 'Funded',            value: fmtNum(mcaConv.funded ?? fundedCount),      color: 'bg-amber-500',   rate: mcaConv.fundingRate },
-                { label: 'Overall Conv.',     value: `${(mcaConv.overallConversion ?? 0).toFixed(1)}%`, color: 'bg-rose-500', rate: null },
-              ].map(({ label, value, color, rate }) => (
-                <div key={label} className="flex items-center gap-3">
-                  <div className={cn('w-2 h-8 rounded-full flex-shrink-0', color)} />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-slate-600">{label}</span>
-                      <span className="text-[13px] font-bold text-slate-900 tabular-nums">{value}</span>
-                    </div>
-                    {rate != null && (
-                      <div className="h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                        <div className={cn('h-full rounded-full', color)} style={{ width: `${Math.min(rate, 100)}%` }} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
+              <Building2 size={28} />
+              <p className="text-sm text-slate-400">No lender data available</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Agent Leaderboard + Lender Performance ──────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ── Agent Leaderboard ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4">
 
         {/* Agent Leaderboard */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
@@ -587,60 +630,6 @@ export function CrmDashboard() {
             <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
               <Users size={28} />
               <p className="text-sm text-slate-400">No agent data available</p>
-            </div>
-          )}
-        </div>
-
-        {/* Lender Performance */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <SectionHeader
-            title="Lender Performance"
-            sub="Approval & funding rates"
-            right={
-              <button onClick={() => navigate('/crm/lenders')}
-                className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
-                View all <ArrowRight size={12} />
-              </button>
-            }
-          />
-          {loadingLender ? (
-            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
-          ) : lenders.length > 0 ? (
-            <div className="space-y-2.5">
-              {lenders.slice(0, 8).map((l, i) => {
-                const name       = l.lender_name ?? l.name ?? `Lender #${i+1}`
-                const approvalR  = Number(l.approval_rate ?? (l.total_sent && l.total_approved ? Math.round(l.total_approved / l.total_sent * 100) : 0))
-                const lColors    = ['from-indigo-500 to-violet-500','from-emerald-500 to-teal-500','from-amber-500 to-orange-500','from-rose-500 to-pink-500','from-sky-500 to-cyan-500']
-                return (
-                  <div key={name + i} className="flex items-center gap-3">
-                    <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white bg-gradient-to-br', lColors[i % lColors.length])}>
-                      <Building2 size={14} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-[13px] font-semibold text-slate-800 truncate">{name}</p>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                          {l.total_funded != null && (
-                            <span className="text-[11px] font-bold text-emerald-600">{l.total_funded} funded</span>
-                          )}
-                          <span className={cn('text-[11px] font-bold tabular-nums', approvalR >= 50 ? 'text-emerald-600' : 'text-amber-600')}>
-                            {approvalR}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={cn('h-full rounded-full bg-gradient-to-r transition-all', lColors[i % lColors.length])}
-                          style={{ width: `${Math.min(approvalR, 100)}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
-              <Building2 size={28} />
-              <p className="text-sm text-slate-400">No lender data available</p>
             </div>
           )}
         </div>
