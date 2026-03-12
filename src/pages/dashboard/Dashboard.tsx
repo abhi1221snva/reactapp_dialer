@@ -19,19 +19,6 @@ import { initials } from '../../utils/format'
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const PIE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899']
 
-const CALL_TYPE_COLORS: Record<string, string> = {
-  inbound:          '#10b981',
-  outbound_dialer:  '#6366f1',
-  outbound_manual:  '#f59e0b',
-  outbound_c2c:     '#f97316',
-}
-const CALL_TYPE_LABELS: Record<string, string> = {
-  inbound:          'Inbound',
-  outbound_dialer:  'Auto Dialer',
-  outbound_manual:  'Manual',
-  outbound_c2c:     'C2C',
-}
-
 // ─── Dummy / fallback data (shown when API returns empty) ─────────────────────
 function _makeDates(count: number) {
   return Array.from({ length: count }, (_, i) => {
@@ -308,27 +295,9 @@ export function Dashboard() {
   // ── Parse revenue (fallback to dummy) ─────────────────────────────────────
   const rev         = revData?.data?.data
   const revSummary  = rev?.summary?.totalRevenue != null ? rev.summary        : DUMMY.revenue.summary
-  const revByType   = rev?.byCallType && Object.keys(rev.byCallType).length   ? rev.byCallType    : DUMMY.revenue.byCallType
-  const revAgents   = rev?.byAgent?.length                                    ? rev.byAgent       : DUMMY.revenue.byAgent
-  const revCampaign = rev?.byCampaign?.length                                 ? rev.byCampaign    : DUMMY.revenue.byCampaign
-  const revHourly   = rev?.hourlyBreakdown?.length                            ? rev.hourlyBreakdown : DUMMY.revenue.hourlyBreakdown
+  const revAgents   = rev?.byAgent?.length    ? rev.byAgent    : DUMMY.revenue.byAgent
+  const revCampaign = rev?.byCampaign?.length ? rev.byCampaign : DUMMY.revenue.byCampaign
   const revComp     = rev?.comparison ?? DUMMY.revenue.comparison
-
-  const hourlyBar = (revHourly as { hour: string; revenue?: number; callCount?: number }[]).map(h => ({
-    hour:    h.hour,
-    revenue: Number(h.revenue ?? 0),
-    calls:   Number(h.callCount ?? 0),
-  }))
-
-  const callTypeBar = Object.entries(revByType).map(([key, v]: [string, unknown]) => {
-    const val = v as { revenue?: number; calls?: number }
-    return {
-      name:    CALL_TYPE_LABELS[key] ?? key,
-      revenue: Number(val.revenue ?? 0),
-      calls:   Number(val.calls ?? 0),
-      color:   CALL_TYPE_COLORS[key] ?? '#94a3b8',
-    }
-  })
 
   const greeting     = getGreeting()
   const displayName  = user?.first_name || user?.name?.split(' ')[0] || ''
@@ -541,95 +510,6 @@ export function Dashboard() {
               <p className="text-sm text-slate-400">No disposition data</p>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* ── Revenue analytics row ────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <SectionHeader
-          title="Revenue Analytics"
-          sub="Call revenue breakdown by type and hour"
-          right={<PeriodSelector value={revPeriod} onChange={setRevPeriod} />}
-        />
-
-        {/* Revenue summary strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-          {[
-            { label: 'Total Revenue',     value: fmtMoney(revSummary.totalRevenue ?? 0),       icon: DollarSign, color: 'text-amber-600',  bg: 'bg-amber-50' },
-            { label: 'Total Calls',        value: (revSummary.totalCalls ?? 0).toLocaleString(), icon: Phone,      color: 'text-indigo-600', bg: 'bg-indigo-50' },
-            { label: 'Avg Revenue/Call',   value: fmtMoney(revSummary.avgRevenuePerCall ?? 0),   icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'Billable Minutes',   value: (revSummary.totalBillableMinutes ?? 0).toLocaleString(), icon: Clock, color: 'text-violet-600', bg: 'bg-violet-50' },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="flex items-center gap-3 rounded-xl p-3 bg-slate-50 border border-slate-100">
-              <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', bg)}>
-                <Icon size={16} className={color} />
-              </div>
-              <div>
-                <p className="text-[11px] text-slate-500 font-medium">{label}</p>
-                <p className={cn('text-sm font-bold', revLoading ? 'text-slate-300' : 'text-slate-900')}>
-                  {revLoading ? '—' : value}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Hourly revenue bar */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Hourly Call Volume</p>
-            {revLoading ? <Skeleton className="h-[180px]" /> : hourlyBar.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={hourlyBar} barSize={8} margin={{ left: -20, right: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                    interval={3} tickFormatter={h => h.slice(0,2)}
-                  />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="calls" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center text-sm text-slate-300">
-                <Activity size={28} />
-              </div>
-            )}
-          </div>
-
-          {/* Call type breakdown */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Revenue by Call Type</p>
-            {revLoading ? <Skeleton className="h-[180px]" /> : callTypeBar.length > 0 ? (
-              <>
-                <ResponsiveContainer width="100%" height={140}>
-                  <BarChart data={callTypeBar} barSize={32} margin={{ left: -20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => '$' + fmtNum(v)} />
-                    <Tooltip formatter={(v: number) => [fmtMoney(v), 'Revenue']}
-                      contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.10)', fontSize: 12 }} />
-                    <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                      {callTypeBar.map((e, i) => <Cell key={i} fill={e.color} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap gap-3 mt-2">
-                  {callTypeBar.map(e => (
-                    <div key={e.name} className="flex items-center gap-1.5 text-xs">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: e.color }} />
-                      <span className="text-slate-500">{e.name}:</span>
-                      <span className="font-bold text-slate-800">{fmtMoney(e.revenue)}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="h-[140px] flex items-center justify-center text-sm text-slate-300">
-                <DollarSign size={28} />
-              </div>
-            )}
-          </div>
         </div>
       </div>
 

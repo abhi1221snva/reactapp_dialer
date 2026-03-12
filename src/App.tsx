@@ -36,6 +36,7 @@ import { CrmLeadFields } from './pages/crm/CrmLeadFields'
 import { CrmEmailTemplates } from './pages/crm/CrmEmailTemplates'
 import { CrmSmsTemplates } from './pages/crm/CrmSmsTemplates'
 import { CrmLenders } from './pages/crm/CrmLenders'
+import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
 import { Campaigns } from './pages/campaigns/Campaigns'
 import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
@@ -153,6 +154,7 @@ export default function App() {
           <Route path="/crm/lead-fields" element={<CrmLeadFields />} />
           <Route path="/crm/email-templates" element={<CrmEmailTemplates />} />
           <Route path="/crm/sms-templates" element={<CrmSmsTemplates />} />
+          <Route path="/crm/pdf-templates" element={<CrmPdfTemplates />} />
           <Route path="/crm/lenders" element={<CrmLenders />} />
         </Route>
 

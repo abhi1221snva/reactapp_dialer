@@ -87,7 +87,7 @@ export function UserForm() {
 
   const set = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }))
 
-  const groups: Array<{ id: number; group_name: string }> =
+  const groups: Array<{ id: number; title?: string; group_name?: string }> =
     groupsData?.data?.data || groupsData?.data || []
 
   const toggleGroup = (gid: number) => {
@@ -216,8 +216,9 @@ export function UserForm() {
           <div className="form-group">
             <label className="label">Agent Groups</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-1">
-              {groups.map((g: { id: number; group_name: string }) => {
+              {groups.map((g: { id: number; title?: string; group_name?: string }) => {
                 const checked = form.group_id.includes(g.id)
+                const label = g.title || g.group_name || `Group ${g.id}`
                 return (
                   <label key={g.id} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${
                     checked ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
@@ -227,7 +228,7 @@ export function UserForm() {
                       onChange={() => toggleGroup(g.id)}
                       className="rounded accent-indigo-600" />
                     <span className={`text-sm font-medium ${checked ? 'text-indigo-700' : 'text-slate-700'}`}>
-                      {g.group_name}
+                      {label}
                     </span>
                   </label>
                 )

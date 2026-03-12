@@ -7,7 +7,7 @@ import {
   Trash2, Download, Building2, Send, AlertCircle, X, Eye,
   Settings2, Mail, Phone, MapPin, Calendar, User, Briefcase,
   Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
-  ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink,
+  ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -21,7 +21,7 @@ import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDo
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSendRecord } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus } from '../../types/crm.types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const AVATAR_BG = ['bg-indigo-500','bg-violet-500','bg-sky-500','bg-emerald-500','bg-rose-500','bg-amber-500']
@@ -380,16 +380,129 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
   )
 }
 
+// ── Lender status helpers ───────────────────────────────────────────────────────
+const SUBMISSION_STATUS_MAP: Record<LenderSubmissionStatus, { label: string; bg: string; text: string }> = {
+  pending:     { label: 'Pending',     bg: 'bg-slate-100',   text: 'text-slate-600'  },
+  submitted:   { label: 'Submitted',   bg: 'bg-blue-100',    text: 'text-blue-700'   },
+  viewed:      { label: 'Viewed',      bg: 'bg-violet-100',  text: 'text-violet-700' },
+  approved:    { label: 'Approved',    bg: 'bg-emerald-100', text: 'text-emerald-700'},
+  declined:    { label: 'Declined',    bg: 'bg-red-100',     text: 'text-red-700'    },
+  no_response: { label: 'No Response', bg: 'bg-amber-100',   text: 'text-amber-700'  },
+}
+const RESPONSE_STATUS_MAP: Record<LenderResponseStatus, { label: string; bg: string; text: string }> = {
+  pending:         { label: 'Pending',         bg: 'bg-slate-100',   text: 'text-slate-600'  },
+  approved:        { label: 'Approved',        bg: 'bg-emerald-100', text: 'text-emerald-700'},
+  declined:        { label: 'Declined',        bg: 'bg-red-100',     text: 'text-red-700'    },
+  needs_documents: { label: 'Needs Docs',      bg: 'bg-amber-100',   text: 'text-amber-700'  },
+  no_response:     { label: 'No Response',     bg: 'bg-slate-100',   text: 'text-slate-500'  },
+}
+
+function StatusPill({ status, map }: { status: string; map: Record<string, { label: string; bg: string; text: string }> }) {
+  const cfg = map[status] ?? { label: status, bg: 'bg-slate-100', text: 'text-slate-600' }
+  return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+}
+
+// ── Response Update Modal ───────────────────────────────────────────────────────
+function ResponseModal({
+  submission, leadId, onClose,
+}: {
+  submission: LenderSubmission
+  leadId: number
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [responseStatus, setResponseStatus] = useState<LenderResponseStatus>(submission.response_status ?? 'pending')
+  const [submissionStatus, setSubmissionStatus] = useState<LenderSubmissionStatus>(submission.submission_status ?? 'submitted')
+  const [responseNote, setResponseNote] = useState(submission.response_note ?? '')
+
+  const mutation = useMutation({
+    mutationFn: () => crmService.updateSubmissionResponse(leadId, submission.id, {
+      response_status:   responseStatus,
+      submission_status: submissionStatus,
+      response_note:     responseNote || undefined,
+    }),
+    onSuccess: () => {
+      toast.success('Response updated')
+      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      onClose()
+    },
+    onError: () => toast.error('Failed to update response'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+              <Building2 size={14} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">{submission.lender_name ?? `Lender #${submission.lender_id}`}</p>
+              <p className="text-[11px] text-slate-400">Update lender response</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Lender Response</label>
+            <select className="input w-full" value={responseStatus} onChange={e => setResponseStatus(e.target.value as LenderResponseStatus)}>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="declined">Declined</option>
+              <option value="needs_documents">Needs Documents</option>
+              <option value="no_response">No Response</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Submission Status</label>
+            <select className="input w-full" value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value as LenderSubmissionStatus)}>
+              <option value="pending">Pending</option>
+              <option value="submitted">Submitted</option>
+              <option value="viewed">Viewed</option>
+              <option value="approved">Approved</option>
+              <option value="declined">Declined</option>
+              <option value="no_response">No Response</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Response Note <span className="font-normal text-slate-400">(optional)</span></label>
+            <textarea
+              className="input w-full resize-none" rows={3}
+              value={responseNote} onChange={e => setResponseNote(e.target.value)}
+              placeholder="e.g. Approved for $50,000 at 1.35 factor rate…"
+            />
+          </div>
+          <div className="flex items-center gap-2.5 pt-1">
+            <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="btn-primary disabled:opacity-50 flex-1">
+              {mutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : <>Save Response</>}
+            </button>
+            <button onClick={onClose} className="btn-outline">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Lenders Panel ──────────────────────────────────────────────────────────────
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
-  const [showSendForm, setShowSendForm] = useState(false)
-  const [selectedLender, setSelectedLender] = useState('')
-  const [notes, setNotes] = useState('')
+  const [showSubmitForm, setShowSubmitForm]   = useState(false)
+  const [selectedIds, setSelectedIds]         = useState<Set<number>>(new Set())
+  const [notes, setNotes]                     = useState('')
+  const [pdfPath, setPdfPath]                 = useState('')
+  const [editingSub, setEditingSub]           = useState<LenderSubmission | null>(null)
 
-  const { data: history, isLoading: histLoading } = useQuery({
-    queryKey: ['lead-lender-history', leadId],
-    queryFn: async () => (res => (res.data?.data ?? res.data ?? []) as LenderSendRecord[])(await crmService.getLeadLenderHistory(leadId)),
+  const { data: submissions, isLoading: subsLoading } = useQuery({
+    queryKey: ['lender-submissions', leadId],
+    queryFn: async () => {
+      const res = await crmService.getLenderSubmissions(leadId)
+      return (res.data?.data ?? res.data ?? []) as LenderSubmission[]
+    },
   })
 
   const { data: lendersData } = useQuery({
@@ -399,87 +512,330 @@ function LendersPanel({ leadId }: { leadId: number }) {
   })
 
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
-  const submissions = history ?? []
+  const subList       = submissions ?? []
 
-  const sendMutation = useMutation({
-    mutationFn: () => crmService.sendLeadToLender(leadId, { lender_id: Number(selectedLender), notes: notes || undefined }),
+  function toggleLender(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const submitMutation = useMutation({
+    mutationFn: () => crmService.submitApplication(leadId, {
+      lender_ids: Array.from(selectedIds),
+      notes:      notes || undefined,
+      pdf_path:   pdfPath || undefined,
+    }),
     onSuccess: (res) => {
-      const apiQueued = res.data?.data?.api_queued ?? false
-      toast.success(apiQueued ? 'Lead queued for API submission' : 'Lead sent to lender')
-      setShowSendForm(false); setSelectedLender(''); setNotes('')
-      qc.invalidateQueries({ queryKey: ['lead-lender-history', leadId] })
+      const { submitted = [], failed = [] } = res.data?.data ?? {}
+      if (submitted.length) toast.success(`Application sent to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
+      if (failed.length)    toast.error(`Failed for ${failed.length} lender${failed.length !== 1 ? 's' : ''}`)
+      setShowSubmitForm(false); setSelectedIds(new Set()); setNotes(''); setPdfPath('')
+      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
     },
-    onError: () => toast.error('Failed to send lead to lender'),
+    onError: () => toast.error('Submission failed'),
   })
 
   return (
     <div className="space-y-4">
-      {!showSendForm ? (
-        <button onClick={() => setShowSendForm(true)} className="btn-primary">
-          <Send size={14} /> Send to Lender
+
+      {/* ── Submit Application Form ── */}
+      {!showSubmitForm ? (
+        <button onClick={() => setShowSubmitForm(true)} className="btn-primary w-full">
+          <Send size={14} /> Submit Application to Lenders
         </button>
       ) : (
-        <div className="bg-indigo-50/40 rounded-xl border border-indigo-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 bg-indigo-50 border-b border-indigo-100">
-            <Send size={13} className="text-indigo-500" />
-            <h3 className="text-sm font-semibold text-slate-800">Send Lead to Lender</h3>
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/30 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-indigo-50 border-b border-indigo-100">
+            <div className="flex items-center gap-2">
+              <Send size={13} className="text-indigo-500" />
+              <span className="text-sm font-semibold text-slate-800">Submit Application</span>
+            </div>
+            <button onClick={() => { setShowSubmitForm(false); setSelectedIds(new Set()) }} className="p-1 text-slate-400 hover:text-slate-700">
+              <X size={14} />
+            </button>
           </div>
-          <div className="p-4 space-y-3">
+
+          <div className="p-4 space-y-4">
+            {/* Lender multi-select */}
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Select Lender</label>
-              <select className="input w-full" value={selectedLender} onChange={e => setSelectedLender(e.target.value)}>
-                <option value="">— Choose a lender —</option>
-                {activeLenders.map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
-              </select>
-              {activeLenders.length === 0 && <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1"><AlertCircle size={12} /> No active lenders.</p>}
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-slate-600">Select Lenders</label>
+                {activeLenders.length > 0 && (
+                  <button
+                    onClick={() => setSelectedIds(
+                      selectedIds.size === activeLenders.length
+                        ? new Set()
+                        : new Set(activeLenders.map(l => l.id))
+                    )}
+                    className="text-[11px] text-indigo-600 hover:underline font-medium"
+                  >
+                    {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
+              </div>
+
+              {activeLenders.length === 0 ? (
+                <p className="text-xs text-amber-600 flex items-center gap-1.5 py-2">
+                  <AlertCircle size={12} /> No active lenders configured.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                  {activeLenders.map(l => (
+                    <label
+                      key={l.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${
+                        selectedIds.has(l.id)
+                          ? 'border-indigo-300 bg-indigo-50 shadow-sm'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-indigo-600 w-4 h-4 flex-shrink-0"
+                        checked={selectedIds.has(l.id)}
+                        onChange={() => toggleLender(l.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{l.lender_name}</p>
+                        {l.email && <p className="text-[11px] text-slate-400 truncate">{l.email}</p>}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {selectedIds.size > 0 && (
+                <p className="text-[11px] text-indigo-600 font-medium mt-1.5">
+                  {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''} selected
+                </p>
+              )}
             </div>
+
+            {/* PDF path (optional) */}
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Notes <span className="font-normal text-slate-400">(optional)</span></label>
-              <textarea className="input w-full resize-none" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional context…" />
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Application PDF path <span className="font-normal text-slate-400">(optional — storage-relative)</span>
+              </label>
+              <input
+                className="input w-full text-xs"
+                value={pdfPath}
+                onChange={e => setPdfPath(e.target.value)}
+                placeholder="crm_documents/client_1/lead_42/application.pdf"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Leave blank to send without attachment</p>
             </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Cover note <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <textarea
+                className="input w-full resize-none" rows={2}
+                value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Any special context for the lender…"
+              />
+            </div>
+
             <div className="flex items-center gap-2.5">
-              <button onClick={() => sendMutation.mutate()} disabled={!selectedLender || sendMutation.isPending} className="btn-primary disabled:opacity-50">
-                {sendMutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Sending…</> : <><Send size={14} /> Send Lead</>}
+              <button
+                onClick={() => submitMutation.mutate()}
+                disabled={selectedIds.size === 0 || submitMutation.isPending}
+                className="btn-primary flex-1 disabled:opacity-50"
+              >
+                {submitMutation.isPending
+                  ? <><Loader2 size={14} className="animate-spin" /> Sending…</>
+                  : <><Send size={14} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                }
               </button>
-              <button onClick={() => setShowSendForm(false)} className="btn-outline">Cancel</button>
+              <button onClick={() => { setShowSubmitForm(false); setSelectedIds(new Set()) }} className="btn-outline">
+                Cancel
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Submission History ── */}
       <div>
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Submission History</p>
-        {histLoading ? (
+        {subsLoading ? (
           <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-indigo-400" /></div>
-        ) : submissions.length === 0 ? (
+        ) : subList.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
-            <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-3"><Building2 size={18} className="text-slate-400" /></div>
+            <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
+              <Building2 size={18} className="text-slate-400" />
+            </div>
             <p className="text-sm font-semibold text-slate-600">No submissions yet</p>
-            <p className="text-xs text-slate-400 mt-1">Send this lead to a lender to start</p>
+            <p className="text-xs text-slate-400 mt-1">Submit an application to track lender responses</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {submissions.map(s => (
-              <div key={s.id} className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 hover:shadow-sm transition-all">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                  <Building2 size={15} className="text-amber-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{s.lender_name ?? `Lender #${s.lender_id}`}</p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                      <Calendar size={9} /> {new Date(s.submitted_date ?? s.created_at ?? '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                    {s.notes && <span className="text-[11px] text-slate-500 truncate max-w-[160px]">{s.notes}</span>}
+            {subList.map(s => (
+              <div key={s.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 hover:shadow-sm transition-all group">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Building2 size={15} className="text-amber-600" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{s.lender_name ?? `Lender #${s.lender_id}`}</p>
+                    {s.lender_email && <p className="text-[11px] text-slate-400 truncate">{s.lender_email}</p>}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <StatusPill status={s.submission_status ?? 'pending'} map={SUBMISSION_STATUS_MAP} />
+                      <span className="text-slate-300">·</span>
+                      <StatusPill status={s.response_status ?? 'pending'} map={RESPONSE_STATUS_MAP} />
+                      {s.application_pdf && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                            <FileText size={9} /> PDF attached
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {s.submitted_at && (
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Calendar size={9} /> {new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                      {s.response_note && (
+                        <span className="text-[11px] text-slate-500 italic truncate max-w-[180px]">"{s.response_note}"</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEditingSub(s)}
+                    className="flex-shrink-0 p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Update response"
+                  >
+                    <Pencil size={13} />
+                  </button>
                 </div>
-                {s.lender_status_id && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 flex-shrink-0">{s.lender_status_id}</span>
-                )}
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Response update modal */}
+      {editingSub && (
+        <ResponseModal submission={editingSub} leadId={leadId} onClose={() => setEditingSub(null)} />
+      )}
+    </div>
+  )
+}
+
+// ── PDF Preview Modal ──────────────────────────────────────────────────────────
+function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadName: string; onClose: () => void }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['lead-pdf-render', leadId],
+    queryFn: async () => {
+      const res = await crmService.renderLeadPdf(leadId)
+      return (res.data?.data ?? res.data) as { html: string; lead_name: string; template_name: string }
+    },
+    retry: false,
+  })
+
+  function handlePrint() {
+    const iframe = iframeRef.current
+    if (!iframe?.contentWindow) return
+    iframe.contentWindow.focus()
+    iframe.contentWindow.print()
+  }
+
+  function handleDownload() {
+    if (!data?.html) return
+    const blob = new Blob([data.html], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    const a    = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `${leadName.replace(/\s+/g, '_')}_application.html`,
+    })
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success('Downloaded as HTML — open in browser and print to PDF')
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: 'rgba(0,0,0,0.88)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-5 py-3 bg-slate-900 border-b border-white/10 flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center flex-shrink-0">
+            <FileText size={14} className="text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white truncate">{data?.template_name ?? 'Application PDF'}</p>
+            <p className="text-xs text-slate-400">{data?.lead_name ?? leadName}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+          {data && (
+            <>
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors"
+              >
+                <Printer size={13} /> Print / Save as PDF
+              </button>
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold transition-colors"
+              >
+                <Download size={13} /> Download HTML
+              </button>
+            </>
+          )}
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden flex items-start justify-center p-6">
+        {isLoading && (
+          <div className="flex flex-col items-center gap-3 text-center mt-20">
+            <Loader2 size={32} className="animate-spin text-indigo-400" />
+            <p className="text-slate-300 text-sm">Generating application…</p>
+          </div>
+        )}
+        {error && (
+          <div className="flex flex-col items-center gap-4 text-center mt-20 max-w-md">
+            <div className="w-16 h-16 rounded-2xl bg-red-500/20 flex items-center justify-center">
+              <AlertCircle size={30} className="text-red-400" />
+            </div>
+            <div>
+              <p className="text-white font-bold text-base">No Application Template Found</p>
+              <p className="text-slate-400 text-sm mt-1">
+                Go to <strong className="text-white">CRM → PDF Templates</strong>, create a template, and mark it as the <em>Application Template</em>.
+              </p>
+            </div>
+            <button onClick={onClose} className="px-5 py-2 rounded-xl bg-slate-700 text-white text-sm font-semibold hover:bg-slate-600 transition-colors">
+              Close
+            </button>
+          </div>
+        )}
+        {data?.html && (
+          <iframe
+            ref={iframeRef}
+            title="Application PDF Preview"
+            srcDoc={data.html}
+            className="w-full rounded-xl shadow-2xl bg-white"
+            style={{ maxWidth: '880px', height: 'calc(100vh - 140px)', border: 'none' }}
+            sandbox="allow-same-origin allow-modals"
+          />
         )}
       </div>
     </div>
@@ -533,19 +889,21 @@ function LeadSummaryWidget({ lead, statuses }: { lead: CrmLead; statuses: LeadSt
 
 // ── Quick Actions Widget (right sidebar) ───────────────────────────────────────
 function QuickActionsWidget({
-  leadId, onNavigateEdit, onScrollToActivity, onScrollToLenders,
+  leadId, onNavigateEdit, onScrollToActivity, onScrollToLenders, onGeneratePdf,
 }: {
   leadId: number
   onNavigateEdit: () => void
   onScrollToActivity: () => void
   onScrollToLenders: () => void
+  onGeneratePdf: () => void
 }) {
   const actions = [
-    { label: 'Edit Lead',        icon: Pencil,      color: 'text-indigo-600', bg: 'bg-indigo-50 hover:bg-indigo-100', action: onNavigateEdit },
-    { label: 'Add Note',         icon: MessageSquare, color: 'text-emerald-600', bg: 'bg-emerald-50 hover:bg-emerald-100', action: onScrollToActivity },
-    { label: 'Send to Lender',   icon: Send,        color: 'text-amber-600',  bg: 'bg-amber-50 hover:bg-amber-100',   action: onScrollToLenders },
-    { label: 'Download Lead',    icon: FileDown,    color: 'text-slate-600',  bg: 'bg-slate-50 hover:bg-slate-100',   action: () => toast('Export coming soon', { icon: 'ℹ️' }) },
-    { label: 'External Link',    icon: ExternalLink, color: 'text-sky-600',   bg: 'bg-sky-50 hover:bg-sky-100',       action: () => toast('Portal link via Merchant Portal section', { icon: 'ℹ️' }) },
+    { label: 'Edit Lead',             icon: Pencil,        color: 'text-indigo-600', bg: 'bg-indigo-50 hover:bg-indigo-100',  action: onNavigateEdit },
+    { label: 'Add Note',              icon: MessageSquare, color: 'text-emerald-600',bg: 'bg-emerald-50 hover:bg-emerald-100',action: onScrollToActivity },
+    { label: 'Generate PDF Application', icon: Printer,   color: 'text-violet-600', bg: 'bg-violet-50 hover:bg-violet-100',  action: onGeneratePdf },
+    { label: 'Send to Lender',        icon: Send,          color: 'text-amber-600',  bg: 'bg-amber-50 hover:bg-amber-100',   action: onScrollToLenders },
+    { label: 'Download Lead',         icon: FileDown,      color: 'text-slate-600',  bg: 'bg-slate-50 hover:bg-slate-100',   action: () => toast('Export coming soon', { icon: 'ℹ️' }) },
+    { label: 'External Link',         icon: ExternalLink,  color: 'text-sky-600',    bg: 'bg-sky-50 hover:bg-sky-100',       action: () => toast('Portal link via Merchant Portal section', { icon: 'ℹ️' }) },
   ]
 
   return (
@@ -576,7 +934,8 @@ export function CrmLeadDetail() {
   const lendersRef  = useRef<HTMLDivElement>(null)
 
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showMoreMenu, setShowMoreMenu]             = useState(false)
+  const [showPdfModal, setShowPdfModal]             = useState(false)
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -862,6 +1221,7 @@ export function CrmLeadDetail() {
               onNavigateEdit={() => navigate(`/crm/leads/${leadId}/edit`)}
               onScrollToActivity={() => scrollTo(activityRef)}
               onScrollToLenders={() => scrollTo(lendersRef)}
+              onGeneratePdf={() => setShowPdfModal(true)}
             />
           </SidebarCard>
 
@@ -884,6 +1244,15 @@ export function CrmLeadDetail() {
 
         </div>
       </div>
+
+      {/* PDF Preview modal */}
+      {showPdfModal && (
+        <PdfPreviewModal
+          leadId={leadId}
+          leadName={fullName}
+          onClose={() => setShowPdfModal(false)}
+        />
+      )}
     </div>
   )
 }

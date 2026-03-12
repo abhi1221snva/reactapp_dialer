@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { showConfirm } from '../../utils/confirmDelete'
 import {
@@ -80,6 +80,22 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
     send_welcome_email: true,
     status: editing?.status ?? 1,
   })
+
+  // Reset form whenever the modal opens or the target agent changes
+  useEffect(() => {
+    if (!open) return
+    setForm({
+      first_name: editing?.first_name ?? '',
+      last_name:  editing?.last_name  ?? '',
+      email:      editing?.email      ?? '',
+      mobile:     editing?.mobile     ?? '',
+      role_id:    editing?.role       ?? (roles[0]?.id ?? 0),
+      password:   '',
+      password_confirmation: '',
+      send_welcome_email: true,
+      status: editing?.status ?? 1,
+    })
+  }, [open, editing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [saving, setSaving] = useState(false)
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>

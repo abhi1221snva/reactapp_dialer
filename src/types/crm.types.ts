@@ -162,6 +162,41 @@ export interface LenderSendRecord {
   created_at?: string
 }
 
+// ─── Enhanced Lender Submission (crm_lender_submissions) ─────────────────────
+
+export type LenderSubmissionStatus = 'pending' | 'submitted' | 'viewed' | 'approved' | 'declined' | 'no_response'
+export type LenderResponseStatus   = 'pending' | 'approved' | 'declined' | 'needs_documents' | 'no_response'
+
+export interface LenderSubmission {
+  id: number
+  lead_id: number
+  lender_id: number
+  lender_name?: string
+  lender_email?: string
+  application_pdf?: string
+  submission_status: LenderSubmissionStatus
+  response_status: LenderResponseStatus
+  notes?: string
+  response_note?: string
+  submitted_by?: number
+  submitted_at?: string
+  response_received_at?: string
+  created_at: string
+  updated_at?: string
+}
+
+export interface SubmitApplicationPayload {
+  lender_ids: number[]
+  notes?: string
+  pdf_path?: string
+}
+
+export interface UpdateSubmissionResponsePayload {
+  response_status: LenderResponseStatus
+  submission_status?: LenderSubmissionStatus
+  response_note?: string
+}
+
 // ─── Automation Rule ─────────────────────────────────────────────────────────
 
 export type AutomationTrigger =

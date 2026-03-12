@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -141,12 +142,13 @@ export function Onboarding() {
   const qc = useQueryClient()
   const [marking, setMarking] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery<OnboardingData>({
+  const { data, isLoading, isError, refetch } = useQuery<OnboardingData>({
     queryKey: ['onboarding'],
     queryFn: async () => {
       const res = await onboardingService.getProgress()
       return res.data?.data ?? res.data
     },
+    retry: 1,
   })
 
   const completeMutation = useMutation({
@@ -169,6 +171,28 @@ export function Onboarding() {
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto" />
           <p className="text-slate-500 text-sm">Loading onboarding...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto">
+            <Circle size={24} className="text-red-400" />
+          </div>
+          <div>
+            <p className="text-slate-800 font-semibold">Failed to load onboarding progress</p>
+            <p className="text-slate-500 text-sm mt-1">Unable to reach the server. Please try again.</p>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="btn-primary text-sm px-5 py-2 rounded-xl"
+          >
+            Retry
+          </button>
         </div>
       </div>
     )
@@ -244,5 +268,3 @@ export function Onboarding() {
   )
 }
 
-// Needed for useNavigate inside StepCard
-import { useState } from 'react'

@@ -30,6 +30,7 @@ export function AgentMonitoring() {
     queryKey: ['live-calls'],
     queryFn: () => dialerService.getLiveCalls(),
     refetchInterval: autoRefresh ? 5000 : false,
+    refetchIntervalInBackground: true,
   })
 
   const liveCalls: LiveCall[] = data?.data?.data?.live_calls || []

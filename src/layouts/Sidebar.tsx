@@ -2,14 +2,14 @@ import { useState, useRef } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Phone, LayoutDashboard, Users, BarChart3, MessageSquare,
-  ChevronRight, Activity, UserCheck,
+  ChevronRight, Activity,
   CreditCard, Radio, MessagesSquare, Hash, UserCog, List, Tag, ListChecks, FileText, ChevronUp,
   PhoneCall, Voicemail, Layers, Link2, ShieldCheck, PieChart,
   Mail, Building2, LogOut, X, ChevronDown,
   Headphones, Clock, Globe, Bot, Calendar,
-  Mic, Inbox, BrainCircuit, Settings2, Rocket, User, Camera,
+  Mic, Inbox, BrainCircuit, Settings2, User, Camera,
   Wifi, DollarSign, BookMarked,
-  Target, CheckCircle2, Settings,
+  Target, CheckCircle2,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
@@ -122,23 +122,22 @@ const DIALER_SECTIONS: NavSection[] = [
   {
     label: 'CORE',
     items: [
-      { to: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard, minLevel: 1 },
-      { to: '/dialer',     label: 'Dialer',      icon: Phone,           minLevel: 1 },
-      { to: '/attendance', label: 'Attendance',  icon: UserCheck,       minLevel: 1 },
+      { to: '/dashboard', label: 'Dashboard',       icon: LayoutDashboard, minLevel: 1 },
+      { to: '/users',     label: 'User Management', icon: UserCog,         minLevel: LEVELS.ADMIN },
+      { to: '/dialer',    label: 'Dialer',           icon: Phone,           minLevel: 1 },
     ],
   },
   {
-    label: 'CAMPAIGNS',
+    label: 'CAMPAIGN MANAGEMENT',
     items: [
-      { to: '/campaigns', label: 'Campaigns',  icon: Radio, minLevel: LEVELS.MANAGER },
-      { to: '/lists',     label: 'Lead Lists', icon: List,  minLevel: LEVELS.MANAGER },
+      { to: '/campaigns',             label: 'Campaigns',    icon: Radio,      minLevel: LEVELS.MANAGER },
+      { to: '/lists',                 label: 'Lists',        icon: List,       minLevel: LEVELS.MANAGER },
+      { to: '/settings/labels',       label: 'Labels',       icon: Tag,        minLevel: LEVELS.MANAGER },
+      { to: '/settings/dispositions', label: 'Dispositions', icon: ListChecks, minLevel: LEVELS.ADMIN },
     ],
   },
   {
-    label: 'Reports',
-    icon: BarChart3,
-    expandable: true,
-    defaultExpanded: false,
+    label: 'REPORTS',
     minLevel: LEVELS.MANAGER,
     items: [
       { to: '/reports',                      label: 'CDR Report',           icon: BarChart3,  minLevel: LEVELS.MANAGER },
@@ -150,12 +149,10 @@ const DIALER_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'Voice',
-    icon: Mic,
-    expandable: true,
-    defaultExpanded: false,
+    label: 'VOICE',
     minLevel: LEVELS.ADMIN,
     items: [
+      { to: '/dids',              label: 'DID Management',   icon: Hash,      minLevel: LEVELS.ADMIN },
       { to: '/ivr',               label: 'IVR Menus',        icon: PhoneCall, minLevel: LEVELS.ADMIN },
       { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail, minLevel: LEVELS.ADMIN },
       { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,     minLevel: LEVELS.MANAGER },
@@ -164,10 +161,7 @@ const DIALER_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'AI & Tools',
-    icon: BrainCircuit,
-    expandable: true,
-    defaultExpanded: false,
+    label: 'AI & TOOLS',
     minLevel: LEVELS.ADMIN,
     items: [
       { to: '/ai/settings', label: 'AI Settings',        icon: Bot,        minLevel: LEVELS.ADMIN },
@@ -176,10 +170,7 @@ const DIALER_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'Communications',
-    icon: MessagesSquare,
-    expandable: true,
-    defaultExpanded: false,
+    label: 'COMMUNICATIONS',
     minLevel: 1,
     items: [
       { to: '/sms',  label: 'SMS Center', icon: MessageSquare,  minLevel: 1 },
@@ -187,52 +178,36 @@ const DIALER_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'Telecom',
-    icon: Globe,
-    expandable: true,
-    defaultExpanded: false,
+    label: 'TWILIO',
     minLevel: LEVELS.ADMIN,
-    items: [],
-    subSections: [
-      {
-        label: 'Twilio',
-        icon: Phone,
-        minLevel: LEVELS.ADMIN,
-        items: [
-          { to: '/twilio',         label: 'Dashboard',       icon: LayoutDashboard, minLevel: LEVELS.ADMIN },
-          { to: '/twilio/numbers', label: 'Phone Numbers',   icon: Hash,            minLevel: LEVELS.ADMIN },
-          { to: '/twilio/trunks',  label: 'SIP Trunks',      icon: Wifi,            minLevel: LEVELS.ADMIN },
-          { to: '/twilio/calls',   label: 'Call Logs',       icon: PhoneCall,       minLevel: LEVELS.MANAGER },
-          { to: '/twilio/sms',     label: 'SMS Logs',        icon: MessageSquare,   minLevel: LEVELS.MANAGER },
-          { to: '/twilio/usage',   label: 'Usage & Billing', icon: DollarSign,      minLevel: LEVELS.ADMIN },
-        ],
-      },
-      {
-        label: 'Plivo',
-        icon: Wifi,
-        minLevel: LEVELS.ADMIN,
-        items: [
-          { to: '/plivo',         label: 'Dashboard',       icon: LayoutDashboard, minLevel: LEVELS.ADMIN },
-          { to: '/plivo/numbers', label: 'Phone Numbers',   icon: Hash,            minLevel: LEVELS.ADMIN },
-          { to: '/plivo/trunks',  label: 'SIP Trunks',      icon: Wifi,            minLevel: LEVELS.ADMIN },
-          { to: '/plivo/calls',   label: 'Call Logs',       icon: PhoneCall,       minLevel: LEVELS.MANAGER },
-          { to: '/plivo/sms',     label: 'SMS Logs',        icon: MessageSquare,   minLevel: LEVELS.MANAGER },
-          { to: '/plivo/usage',   label: 'Usage & Billing', icon: DollarSign,      minLevel: LEVELS.ADMIN },
-        ],
-      },
+    items: [
+      { to: '/twilio',         label: 'Dashboard',       icon: LayoutDashboard, minLevel: LEVELS.ADMIN },
+      { to: '/twilio/numbers', label: 'Phone Numbers',   icon: Hash,            minLevel: LEVELS.ADMIN },
+      { to: '/twilio/trunks',  label: 'SIP Trunks',      icon: Wifi,            minLevel: LEVELS.ADMIN },
+      { to: '/twilio/calls',   label: 'Call Logs',       icon: PhoneCall,       minLevel: LEVELS.MANAGER },
+      { to: '/twilio/sms',     label: 'SMS Logs',        icon: MessageSquare,   minLevel: LEVELS.MANAGER },
+      { to: '/twilio/usage',   label: 'Usage & Billing', icon: DollarSign,      minLevel: LEVELS.ADMIN },
+    ],
+  },
+  {
+    label: 'PLIVO',
+    minLevel: LEVELS.ADMIN,
+    items: [
+      { to: '/plivo',         label: 'Dashboard',       icon: LayoutDashboard, minLevel: LEVELS.ADMIN },
+      { to: '/plivo/numbers', label: 'Phone Numbers',   icon: Hash,            minLevel: LEVELS.ADMIN },
+      { to: '/plivo/trunks',  label: 'SIP Trunks',      icon: Wifi,            minLevel: LEVELS.ADMIN },
+      { to: '/plivo/calls',   label: 'Call Logs',       icon: PhoneCall,       minLevel: LEVELS.MANAGER },
+      { to: '/plivo/sms',     label: 'SMS Logs',        icon: MessageSquare,   minLevel: LEVELS.MANAGER },
+      { to: '/plivo/usage',   label: 'Usage & Billing', icon: DollarSign,      minLevel: LEVELS.ADMIN },
     ],
   },
   {
     label: 'SETTINGS',
     minLevel: LEVELS.ADMIN,
     items: [
-      { to: '/dids',                 label: 'DID Management', icon: Hash,        minLevel: LEVELS.ADMIN },
-      { to: '/settings/dispositions',label: 'Dispositions',   icon: ListChecks,  minLevel: LEVELS.ADMIN },
-      { to: '/settings/dnc',         label: 'DNC List',       icon: ShieldCheck, minLevel: LEVELS.ADMIN },
-      { to: '/settings/fax',         label: 'Fax Settings',   icon: FileText,    minLevel: LEVELS.ADMIN },
-      { to: '/settings/security',    label: 'Security',       icon: Settings,    minLevel: LEVELS.ADMIN },
-      { to: '/onboarding',           label: 'Onboarding',     icon: Rocket,      minLevel: LEVELS.ADMIN },
-      { to: '/billing',              label: 'Billing',        icon: CreditCard,  minLevel: LEVELS.ADMIN },
+      { to: '/settings/dnc', label: 'DNC List',       icon: ShieldCheck, minLevel: LEVELS.ADMIN },
+      { to: '/settings/fax',  label: 'Fax Settings', icon: FileText,   minLevel: LEVELS.ADMIN },
+      { to: '/billing',       label: 'Billing',      icon: CreditCard, minLevel: LEVELS.ADMIN },
     ],
   },
   {
@@ -285,6 +260,7 @@ const CRM_SECTIONS: NavSection[] = [
     items: [
       { to: '/crm/email-templates', label: 'Email Templates', icon: Mail,          minLevel: LEVELS.MANAGER },
       { to: '/crm/sms-templates',   label: 'SMS Templates',   icon: MessageSquare, minLevel: LEVELS.MANAGER },
+      { to: '/crm/pdf-templates',   label: 'PDF Templates',   icon: FileText,      minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -300,13 +276,6 @@ const CRM_SECTIONS: NavSection[] = [
     minLevel: LEVELS.MANAGER,
     items: [
       { to: '/crm/approvals', label: 'Approvals', icon: CheckCircle2, minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'SETTINGS',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/settings/labels', label: 'Field Labels', icon: Tag, minLevel: LEVELS.MANAGER },
     ],
   },
   {

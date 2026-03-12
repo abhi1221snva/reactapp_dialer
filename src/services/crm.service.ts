@@ -317,12 +317,48 @@ export const crmService = {
   getLenderApiCredentials: (id: number) =>
     api.get(`/crm-lender-apis/${id}`),
 
-  // ── Send Lead to Lender ─────────────────────────────────────────────────────
+  // ── Send Lead to Lender (legacy) ─────────────────────────────────────────────
   getLeadLenderHistory: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/lender-submissions`),
 
   sendLeadToLender: (leadId: number, data: { lender_id: number; notes?: string }) =>
     api.post(`/crm/lead/${leadId}/send-to-lender`, data),
+
+  // ── Enhanced Lender Submission System ────────────────────────────────────────
+  getLenderSubmissions: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/lender-submissions/enhanced`),
+
+  submitApplication: (leadId: number, data: import('../types/crm.types').SubmitApplicationPayload) =>
+    api.post(`/crm/lead/${leadId}/submit-application`, data),
+
+  updateSubmissionResponse: (leadId: number, subId: number, data: import('../types/crm.types').UpdateSubmissionResponsePayload) =>
+    api.post(`/crm/lead/${leadId}/submissions/${subId}/response`, data),
+
+  // ── PDF Application Generator ─────────────────────────────────────────────────
+  renderLeadPdf: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/render-pdf`),
+
+  getPdfPlaceholders: () =>
+    api.get('/crm/pdf/placeholders'),
+
+  // ── Custom Templates (PDF/Application Templates) ──────────────────────────────
+  getCustomTemplates: (params?: { start?: number; limit?: number }) =>
+    api.get('/crm-custom-templates', { params }),
+
+  getCustomTemplate: (id: number) =>
+    api.get(`/crm-custom-template/${id}`),
+
+  createCustomTemplate: (data: { template_name: string; template_html: string; custom_type?: string; subject?: string }) =>
+    api.put('/crm-add-custom-template', data),
+
+  updateCustomTemplate: (id: number, data: { template_name?: string; template_html?: string; custom_type?: string; subject?: string }) =>
+    api.post(`/crm-custom-template/${id}`, data),
+
+  deleteCustomTemplate: (id: number) =>
+    api.get(`/crm-delete-custom-template/${id}`),
+
+  setAsApplicationTemplate: (id: number) =>
+    api.post(`/crm-custom-template/${id}`, { custom_type: 'signature_application' }),
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   getUsers: async (): Promise<{ id: number; name: string }[]> => {
