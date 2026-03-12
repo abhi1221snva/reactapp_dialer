@@ -152,7 +152,7 @@ export function DispositionList() {
       <div className="space-y-5">
         {/* Page header */}
         <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/settings')} className="btn-ghost p-2 rounded-lg mt-0.5">
+          <button onClick={() => navigate('/')} className="btn-ghost p-2 rounded-lg mt-0.5">
             <ArrowLeft size={18} />
           </button>
           <div className="flex-1">

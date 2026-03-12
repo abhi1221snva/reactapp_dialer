@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
-import { dashboardService } from '../../services/dashboard.service'
+import api from '../../api/axios'
 import { campaignService } from '../../services/campaign.service'
 import { cn } from '../../utils/cn'
 import toast from 'react-hot-toast'
@@ -126,7 +126,7 @@ export function DispositionReport() {
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['disposition-report', queryParams],
-    queryFn:  () => dashboardService.getDispositionReport(queryParams),
+    queryFn:  () => api.post('/reports/disposition', queryParams),
   })
 
   const rawRows: DispositionRow[] = data?.data?.data?.data || data?.data?.data || data?.data || []

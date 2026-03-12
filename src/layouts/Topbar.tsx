@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bell, ChevronDown, LogOut, User, Settings } from 'lucide-react'
+import { Bell, ChevronDown, LogOut, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useNotificationStore } from '../stores/notification.store'
@@ -139,13 +139,9 @@ export function Topbar() {
               <p className="text-[11px] text-slate-500 truncate mt-0.5">{user?.email}</p>
             </div>
             <div className="py-1">
-              <button onClick={() => { navigate('/settings'); setShowProfileMenu(false) }}
+              <button onClick={() => { navigate('/profile'); setShowProfileMenu(false) }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors duration-100">
                 <User size={14} className="text-slate-400 flex-shrink-0" /> Profile
-              </button>
-              <button onClick={() => { navigate('/settings'); setShowProfileMenu(false) }}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors duration-100">
-                <Settings size={14} className="text-slate-400 flex-shrink-0" /> Settings
               </button>
             </div>
             <div className="border-t border-slate-100 py-1">

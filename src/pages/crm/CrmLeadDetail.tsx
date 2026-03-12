@@ -64,14 +64,15 @@ function formatBytes(b: number) {
   return (b / 1048576).toFixed(1) + ' MB'
 }
 
-function getFileType(p: string): 'pdf' | 'image' | 'other' {
+function getFileType(p: string | null | undefined): 'pdf' | 'image' | 'other' {
+  if (!p) return 'other'
   const e = (p.split('.').pop() ?? '').toLowerCase()
   if (e === 'pdf') return 'pdf'
   if (['jpg','jpeg','png'].includes(e)) return 'image'
   return 'other'
 }
 
-function getFileIcon(p: string) {
+function getFileIcon(p: string | null | undefined) {
   const t = getFileType(p)
   if (t === 'pdf') return { bg: 'bg-red-50', color: 'text-red-500' }
   if (t === 'image') return { bg: 'bg-sky-50', color: 'text-sky-500' }
@@ -346,10 +347,10 @@ function DocumentsTab({ leadId }: { leadId: number }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setViewDoc(doc)} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Preview">
+                  <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Preview">
                     <Eye size={14} />
                   </button>
-                  <button onClick={() => downloadFile(doc.file_path, doc.file_name)} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors" title="Download">
+                  <button onClick={() => doc.file_path && downloadFile(doc.file_path, doc.file_name)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Download">
                     <Download size={14} />
                   </button>
                   <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">

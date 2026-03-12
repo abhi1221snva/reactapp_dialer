@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  Phone, Users, Radio, MessageSquare, Voicemail, List,
+  Phone, Users, Radio, MessageSquare, Voicemail,
   UserPlus, PhoneCall, PhoneOff, Activity, TrendingUp, TrendingDown,
-  DollarSign, Hash, ArrowRight, Clock, Zap, Target, Award,
-  BarChart3, Inbox,
+  DollarSign, ArrowRight, Clock, Target, Award,
+  BarChart3,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -670,48 +670,6 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* ── Live status strip ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Live Calls"
-          value={statsLoading ? '—' : (stats.liveCalls ?? stats.totalCallbacks ?? 0)}
-          icon={PhoneCall}
-          gradient="from-red-500 to-rose-600"
-          badge="Live"
-          badgeColor="bg-red-100 text-red-700"
-          pulse
-          onClick={() => navigate('/monitoring')}
-          loading={statsLoading}
-        />
-        <KpiCard
-          label="Active Campaigns"
-          value={statsLoading ? '—' : (stats.totalCampaigns ?? 0)}
-          icon={Radio}
-          gradient="from-indigo-500 to-violet-600"
-          badge={(stats.totalCampaigns ?? 0) > 0 ? 'Running' : 'Idle'}
-          badgeColor={(stats.totalCampaigns ?? 0) > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}
-          onClick={() => navigate('/campaigns')}
-          loading={statsLoading}
-        />
-        <KpiCard
-          label="Unread Voicemails"
-          value={statsLoading ? '—' : (stats.unreadVoicemail ?? 0)}
-          icon={Inbox}
-          gradient="from-orange-500 to-amber-500"
-          badge={(stats.unreadVoicemail ?? 0) > 0 ? 'New' : undefined}
-          badgeColor="bg-orange-100 text-orange-700"
-          onClick={() => navigate('/voicemail')}
-          loading={statsLoading}
-        />
-        <KpiCard
-          label="Total DIDs"
-          value={statsLoading ? '—' : (stats.totalDids ?? 0)}
-          icon={Hash}
-          gradient="from-sky-500 to-cyan-600"
-          onClick={() => navigate('/dids')}
-          loading={statsLoading}
-        />
-      </div>
 
     </div>
   )

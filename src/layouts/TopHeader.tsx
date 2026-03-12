@@ -1,4 +1,4 @@
-import { Bell, Search, Settings, Menu } from 'lucide-react'
+import { Bell, Search, Menu } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useNotificationStore } from '../stores/notification.store'
@@ -43,11 +43,6 @@ export function TopHeader() {
               {unreadSms > 9 ? '9+' : unreadSms}
             </span>
           )}
-        </Link>
-
-        {/* Settings */}
-        <Link to="/settings" className="action-btn" title="Settings">
-          <Settings size={17} />
         </Link>
 
         {/* Divider */}

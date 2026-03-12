@@ -6,6 +6,7 @@ import { authService } from '../../services/auth.service'
 import { twoFactorService } from '../../services/twoFactor.service'
 import api from '../../api/axios'
 import type { User } from '../../types'
+import { LEVELS } from '../../utils/permissions'
 import toast from 'react-hot-toast'
 import Swal from 'sweetalert2'
 
@@ -236,7 +237,7 @@ export function Login() {
             }
             const user = await buildUser(payload as Record<string, unknown>)
             setAuth(payload.token as string, user)
-            navigate('/dashboard')
+            navigate(user.level === LEVELS.ADMIN ? '/crm/dashboard' : '/dashboard')
           } catch (err: unknown) {
             // Check for ACCOUNT_NOT_FOUND — show SweetAlert with Register option
             const axiosErr = err as { response?: { data?: { code?: string; message?: string } } }
@@ -296,7 +297,7 @@ export function Login() {
   const completeLogin = async (payload: Record<string, unknown>) => {
     const user = await buildUser(payload)
     setAuth(payload.token as string, user)
-    navigate('/dashboard')
+    navigate(user.level === LEVELS.ADMIN ? '/crm/dashboard' : '/dashboard')
   }
 
   const handleLogin = async (e: React.FormEvent) => {

@@ -1,6 +1,7 @@
 import type { User } from '../types'
 
 export const LEVELS = {
+  SYSTEM_ADMIN: 11,
   SUPERADMIN: 10,
   ADMIN: 7,
   MANAGER: 5,

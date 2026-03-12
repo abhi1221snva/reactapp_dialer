@@ -240,7 +240,18 @@ export function Reports() {
   const handleExportCsv = async () => {
     setShowExportMenu(false)
     try {
-      const res = await reportService.exportCsv(filters)
+      // Remap frontend filter keys to match backend expectations
+      const exportParams: Record<string, unknown> = {
+        start_date:  filters.start_date,
+        end_date:    filters.end_date,
+        number:      filters.number,
+        extension:   filters.extension,
+        ...(filters.campaign_id      ? { campaign_id:      filters.campaign_id }      : {}),
+        ...(filters.disposition_name ? { disposition_name: filters.disposition_name } : {}),
+        ...(filters.call_status      ? { status:           filters.call_status }      : {}),
+        ...(filters.type             ? { type:             filters.type }             : {}),
+      }
+      const res = await reportService.exportCsv(exportParams)
       const url = URL.createObjectURL(res.data as Blob)
       const a   = document.createElement('a')
       a.href     = url

@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
-import { dashboardService } from '../../services/dashboard.service'
+import api from '../../api/axios'
 import { campaignService } from '../../services/campaign.service'
 import { formatDuration, formatDate } from '../../utils/format'
 import { cn } from '../../utils/cn'
@@ -127,7 +127,7 @@ export function DailyReport() {
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['daily-report', queryParams],
-    queryFn:  () => dashboardService.getDailyReport(queryParams),
+    queryFn:  () => api.post('/reports/daily', queryParams),
   })
 
   const rawRows: DailyRow[] = data?.data?.data?.data || data?.data?.data || data?.data || []

@@ -27,10 +27,14 @@ interface AgentRow {
   calls?: number
   answered?: number
   missed?: number
+  no_answer?: number
   talk_time?: number
   total_duration?: number
+  total_talk_time?: number
   avg_duration?: number
+  avg_talk_time?: number
   campaigns?: string | string[]
+  campaigns_worked?: number
   campaign_count?: number
   answer_rate?: number
   [key: string]: unknown
@@ -108,14 +112,15 @@ export function AgentSummary() {
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['agent-report', filters],
-    queryFn:  () => api.post('/agent-report', {
+    queryFn:  () => api.post('/reports/agent-productivity', {
       date_from:   filters.date_from,
       date_to:     filters.date_to,
       ...(filters.campaign_id ? { campaign_id: Number(filters.campaign_id) } : {}),
     }),
   })
 
-  const rawRows: AgentRow[] = data?.data?.data?.data || data?.data?.data || data?.data || []
+  // /reports/agent-productivity returns { status, data: [...], summary: {...} }
+  const rawRows: AgentRow[] = data?.data?.data || data?.data || []
   const rows = Array.isArray(rawRows) ? rawRows : []
 
   // Search filter
@@ -142,7 +147,7 @@ export function AgentSummary() {
   const totalAgents   = rows.length
   const totalCalls    = rows.reduce((s, r) => s + Number(r.total_calls || r.calls || 0), 0)
   const totalAnswered = rows.reduce((s, r) => s + Number(r.answered || 0), 0)
-  const totalTalkTime = rows.reduce((s, r) => s + Number(r.talk_time || r.total_duration || 0), 0)
+  const totalTalkTime = rows.reduce((s, r) => s + Number(r.talk_time || r.total_talk_time || r.total_duration || 0), 0)
   const avgCallsPerAgent = totalAgents > 0 ? (totalCalls / totalAgents).toFixed(1) : '0'
   const avgDuration   = totalAnswered > 0 ? Math.round(totalTalkTime / totalAnswered) : 0
 
@@ -176,8 +181,8 @@ export function AgentSummary() {
         tc,
         an,
         r.missed || 0,
-        formatDuration(Number(r.talk_time || r.total_duration || 0)),
-        formatDuration(Number(r.avg_duration || 0)),
+        formatDuration(Number(r.talk_time || r.total_talk_time || r.total_duration || 0)),
+        formatDuration(Number(r.avg_duration || r.avg_talk_time || 0)),
         `${rate}%`,
         `"${cams}"`,
       ].join(',')
@@ -288,7 +293,7 @@ export function AgentSummary() {
       sortable: true,
       render: (r) => (
         <span className="font-mono text-sm text-slate-700">
-          {formatDuration(Number(r.talk_time || r.total_duration || 0))}
+          {formatDuration(Number(r.talk_time || r.total_talk_time || r.total_duration || 0))}
         </span>
       ),
     },
@@ -298,7 +303,7 @@ export function AgentSummary() {
       sortable: true,
       render: (r) => (
         <span className="font-mono text-sm text-slate-600">
-          {formatDuration(Number(r.avg_duration || 0))}
+          {formatDuration(Number(r.avg_duration || r.avg_talk_time || 0))}
         </span>
       ),
     },
@@ -306,21 +311,9 @@ export function AgentSummary() {
       key: 'campaigns',
       header: 'Campaigns',
       render: (r) => {
-        const cList = Array.isArray(r.campaigns)
-          ? r.campaigns
-          : r.campaigns ? String(r.campaigns).split(',').map((s) => s.trim()) : []
-        const count = r.campaign_count ?? cList.length
+        const count = r.campaigns_worked ?? r.campaign_count ?? 0
         if (count === 0) return <span className="text-slate-300 text-sm">—</span>
-        return (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {cList.slice(0, 2).map((c, i) => (
-              <Badge key={i} variant="blue">{c}</Badge>
-            ))}
-            {count > 2 && (
-              <Badge variant="gray">+{count - 2}</Badge>
-            )}
-          </div>
-        )
+        return <Badge variant="blue">{count} campaign{count !== 1 ? 's' : ''}</Badge>
       },
     },
   ]

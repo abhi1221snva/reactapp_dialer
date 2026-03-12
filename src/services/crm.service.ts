@@ -10,8 +10,8 @@ import type {
 
 export const crmService = {
   // ── Activity Timeline ───────────────────────────────────────────────────────
-  getActivity: (leadId: number, offset = 0, limit = 20) =>
-    api.get(`/crm/lead/${leadId}/activity`, { params: { offset, limit } }),
+  getActivity: (leadId: number, offset = 0, limit = 20, type?: string) =>
+    api.get(`/crm/lead/${leadId}/activity`, { params: { offset, limit, ...(type ? { type } : {}) } }),
 
   addActivity: (leadId: number, data: { activity_type: string; subject: string; body?: string }) =>
     api.put(`/crm/lead/${leadId}/activity`, data),

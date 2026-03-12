@@ -2,13 +2,13 @@ import { useState, useRef } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Phone, LayoutDashboard, Users, BarChart3, MessageSquare,
-  Settings, ChevronRight, Activity, UserCheck,
+  ChevronRight, Activity, UserCheck,
   CreditCard, Radio, MessagesSquare, Hash, UserCog, List, Tag, ListChecks, PhoneOff, FileText, ChevronUp,
   PhoneCall, Voicemail, Layers, Kanban, Link2, ShieldCheck, PieChart,
   Mail, Building2, LogOut, X, ChevronDown,
   Headphones, Clock, Globe, Zap, Bot, Cpu, BookOpen,
   MapPin, Mic, Inbox, BrainCircuit, Settings2, Rocket, User, Camera,
-  Wifi, DollarSign, CalendarClock, TrendingUp,
+  Wifi, DollarSign, CalendarClock, TrendingUp, Server, BookMarked,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
@@ -19,6 +19,25 @@ import { initials } from '../utils/format'
 import { LEVELS } from '../utils/permissions'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
+
+// ─── Routes visible to Admin (level 7) only ───────────────────────────────────
+const ADMIN_ALLOWED_ROUTES = new Set([
+  '/profile',
+  '/crm/dashboard',
+  '/crm/pipeline',
+  '/crm/leads',
+  '/crm/lead-status',
+  '/crm/lead-fields',
+  '/crm/email-templates',
+  '/crm/sms-templates',
+  '/crm/lenders',
+  '/crm/affiliate-links',
+  '/crm/approvals',
+  '/sms',
+  '/chat',
+  '/gmail-mailbox',
+  '/google-calendar',
+])
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Icon = React.ComponentType<any>
@@ -49,7 +68,7 @@ type NavSection = {
 }
 
 const profileMenuItems: { to: string; label: string; icon: Icon }[] = [
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/profile', label: 'My Profile', icon: User },
 ]
 
 function getRoleLabel(level?: number): string {
@@ -352,7 +371,6 @@ export function Sidebar() {
       items: [
         { to: '/dashboard', label: 'Dashboard',  icon: LayoutDashboard, minLevel: 1 },
         { to: '/dialer',    label: 'Dialer',      icon: Phone,           minLevel: 1 },
-        { to: '/profile',   label: 'My Profile',  icon: User,            minLevel: 1 },
       ],
     },
 
@@ -407,12 +425,16 @@ export function Sidebar() {
 
     // ─── COMMUNICATIONS ──────────────────────────────────────────────────────
     {
-      label: 'COMMUNICATIONS',
+      label: 'Communications',
+      icon: MessagesSquare,
+      expandable: true,
+      defaultExpanded: false,
+      minLevel: 1,
       items: [
-        { to: '/sms',          label: 'SMS Center',  icon: MessageSquare,  minLevel: 1 },
-        { to: '/chat',         label: 'Team Chat',   icon: MessagesSquare, minLevel: 1 },
-        { to: '/gmail-mailbox',    label: 'Gmail Inbox',      icon: Mail,           minLevel: 1 },
-        { to: '/google-calendar',  label: 'Google Calendar',  icon: Clock,          minLevel: 1 },
+        { to: '/sms',             label: 'SMS Center',      icon: MessageSquare,  minLevel: 1 },
+        { to: '/chat',            label: 'Team Chat',       icon: MessagesSquare, minLevel: 1 },
+        { to: '/gmail-mailbox',   label: 'Gmail Inbox',     icon: Mail,           minLevel: 1 },
+        { to: '/google-calendar', label: 'Google Calendar', icon: Clock,          minLevel: 1 },
       ],
     },
 
@@ -506,28 +528,36 @@ export function Sidebar() {
       label: 'SYSTEM ADMIN',
       minLevel: LEVELS.SUPERADMIN,
       items: [
-        { to: '/admin/clients', label: 'Client Management', icon: Building2, minLevel: LEVELS.SUPERADMIN },
-        { to: '/admin/system-health', label: 'System Health', icon: Activity, minLevel: LEVELS.ADMIN },
+        { to: '/admin/clients',        label: 'Client Management', icon: Building2,   minLevel: LEVELS.SUPERADMIN },
+        { to: '/admin/system-monitor', label: 'System Monitor',    icon: Activity,    minLevel: LEVELS.SYSTEM_ADMIN },
+        { to: '/system/swagger',       label: 'Swagger API Docs',  icon: BookMarked,  minLevel: LEVELS.SYSTEM_ADMIN },
       ],
     },
 
-    // ─── SETTINGS ────────────────────────────────────────────────────────────
+    // ─── MY PROFILE ──────────────────────────────────────────────────────────
     {
-      label: 'Settings',
-      icon: Settings,
-      expandable: true,
-      defaultExpanded: false,
-      minLevel: LEVELS.MANAGER,
+      label: 'MY PROFILE',
+      minLevel: 1,
       items: [
-        { to: '/settings',              label: 'General',      icon: Settings2,   minLevel: LEVELS.ADMIN },
-        { to: '/settings/labels',       label: 'Labels',       icon: Tag,         minLevel: LEVELS.MANAGER },
-        { to: '/settings/dispositions', label: 'Dispositions', icon: ListChecks,  minLevel: LEVELS.MANAGER },
-        { to: '/settings/dnc',          label: 'DNC List',     icon: PhoneOff,    minLevel: LEVELS.MANAGER },
-        { to: '/settings/fax',          label: 'Fax',          icon: FileText,    minLevel: LEVELS.MANAGER },
-        { to: '/settings/security',     label: 'Security',     icon: ShieldCheck, minLevel: LEVELS.ADMIN },
+        { to: '/profile', label: 'My Profile', icon: User, minLevel: 1 },
       ],
     },
   ]
+
+  // For Admin (level 7): restrict to allowed routes only.
+  // For all other levels: use sections as-is (minLevel logic handles visibility).
+  const isAdminUser = user?.level === LEVELS.ADMIN
+  const effectiveSections = isAdminUser
+    ? sections
+        .map(s => ({
+          ...s,
+          items: (s.items ?? []).filter(item => ADMIN_ALLOWED_ROUTES.has(item.to)),
+          subSections: (s.subSections ?? [])
+            .map(sub => ({ ...sub, items: sub.items.filter(item => ADMIN_ALLOWED_ROUTES.has(item.to)) }))
+            .filter(sub => sub.items.length > 0),
+        }))
+        .filter(s => (s.items ?? []).length > 0 || (s.subSections ?? []).some(sub => sub.items.length > 0))
+    : sections
 
   return (
     <div
@@ -575,7 +605,7 @@ export function Sidebar() {
         className="flex-1 overflow-y-auto py-2 px-2"
         style={{ scrollbarWidth: 'thin', scrollbarColor: '#E5E7EB transparent' }}
       >
-        {sections.map((section, idx) => {
+        {effectiveSections.map((section, idx) => {
           const visibleItems = (section.items ?? []).filter(item => canAccess(item.minLevel))
           const hasVisibleSubs = (section.subSections ?? []).some(sub =>
             sub.items.some(item => canAccess(item.minLevel))
@@ -585,7 +615,7 @@ export function Sidebar() {
 
           return (
             <div key={section.label} className="mb-1">
-              {idx > 0 && !(section.expandable && sections[idx - 1]?.expandable) && (
+              {idx > 0 && !(section.expandable && effectiveSections[idx - 1]?.expandable) && (
                 <div className="mx-2 my-2 border-t border-slate-100" />
               )}
               {!section.expandable && (

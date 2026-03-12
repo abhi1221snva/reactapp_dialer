@@ -78,7 +78,7 @@ import { PlivoTrunks }     from './pages/plivo/PlivoTrunks'
 import { PlivoCallLogs }   from './pages/plivo/PlivoCallLogs'
 import { PlivoSmsLogs }    from './pages/plivo/PlivoSmsLogs'
 import { PlivoUsage }      from './pages/plivo/PlivoUsage'
-import { Settings } from './pages/settings/Settings'
+
 import { Labels } from './pages/settings/Labels'
 import { TwoFactorSetup } from './pages/settings/TwoFactorSetup'
 import { SecuritySettings } from './pages/settings/SecuritySettings'
@@ -93,7 +93,8 @@ import { Mailbox } from './pages/voicemail/Mailbox'
 import { GmailMailbox } from './pages/gmail/GmailMailbox'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
-import SystemHealth from './pages/admin/SystemHealth'
+import { SystemMonitor } from './pages/admin/SystemMonitor'
+import { SwaggerDocs } from './pages/admin/SwaggerDocs'
 import { WorkforceDashboard } from './pages/workforce/WorkforceDashboard'
 import { ShiftManagement } from './pages/workforce/ShiftManagement'
 import { CampaignStaffing } from './pages/workforce/CampaignStaffing'
@@ -106,8 +107,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <>{children}</>
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <>{children}</>
+  return <Navigate to={user?.level === 7 ? '/crm/dashboard' : '/dashboard'} replace />
 }
 
 function AppWithPusher() {
@@ -190,7 +192,7 @@ export default function App() {
         <Route path="/monitoring" element={<AgentMonitoring />} />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/billing" element={<Billing />} />
-        <Route path="/settings" element={<Settings />} />
+
         <Route path="/settings/labels" element={<Labels />} />
         <Route path="/settings/dispositions" element={<DispositionList />} />
         <Route path="/settings/dnc" element={<DncList />} />
@@ -256,7 +258,8 @@ export default function App() {
 
         {/* System Admin */}
         <Route path="/admin/clients" element={<AdminClients />} />
-        <Route path="/admin/system-health" element={<SystemHealth />} />
+        <Route path="/admin/system-monitor" element={<SystemMonitor />} />
+        <Route path="/system/swagger" element={<SwaggerDocs />} />
       </Route>
 
       {/* Default redirect */}

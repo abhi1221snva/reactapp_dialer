@@ -671,35 +671,6 @@ export function CrmDashboard() {
             </div>
           )}
 
-          {/* Renewal pipeline */}
-          {mcaData?.renewals && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-              <SectionHeader title="Renewal Pipeline" sub="Merchant renewals" />
-              <div className="space-y-3">
-                {[
-                  { label: 'Eligible',     value: mcaData.renewals.eligible ?? 0,   icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                  { label: 'In Progress',  value: mcaData.renewals.inProgress ?? 0, icon: RefreshCw,   color: 'text-amber-600',   bg: 'bg-amber-50' },
-                  { label: 'Completed',    value: mcaData.renewals.completed ?? 0,   icon: Award,       color: 'text-indigo-600',  bg: 'bg-indigo-50' },
-                ].map(({ label, value, icon: Icon, color, bg }) => (
-                  <div key={label} className="flex items-center gap-3 rounded-xl p-3 bg-slate-50">
-                    <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', bg)}>
-                      <Icon size={16} className={color} />
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-slate-500">{label}</p>
-                      <p className="text-lg font-bold text-slate-900">{value}</p>
-                    </div>
-                  </div>
-                ))}
-                {mcaData.renewals.renewalVolume != null && (
-                  <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100">
-                    <p className="text-[11px] text-emerald-600 font-medium">Renewal Volume</p>
-                    <p className="text-lg font-bold text-emerald-700">{fmtMoney(mcaData.renewals.renewalVolume)}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
