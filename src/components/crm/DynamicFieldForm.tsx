@@ -307,10 +307,10 @@ export function DynamicFieldForm({
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
                 {humanizeSection(section)}
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4">
+              <div className="space-y-3">
                 {visible.map(label => (
                   <div key={label.id}>
-                    <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-0.5">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-0.5">
                       {label.label_name}
                     </p>
                     <DisplayValue

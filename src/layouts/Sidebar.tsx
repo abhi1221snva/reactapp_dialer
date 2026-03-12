@@ -32,6 +32,7 @@ const ADMIN_ALLOWED_ROUTES = new Set([
   '/crm/sms-templates',
   '/crm/lenders',
   '/crm/affiliate-links',
+  '/crm/company-settings',
   '/crm/approvals',
   '/sms',
   '/chat',
@@ -122,9 +123,16 @@ const DIALER_SECTIONS: NavSection[] = [
   {
     label: 'CORE',
     items: [
-      { to: '/dashboard', label: 'Dashboard',       icon: LayoutDashboard, minLevel: 1 },
-      { to: '/users',     label: 'User Management', icon: UserCog,         minLevel: LEVELS.ADMIN },
-      { to: '/dialer',    label: 'Dialer',           icon: Phone,           minLevel: 1 },
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, minLevel: 1 },
+      { to: '/dialer',    label: 'Dialer',     icon: Phone,           minLevel: 1 },
+    ],
+  },
+  {
+    label: 'USER MANAGEMENT',
+    minLevel: LEVELS.ADMIN,
+    items: [
+      { to: '/users',            label: 'Users & Agents',  icon: UserCog, minLevel: LEVELS.ADMIN },
+      { to: '/extension-groups', label: 'Extension Groups', icon: Layers,  minLevel: LEVELS.ADMIN },
     ],
   },
   {
@@ -156,8 +164,7 @@ const DIALER_SECTIONS: NavSection[] = [
       { to: '/ivr',               label: 'IVR Menus',        icon: PhoneCall, minLevel: LEVELS.ADMIN },
       { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail, minLevel: LEVELS.ADMIN },
       { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,     minLevel: LEVELS.MANAGER },
-      { to: '/ring-groups',       label: 'Ring Groups',      icon: Users,     minLevel: LEVELS.ADMIN },
-      { to: '/extension-groups',  label: 'Extension Groups', icon: Layers,    minLevel: LEVELS.ADMIN },
+      { to: '/ring-groups', label: 'Ring Groups', icon: Users, minLevel: LEVELS.ADMIN },
     ],
   },
   {
@@ -178,27 +185,15 @@ const DIALER_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'TWILIO',
-    minLevel: LEVELS.ADMIN,
+    label: 'TELECOM',
+    minLevel: LEVELS.MANAGER,
     items: [
-      { to: '/twilio',         label: 'Dashboard',       icon: LayoutDashboard, minLevel: LEVELS.ADMIN },
-      { to: '/twilio/numbers', label: 'Phone Numbers',   icon: Hash,            minLevel: LEVELS.ADMIN },
-      { to: '/twilio/trunks',  label: 'SIP Trunks',      icon: Wifi,            minLevel: LEVELS.ADMIN },
-      { to: '/twilio/calls',   label: 'Call Logs',       icon: PhoneCall,       minLevel: LEVELS.MANAGER },
-      { to: '/twilio/sms',     label: 'SMS Logs',        icon: MessageSquare,   minLevel: LEVELS.MANAGER },
-      { to: '/twilio/usage',   label: 'Usage & Billing', icon: DollarSign,      minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'PLIVO',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/plivo',         label: 'Dashboard',       icon: LayoutDashboard, minLevel: LEVELS.ADMIN },
-      { to: '/plivo/numbers', label: 'Phone Numbers',   icon: Hash,            minLevel: LEVELS.ADMIN },
-      { to: '/plivo/trunks',  label: 'SIP Trunks',      icon: Wifi,            minLevel: LEVELS.ADMIN },
-      { to: '/plivo/calls',   label: 'Call Logs',       icon: PhoneCall,       minLevel: LEVELS.MANAGER },
-      { to: '/plivo/sms',     label: 'SMS Logs',        icon: MessageSquare,   minLevel: LEVELS.MANAGER },
-      { to: '/plivo/usage',   label: 'Usage & Billing', icon: DollarSign,      minLevel: LEVELS.ADMIN },
+      { to: '/telecom',                    label: 'Telecom Hub',    icon: Radio,       minLevel: LEVELS.MANAGER },
+      { to: '/telecom?p=twilio&t=numbers', label: 'Phone Numbers',  icon: Hash,        minLevel: LEVELS.ADMIN   },
+      { to: '/telecom?p=twilio&t=trunks',  label: 'SIP Trunks',     icon: Wifi,        minLevel: LEVELS.ADMIN   },
+      { to: '/telecom?p=twilio&t=calls',   label: 'Call Logs',      icon: PhoneCall,   minLevel: LEVELS.MANAGER },
+      { to: '/telecom?p=twilio&t=sms',     label: 'SMS Logs',       icon: MessageSquare, minLevel: LEVELS.MANAGER },
+      { to: '/telecom?p=twilio&t=usage',   label: 'Usage & Billing',icon: DollarSign,  minLevel: LEVELS.ADMIN   },
     ],
   },
   {
@@ -227,15 +222,15 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'OVERVIEW',
     items: [
       { to: '/crm/dashboard', label: 'CRM Dashboard', icon: PieChart, minLevel: 1 },
-      { to: '/crm/leads',     label: 'Leads',         icon: Target,   minLevel: 1 },
     ],
   },
   {
-    label: 'LEAD MANAGEMENT',
-    minLevel: LEVELS.MANAGER,
+    label: 'MERCHANT MANAGEMENT',
+    minLevel: 1,
     items: [
+      { to: '/crm/leads',       label: 'Leads',       icon: Target,    minLevel: 1 },
+      { to: '/crm/lead-fields', label: 'Labels',      icon: Settings2, minLevel: LEVELS.MANAGER },
       { to: '/crm/lead-status', label: 'Lead Status', icon: Tag,       minLevel: LEVELS.MANAGER },
-      { to: '/crm/lead-fields', label: 'Lead Fields', icon: Settings2, minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -267,15 +262,9 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'PARTNERS',
     minLevel: LEVELS.MANAGER,
     items: [
-      { to: '/crm/lenders',         label: 'Lenders',         icon: Building2, minLevel: LEVELS.MANAGER },
-      { to: '/crm/affiliate-links', label: 'Affiliate Links', icon: Link2,     minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'APPROVALS',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/crm/approvals', label: 'Approvals', icon: CheckCircle2, minLevel: LEVELS.MANAGER },
+      { to: '/crm/lenders',          label: 'Lenders',          icon: Building2, minLevel: LEVELS.MANAGER },
+      { to: '/crm/affiliate-links',  label: 'Affiliate Links',  icon: Link2,     minLevel: LEVELS.MANAGER },
+      { to: '/crm/company-settings', label: 'Company Settings', icon: Globe,     minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -474,18 +463,7 @@ export function Sidebar() {
   function handleNav(to: string) { navigate(to); closeMobileSidebar(); setShowProfileMenu(false) }
 
   const rawSections = engine === 'dialer' ? DIALER_SECTIONS : CRM_SECTIONS
-  const isAdminUser = user?.level === LEVELS.ADMIN
-  const effectiveSections = isAdminUser
-    ? rawSections
-        .map(s => ({
-          ...s,
-          items: (s.items ?? []).filter(item => ADMIN_ALLOWED_ROUTES.has(item.to)),
-          subSections: (s.subSections ?? [])
-            .map(sub => ({ ...sub, items: sub.items.filter(item => ADMIN_ALLOWED_ROUTES.has(item.to)) }))
-            .filter(sub => sub.items.length > 0),
-        }))
-        .filter(s => (s.items ?? []).length > 0 || (s.subSections ?? []).some(sub => sub.items.length > 0))
-    : rawSections
+  const effectiveSections = rawSections.filter(s => s.label !== 'SYSTEM ADMIN' || canAccess(LEVELS.SUPERADMIN))
 
   const logoGradient = engine === 'dialer'
     ? 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)'
@@ -549,7 +527,7 @@ export function Sidebar() {
               )}
               {!section.expandable && (
                 !sidebarCollapsed ? (
-                  <p className="px-3 mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400 select-none">
+                  <p className="px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 select-none">
                     {section.label}
                   </p>
                 ) : (

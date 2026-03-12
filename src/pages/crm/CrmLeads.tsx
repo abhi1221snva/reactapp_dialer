@@ -1,5 +1,9 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Phone, Mail, Pencil, Trash2, Users } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Plus, Phone, Mail, Pencil, Trash2, Users,
+  Link2, Copy, Check, ExternalLink, X, Loader2,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -7,10 +11,10 @@ import { Badge } from '../../components/ui/Badge'
 import { leadService } from '../../services/lead.service'
 import { initials, formatPhoneNumber } from '../../utils/format'
 import { useServerTable } from '../../hooks/useServerTable'
-import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import api from '../../api/axios'
 
 const AVATAR_COLORS = [
   'from-indigo-500 to-violet-600',
@@ -33,10 +37,151 @@ interface Lead {
   [key: string]: unknown
 }
 
+interface MyAffiliateLink {
+  affiliate_code: string | null
+  affiliate_url: string | null
+  has_code: boolean
+}
+
+// ── Affiliate Link Modal ───────────────────────────────────────────────────────
+function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['my-affiliate-link'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: MyAffiliateLink }>('/crm/affiliate/my-link')
+      return res.data?.data
+    },
+  })
+
+  const url = data?.affiliate_url ?? ''
+
+  async function handleCopy() {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      toast.success('Link copied to clipboard!')
+      setTimeout(() => setCopied(false), 2500)
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(15,23,42,0.45)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4 overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Link2 size={16} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">Affiliate Link</p>
+              <p className="text-xs text-slate-400">Share to track leads from your referrals</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-slate-400">
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm">Loading your link…</span>
+            </div>
+          ) : !data?.has_code ? (
+            <div className="text-center py-8">
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto mb-4">
+                <Link2 size={24} className="text-amber-500" />
+              </div>
+              <p className="text-sm font-bold text-slate-700">No affiliate code yet</p>
+              <p className="text-xs text-slate-400 mt-1.5 max-w-xs mx-auto">
+                Go to <strong className="text-slate-600">Partners → Affiliate Links</strong> to generate your personal referral code.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+
+              {/* Link display */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  Your Affiliate Link
+                </label>
+                <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 group">
+                  <Link2 size={13} className="text-slate-400 flex-shrink-0" />
+                  <p className="flex-1 text-sm font-medium text-slate-800 truncate select-all">{url}</p>
+                </div>
+              </div>
+
+              {/* Affiliate code pill */}
+              {data.affiliate_code && (
+                <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-100">
+                  <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wide">Code</span>
+                  <div className="w-px h-3.5 bg-indigo-200" />
+                  <code className="text-sm font-bold text-indigo-700 tracking-wide">{data.affiliate_code}</code>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2.5 pt-1">
+                <button
+                  onClick={handleCopy}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm active:scale-[0.97] ${
+                    copied
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                  }`}
+                >
+                  {copied
+                    ? <><Check size={14} /> Copied!</>
+                    : <><Copy size={14} /> Copy Link</>
+                  }
+                </button>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors active:scale-[0.97]"
+                >
+                  <ExternalLink size={14} /> Open Form
+                </a>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
+// ── CRM Leads Page ─────────────────────────────────────────────────────────────
 export function CrmLeads() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 20 })
+  const [showAffiliateModal, setShowAffiliateModal] = useState(false)
 
   const { data: statusesData } = useQuery({
     queryKey: ['lead-statuses'],
@@ -168,11 +313,23 @@ export function CrmLeads() {
         limit={table.limit}
         onPageChange={table.setPage}
         headerActions={
-          <button onClick={() => navigate('/crm/create')} className="btn-primary">
-            <Plus size={15} /> Add Lead
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAffiliateModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+            >
+              <Link2 size={14} /> Affiliate Link
+            </button>
+            <button onClick={() => navigate('/crm/create')} className="btn-primary">
+              <Plus size={15} /> Add Lead
+            </button>
+          </div>
         }
       />
+
+      {showAffiliateModal && (
+        <AffiliateLinkModal onClose={() => setShowAffiliateModal(false)} />
+      )}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import {
   Settings2, Mail, Phone, MapPin, Calendar, User, Briefcase,
   Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
   ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
+  Check, DollarSign,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -842,100 +843,327 @@ function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadNa
   )
 }
 
-// ── Lead Summary Widget (right sidebar) ────────────────────────────────────────
-function LeadSummaryWidget({ lead, statuses }: { lead: CrmLead; statuses: LeadStatus[] | undefined }) {
-  const currentStatus = statuses?.find(s => s.lead_title_url === String(lead.lead_status))
-  const statusColor = currentStatus?.color_code ?? currentStatus?.color ?? '#6366f1'
+// ── InlineField — click-to-edit single field ──────────────────────────────────
+function InlineField({
+  fieldKey, label, value, type = 'text', leadId, onUpdated,
+}: {
+  fieldKey: string
+  label: string
+  value: string | null | undefined
+  type?: 'text' | 'email' | 'tel' | 'textarea'
+  leadId: number
+  onUpdated: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState('')
+  const [saving,  setSaving]  = useState(false)
 
-  const rows: { label: string; value: string | null | undefined; icon: LucideIcon }[] = [
-    { label: 'Lead ID',    value: `#${lead.id}`,                         icon: Hash },
-    { label: 'Type',       value: lead.lead_type ? String(lead.lead_type) : null, icon: Tag },
-    { label: 'Assigned',   value: (lead.assigned_name as string | undefined), icon: UserCheck },
-    { label: 'Created',    value: new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), icon: Calendar },
-    { label: 'Created By', value: (lead.created_by_name as string | undefined), icon: User },
-    { label: 'Updated',    value: lead.updated_at ? new Date(String(lead.updated_at)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null, icon: Clock },
-  ]
+  function startEdit() { setDraft(value ?? ''); setEditing(true) }
+  function cancel()    { setDraft(''); setEditing(false) }
+
+  async function save() {
+    if (draft === (value ?? '')) { setEditing(false); return }
+    setSaving(true)
+    try {
+      await leadService.update(leadId, { [fieldKey]: draft })
+      onUpdated()
+      toast.success(`${label} updated`)
+    } catch {
+      toast.error(`Failed to update ${label}`)
+    } finally {
+      setSaving(false)
+      setEditing(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</label>
+        <div className="flex items-center gap-1.5">
+          {type === 'textarea' ? (
+            <textarea
+              autoFocus rows={2}
+              className="input flex-1 text-sm resize-none"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() } if (e.key === 'Escape') cancel() }}
+            />
+          ) : (
+            <input
+              autoFocus type={type}
+              className="input flex-1 text-sm"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }}
+            />
+          )}
+          <button
+            onMouseDown={e => { e.preventDefault(); save() }}
+            disabled={saving}
+            className="p-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex-shrink-0 disabled:opacity-60 transition-colors"
+          >
+            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); cancel() }}
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex-shrink-0 transition-colors"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3">
-      {/* Status badge */}
-      <div className="flex items-center gap-2.5 p-3 rounded-lg border" style={{ borderColor: `${statusColor}33`, background: `${statusColor}0d` }}>
-        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-        <span className="text-sm font-semibold" style={{ color: statusColor }}>
-          {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-        </span>
+    <button
+      onClick={startEdit}
+      className="w-full text-left group rounded-lg px-2.5 py-2 hover:bg-indigo-50/60 transition-colors -mx-2.5 focus:outline-none"
+    >
+      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-0.5">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-medium text-slate-800 flex-1 truncate leading-snug">
+          {value || <span className="text-slate-300 italic font-normal text-xs">Click to edit…</span>}
+        </p>
+        <Pencil size={11} className="text-slate-200 group-hover:text-indigo-500 flex-shrink-0 transition-colors" />
       </div>
+    </button>
+  )
+}
 
-      {/* Metadata rows */}
-      <div className="space-y-2">
-        {rows.map(({ label, value, icon: Icon }) => {
-          if (!value) return null
-          return (
-            <div key={label} className="flex items-center gap-2.5">
-              <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0">
-                <Icon size={12} className="text-slate-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-[10px] text-slate-400 uppercase tracking-wide leading-none block">{label}</span>
-                <span className="text-xs font-medium text-slate-700 truncate block mt-0.5">{value}</span>
-              </div>
-            </div>
-          )
-        })}
+// ── FieldSection — card wrapper for grouped InlineFields ──────────────────────
+function FieldSection({
+  title, icon: Icon, children,
+  iconBg = 'bg-indigo-50', iconColor = 'text-indigo-600',
+}: {
+  title: string
+  icon: LucideIcon
+  children: ReactNode
+  iconBg?: string
+  iconColor?: string
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+          <Icon size={12} className={iconColor} />
+        </div>
+        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{title}</span>
       </div>
+      <div className="px-4 py-3 space-y-0.5">{children}</div>
     </div>
   )
 }
 
-// ── Quick Actions Widget (right sidebar) ───────────────────────────────────────
-function QuickActionsWidget({
-  leadId, onNavigateEdit, onScrollToActivity, onScrollToLenders, onGeneratePdf,
+// ── Lead Profile Panel (left column) ──────────────────────────────────────────
+function LeadProfilePanel({
+  lead, leadId, onUpdated, onEditAll,
 }: {
+  lead: CrmLead
   leadId: number
-  onNavigateEdit: () => void
+  onUpdated: () => void
+  onEditAll: () => void
+}) {
+  return (
+    <div className="space-y-4">
+
+      {/* ── Contact Information ── */}
+      <FieldSection title="Contact Information" icon={User}>
+        <InlineField fieldKey="first_name"   label="First Name" value={lead.first_name   as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="last_name"    label="Last Name"  value={lead.last_name    as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="email"        label="Email"      value={lead.email        as string | undefined} type="email" leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="phone_number" label="Phone"      value={lead.phone_number as string | undefined} type="tel"   leadId={leadId} onUpdated={onUpdated} />
+      </FieldSection>
+
+      {/* ── Business Information ── */}
+      <FieldSection title="Business Information" icon={Briefcase} iconBg="bg-violet-50" iconColor="text-violet-600">
+        <InlineField fieldKey="company_name" label="Business Name" value={lead.company_name as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="address"      label="Address"       value={lead.address      as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="city"         label="City"          value={lead.city         as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="state"        label="State"         value={lead.state        as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="zip"          label="ZIP"           value={(lead as Record<string, unknown>)['zip'] as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        <InlineField fieldKey="country"      label="Country"       value={lead.country      as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+      </FieldSection>
+
+      {/* ── Funding & Custom Fields (EAV via DynamicFieldForm) ── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-emerald-50/80 to-white border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+              <DollarSign size={12} className="text-emerald-600" />
+            </div>
+            <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Funding &amp; Custom Fields</span>
+          </div>
+          <button
+            onClick={onEditAll}
+            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-colors"
+          >
+            <Pencil size={11} /> Edit All
+          </button>
+        </div>
+        <div className="p-4">
+          <DynamicFieldForm
+            register={(() => {}) as never}
+            defaultValues={lead as Record<string, unknown>}
+            readOnly
+          />
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+// ── Action Group heading + items ───────────────────────────────────────────────
+function ActionGroup({
+  title, icon: Icon, iconBg, iconColor, children,
+}: {
+  title: string; icon: LucideIcon; iconBg: string; iconColor: string; children: ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2 px-0.5">
+        <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+          <Icon size={11} className={iconColor} />
+        </div>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</span>
+      </div>
+      <div className="space-y-1">{children}</div>
+    </div>
+  )
+}
+
+function ActionBtn({
+  icon: Icon, label, color, bg, onClick,
+}: {
+  icon: LucideIcon; label: string; color: string; bg: string; onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left hover:shadow-sm active:scale-[0.98] ${bg}`}
+    >
+      <Icon size={14} className={`${color} flex-shrink-0`} />
+      <span className={color}>{label}</span>
+    </button>
+  )
+}
+
+// ── Actions Panel (right column) ───────────────────────────────────────────────
+function ActionsPanel({
+  lead, statuses, updateStatus,
+  showStatusDropdown, setShowStatusDropdown,
+  onScrollToActivity, onScrollToLenders,
+  onGeneratePdf, onEditLead, onDeleteLead,
+}: {
+  lead: CrmLead
+  statuses: LeadStatus[] | undefined
+  updateStatus: { mutate: (s: string) => void; isPending: boolean }
+  showStatusDropdown: boolean
+  setShowStatusDropdown: (v: boolean) => void
   onScrollToActivity: () => void
   onScrollToLenders: () => void
   onGeneratePdf: () => void
+  onEditLead: () => void
+  onDeleteLead: () => void
 }) {
-  const actions = [
-    { label: 'Edit Lead',             icon: Pencil,        color: 'text-indigo-600', bg: 'bg-indigo-50 hover:bg-indigo-100',  action: onNavigateEdit },
-    { label: 'Add Note',              icon: MessageSquare, color: 'text-emerald-600',bg: 'bg-emerald-50 hover:bg-emerald-100',action: onScrollToActivity },
-    { label: 'Generate PDF Application', icon: Printer,   color: 'text-violet-600', bg: 'bg-violet-50 hover:bg-violet-100',  action: onGeneratePdf },
-    { label: 'Send to Lender',        icon: Send,          color: 'text-amber-600',  bg: 'bg-amber-50 hover:bg-amber-100',   action: onScrollToLenders },
-    { label: 'Download Lead',         icon: FileDown,      color: 'text-slate-600',  bg: 'bg-slate-50 hover:bg-slate-100',   action: () => toast('Export coming soon', { icon: 'ℹ️' }) },
-    { label: 'External Link',         icon: ExternalLink,  color: 'text-sky-600',    bg: 'bg-sky-50 hover:bg-sky-100',       action: () => toast('Portal link via Merchant Portal section', { icon: 'ℹ️' }) },
-  ]
-
   return (
-    <div className="space-y-1.5">
-      {actions.map(({ label, icon: Icon, color, bg, action }) => (
-        <button
-          key={label}
-          onClick={action}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${bg}`}
-        >
-          <Icon size={14} className={`${color} flex-shrink-0`} />
-          <span className={color}>{label}</span>
-        </button>
-      ))}
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 border-b border-indigo-700">
+        <Zap size={14} className="text-white flex-shrink-0" />
+        <span className="text-xs font-bold text-white uppercase tracking-widest">Actions</span>
+      </div>
+      <div className="p-4 space-y-5">
+
+        {/* Lead Actions */}
+        <ActionGroup title="Lead Actions" icon={ClipboardList} iconBg="bg-indigo-50" iconColor="text-indigo-600">
+          <ActionBtn icon={Pencil}    label="Edit Lead"    color="text-indigo-700"  bg="bg-indigo-50 hover:bg-indigo-100"  onClick={onEditLead}    />
+          <ActionBtn icon={Trash2}    label="Delete Lead"  color="text-red-600"     bg="bg-red-50 hover:bg-red-100"        onClick={onDeleteLead}  />
+          {/* Status picker inline */}
+          <div className="relative">
+            <button
+              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition-all text-left hover:shadow-sm active:scale-[0.98]"
+            >
+              <Zap size={14} className="text-violet-600 flex-shrink-0" />
+              <span className="flex-1">Change Status</span>
+              <ChevronDown size={12} className="text-violet-400" />
+            </button>
+            {showStatusDropdown && statuses && (
+              <div
+                className="absolute left-0 right-0 top-full mt-1 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1"
+                onMouseLeave={() => setShowStatusDropdown(false)}
+              >
+                {statuses.map((s: LeadStatus) => (
+                  <button
+                    key={s.id}
+                    onClick={() => updateStatus.mutate(s.lead_title_url)}
+                    disabled={s.lead_title_url === String(lead.lead_status) || updateStatus.isPending}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color_code ?? s.color ?? '#94a3b8' }} />
+                    {s.lead_title}
+                    {s.lead_title_url === String(lead.lead_status) && (
+                      <span className="ml-auto text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">Current</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </ActionGroup>
+
+        <div className="h-px bg-slate-100" />
+
+        {/* Communication */}
+        <ActionGroup title="Communication" icon={MessageSquare} iconBg="bg-emerald-50" iconColor="text-emerald-600">
+          <ActionBtn icon={MessageSquare} label="Add Note"   color="text-emerald-700" bg="bg-emerald-50 hover:bg-emerald-100" onClick={onScrollToActivity} />
+          {lead.email
+            ? <a href={`mailto:${String(lead.email)}`} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 hover:shadow-sm transition-all"><Mail size={14} className="text-sky-600 flex-shrink-0" /> Send Email</a>
+            : <ActionBtn icon={Mail} label="Send Email" color="text-sky-700" bg="bg-sky-50 hover:bg-sky-100" onClick={() => toast('No email on file', { icon: '⚠️' })} />
+          }
+          {lead.phone_number
+            ? <a href={`tel:${String(lead.phone_number)}`} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:shadow-sm transition-all"><Phone size={14} className="text-blue-600 flex-shrink-0" /> Call Lead</a>
+            : <ActionBtn icon={Phone} label="Call Lead" color="text-blue-700" bg="bg-blue-50 hover:bg-blue-100" onClick={() => toast('No phone on file', { icon: '⚠️' })} />
+          }
+        </ActionGroup>
+
+        <div className="h-px bg-slate-100" />
+
+        {/* Funding Actions */}
+        <ActionGroup title="Funding Actions" icon={DollarSign} iconBg="bg-amber-50" iconColor="text-amber-600">
+          <ActionBtn icon={Printer}   label="Generate Application" color="text-violet-700" bg="bg-violet-50 hover:bg-violet-100"  onClick={onGeneratePdf}        />
+          <ActionBtn icon={Send}      label="Submit to Lenders"    color="text-amber-700"  bg="bg-amber-50 hover:bg-amber-100"    onClick={onScrollToLenders}    />
+          <ActionBtn icon={Building2} label="View Submissions"     color="text-amber-700"  bg="bg-amber-50 hover:bg-amber-100"    onClick={onScrollToLenders}    />
+        </ActionGroup>
+
+        <div className="h-px bg-slate-100" />
+
+        {/* Documents */}
+        <ActionGroup title="Documents" icon={FolderOpen} iconBg="bg-slate-100" iconColor="text-slate-600">
+          <ActionBtn icon={FileDown}    label="Download Lead"   color="text-slate-700" bg="bg-slate-50 hover:bg-slate-100"  onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} />
+          <ActionBtn icon={ExternalLink} label="Merchant Portal" color="text-sky-700"  bg="bg-sky-50 hover:bg-sky-100"     onClick={() => toast('Scroll to Merchant Portal below', { icon: 'ℹ️' })} />
+        </ActionGroup>
+
+      </div>
     </div>
   )
 }
 
-// ── Main Lead Detail (Single-scroll layout) ────────────────────────────────────
+// ── Main Lead Detail — Command Center ─────────────────────────────────────────
 export function CrmLeadDetail() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const qc = useQueryClient()
-  const leadId = Number(id)
+  const navigate  = useNavigate()
+  const qc        = useQueryClient()
+  const leadId    = Number(id)
 
-  // Section refs for scroll-to navigation
   const activityRef = useRef<HTMLDivElement>(null)
   const lendersRef  = useRef<HTMLDivElement>(null)
 
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
-  const [showMoreMenu, setShowMoreMenu]             = useState(false)
-  const [showPdfModal, setShowPdfModal]             = useState(false)
+  const [showMoreMenu,       setShowMoreMenu]       = useState(false)
+  const [showPdfModal,       setShowPdfModal]       = useState(false)
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -952,14 +1180,14 @@ export function CrmLeadDetail() {
   const updateStatus = useMutation({
     mutationFn: (status: string) => crmService.bulkStatusChange({ lead_ids: [leadId], lead_status: status }),
     onSuccess: () => {
-      toast.success('Status updated'); setShowStatusDropdown(false)
+      toast.success('Status updated')
+      setShowStatusDropdown(false)
       qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
     },
     onError: () => toast.error('Failed to update status'),
   })
 
-  // ── Loading / Not found ───────────────────────────────────────────────────
   if (isLoading) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <Loader2 size={28} className="animate-spin text-indigo-500" />
@@ -974,10 +1202,9 @@ export function CrmLeadDetail() {
     </div>
   )
 
-  const fullName    = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${lead.id}`
-  const avatarBg    = AVATAR_BG[leadId % AVATAR_BG.length]
-  const leadInits   = initials(fullName)
-  const location    = [lead.city, lead.state, lead.country].filter(Boolean).join(', ')
+  const fullName      = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${lead.id}`
+  const avatarBg      = AVATAR_BG[leadId % AVATAR_BG.length]
+  const leadInits     = initials(fullName)
   const currentStatus = statuses?.find(s => s.lead_title_url === String(lead.lead_status))
   const statusColor   = currentStatus?.color_code ?? currentStatus?.color ?? '#6366f1'
 
@@ -985,16 +1212,32 @@ export function CrmLeadDetail() {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  async function handleDeleteLead() {
+    if (!window.confirm(`Delete lead "${fullName}"? This cannot be undone.`)) return
+    try {
+      await leadService.delete(leadId)
+      toast.success('Lead deleted')
+      navigate('/crm/leads')
+    } catch {
+      toast.error('Failed to delete lead')
+    }
+  }
+
+  function onLeadUpdated() {
+    qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+    qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/40">
 
       {/* ══════════════════════════════════════════════════════════════════
-          STICKY HEADER
+          COMMAND BAR — sticky header
       ══════════════════════════════════════════════════════════════════ */}
       <div className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
 
-        {/* Back bar */}
-        <div className="flex items-center gap-3 px-5 py-2 bg-slate-50 border-b border-slate-100">
+        {/* Breadcrumb row */}
+        <div className="flex items-center gap-3 px-5 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
           <button
             onClick={() => navigate('/crm/leads')}
             className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors"
@@ -1009,21 +1252,25 @@ export function CrmLeadDetail() {
               <span className="text-xs font-medium text-slate-500">{String(lead.lead_type)}</span>
             </>
           )}
+          <div className="ml-auto">
+            <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full uppercase tracking-widest">
+              Command Center
+            </span>
+          </div>
         </div>
 
-        {/* Main header row */}
-        <div className="flex items-center gap-4 px-5 py-3.5">
+        {/* Lead summary row */}
+        <div className="flex items-center gap-4 px-5 py-3">
 
           {/* Avatar */}
           <div className={`w-10 h-10 rounded-xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-sm ring-2 ring-white`}>
             <span className="text-sm font-bold text-white leading-none">{leadInits}</span>
           </div>
 
-          {/* Name + contact info */}
+          {/* Name + status + quick info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-base font-bold text-slate-900 leading-tight">{fullName}</h1>
-              {/* Status badge */}
               <span
                 className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold leading-none"
                 style={{ background: `${statusColor}1a`, color: statusColor, border: `1px solid ${statusColor}44` }}
@@ -1031,93 +1278,79 @@ export function CrmLeadDetail() {
                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
                 {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               </span>
-              {/* Lead type tag */}
               {lead.lead_type && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
                   <Tag size={9} /> {String(lead.lead_type)}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-4 mt-1 flex-wrap">
-              {lead.email && (
-                <a href={`mailto:${lead.email}`} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors">
-                  <Mail size={11} className="text-slate-400 flex-shrink-0" /> {String(lead.email)}
-                </a>
-              )}
               {lead.phone_number && (
                 <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors">
                   <Phone size={11} className="text-slate-400 flex-shrink-0" /> {formatPhoneNumber(String(lead.phone_number))}
                 </a>
               )}
-              {location && (
-                <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
-                  <MapPin size={11} className="flex-shrink-0" /> {location}
+              {lead.email && (
+                <a href={`mailto:${lead.email}`} className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors">
+                  <Mail size={11} className="text-slate-400 flex-shrink-0" /> {String(lead.email)}
+                </a>
+              )}
+              {(lead.assigned_name as string | undefined) && (
+                <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-400">
+                  <UserCheck size={11} className="flex-shrink-0" /> {lead.assigned_name as string}
                 </span>
               )}
               {lead.company_name && (
-                <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="hidden lg:flex items-center gap-1.5 text-xs text-slate-400">
                   <Briefcase size={11} className="flex-shrink-0" /> {String(lead.company_name)}
                 </span>
               )}
-              {(lead.assigned_name as string | undefined) && (
-                <span className="hidden lg:flex items-center gap-1.5 text-xs text-slate-400">
-                  <UserCheck size={11} className="flex-shrink-0" /> {lead.assigned_name as string}
+              <span className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400">
+                <Hash size={11} className="flex-shrink-0" /> #{lead.id}
+              </span>
+              <span className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400">
+                <Calendar size={11} className="flex-shrink-0" />
+                {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+              {(lead.created_by_name as string | undefined) && (
+                <span className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400">
+                  <User size={11} className="flex-shrink-0" /> {lead.created_by_name as string}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Action buttons */}
+          {/* Header quick actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
-
-            {/* Add Note */}
+            {lead.phone_number && (
+              <a href={`tel:${lead.phone_number}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors">
+                <Phone size={12} /> Call
+              </a>
+            )}
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 transition-colors">
+                <Mail size={12} /> Email
+              </a>
+            )}
             <button
               onClick={() => scrollTo(activityRef)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
             >
               <MessageSquare size={12} /> Add Note
             </button>
-
-            {/* Change Status */}
-            <div className="relative">
-              <button
-                onClick={() => { setShowStatusDropdown(s => !s); setShowMoreMenu(false) }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors"
-              >
-                <Zap size={12} className="text-indigo-500" /> Status <ChevronDown size={11} />
-              </button>
-              {showStatusDropdown && statuses && (
-                <div
-                  className="absolute right-0 top-full mt-1.5 w-52 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1"
-                  onMouseLeave={() => setShowStatusDropdown(false)}
-                >
-                  {statuses.map((s: LeadStatus) => (
-                    <button
-                      key={s.id}
-                      onClick={() => updateStatus.mutate(s.lead_title_url)}
-                      disabled={s.lead_title_url === String(lead.lead_status) || updateStatus.isPending}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-                    >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color_code ?? s.color ?? '#94a3b8' }} />
-                      {s.lead_title}
-                      {s.lead_title_url === String(lead.lead_status) && (
-                        <span className="ml-auto text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">Current</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Edit */}
+            <button
+              onClick={() => setShowPdfModal(true)}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200 transition-colors"
+            >
+              <Printer size={12} /> Gen PDF
+            </button>
             <button
               onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
             >
               <Pencil size={12} /> Edit
             </button>
-
-            {/* More ⋮ */}
+            {/* More menu */}
             <div className="relative">
               <button
                 onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }}
@@ -1127,11 +1360,14 @@ export function CrmLeadDetail() {
               </button>
               {showMoreMenu && (
                 <div
-                  className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1"
+                  className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1"
                   onMouseLeave={() => setShowMoreMenu(false)}
                 >
                   <button onClick={() => { setShowMoreMenu(false); scrollTo(activityRef) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors sm:hidden">
                     <MessageSquare size={13} /> Add Note
+                  </button>
+                  <button onClick={() => { setShowMoreMenu(false); setShowPdfModal(true) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors lg:hidden">
+                    <Printer size={13} /> Generate PDF
                   </button>
                   <button onClick={() => { setShowMoreMenu(false); scrollTo(lendersRef) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors">
                     <Send size={13} /> Send to Lender
@@ -1140,7 +1376,7 @@ export function CrmLeadDetail() {
                     <FileDown size={13} /> Download Lead
                   </button>
                   <div className="h-px bg-slate-100 my-1" />
-                  <button className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors">
+                  <button onClick={handleDeleteLead} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors">
                     <Trash2 size={13} /> Delete Lead
                   </button>
                 </div>
@@ -1151,44 +1387,29 @@ export function CrmLeadDetail() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
-          TWO-COLUMN BODY
+          3-COLUMN COMMAND CENTER BODY
+          Desktop (xl+): [Profile 340px] [Timeline flex-1] [Actions 268px]
+          Tablet  (lg) : [Profile] [Timeline]  — Actions stacks below
+          Mobile       : Stacked
       ══════════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col lg:flex-row gap-6 px-5 py-6 max-w-[1600px] mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[340px_1fr_268px] gap-5 px-5 py-5 max-w-[1800px] mx-auto">
 
-        {/* ── LEFT COLUMN ─────────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 space-y-5">
+        {/* ── COLUMN 1 — LEAD PROFILE (35%) ───────────────────────────── */}
+        <div className="xl:sticky xl:top-[104px] xl:self-start xl:max-h-[calc(100vh-116px)] xl:overflow-y-auto xl:pb-4">
+          <LeadProfilePanel
+            lead={lead}
+            leadId={leadId}
+            onUpdated={onLeadUpdated}
+            onEditAll={() => navigate(`/crm/leads/${leadId}/edit`)}
+          />
+        </div>
 
-          {/* 1. Lead Information (Dynamic Fields) */}
-          <CollapsibleSection title="Lead Information" icon={ClipboardList} defaultOpen={true}>
-            <DynamicFieldForm
-              register={(() => {}) as never}
-              defaultValues={lead as Record<string, unknown>}
-              readOnly
-            />
-            {/* Record metadata footer */}
-            <div className="mt-5 pt-4 border-t border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Record Info</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-3.5">
-                {[
-                  { label: 'Lead ID',      value: `#${lead.id}` },
-                  { label: 'Created',      value: new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
-                  { label: 'Created By',   value: (lead.created_by_name as string | undefined) },
-                  { label: 'Last Updated', value: lead.updated_at ? new Date(String(lead.updated_at)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null },
-                  { label: 'Updated By',   value: (lead.updated_by_name as string | undefined) },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-1">{label}</p>
-                    {value ? <p className="text-sm font-medium text-slate-800 leading-snug">{String(value)}</p> : <p className="text-sm text-slate-300">—</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CollapsibleSection>
+        {/* ── COLUMN 2 — ACTIVITY TIMELINE + DOCUMENTS (40%) ──────────── */}
+        <div className="space-y-5 min-w-0">
 
-          {/* 2. Activity Timeline */}
           <div ref={activityRef}>
             <CollapsibleSection
-              title="Activity & Notes"
+              title="Activity Timeline"
               icon={Clock}
               defaultOpen={true}
               headerRight={
@@ -1204,32 +1425,40 @@ export function CrmLeadDetail() {
             </CollapsibleSection>
           </div>
 
-          {/* 3. Documents */}
           <CollapsibleSection title="Documents" icon={FolderOpen} defaultOpen={false}>
             <DocumentsPanel leadId={leadId} />
           </CollapsibleSection>
 
         </div>
 
-        {/* ── RIGHT SIDEBAR ────────────────────────────────────────────── */}
-        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 space-y-4 lg:sticky lg:top-[108px] lg:self-start lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:pb-4">
+        {/* ── COLUMN 3 — ACTIONS + DEAL PROGRESS (25%) ────────────────── */}
+        {/* On tablet (lg) this spans both columns and sits below the timeline */}
+        <div className="space-y-4 lg:col-span-2 xl:col-span-1 xl:sticky xl:top-[104px] xl:self-start xl:max-h-[calc(100vh-116px)] xl:overflow-y-auto xl:pb-4">
 
-          {/* Quick Actions */}
-          <SidebarCard title="Quick Actions" icon={Zap} iconColor="text-amber-600" iconBg="bg-amber-50">
-            <QuickActionsWidget
-              leadId={leadId}
-              onNavigateEdit={() => navigate(`/crm/leads/${leadId}/edit`)}
+          {/* On tablet: use a 2-col sub-grid so actions + lenders sit side-by-side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 gap-4">
+
+            {/* Actions */}
+            <ActionsPanel
+              lead={lead}
+              statuses={statuses}
+              updateStatus={updateStatus}
+              showStatusDropdown={showStatusDropdown}
+              setShowStatusDropdown={setShowStatusDropdown}
               onScrollToActivity={() => scrollTo(activityRef)}
               onScrollToLenders={() => scrollTo(lendersRef)}
               onGeneratePdf={() => setShowPdfModal(true)}
+              onEditLead={() => navigate(`/crm/leads/${leadId}/edit`)}
+              onDeleteLead={handleDeleteLead}
             />
-          </SidebarCard>
 
-          {/* Lender Submissions */}
-          <div ref={lendersRef}>
-            <SidebarCard title="Lender Submissions" icon={Building2} iconColor="text-amber-600" iconBg="bg-amber-50">
-              <LendersPanel leadId={leadId} />
-            </SidebarCard>
+            {/* Lender Submissions */}
+            <div ref={lendersRef}>
+              <SidebarCard title="Lender Submissions" icon={Building2} iconColor="text-amber-600" iconBg="bg-amber-50">
+                <LendersPanel leadId={leadId} />
+              </SidebarCard>
+            </div>
+
           </div>
 
           {/* Approvals */}

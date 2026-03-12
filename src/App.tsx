@@ -30,6 +30,9 @@ import { CrmLeadsList } from './pages/crm/CrmLeadsList'
 import { CrmLeadDetail } from './pages/crm/CrmLeadDetail'
 import { CrmLeadCreate } from './pages/crm/CrmLeadCreate'
 import { CrmAffiliateLinks } from './pages/crm/CrmAffiliateLinks'
+import { CrmCompanySettings } from './pages/crm/CrmCompanySettings'
+import { ApplyPage } from './pages/public/ApplyPage'
+import { MerchantPage } from './pages/public/MerchantPage'
 import { CrmApprovals } from './pages/crm/CrmApprovals'
 import { CrmLeadStatus } from './pages/crm/CrmLeadStatus'
 import { CrmLeadFields } from './pages/crm/CrmLeadFields'
@@ -67,18 +70,7 @@ import { TeamChat } from './pages/chat/TeamChat'
 import { AgentMonitoring } from './pages/monitoring/AgentMonitoring'
 import { Attendance } from './pages/attendance/Attendance'
 import { Billing } from './pages/billing/Billing'
-import { TwilioDashboard } from './pages/twilio/TwilioDashboard'
-import { TwilioNumbers }   from './pages/twilio/TwilioNumbers'
-import { TwilioTrunks }    from './pages/twilio/TwilioTrunks'
-import { TwilioCallLogs }  from './pages/twilio/TwilioCallLogs'
-import { TwilioSmsLogs }   from './pages/twilio/TwilioSmsLogs'
-import { TwilioUsage }     from './pages/twilio/TwilioUsage'
-import { PlivoDashboard }  from './pages/plivo/PlivoDashboard'
-import { PlivoNumbers }    from './pages/plivo/PlivoNumbers'
-import { PlivoTrunks }     from './pages/plivo/PlivoTrunks'
-import { PlivoCallLogs }   from './pages/plivo/PlivoCallLogs'
-import { PlivoSmsLogs }    from './pages/plivo/PlivoSmsLogs'
-import { PlivoUsage }      from './pages/plivo/PlivoUsage'
+import { TelecomPage } from './pages/telecom/TelecomPage'
 
 import { Labels } from './pages/settings/Labels'
 import { TwoFactorSetup } from './pages/settings/TwoFactorSetup'
@@ -121,7 +113,11 @@ function AppWithPusher() {
 export default function App() {
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Fully public routes — no auth, no layout wrapper */}
+      <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
+      <Route path="/merchant/:leadToken"  element={<MerchantPage />} />
+
+      {/* Auth routes (redirect to dashboard if already logged in) */}
       <Route element={<PublicRoute><AuthLayout /></PublicRoute>}>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -148,7 +144,8 @@ export default function App() {
           <Route path="/crm/leads/create" element={<CrmLeadCreate />} />
           <Route path="/crm/leads/:id/edit" element={<CrmLeadCreate />} />
           <Route path="/crm/leads/:id" element={<CrmLeadDetail />} />
-          <Route path="/crm/affiliate-links" element={<CrmAffiliateLinks />} />
+          <Route path="/crm/affiliate-links"   element={<CrmAffiliateLinks />} />
+          <Route path="/crm/company-settings"  element={<CrmCompanySettings />} />
           <Route path="/crm/approvals" element={<CrmApprovals />} />
           <Route path="/crm/lead-status" element={<CrmLeadStatus />} />
           <Route path="/crm/lead-fields" element={<CrmLeadFields />} />
@@ -235,21 +232,24 @@ export default function App() {
         {/* Onboarding */}
         <Route path="/onboarding" element={<Onboarding />} />
 
-        {/* Twilio Telecom */}
-        <Route path="/twilio"         element={<TwilioDashboard />} />
-        <Route path="/twilio/numbers" element={<TwilioNumbers />} />
-        <Route path="/twilio/trunks"  element={<TwilioTrunks />} />
-        <Route path="/twilio/calls"   element={<TwilioCallLogs />} />
-        <Route path="/twilio/sms"     element={<TwilioSmsLogs />} />
-        <Route path="/twilio/usage"   element={<TwilioUsage />} />
+        {/* Unified Telecom Hub */}
+        <Route path="/telecom"        element={<TelecomPage />} />
 
-        {/* Plivo Telecom */}
-        <Route path="/plivo"          element={<PlivoDashboard />} />
-        <Route path="/plivo/numbers"  element={<PlivoNumbers />} />
-        <Route path="/plivo/trunks"   element={<PlivoTrunks />} />
-        <Route path="/plivo/calls"    element={<PlivoCallLogs />} />
-        <Route path="/plivo/sms"      element={<PlivoSmsLogs />} />
-        <Route path="/plivo/usage"    element={<PlivoUsage />} />
+        {/* Legacy Twilio routes → redirect to unified hub */}
+        <Route path="/twilio"         element={<Navigate to="/telecom?p=twilio&t=dashboard" replace />} />
+        <Route path="/twilio/numbers" element={<Navigate to="/telecom?p=twilio&t=numbers"   replace />} />
+        <Route path="/twilio/trunks"  element={<Navigate to="/telecom?p=twilio&t=trunks"    replace />} />
+        <Route path="/twilio/calls"   element={<Navigate to="/telecom?p=twilio&t=calls"     replace />} />
+        <Route path="/twilio/sms"     element={<Navigate to="/telecom?p=twilio&t=sms"       replace />} />
+        <Route path="/twilio/usage"   element={<Navigate to="/telecom?p=twilio&t=usage"     replace />} />
+
+        {/* Legacy Plivo routes → redirect to unified hub */}
+        <Route path="/plivo"          element={<Navigate to="/telecom?p=plivo&t=dashboard" replace />} />
+        <Route path="/plivo/numbers"  element={<Navigate to="/telecom?p=plivo&t=numbers"   replace />} />
+        <Route path="/plivo/trunks"   element={<Navigate to="/telecom?p=plivo&t=trunks"    replace />} />
+        <Route path="/plivo/calls"    element={<Navigate to="/telecom?p=plivo&t=calls"     replace />} />
+        <Route path="/plivo/sms"      element={<Navigate to="/telecom?p=plivo&t=sms"       replace />} />
+        <Route path="/plivo/usage"    element={<Navigate to="/telecom?p=plivo&t=usage"     replace />} />
 
         {/* Workforce Management */}
         <Route path="/workforce"          element={<WorkforceDashboard />} />
