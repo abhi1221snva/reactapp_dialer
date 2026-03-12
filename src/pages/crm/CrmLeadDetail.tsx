@@ -1,17 +1,18 @@
 import { useState, useRef } from 'react'
+import type { ReactNode, ChangeEvent, RefObject, ComponentType } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Pencil, Loader2, ChevronDown, Upload, FileText,
+  ArrowLeft, Pencil, Loader2, ChevronDown, ChevronUp, Upload, FileText,
   Trash2, Download, Building2, Send, AlertCircle, X, Eye,
   Settings2, Mail, Phone, MapPin, Calendar, User, Briefcase,
-  Hash, UserCheck, Clock, FolderOpen,
-  ClipboardList, CheckSquare, MoreVertical, Tag,
+  Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
+  ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
-import { LeadStatusBadge } from '../../components/crm/LeadStatusBadge'
 import { ActivityTimeline } from '../../components/crm/ActivityTimeline'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { MerchantPortalSection } from '../../components/crm/MerchantPortalSection'
@@ -23,15 +24,6 @@ import { formatPhoneNumber } from '../../utils/format'
 import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSendRecord } from '../../types/crm.types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const TABS = [
-  { key: 'Overview',   icon: ClipboardList },
-  { key: 'Activity',   icon: Clock },
-  { key: 'Documents',  icon: FolderOpen },
-  { key: 'Lenders',    icon: Building2 },
-  { key: 'Approvals',  icon: CheckSquare },
-] as const
-type Tab = typeof TABS[number]['key']
-
 const AVATAR_BG = ['bg-indigo-500','bg-violet-500','bg-sky-500','bg-emerald-500','bg-rose-500','bg-amber-500']
 
 const ALLOWED_MIMES = new Set([
@@ -97,6 +89,69 @@ function initials(name: string) {
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
 }
 
+// ── CollapsibleSection ─────────────────────────────────────────────────────────
+function CollapsibleSection({
+  title, icon: Icon, children, defaultOpen = true, count, headerRight,
+}: {
+  title: string
+  icon: LucideIcon
+  children: ReactNode
+  defaultOpen?: boolean
+  count?: number
+  headerRight?: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50/70 border-b border-slate-100">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+        >
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+            <Icon size={14} className="text-indigo-600" />
+          </div>
+          <span className="text-sm font-semibold text-slate-800">{title}</span>
+          {count !== undefined && count > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 flex-shrink-0">
+              {count}
+            </span>
+          )}
+          {open
+            ? <ChevronUp size={14} className="text-slate-400 ml-1 flex-shrink-0" />
+            : <ChevronDown size={14} className="text-slate-400 ml-1 flex-shrink-0" />
+          }
+        </button>
+        {headerRight && <div className="flex-shrink-0 ml-3">{headerRight}</div>}
+      </div>
+      {open && <div className="p-5">{children}</div>}
+    </div>
+  )
+}
+
+// ── SidebarCard ────────────────────────────────────────────────────────────────
+function SidebarCard({
+  title, icon: Icon, children, iconColor = 'text-indigo-600', iconBg = 'bg-indigo-50',
+}: {
+  title: string
+  icon: LucideIcon
+  children: ReactNode
+  iconColor?: string
+  iconBg?: string
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+          <Icon size={13} className={iconColor} />
+        </div>
+        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{title}</span>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  )
+}
+
 // ── Doc viewer modal ───────────────────────────────────────────────────────────
 function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => void }) {
   const [downloading, setDownloading] = useState(false)
@@ -122,8 +177,7 @@ function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => voi
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
           <button
-            onClick={handleDownload}
-            disabled={downloading}
+            onClick={handleDownload} disabled={downloading}
             className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-60"
           >
             {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
@@ -158,8 +212,8 @@ function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => voi
   )
 }
 
-// ── Documents Tab ──────────────────────────────────────────────────────────────
-function DocumentsTab({ leadId }: { leadId: number }) {
+// ── Documents Panel ────────────────────────────────────────────────────────────
+function DocumentsPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [selectedTypeId, setSelectedTypeId] = useState('')
@@ -211,7 +265,7 @@ function DocumentsTab({ leadId }: { leadId: number }) {
     onError: () => toast.error('Delete failed'),
   })
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: import('react').ChangeEvent<HTMLInputElement>) {
     const raw = Array.from(e.target.files ?? []); e.target.value = ''
     if (!raw.length) return
     const { valid, errors } = validateFiles([...selectedFiles, ...raw])
@@ -222,26 +276,19 @@ function DocumentsTab({ leadId }: { leadId: number }) {
 
   return (
     <div className="space-y-5">
-
       {/* Upload panel */}
-      <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-slate-700">Upload Documents</p>
-          <button onClick={() => setShowTypeManager(true)} className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white border border-slate-200 bg-white">
-            <Settings2 size={12} /> Manage Types
+      <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-slate-600">Upload Documents</p>
+          <button onClick={() => setShowTypeManager(true)} className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white transition-colors">
+            <Settings2 size={11} /> Manage Types
           </button>
         </div>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          <select
-            value={selectedTypeId}
-            onChange={e => { setSelectedTypeId(e.target.value); setSubValue('') }}
-            className="input text-sm flex-1 min-w-[160px]"
-          >
+        <div className="flex flex-wrap gap-2 mb-3">
+          <select value={selectedTypeId} onChange={e => { setSelectedTypeId(e.target.value); setSubValue('') }} className="input text-sm flex-1 min-w-[160px]">
             <option value="">— Select document type —</option>
             {activeTypes.map((t: DocumentType) => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
           </select>
-
           {subValues.length > 0 && (
             <select value={subValue} onChange={e => setSubValue(e.target.value)} className="input text-sm flex-1 min-w-[140px]">
               <option value="">— Select sub-type —</option>
@@ -249,64 +296,41 @@ function DocumentsTab({ leadId }: { leadId: number }) {
             </select>
           )}
         </div>
-
         <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={!selectedTypeId || uploadMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border-2 border-dashed border-indigo-300 bg-white text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400 transition-all disabled:opacity-40"
-          >
-            <Upload size={15} /> Choose Files
+          <button onClick={() => fileRef.current?.click()} disabled={!selectedTypeId || uploadMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border-2 border-dashed border-indigo-300 bg-white text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400 transition-all disabled:opacity-40">
+            <Upload size={14} /> Choose Files
           </button>
-
           {computedDocType && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700">
-              <Tag size={12} />
-              <span className="text-xs font-semibold">{computedDocType}</span>
+              <Tag size={11} /><span className="text-xs font-semibold">{computedDocType}</span>
             </div>
           )}
-
           {selectedFiles.length > 0 && (
-            <button
-              onClick={() => uploadMutation.mutate(selectedFiles)}
-              disabled={!canUpload || uploadMutation.isPending}
-              className="btn-primary ml-auto disabled:opacity-50"
-            >
+            <button onClick={() => uploadMutation.mutate(selectedFiles)} disabled={!canUpload || uploadMutation.isPending} className="btn-primary ml-auto disabled:opacity-50">
               {uploadMutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Uploading…</> : <><Upload size={14} /> Upload {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}</>}
             </button>
           )}
-
           <input ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden" onChange={handleFileChange} />
         </div>
-
-        <p className="text-[11px] text-slate-400 mt-3">
-          PDF, DOC, DOCX, XLS, XLSX, JPG, PNG · max {MAX_FILE_MB} MB per file · up to {MAX_FILES} files
-        </p>
-
+        <p className="text-[11px] text-slate-400 mt-2.5">PDF, DOC, DOCX, XLS, XLSX, JPG, PNG · max {MAX_FILE_MB} MB · up to {MAX_FILES} files</p>
         {validationErrors.length > 0 && (
           <div className="mt-3 rounded-xl bg-red-50 border border-red-100 p-3 space-y-1">
             {validationErrors.map((err, i) => (
-              <p key={i} className="flex items-start gap-1.5 text-xs text-red-600">
-                <AlertCircle size={12} className="mt-0.5 flex-shrink-0" /> {err}
-              </p>
+              <p key={i} className="flex items-start gap-1.5 text-xs text-red-600"><AlertCircle size={12} className="mt-0.5 flex-shrink-0" /> {err}</p>
             ))}
           </div>
         )}
-
         {selectedFiles.length > 0 && (
           <div className="mt-3 space-y-1.5">
             {selectedFiles.map((f, i) => {
               const ic = getFileIcon(f.name)
               return (
                 <div key={i} className="flex items-center gap-3 rounded-xl bg-white border border-slate-200 px-3 py-2.5">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
-                    <FileText size={13} className={ic.color} />
-                  </div>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}><FileText size={13} className={ic.color} /></div>
                   <span className="flex-1 text-xs font-medium text-slate-700 truncate">{f.name}</span>
                   <span className="text-xs text-slate-400 flex-shrink-0">{formatBytes(f.size)}</span>
-                  <button onClick={() => { setSelectedFiles(p => p.filter((_, j) => j !== i)); setValidationErrors([]) }} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors">
-                    <X size={13} />
-                  </button>
+                  <button onClick={() => { setSelectedFiles(p => p.filter((_, j) => j !== i)); setValidationErrors([]) }} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><X size={13} /></button>
                 </div>
               )
             })}
@@ -316,12 +340,10 @@ function DocumentsTab({ leadId }: { leadId: number }) {
 
       {/* Document list */}
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 size={22} className="animate-spin text-indigo-400" /></div>
+        <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-indigo-400" /></div>
       ) : docs.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-14 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-            <FolderOpen size={24} className="text-slate-400" />
-          </div>
+        <div className="rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3"><FolderOpen size={22} className="text-slate-400" /></div>
           <p className="text-sm font-semibold text-slate-600">No documents yet</p>
           <p className="text-xs text-slate-400 mt-1">Upload bank statements, ID, or any relevant files</p>
         </div>
@@ -332,45 +354,34 @@ function DocumentsTab({ leadId }: { leadId: number }) {
             const ic = getFileIcon(doc.file_path)
             return (
               <div key={doc.id} className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 hover:border-indigo-200 hover:shadow-sm transition-all group">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
-                  <FileText size={16} className={ic.color} />
-                </div>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${ic.bg}`}><FileText size={16} className={ic.color} /></div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{doc.file_name}</p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-600">
-                      <Tag size={8} /> {doc.document_type}
-                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-600"><Tag size={8} /> {doc.document_type}</span>
                     {doc.file_size ? <span className="text-[11px] text-slate-400">{formatBytes(Number(doc.file_size))}</span> : null}
                     <span className="text-[11px] text-slate-400">{new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     {doc.uploaded_by_name && <span className="text-[11px] text-slate-400">by {doc.uploaded_by_name}</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Preview">
-                    <Eye size={14} />
-                  </button>
-                  <button onClick={() => doc.file_path && downloadFile(doc.file_path, doc.file_name)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Download">
-                    <Download size={14} />
-                  </button>
-                  <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
-                    <Trash2 size={14} />
-                  </button>
+                  <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30" title="Preview"><Eye size={14} /></button>
+                  <button onClick={() => doc.file_path && downloadFile(doc.file_path, doc.file_name)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Download"><Download size={14} /></button>
+                  <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={14} /></button>
                 </div>
               </div>
             )
           })}
         </div>
       )}
-
       {viewDoc && <DocViewerModal doc={viewDoc} onClose={() => setViewDoc(null)} />}
       {showTypeManager && <CrmDocumentTypesManager onClose={() => setShowTypeManager(false)} />}
     </div>
   )
 }
 
-// ── Lenders Tab ────────────────────────────────────────────────────────────────
-function LendersTab({ leadId }: { leadId: number }) {
+// ── Lenders Panel ──────────────────────────────────────────────────────────────
+function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
   const [showSendForm, setShowSendForm] = useState(false)
   const [selectedLender, setSelectedLender] = useState('')
@@ -387,8 +398,7 @@ function LendersTab({ leadId }: { leadId: number }) {
     staleTime: 5 * 60 * 1000,
   })
 
-  const lenders = lendersData ?? []
-  const activeLenders = lenders.filter(l => Number(l.status) === 1)
+  const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
   const submissions = history ?? []
 
   const sendMutation = useMutation({
@@ -404,33 +414,31 @@ function LendersTab({ leadId }: { leadId: number }) {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {!showSendForm ? (
         <button onClick={() => setShowSendForm(true)} className="btn-primary">
           <Send size={14} /> Send to Lender
         </button>
       ) : (
-        <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3.5 bg-indigo-50 border-b border-indigo-100">
-            <Send size={14} className="text-indigo-500" />
+        <div className="bg-indigo-50/40 rounded-xl border border-indigo-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 bg-indigo-50 border-b border-indigo-100">
+            <Send size={13} className="text-indigo-500" />
             <h3 className="text-sm font-semibold text-slate-800">Send Lead to Lender</h3>
           </div>
-          <div className="p-5 space-y-4">
+          <div className="p-4 space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Select Lender</label>
               <select className="input w-full" value={selectedLender} onChange={e => setSelectedLender(e.target.value)}>
                 <option value="">— Choose a lender —</option>
                 {activeLenders.map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
               </select>
-              {activeLenders.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1"><AlertCircle size={12} /> No active lenders found. Add lenders first.</p>
-              )}
+              {activeLenders.length === 0 && <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1"><AlertCircle size={12} /> No active lenders.</p>}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Notes <span className="font-normal text-slate-400">(optional)</span></label>
-              <textarea className="input w-full resize-none" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any additional context for the lender..." />
+              <textarea className="input w-full resize-none" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional context…" />
             </div>
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center gap-2.5">
               <button onClick={() => sendMutation.mutate()} disabled={!selectedLender || sendMutation.isPending} className="btn-primary disabled:opacity-50">
                 {sendMutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Sending…</> : <><Send size={14} /> Send Lead</>}
               </button>
@@ -443,29 +451,27 @@ function LendersTab({ leadId }: { leadId: number }) {
       <div>
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Submission History</p>
         {histLoading ? (
-          <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-indigo-400" /></div>
+          <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-indigo-400" /></div>
         ) : submissions.length === 0 ? (
-          <div className="rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-12 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-              <Building2 size={20} className="text-slate-400" />
-            </div>
+          <div className="rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-3"><Building2 size={18} className="text-slate-400" /></div>
             <p className="text-sm font-semibold text-slate-600">No submissions yet</p>
-            <p className="text-xs text-slate-400 mt-1">Send this lead to a lender to start the process</p>
+            <p className="text-xs text-slate-400 mt-1">Send this lead to a lender to start</p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {submissions.map(s => (
-              <div key={s.id} className="flex items-center gap-4 bg-white rounded-xl border border-slate-200 px-4 py-3.5">
+              <div key={s.id} className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 hover:shadow-sm transition-all">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                  <Building2 size={16} className="text-amber-600" />
+                  <Building2 size={15} className="text-amber-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">{s.lender_name ?? `Lender #${s.lender_id}`}</p>
+                  <p className="text-sm font-semibold text-slate-800 truncate">{s.lender_name ?? `Lender #${s.lender_id}`}</p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className="text-xs text-slate-400 flex items-center gap-1">
-                      <Calendar size={10} /> {new Date(s.submitted_date ?? s.created_at ?? '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <Calendar size={9} /> {new Date(s.submitted_date ?? s.created_at ?? '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
-                    {s.notes && <span className="text-xs text-slate-500 truncate max-w-xs">{s.notes}</span>}
+                    {s.notes && <span className="text-[11px] text-slate-500 truncate max-w-[160px]">{s.notes}</span>}
                   </div>
                 </div>
                 {s.lender_status_id && (
@@ -480,15 +486,97 @@ function LendersTab({ leadId }: { leadId: number }) {
   )
 }
 
-// ── Main Lead Detail ───────────────────────────────────────────────────────────
+// ── Lead Summary Widget (right sidebar) ────────────────────────────────────────
+function LeadSummaryWidget({ lead, statuses }: { lead: CrmLead; statuses: LeadStatus[] | undefined }) {
+  const currentStatus = statuses?.find(s => s.lead_title_url === String(lead.lead_status))
+  const statusColor = currentStatus?.color_code ?? currentStatus?.color ?? '#6366f1'
+
+  const rows: { label: string; value: string | null | undefined; icon: LucideIcon }[] = [
+    { label: 'Lead ID',    value: `#${lead.id}`,                         icon: Hash },
+    { label: 'Type',       value: lead.lead_type ? String(lead.lead_type) : null, icon: Tag },
+    { label: 'Assigned',   value: (lead.assigned_name as string | undefined), icon: UserCheck },
+    { label: 'Created',    value: new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), icon: Calendar },
+    { label: 'Created By', value: (lead.created_by_name as string | undefined), icon: User },
+    { label: 'Updated',    value: lead.updated_at ? new Date(String(lead.updated_at)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null, icon: Clock },
+  ]
+
+  return (
+    <div className="space-y-3">
+      {/* Status badge */}
+      <div className="flex items-center gap-2.5 p-3 rounded-lg border" style={{ borderColor: `${statusColor}33`, background: `${statusColor}0d` }}>
+        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+        <span className="text-sm font-semibold" style={{ color: statusColor }}>
+          {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+        </span>
+      </div>
+
+      {/* Metadata rows */}
+      <div className="space-y-2">
+        {rows.map(({ label, value, icon: Icon }) => {
+          if (!value) return null
+          return (
+            <div key={label} className="flex items-center gap-2.5">
+              <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0">
+                <Icon size={12} className="text-slate-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wide leading-none block">{label}</span>
+                <span className="text-xs font-medium text-slate-700 truncate block mt-0.5">{value}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Quick Actions Widget (right sidebar) ───────────────────────────────────────
+function QuickActionsWidget({
+  leadId, onNavigateEdit, onScrollToActivity, onScrollToLenders,
+}: {
+  leadId: number
+  onNavigateEdit: () => void
+  onScrollToActivity: () => void
+  onScrollToLenders: () => void
+}) {
+  const actions = [
+    { label: 'Edit Lead',        icon: Pencil,      color: 'text-indigo-600', bg: 'bg-indigo-50 hover:bg-indigo-100', action: onNavigateEdit },
+    { label: 'Add Note',         icon: MessageSquare, color: 'text-emerald-600', bg: 'bg-emerald-50 hover:bg-emerald-100', action: onScrollToActivity },
+    { label: 'Send to Lender',   icon: Send,        color: 'text-amber-600',  bg: 'bg-amber-50 hover:bg-amber-100',   action: onScrollToLenders },
+    { label: 'Download Lead',    icon: FileDown,    color: 'text-slate-600',  bg: 'bg-slate-50 hover:bg-slate-100',   action: () => toast('Export coming soon', { icon: 'ℹ️' }) },
+    { label: 'External Link',    icon: ExternalLink, color: 'text-sky-600',   bg: 'bg-sky-50 hover:bg-sky-100',       action: () => toast('Portal link via Merchant Portal section', { icon: 'ℹ️' }) },
+  ]
+
+  return (
+    <div className="space-y-1.5">
+      {actions.map(({ label, icon: Icon, color, bg, action }) => (
+        <button
+          key={label}
+          onClick={action}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${bg}`}
+        >
+          <Icon size={14} className={`${color} flex-shrink-0`} />
+          <span className={color}>{label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Main Lead Detail (Single-scroll layout) ────────────────────────────────────
 export function CrmLeadDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [activeTab, setActiveTab] = useState<Tab>('Overview')
+  const leadId = Number(id)
+
+  // Section refs for scroll-to navigation
+  const activityRef = useRef<HTMLDivElement>(null)
+  const lendersRef  = useRef<HTMLDivElement>(null)
+
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
-  const leadId = Number(id)
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -512,10 +600,11 @@ export function CrmLeadDetail() {
     onError: () => toast.error('Failed to update status'),
   })
 
+  // ── Loading / Not found ───────────────────────────────────────────────────
   if (isLoading) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <Loader2 size={28} className="animate-spin text-indigo-500" />
-      <p className="text-sm text-slate-400">Loading lead details…</p>
+      <p className="text-sm text-slate-400">Loading lead…</p>
     </div>
   )
 
@@ -526,83 +615,117 @@ export function CrmLeadDetail() {
     </div>
   )
 
-  const fullName  = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${lead.id}`
-  const avatarBg  = AVATAR_BG[leadId % AVATAR_BG.length]
-  const leadInits = initials(fullName)
+  const fullName    = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${lead.id}`
+  const avatarBg    = AVATAR_BG[leadId % AVATAR_BG.length]
+  const leadInits   = initials(fullName)
+  const location    = [lead.city, lead.state, lead.country].filter(Boolean).join(', ')
+  const currentStatus = statuses?.find(s => s.lead_title_url === String(lead.lead_status))
+  const statusColor   = currentStatus?.color_code ?? currentStatus?.color ?? '#6366f1'
 
-  // Location string
-  const location = [lead.city, lead.state, lead.country].filter(Boolean).join(', ')
+  function scrollTo(ref: RefObject<HTMLDivElement | null>) {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
-    <div className="space-y-0">
+    <div className="min-h-screen bg-slate-50/40">
 
-      {/* ── Hero Banner ────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 rounded-2xl overflow-hidden mb-4 shadow-md">
+      {/* ══════════════════════════════════════════════════════════════════
+          STICKY HEADER
+      ══════════════════════════════════════════════════════════════════ */}
+      <div className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
 
-        {/* ── Main content row ── */}
-        <div className="flex items-center gap-4 px-5 py-4">
+        {/* Back bar */}
+        <div className="flex items-center gap-3 px-5 py-2 bg-slate-50 border-b border-slate-100">
+          <button
+            onClick={() => navigate('/crm/leads')}
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors"
+          >
+            <ArrowLeft size={13} /> Back to Leads
+          </button>
+          <div className="w-px h-3.5 bg-slate-300" />
+          <span className="text-xs text-slate-400">Lead #{lead.id}</span>
+          {lead.lead_type && (
+            <>
+              <div className="w-px h-3.5 bg-slate-300" />
+              <span className="text-xs font-medium text-slate-500">{String(lead.lead_type)}</span>
+            </>
+          )}
+        </div>
+
+        {/* Main header row */}
+        <div className="flex items-center gap-4 px-5 py-3.5">
 
           {/* Avatar */}
-          <div className={`w-11 h-11 rounded-xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-md ring-2 ring-white/25`}>
+          <div className={`w-10 h-10 rounded-xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-sm ring-2 ring-white`}>
             <span className="text-sm font-bold text-white leading-none">{leadInits}</span>
           </div>
 
-          {/* Info block — Name row + Contact row */}
+          {/* Name + contact info */}
           <div className="flex-1 min-w-0">
-
-            {/* Row 1: Name + Status badge + Company */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base font-bold text-white leading-tight">{fullName}</h1>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white/90 text-gray-800 leading-none">
-                {String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-base font-bold text-slate-900 leading-tight">{fullName}</h1>
+              {/* Status badge */}
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold leading-none"
+                style={{ background: `${statusColor}1a`, color: statusColor, border: `1px solid ${statusColor}44` }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               </span>
-              {lead.company_name && (
-                <span className="hidden sm:flex items-center gap-1.5 text-xs text-indigo-100">
-                  <Briefcase size={11} className="flex-shrink-0" />
-                  {String(lead.company_name)}
+              {/* Lead type tag */}
+              {lead.lead_type && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                  <Tag size={9} /> {String(lead.lead_type)}
                 </span>
               )}
             </div>
-
-            {/* Row 2: Email · Phone · Location */}
-            <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-4 mt-1 flex-wrap">
               {lead.email && (
-                <a
-                  href={`mailto:${lead.email}`}
-                  className="flex items-center gap-1.5 text-xs text-indigo-100 hover:text-white transition-colors"
-                >
-                  <Mail size={11} className="text-indigo-300 flex-shrink-0" />
-                  {String(lead.email)}
+                <a href={`mailto:${lead.email}`} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors">
+                  <Mail size={11} className="text-slate-400 flex-shrink-0" /> {String(lead.email)}
                 </a>
               )}
               {lead.phone_number && (
-                <a
-                  href={`tel:${lead.phone_number}`}
-                  className="flex items-center gap-1.5 text-xs text-indigo-100 hover:text-white transition-colors"
-                >
-                  <Phone size={11} className="text-indigo-300 flex-shrink-0" />
-                  {formatPhoneNumber(String(lead.phone_number))}
+                <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors">
+                  <Phone size={11} className="text-slate-400 flex-shrink-0" /> {formatPhoneNumber(String(lead.phone_number))}
                 </a>
               )}
               {location && (
-                <span className="hidden md:flex items-center gap-1.5 text-xs text-indigo-200">
-                  <MapPin size={11} className="text-indigo-300 flex-shrink-0" />
-                  {location}
+                <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
+                  <MapPin size={11} className="flex-shrink-0" /> {location}
+                </span>
+              )}
+              {lead.company_name && (
+                <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-400">
+                  <Briefcase size={11} className="flex-shrink-0" /> {String(lead.company_name)}
+                </span>
+              )}
+              {(lead.assigned_name as string | undefined) && (
+                <span className="hidden lg:flex items-center gap-1.5 text-xs text-slate-400">
+                  <UserCheck size={11} className="flex-shrink-0" /> {lead.assigned_name as string}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Actions — pinned right, all vertically centered */}
+          {/* Action buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
+
+            {/* Add Note */}
+            <button
+              onClick={() => scrollTo(activityRef)}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+            >
+              <MessageSquare size={12} /> Add Note
+            </button>
 
             {/* Change Status */}
             <div className="relative">
               <button
                 onClick={() => { setShowStatusDropdown(s => !s); setShowMoreMenu(false) }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/25 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors"
               >
-                Change Status <ChevronDown size={12} />
+                <Zap size={12} className="text-indigo-500" /> Status <ChevronDown size={11} />
               </button>
               {showStatusDropdown && statuses && (
                 <div
@@ -630,7 +753,7 @@ export function CrmLeadDetail() {
             {/* Edit */}
             <button
               onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-indigo-700 hover:bg-indigo-50 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
             >
               <Pencil size={12} /> Edit
             </button>
@@ -639,7 +762,7 @@ export function CrmLeadDetail() {
             <div className="relative">
               <button
                 onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-indigo-200 hover:text-white hover:bg-white/10 transition-colors"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
               >
                 <MoreVertical size={15} />
               </button>
@@ -648,9 +771,16 @@ export function CrmLeadDetail() {
                   className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1"
                   onMouseLeave={() => setShowMoreMenu(false)}
                 >
-                  <button className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors">
+                  <button onClick={() => { setShowMoreMenu(false); scrollTo(activityRef) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors sm:hidden">
+                    <MessageSquare size={13} /> Add Note
+                  </button>
+                  <button onClick={() => { setShowMoreMenu(false); scrollTo(lendersRef) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors">
                     <Send size={13} /> Send to Lender
                   </button>
+                  <button onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors">
+                    <FileDown size={13} /> Download Lead
+                  </button>
+                  <div className="h-px bg-slate-100 my-1" />
                   <button className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors">
                     <Trash2 size={13} /> Delete Lead
                   </button>
@@ -659,88 +789,29 @@ export function CrmLeadDetail() {
             </div>
           </div>
         </div>
-
-        {/* ── Meta strip: back + info pills ── */}
-        <div className="flex items-center gap-2 px-5 py-2 bg-black/10 flex-wrap">
-
-          {/* Back link */}
-          <button
-            onClick={() => navigate('/crm/leads')}
-            className="flex items-center gap-1 text-[11px] font-medium text-indigo-200 hover:text-white transition-colors mr-1"
-          >
-            <ArrowLeft size={11} /> Back
-          </button>
-
-          <div className="w-px h-3.5 bg-white/20 flex-shrink-0" />
-
-          {/* Info pills */}
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-medium text-white">
-            <Hash size={9} className="text-indigo-300" /> {lead.id}
-          </span>
-          {lead.lead_type && (
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-medium text-white">
-              <Tag size={9} className="text-indigo-300" /> {String(lead.lead_type)}
-            </span>
-          )}
-          {(lead.assigned_name as string | undefined) && (
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-medium text-white">
-              <UserCheck size={9} className="text-indigo-300" /> {lead.assigned_name as string}
-            </span>
-          )}
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-medium text-white">
-            <Calendar size={9} className="text-indigo-300" />
-            {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-          {(lead.created_by_name as string | undefined) && (
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-medium text-white">
-              <User size={9} className="text-indigo-300" /> {lead.created_by_name as string}
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* ── Tab Bar ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 bg-white rounded-xl border border-slate-200 p-1 mb-4 shadow-sm">
-        {TABS.map(({ key, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-1 justify-center ${
-              activeTab === key
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            }`}
-          >
-            <Icon size={13} /> {key}
-          </button>
-        ))}
-      </div>
+      {/* ══════════════════════════════════════════════════════════════════
+          TWO-COLUMN BODY
+      ══════════════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col lg:flex-row gap-6 px-5 py-6 max-w-[1600px] mx-auto">
 
-      {/* ── Overview Tab ───────────────────────────────────────────────────── */}
-      {activeTab === 'Overview' && (
-        <div className="space-y-4">
+        {/* ── LEFT COLUMN ─────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-5">
 
-          {/* ── All Lead Fields — driven by lead-fields configuration ── */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-
-            {/* Dynamic fields (column + EAV) in read-only mode */}
-            <div className="px-5 py-4">
-              <DynamicFieldForm
-                register={(() => {}) as never}
-                defaultValues={lead as Record<string, unknown>}
-                readOnly
-              />
-            </div>
-
-            <div className="h-px bg-slate-100 mx-5" />
-
-            {/* Record metadata */}
-            <div className="px-5 pt-4 pb-4">
+          {/* 1. Lead Information (Dynamic Fields) */}
+          <CollapsibleSection title="Lead Information" icon={ClipboardList} defaultOpen={true}>
+            <DynamicFieldForm
+              register={(() => {}) as never}
+              defaultValues={lead as Record<string, unknown>}
+              readOnly
+            />
+            {/* Record metadata footer */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Record Info</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-3.5">
                 {[
                   { label: 'Lead ID',      value: `#${lead.id}` },
-                  { label: 'Status',       value: String(lead.lead_status).replace(/_/g, ' ') },
                   { label: 'Created',      value: new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
                   { label: 'Created By',   value: (lead.created_by_name as string | undefined) },
                   { label: 'Last Updated', value: lead.updated_at ? new Date(String(lead.updated_at)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null },
@@ -748,75 +819,76 @@ export function CrmLeadDetail() {
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-1">{label}</p>
-                    {value
-                      ? <p className="text-sm font-medium text-slate-800 leading-snug">{String(value)}</p>
-                      : <p className="text-sm text-slate-300">—</p>
-                    }
+                    {value ? <p className="text-sm font-medium text-slate-800 leading-snug">{String(value)}</p> : <p className="text-sm text-slate-300">—</p>}
                   </div>
                 ))}
               </div>
             </div>
+          </CollapsibleSection>
+
+          {/* 2. Activity Timeline */}
+          <div ref={activityRef}>
+            <CollapsibleSection
+              title="Activity & Notes"
+              icon={Clock}
+              defaultOpen={true}
+              headerRight={
+                <button
+                  onClick={() => scrollTo(activityRef)}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                >
+                  <Plus size={12} /> Add Note
+                </button>
+              }
+            >
+              <ActivityTimeline leadId={leadId} />
+            </CollapsibleSection>
           </div>
 
-          {/* ── Merchant Portal ── */}
-          <MerchantPortalSection leadId={leadId} />
+          {/* 3. Documents */}
+          <CollapsibleSection title="Documents" icon={FolderOpen} defaultOpen={false}>
+            <DocumentsPanel leadId={leadId} />
+          </CollapsibleSection>
+
         </div>
-      )}
 
-      {/* ── Activity Tab ───────────────────────────────────────────────────── */}
-      {activeTab === 'Activity' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
-            <Clock size={14} className="text-indigo-500" />
-            <h3 className="text-sm font-semibold text-slate-700">Activity Timeline</h3>
-          </div>
-          <div className="p-5">
-            <ActivityTimeline leadId={leadId} />
-          </div>
-        </div>
-      )}
+        {/* ── RIGHT SIDEBAR ────────────────────────────────────────────── */}
+        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 space-y-4 lg:sticky lg:top-[108px] lg:self-start lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:pb-4">
 
-      {/* ── Documents Tab ──────────────────────────────────────────────────── */}
-      {activeTab === 'Documents' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
-            <div className="flex items-center gap-2">
-              <FolderOpen size={14} className="text-indigo-500" />
-              <h3 className="text-sm font-semibold text-slate-700">Documents</h3>
-            </div>
-          </div>
-          <div className="p-5">
-            <DocumentsTab leadId={leadId} />
-          </div>
-        </div>
-      )}
+          {/* Lead Summary */}
+          <SidebarCard title="Lead Summary" icon={ClipboardList}>
+            <LeadSummaryWidget lead={lead} statuses={statuses} />
+          </SidebarCard>
 
-      {/* ── Lenders Tab ────────────────────────────────────────────────────── */}
-      {activeTab === 'Lenders' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
-            <Building2 size={14} className="text-indigo-500" />
-            <h3 className="text-sm font-semibold text-slate-700">Lender Communications</h3>
-          </div>
-          <div className="p-5">
-            <LendersTab leadId={leadId} />
-          </div>
-        </div>
-      )}
+          {/* Quick Actions */}
+          <SidebarCard title="Quick Actions" icon={Zap} iconColor="text-amber-600" iconBg="bg-amber-50">
+            <QuickActionsWidget
+              leadId={leadId}
+              onNavigateEdit={() => navigate(`/crm/leads/${leadId}/edit`)}
+              onScrollToActivity={() => scrollTo(activityRef)}
+              onScrollToLenders={() => scrollTo(lendersRef)}
+            />
+          </SidebarCard>
 
-      {/* ── Approvals Tab ──────────────────────────────────────────────────── */}
-      {activeTab === 'Approvals' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
-            <CheckSquare size={14} className="text-indigo-500" />
-            <h3 className="text-sm font-semibold text-slate-700">Approvals</h3>
+          {/* Lender Submissions */}
+          <div ref={lendersRef}>
+            <SidebarCard title="Lender Submissions" icon={Building2} iconColor="text-amber-600" iconBg="bg-amber-50">
+              <LendersPanel leadId={leadId} />
+            </SidebarCard>
           </div>
-          <div className="p-5">
+
+          {/* Approvals */}
+          <SidebarCard title="Approvals" icon={CheckSquare} iconColor="text-emerald-600" iconBg="bg-emerald-50">
             <ApprovalsSection leadId={leadId} />
-          </div>
-        </div>
-      )}
+          </SidebarCard>
 
+          {/* Merchant Portal */}
+          <SidebarCard title="Merchant Portal" icon={ExternalLink} iconColor="text-sky-600" iconBg="bg-sky-50">
+            <MerchantPortalSection leadId={leadId} />
+          </SidebarCard>
+
+        </div>
+      </div>
     </div>
   )
 }
