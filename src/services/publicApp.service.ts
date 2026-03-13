@@ -9,6 +9,7 @@ export interface PublicCompany {
   logo_url: string | null
   website_url: string | null
   support_email: string | null
+  company_phone?: string
 }
 
 export interface PublicFormField {
@@ -37,6 +38,8 @@ export interface SubmitResult {
   merchant_url: string
   lead_id: number
   message: string
+  signature_url: string | null
+  pdf_url: string
 }
 
 export interface MerchantLeadData {
@@ -71,7 +74,14 @@ export const publicAppService = {
   },
 
   submitApplication(affiliateCode: string, formData: Record<string, string>) {
-    return http.post<{ success: boolean; data: SubmitResult } & SubmitResult>(`/public/apply/${affiliateCode}`, formData)
+    return http.post<{ success: boolean; data: SubmitResult } & SubmitResult>(
+      `/public/apply/${affiliateCode}`,
+      formData,
+    )
+  },
+
+  renderApplicationPdf(leadToken: string): string {
+    return `${API}/public/apply/${leadToken}/pdf`
   },
 
   // ── Merchant Portal ───────────────────────────────────────────────────────
@@ -87,8 +97,10 @@ export const publicAppService = {
     const fd = new FormData()
     fd.append('document', file)
     fd.append('document_type', docType)
-    return http.post(`/public/merchant/${token}/upload`, fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return http.post<{ success: boolean; data: { filename: string; url: string } }>(
+      `/public/merchant/${token}/upload`,
+      fd,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
   },
 }
