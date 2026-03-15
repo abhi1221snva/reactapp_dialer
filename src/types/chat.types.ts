@@ -93,3 +93,39 @@ export interface PusherPresenceEvent {
   status: PresenceStatus
   last_seen_at: string
 }
+
+// ─── Call events ──────────────────────────────────────────────────────────────
+
+export interface CallData {
+  call_id: string
+  conversation_uuid: string
+  conversation_type: 'direct' | 'group'
+  conversation_name: string
+  call_type: 'audio' | 'video'
+  is_group_call: boolean
+  caller: { id: number; name: string }
+  participants: Array<{ id: number; name: string }>
+  active_participants: Array<{ id: number; name: string }>
+  started_at: string
+}
+
+export interface CallSignalData {
+  call_id: string
+  conversation_uuid: string
+  signal_type: 'offer' | 'answer' | 'ice-candidate'
+  signal_data: RTCSessionDescriptionInit | RTCIceCandidateInit
+  from_user: { id: number; name: string }
+}
+
+export interface CallAcceptedData {
+  call_id: string
+  conversation_uuid: string
+  accepted_by: { id: number; name: string }
+}
+
+export interface CallEndedData {
+  call_id: string
+  conversation_uuid: string
+  ended_by: { id: number; name: string }
+  reason: 'declined' | 'ended' | 'busy' | 'no_answer'
+}

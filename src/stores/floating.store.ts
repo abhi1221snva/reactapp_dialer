@@ -7,8 +7,10 @@ interface FloatingState {
   // ── Open/close panels ──────────────────────────────────────────────────────
   chatOpen: boolean
   phoneOpen: boolean
+  smsOpen: boolean
   setChatOpen: (v: boolean) => void
   setPhoneOpen: (v: boolean) => void
+  setSmsOpen: (v: boolean) => void
 
   // ── Phone FAB visual ───────────────────────────────────────────────────────
   phoneFabBg: string
@@ -29,18 +31,30 @@ interface FloatingState {
   // ── Chat unread ────────────────────────────────────────────────────────────
   chatUnread: number
   setChatUnread: (n: number) => void
+
+  // ── SMS unread ─────────────────────────────────────────────────────────────
+  smsUnread: number
+  setSmsUnread: (n: number) => void
 }
 
 export const useFloatingStore = create<FloatingState>((set) => ({
   chatOpen: false,
   phoneOpen: false,
+  smsOpen: false,
   setChatOpen: (v) => set((state) => ({
     chatOpen: v,
     phoneOpen: v ? false : state.phoneOpen,
+    smsOpen:  v ? false : state.smsOpen,
   })),
   setPhoneOpen: (v) => set((state) => ({
     phoneOpen: v,
     chatOpen: v ? false : state.chatOpen,
+    smsOpen:  v ? false : state.smsOpen,
+  })),
+  setSmsOpen: (v) => set((state) => ({
+    smsOpen:   v,
+    chatOpen:  v ? false : state.chatOpen,
+    phoneOpen: v ? false : state.phoneOpen,
   })),
 
   phoneFabBg: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
@@ -59,4 +73,7 @@ export const useFloatingStore = create<FloatingState>((set) => ({
 
   chatUnread: 0,
   setChatUnread: (n) => set({ chatUnread: n }),
+
+  smsUnread: 0,
+  setSmsUnread: (n) => set({ smsUnread: n }),
 }))

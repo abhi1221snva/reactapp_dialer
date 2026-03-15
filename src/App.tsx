@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthStore } from './stores/auth.store'
 import { usePusher } from './hooks/usePusher'
 
@@ -106,6 +106,11 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <Navigate to={user?.level === 7 ? '/crm/dashboard' : '/dashboard'} replace />
 }
 
+function LegacyMerchantRedirect() {
+  const { token } = useParams<{ token: string }>()
+  return <Navigate to={`/merchant/${token}`} replace />
+}
+
 function AppWithPusher() {
   usePusher()
   return <AppLayout />
@@ -117,6 +122,8 @@ export default function App() {
       {/* Fully public routes — no auth, no layout wrapper */}
       <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
       <Route path="/merchant/:leadToken"  element={<MerchantPage />} />
+      {/* Legacy merchant URL — redirect to canonical form */}
+      <Route path="/merchant/customer/app/index/:clientId/:leadId/:token" element={<LegacyMerchantRedirect />} />
 
       {/* Auth routes (redirect to dashboard if already logged in) */}
       <Route element={<PublicRoute><AuthLayout /></PublicRoute>}>

@@ -6,17 +6,18 @@ import {
   Send, Plus, Search, Users, Hash, Paperclip, Smile,
   CheckCheck, Check, MoreVertical, X, Download, Image,
   FileText, MessagesSquare, Phone, Video, ChevronDown,
+  PhoneOff, Mic, MicOff, VideoOff,
 } from 'lucide-react'
 import { chatService } from '../../services/chat.service'
-import { NewConversationModal } from '../../components/chat/NewConversationModal'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { initials } from '../../utils/format'
 import toast from 'react-hot-toast'
 import type {
-  Conversation, ChatMessage, TypingInfo,
+  Conversation, ChatMessage, TypingInfo, SearchUser,
   PusherNewMessageEvent, PusherMessageReadEvent,
   PusherTypingEvent, PusherPresenceEvent,
+  CallData, CallSignalData, CallAcceptedData, CallEndedData,
 } from '../../types/chat.types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -279,6 +280,225 @@ const MessageBubble = memo(function MessageBubble({
   )
 })
 
+function formatDuration(s: number): string {
+  const m = Math.floor(s / 60).toString().padStart(2, '0')
+  const sec = (s % 60).toString().padStart(2, '0')
+  return `${m}:${sec}`
+}
+
+// ─── Call session type ────────────────────────────────────────────────────────
+
+interface CallSession {
+  callId: string
+  convUuid: string
+  callType: 'audio' | 'video'
+  remoteUserId: number
+  remoteName: string
+  isCaller: boolean
+}
+
+type CallPhase = 'idle' | 'calling' | 'incoming' | 'active'
+
+// ─── CallingOverlay ───────────────────────────────────────────────────────────
+
+function CallingOverlay({ session, onCancel }: { session: CallSession; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(15,23,42,0.96)' }}>
+      <div className="text-center">
+        <div className={cn(
+          'w-28 h-28 rounded-full flex items-center justify-center text-white text-4xl font-bold mx-auto mb-6',
+          avatarBg(session.remoteUserId),
+        )} style={{ animation: 'pulse 2s infinite' }}>
+          {initials(session.remoteName)}
+        </div>
+        <p className="text-slate-400 text-sm mb-1">{session.callType === 'video' ? 'Video call' : 'Audio call'}</p>
+        <h3 className="text-2xl font-bold text-white mb-2">{session.remoteName}</h3>
+        <p className="text-slate-500 mb-10 animate-pulse">Calling…</p>
+        <button
+          onClick={onCancel}
+          className="w-16 h-16 rounded-full bg-rose-500 flex items-center justify-center text-white hover:bg-rose-600 mx-auto transition-colors shadow-lg"
+          title="Cancel call"
+        >
+          <PhoneOff className="w-7 h-7" />
+        </button>
+        <p className="text-xs text-slate-500 mt-3">Cancel</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── IncomingCallOverlay ──────────────────────────────────────────────────────
+
+function IncomingCallOverlay({
+  session, onAccept, onDecline,
+}: { session: CallSession; onAccept: () => void; onDecline: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(15,23,42,0.96)' }}>
+      <div className="bg-slate-800 rounded-3xl p-8 w-80 text-center shadow-2xl border border-white/10">
+        <div className={cn(
+          'w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 animate-pulse',
+          avatarBg(session.remoteUserId),
+        )}>
+          {initials(session.remoteName)}
+        </div>
+        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">
+          Incoming {session.callType === 'video' ? 'Video' : 'Audio'} Call
+        </p>
+        <h3 className="text-xl font-bold text-white mb-8">{session.remoteName}</h3>
+        <div className="flex items-center justify-center gap-10">
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={onDecline}
+              className="w-16 h-16 rounded-full bg-rose-500 flex items-center justify-center text-white hover:bg-rose-600 transition-colors shadow-lg"
+            >
+              <PhoneOff className="w-7 h-7" />
+            </button>
+            <span className="text-xs text-slate-400">Decline</span>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={onAccept}
+              className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center text-white hover:bg-emerald-600 transition-colors shadow-lg"
+            >
+              <Phone className="w-7 h-7" />
+            </button>
+            <span className="text-xs text-slate-400">Accept</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── ActiveCallOverlay ────────────────────────────────────────────────────────
+
+interface ActiveCallOverlayProps {
+  session: CallSession
+  isMuted: boolean
+  isCameraOff: boolean
+  callSeconds: number
+  onMute: () => void
+  onCamera: () => void
+  onEnd: () => void
+  remoteVideoRef: React.RefObject<HTMLVideoElement>
+  localVideoRef: React.RefObject<HTMLVideoElement>
+  remoteAudioRef: React.RefObject<HTMLAudioElement>
+}
+
+function ActiveCallOverlay({
+  session, isMuted, isCameraOff, callSeconds,
+  onMute, onCamera, onEnd,
+  remoteVideoRef, localVideoRef, remoteAudioRef,
+}: ActiveCallOverlayProps) {
+  const isVideo = session.callType === 'video'
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: isVideo ? '#000' : 'rgba(15,23,42,0.97)' }}>
+      {isVideo ? (
+        <>
+          {/* Remote video — full screen */}
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          {/* Local video — PiP */}
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="absolute top-4 right-4 w-36 h-24 rounded-xl object-cover border-2 border-white/20 z-10 shadow-lg"
+          />
+          {/* Header */}
+          <div className="relative z-20 text-center pt-8 pb-4">
+            <p className="text-white font-semibold text-lg">{session.remoteName}</p>
+            <p className="text-white/60 text-sm mt-0.5">{formatDuration(callSeconds)}</p>
+          </div>
+          <div className="flex-1" />
+        </>
+      ) : (
+        <>
+          {/* Hidden audio element */}
+          <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+          <div className="flex-1 flex flex-col items-center justify-center gap-5">
+            <div className={cn(
+              'w-28 h-28 rounded-full flex items-center justify-center text-white text-4xl font-bold shadow-2xl',
+              avatarBg(session.remoteUserId),
+            )}>
+              {initials(session.remoteName)}
+            </div>
+            <div className="text-center">
+              <h3 className="text-2xl font-bold text-white">{session.remoteName}</h3>
+              <p className="text-slate-400 mt-1 tabular-nums">{formatDuration(callSeconds)}</p>
+            </div>
+            {/* Animated waveform */}
+            <div className="flex items-end gap-1.5 h-10">
+              {[4, 7, 5, 8, 3, 6, 4, 7, 5].map((h, i) => (
+                <div
+                  key={i}
+                  className="w-1.5 rounded-full animate-bounce"
+                  style={{
+                    height: `${h * 4}px`,
+                    backgroundColor: isMuted ? '#475569' : '#818cf8',
+                    animationDelay: `${i * 0.08}s`,
+                    animationDuration: '0.8s',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Controls */}
+      <div className="relative z-20 flex items-center justify-center gap-5 pb-12 pt-4">
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={onMute}
+            className={cn(
+              'w-14 h-14 rounded-full flex items-center justify-center transition-colors',
+              isMuted ? 'bg-rose-500 text-white' : 'bg-white/20 text-white hover:bg-white/30',
+            )}
+            title={isMuted ? 'Unmute' : 'Mute'}
+          >
+            {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          </button>
+          <span className="text-xs text-white/50">{isMuted ? 'Unmute' : 'Mute'}</span>
+        </div>
+
+        {isVideo && (
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={onCamera}
+              className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center transition-colors',
+                isCameraOff ? 'bg-rose-500 text-white' : 'bg-white/20 text-white hover:bg-white/30',
+              )}
+              title={isCameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
+            >
+              {isCameraOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
+            </button>
+            <span className="text-xs text-white/50">{isCameraOff ? 'Camera On' : 'Camera Off'}</span>
+          </div>
+        )}
+
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={onEnd}
+            className="w-16 h-16 rounded-full bg-rose-500 flex items-center justify-center text-white hover:bg-rose-600 transition-colors shadow-lg"
+            title="End call"
+          >
+            <PhoneOff className="w-7 h-7" />
+          </button>
+          <span className="text-xs text-white/50">End</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── EmojiPicker ─────────────────────────────────────────────────────────────
 
 interface EmojiPickerProps {
@@ -307,6 +527,164 @@ function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   )
 }
 
+// ─── CreateGroupModal ─────────────────────────────────────────────────────────
+
+interface CreateGroupModalProps {
+  members: SearchUser[]
+  onClose: () => void
+  onCreated: (uuid: string) => void
+}
+
+function CreateGroupModal({ members, onClose, onCreated }: CreateGroupModalProps) {
+  const [groupName, setGroupName] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [creating, setCreating] = useState(false)
+
+  const filtered = members.filter(m =>
+    m.name.toLowerCase().includes(memberSearch.toLowerCase())
+  )
+
+  const toggle = (id: number) =>
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  const handleCreate = async () => {
+    if (!groupName.trim() || selected.size < 1) return
+    setCreating(true)
+    try {
+      const res = await chatService.createGroup(groupName.trim(), Array.from(selected))
+      onCreated(res.data.data.uuid)
+    } catch {
+      toast.error('Failed to create group')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Create Group</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Name your group and add members</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-4 flex-1 overflow-hidden">
+
+          {/* Group name */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Group Name</label>
+            <input
+              autoFocus
+              type="text"
+              placeholder="e.g. Sales Team, Support Squad…"
+              value={groupName}
+              onChange={e => setGroupName(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 placeholder-slate-400"
+            />
+          </div>
+
+          {/* Member picker */}
+          <div className="flex flex-col gap-2 min-h-0">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-600">Members</label>
+              {selected.size > 0 && (
+                <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  {selected.size} selected
+                </span>
+              )}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search members…"
+                value={memberSearch}
+                onChange={e => setMemberSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-indigo-300 text-slate-700 placeholder-slate-400"
+              />
+            </div>
+            <div className="overflow-y-auto max-h-52 flex flex-col gap-0.5 pr-0.5">
+              {filtered.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-6">No members found</p>
+              )}
+              {filtered.map(m => {
+                const isChecked = selected.has(m.id)
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => toggle(m.id)}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left w-full',
+                      isChecked ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                    )}
+                  >
+                    <div className={cn(
+                      'w-4 h-4 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                      isChecked ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300',
+                    )}>
+                      {isChecked && (
+                        <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className={cn(
+                      'w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0',
+                      avatarBg(m.id),
+                    )}>
+                      {initials(m.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn('text-sm font-medium truncate', isChecked ? 'text-indigo-700' : 'text-slate-700')}>
+                        {m.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 truncate">{m.email}</p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!groupName.trim() || selected.size < 1 || creating}
+            className="px-5 py-2 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+          >
+            {creating && <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+            {creating ? 'Creating…' : 'Create Group'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function TeamChat() {
@@ -320,8 +698,9 @@ export function TeamChat() {
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingInfo[]>>(new Map())
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [showNewModal, setShowNewModal] = useState(false)
   const [sidebarSearch, setSidebarSearch] = useState('')
+  const [teamMembers, setTeamMembers] = useState<SearchUser[]>([])
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
 
   // ── Input state ──
   const [input, setInput] = useState('')
@@ -329,6 +708,13 @@ export function TeamChat() {
   const [showEmoji, setShowEmoji] = useState(false)
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  // ── Call state ──
+  const [callPhase, setCallPhase] = useState<CallPhase>('idle')
+  const [callSession, setCallSession] = useState<CallSession | null>(null)
+  const [isMuted, setIsMuted] = useState(false)
+  const [isCameraOff, setIsCameraOff] = useState(false)
+  const [callSeconds, setCallSeconds] = useState(0)
 
   // ── Refs ──
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -340,6 +726,22 @@ export function TeamChat() {
   const typingTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const typingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollRestorationRef = useRef<number>(0)
+
+  // ── Call refs (stable across re-renders for Pusher callbacks) ──
+  const callPhaseRef = useRef<CallPhase>('idle')
+  const callSessionRef = useRef<CallSession | null>(null)
+  const peerRef = useRef<RTCPeerConnection | null>(null)
+  const localStreamRef = useRef<MediaStream | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteAudioRef = useRef<HTMLAudioElement>(null)
+  const pendingIceRef = useRef<RTCIceCandidateInit[]>([])
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null)
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Sync state → refs
+  useEffect(() => { callPhaseRef.current = callPhase }, [callPhase])
+  useEffect(() => { callSessionRef.current = callSession }, [callSession])
 
   const selectedConv = conversations.find(c => c.uuid === selectedUuid) ?? null
 
@@ -360,6 +762,27 @@ export function TeamChat() {
   useEffect(() => {
     loadConversations()
   }, [loadConversations])
+
+  // ─── Load all team members ───────────────────────────────────────────────
+
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      const res = await chatService.searchUsers('')
+      const all: SearchUser[] = Array.isArray(res.data?.data) ? res.data.data : []
+      const members = all.filter(m => m.id !== user?.id)
+      setTeamMembers(members)
+      // Seed onlineStatus with API-reported statuses so ChatHeader shows
+      // the correct status before any Pusher presence.changed events arrive.
+      // Pusher events will override these as they come in.
+      setOnlineStatus(prev => {
+        const updated = new Map(prev)
+        members.forEach(m => { if (!updated.has(m.id)) updated.set(m.id, m.status) })
+        return updated
+      })
+    } catch { /* silent */ }
+  }, [user?.id])
+
+  useEffect(() => { loadTeamMembers() }, [loadTeamMembers])
 
   // ─── Load messages ───────────────────────────────────────────────────────
 
@@ -480,6 +903,99 @@ export function TeamChat() {
 
     userChannel.bind('presence.changed', (data: PusherPresenceEvent) => {
       setOnlineStatus(prev => new Map(prev).set(data.user_id, data.status))
+    })
+
+    // ── Call events ───────────────────────────────────────────────────────────
+
+    userChannel.bind('call.incoming', (data: CallData) => {
+      if (callPhaseRef.current !== 'idle') {
+        // We're busy — auto-decline
+        chatService.endCall(data.conversation_uuid, data.call_id, 'busy').catch(() => {})
+        return
+      }
+      const session: CallSession = {
+        callId: data.call_id,
+        convUuid: data.conversation_uuid,
+        callType: data.call_type,
+        remoteUserId: data.caller.id,
+        remoteName: data.caller.name,
+        isCaller: false,
+      }
+      callSessionRef.current = session; setCallSession(session)
+      callPhaseRef.current = 'incoming'; setCallPhase('incoming')
+    })
+
+    userChannel.bind('call.accepted', (data: CallAcceptedData) => {
+      if (callPhaseRef.current !== 'calling') return
+      const session = callSessionRef.current
+      if (!session) return
+      ;(async () => {
+        try {
+          const iceRes = await chatService.getIceServers()
+          const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+          const peer = await buildPeer(session, iceServers)
+          callPhaseRef.current = 'active'; setCallPhase('active')
+          startCallTimer()
+          const offer = await peer.createOffer()
+          await peer.setLocalDescription(offer)
+          await chatService.callSignal(session.convUuid, {
+            call_id: session.callId,
+            signal_type: 'offer',
+            signal_data: offer as RTCSessionDescriptionInit,
+            target_user_id: data.accepted_by.id,
+          })
+        } catch {
+          toast.error('Call setup failed')
+          cleanupCall()
+        }
+      })()
+    })
+
+    userChannel.bind('call.signal', (data: CallSignalData) => {
+      const session = callSessionRef.current
+      if (!session || data.call_id !== session.callId) return
+      ;(async () => {
+        const peer = peerRef.current
+        if (data.signal_type === 'offer') {
+          if (!peer) {
+            // Store offer until we accept and build peer
+            pendingOfferRef.current = data.signal_data as RTCSessionDescriptionInit
+          } else {
+            await peer.setRemoteDescription(data.signal_data as RTCSessionDescriptionInit)
+            for (const c of pendingIceRef.current) { await peer.addIceCandidate(c).catch(() => {}) }
+            pendingIceRef.current = []
+            const answer = await peer.createAnswer()
+            await peer.setLocalDescription(answer)
+            await chatService.callSignal(session.convUuid, {
+              call_id: session.callId,
+              signal_type: 'answer',
+              signal_data: answer as RTCSessionDescriptionInit,
+              target_user_id: data.from_user.id,
+            })
+          }
+        } else if (data.signal_type === 'answer') {
+          if (peer) await peer.setRemoteDescription(data.signal_data as RTCSessionDescriptionInit).catch(() => {})
+        } else if (data.signal_type === 'ice-candidate') {
+          const candidate = data.signal_data as RTCIceCandidateInit
+          if (peer?.remoteDescription) {
+            await peer.addIceCandidate(candidate).catch(() => {})
+          } else {
+            pendingIceRef.current.push(candidate)
+          }
+        }
+      })()
+    })
+
+    userChannel.bind('call.ended', (data: CallEndedData) => {
+      const session = callSessionRef.current
+      if (!session || data.call_id !== session.callId) return
+      const msg = data.reason === 'declined'
+        ? `${data.ended_by.name} declined the call`
+        : data.reason === 'busy'
+        ? `${data.ended_by.name} is busy`
+        : 'Call ended'
+      toast(msg, { icon: '📞' })
+      cleanupCall()
     })
 
     pusherRef.current = pusher
@@ -656,13 +1172,159 @@ export function TeamChat() {
     ))
   }, [])
 
-  // ─── New conversation ────────────────────────────────────────────────────
+  // ─── Open DM with a team member ──────────────────────────────────────────
 
-  const handleNewConv = useCallback(async (uuid: string) => {
-    setShowNewModal(false)
+  const openDmWith = useCallback(async (memberId: number) => {
+    try {
+      const res = await chatService.getOrCreateDirect(memberId)
+      const { uuid } = res.data.data
+      await loadConversations()
+      selectConversation(uuid)
+    } catch {
+      toast.error('Could not open conversation')
+    }
+  }, [loadConversations, selectConversation])
+
+  const handleGroupCreated = useCallback(async (uuid: string) => {
+    setShowCreateGroup(false)
     await loadConversations()
     selectConversation(uuid)
   }, [loadConversations, selectConversation])
+
+  // ─── Call helpers ────────────────────────────────────────────────────────
+
+  const cleanupCall = useCallback(() => {
+    if (peerRef.current) { peerRef.current.close(); peerRef.current = null }
+    if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null }
+    if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
+    pendingIceRef.current = []
+    pendingOfferRef.current = null
+    callPhaseRef.current = 'idle'; setCallPhase('idle')
+    callSessionRef.current = null; setCallSession(null)
+    setCallSeconds(0); setIsMuted(false); setIsCameraOff(false)
+  }, [])
+
+  const startCallTimer = useCallback(() => {
+    setCallSeconds(0)
+    if (callTimerRef.current) clearInterval(callTimerRef.current)
+    callTimerRef.current = setInterval(() => setCallSeconds(s => s + 1), 1000)
+  }, [])
+
+  const buildPeer = useCallback(async (session: CallSession, iceServers: RTCIceServer[]) => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: session.callType === 'video',
+    })
+    localStreamRef.current = stream
+    if (session.callType === 'video' && localVideoRef.current) {
+      localVideoRef.current.srcObject = stream
+    }
+
+    const peer = new RTCPeerConnection({ iceServers })
+    peerRef.current = peer
+    stream.getTracks().forEach(t => peer.addTrack(t, stream))
+
+    peer.ontrack = (e) => {
+      const s = e.streams[0]
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = s
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = s
+    }
+
+    peer.onicecandidate = (e) => {
+      const sess = callSessionRef.current
+      if (e.candidate && sess) {
+        chatService.callSignal(sess.convUuid, {
+          call_id: sess.callId,
+          signal_type: 'ice-candidate',
+          signal_data: e.candidate.toJSON() as RTCIceCandidateInit,
+          target_user_id: sess.remoteUserId,
+        }).catch(() => {})
+      }
+    }
+
+    return peer
+  }, [])
+
+  const startCall = useCallback(async (callType: 'audio' | 'video') => {
+    if (!selectedConv || callPhaseRef.current !== 'idle') return
+    if (selectedConv.type !== 'direct') {
+      toast('Group calls coming soon!', { icon: '🎙️' }); return
+    }
+    const other = selectedConv.participants.find(p => p.user_id !== user?.id)
+    if (!other) return
+    try {
+      const res = await chatService.initiateCall(selectedConv.uuid, callType)
+      const data = res.data?.data
+      if (!data) return
+      const session: CallSession = {
+        callId: data.call_id,
+        convUuid: selectedConv.uuid,
+        callType,
+        remoteUserId: other.user_id,
+        remoteName: other.name,
+        isCaller: true,
+      }
+      callSessionRef.current = session; setCallSession(session)
+      callPhaseRef.current = 'calling'; setCallPhase('calling')
+    } catch {
+      toast.error('Failed to start call')
+    }
+  }, [selectedConv, user?.id])
+
+  const acceptIncomingCall = useCallback(async () => {
+    const session = callSessionRef.current
+    if (!session || callPhaseRef.current !== 'incoming') return
+    try {
+      await chatService.acceptCall(session.convUuid, session.callId, session.remoteUserId)
+      const iceRes = await chatService.getIceServers()
+      const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+      const peer = await buildPeer(session, iceServers)
+      callPhaseRef.current = 'active'; setCallPhase('active')
+      startCallTimer()
+      // If offer arrived before we accepted, process it now
+      if (pendingOfferRef.current) {
+        await peer.setRemoteDescription(pendingOfferRef.current)
+        for (const c of pendingIceRef.current) { await peer.addIceCandidate(c).catch(() => {}) }
+        pendingIceRef.current = []
+        const answer = await peer.createAnswer()
+        await peer.setLocalDescription(answer)
+        await chatService.callSignal(session.convUuid, {
+          call_id: session.callId,
+          signal_type: 'answer',
+          signal_data: answer as RTCSessionDescriptionInit,
+          target_user_id: session.remoteUserId,
+        })
+        pendingOfferRef.current = null
+      }
+    } catch {
+      toast.error('Failed to accept call')
+      cleanupCall()
+    }
+  }, [buildPeer, startCallTimer, cleanupCall])
+
+  const declineCall = useCallback(async () => {
+    const session = callSessionRef.current
+    if (!session) return
+    try { await chatService.endCall(session.convUuid, session.callId, 'declined') } catch {}
+    cleanupCall()
+  }, [cleanupCall])
+
+  const endCurrentCall = useCallback(async () => {
+    const session = callSessionRef.current
+    if (!session) return
+    try { await chatService.endCall(session.convUuid, session.callId, 'ended') } catch {}
+    cleanupCall()
+  }, [cleanupCall])
+
+  const toggleMute = useCallback(() => {
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !t.enabled })
+    setIsMuted(m => !m)
+  }, [])
+
+  const toggleCamera = useCallback(() => {
+    localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = !t.enabled })
+    setIsCameraOff(c => !c)
+  }, [])
 
   // ─── Presence dot ────────────────────────────────────────────────────────
 
@@ -684,106 +1346,167 @@ export function TeamChat() {
   const groupConvs = filteredConvs.filter(c => c.type === 'group')
   const currentTyping = selectedUuid ? (typingUsers.get(selectedUuid) ?? []) : []
 
+  // Team members filtered by search, sorted online-first then alphabetically
+  const statusOrder = (s: string) => s === 'online' ? 0 : s === 'away' ? 1 : s === 'busy' ? 2 : 3
+  const filteredMembers = teamMembers
+    .filter(m => m.name.toLowerCase().includes(sidebarSearch.toLowerCase()))
+    .sort((a, b) => {
+      const sa = onlineStatus.get(a.id) ?? a.status
+      const sb = onlineStatus.get(b.id) ?? b.status
+      const diff = statusOrder(sa) - statusOrder(sb)
+      return diff !== 0 ? diff : a.name.localeCompare(b.name)
+    })
+
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-full -m-6 overflow-hidden" style={{ minHeight: 0 }}>
 
       {/* ── Sidebar ── */}
-      <div className="w-72 flex-shrink-0 flex flex-col bg-slate-900 overflow-hidden">
+      <div className="w-72 flex-shrink-0 flex flex-col bg-white border-r border-slate-200 overflow-hidden">
 
         {/* Sidebar header */}
         <div className="px-4 pt-5 pb-3 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-base font-bold text-white">Team Chat</h1>
-            <button
-              onClick={() => setShowNewModal(true)}
-              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-              title="New conversation"
-            >
-              <Plus className="w-4 h-4 text-white" />
-            </button>
+            <h1 className="text-base font-bold text-slate-800">Team Chat</h1>
           </div>
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search conversations…"
-              className="w-full pl-8 pr-3 py-1.5 bg-white/10 text-white placeholder-slate-400 text-xs rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-white/30"
+              placeholder="Search people…"
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-100 text-slate-700 placeholder-slate-400 text-xs rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-indigo-300"
               value={sidebarSearch}
               onChange={e => setSidebarSearch(e.target.value)}
             />
           </div>
         </div>
 
-        {/* Conversations list */}
+        {/* Sidebar list */}
         <div className="flex-1 overflow-y-auto pb-4 space-y-0.5 px-2">
 
-          {/* Direct Messages section */}
-          {directConvs.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 pt-3 pb-1.5">
-                Direct Messages
+          {/* Groups / Channels section */}
+          <div>
+            <div className="flex items-center justify-between px-2 pt-3 pb-1.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                Groups
               </p>
-              {directConvs.map(conv => {
-                const otherParticipant = conv.participants.find(p => p.user_id !== user?.id)
+              <button
+                onClick={() => setShowCreateGroup(true)}
+                title="Create group"
+                className="w-5 h-5 rounded-md hover:bg-slate-100 flex items-center justify-center transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-500" />
+              </button>
+            </div>
+            {groupConvs.length === 0 && (
+              <button
+                onClick={() => setShowCreateGroup(true)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs text-slate-400 hover:bg-slate-50 hover:text-indigo-500 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create your first group
+              </button>
+            )}
+            {groupConvs.map(conv => (
+              <SidebarItem
+                key={conv.uuid}
+                conv={conv}
+                isActive={selectedUuid === conv.uuid}
+                dotClass=""
+                isDirect={false}
+                onClick={() => selectConversation(conv.uuid)}
+              />
+            ))}
+          </div>
+
+          {/* ── People ─────────────────────────────────────────────────────── */}
+          {filteredMembers.length > 0 && (
+            <div>
+              {/* Header with online / total counts */}
+              <div className="flex items-center justify-between px-2 pt-3 pb-1.5">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  People
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    {filteredMembers.filter(m => (onlineStatus.get(m.id) ?? m.status) === 'online').length} online
+                  </span>
+                  <span className="text-slate-400 text-[10px]">·</span>
+                  <span className="text-[10px] text-slate-400">{filteredMembers.length} total</span>
+                </div>
+              </div>
+              {filteredMembers.map(member => {
+                const effectiveStatus = (onlineStatus.get(member.id) ?? member.status) as string
+                const dotColor =
+                  effectiveStatus === 'online' ? 'bg-emerald-400' :
+                  effectiveStatus === 'away'   ? 'bg-amber-400'   :
+                  effectiveStatus === 'busy'   ? 'bg-rose-400'    : 'bg-slate-600'
+                // Find if we already have a DM open with this member
+                const existingDm = directConvs.find(c =>
+                  c.participants.some(p => p.user_id === member.id)
+                )
+                const isActive = existingDm ? selectedUuid === existingDm.uuid : false
                 return (
-                  <SidebarItem
-                    key={conv.uuid}
-                    conv={conv}
-                    isActive={selectedUuid === conv.uuid}
-                    dotClass={presenceDotClass(otherParticipant?.user_id)}
-                    isDirect
-                    onClick={() => selectConversation(conv.uuid)}
-                  />
+                  <button
+                    key={member.id}
+                    onClick={() => openDmWith(member.id)}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-all text-left',
+                      isActive ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                    )}
+                  >
+                    {/* Avatar with presence ring */}
+                    <div className="relative flex-shrink-0">
+                      <div className={cn(
+                        'w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold',
+                        avatarBg(member.id),
+                      )}>
+                        {initials(member.name)}
+                      </div>
+                      <span className={cn(
+                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white',
+                        dotColor,
+                      )} />
+                    </div>
+
+                    {/* Name + status */}
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        'text-sm font-medium truncate leading-tight',
+                        isActive ? 'text-indigo-700' : 'text-slate-700',
+                      )}>
+                        {member.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 capitalize leading-none mt-0.5">
+                        {effectiveStatus}
+                      </p>
+                    </div>
+
+                    {/* Unread badge from existing DM */}
+                    {existingDm && (existingDm.unread_count ?? 0) > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 bg-indigo-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
+                        {(existingDm.unread_count ?? 0) > 9 ? '9+' : existingDm.unread_count}
+                      </span>
+                    )}
+                  </button>
                 )
               })}
             </div>
           )}
 
-          {/* Groups section */}
-          {groupConvs.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 pt-3 pb-1.5">
-                Channels
-              </p>
-              {groupConvs.map(conv => (
-                <SidebarItem
-                  key={conv.uuid}
-                  conv={conv}
-                  isActive={selectedUuid === conv.uuid}
-                  dotClass=""
-                  isDirect={false}
-                  onClick={() => selectConversation(conv.uuid)}
-                />
-              ))}
-            </div>
-          )}
-
-          {filteredConvs.length === 0 && (
+          {filteredMembers.length === 0 && groupConvs.length === 0 && (
             <div className="flex flex-col items-center justify-center h-40 gap-2">
               <MessagesSquare className="w-8 h-8 text-slate-600" />
               <p className="text-xs text-slate-500 text-center px-4">
-                {sidebarSearch ? 'No matches found' : 'No conversations yet.\nClick + to start chatting.'}
+                {sidebarSearch ? 'No matches found' : 'No team members found.'}
               </p>
             </div>
           )}
         </div>
 
-        {/* Current user footer */}
-        <div className="flex-shrink-0 px-3 py-3 border-t border-white/10 flex items-center gap-2.5">
-          <div className="relative flex-shrink-0">
-            <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold', avatarBg(user?.id ?? 0))}>
-              {initials(user?.name ?? '')}
-            </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-900" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
-            <p className="text-[10px] text-slate-400 truncate">{user?.extension}</p>
-          </div>
-        </div>
       </div>
 
       {/* ── Chat window ── */}
@@ -800,16 +1523,8 @@ export function TeamChat() {
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold text-slate-800">Welcome to Team Chat</h2>
-              <p className="text-sm text-slate-400 mt-1">Select a conversation or start a new one</p>
+              <p className="text-sm text-slate-400 mt-1">Select a person from the list to start chatting</p>
             </div>
-            <button
-              onClick={() => setShowNewModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
-            >
-              <Plus className="w-4 h-4" />
-              New Conversation
-            </button>
           </div>
         ) : (
           <>
@@ -819,6 +1534,7 @@ export function TeamChat() {
               currentUserId={user?.id}
               onlineStatus={onlineStatus}
               avatarBg={avatarBg}
+              onCall={startCall}
             />
 
             {/* Messages area */}
@@ -974,11 +1690,38 @@ export function TeamChat() {
         )}
       </div>
 
-      {/* New conversation modal */}
-      {showNewModal && (
-        <NewConversationModal
-          onClose={() => setShowNewModal(false)}
-          onConversationCreated={handleNewConv}
+      {/* ── Create group modal ── */}
+      {showCreateGroup && (
+        <CreateGroupModal
+          members={teamMembers}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={handleGroupCreated}
+        />
+      )}
+
+      {/* ── Call overlays ── */}
+      {callPhase === 'calling' && callSession && (
+        <CallingOverlay session={callSession} onCancel={endCurrentCall} />
+      )}
+      {callPhase === 'incoming' && callSession && (
+        <IncomingCallOverlay
+          session={callSession}
+          onAccept={acceptIncomingCall}
+          onDecline={declineCall}
+        />
+      )}
+      {callPhase === 'active' && callSession && (
+        <ActiveCallOverlay
+          session={callSession}
+          isMuted={isMuted}
+          isCameraOff={isCameraOff}
+          callSeconds={callSeconds}
+          onMute={toggleMute}
+          onCamera={toggleCamera}
+          onEnd={endCurrentCall}
+          remoteVideoRef={remoteVideoRef}
+          localVideoRef={localVideoRef}
+          remoteAudioRef={remoteAudioRef}
         />
       )}
     </div>
@@ -1003,7 +1746,7 @@ const SidebarItem = memo(function SidebarItem({ conv, isActive, dotClass, isDire
       onClick={onClick}
       className={cn(
         'w-full flex items-start gap-2.5 px-2 py-2 rounded-xl transition-all text-left',
-        isActive ? 'bg-white/15' : 'hover:bg-white/8 hover:bg-white/[0.08]',
+        isActive ? 'bg-indigo-50' : 'hover:bg-slate-50',
       )}
     >
       {/* Avatar */}
@@ -1018,14 +1761,14 @@ const SidebarItem = memo(function SidebarItem({ conv, isActive, dotClass, isDire
           }
         </div>
         {isDirect && dotClass && (
-          <span className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900', dotClass)} />
+          <span className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white', dotClass)} />
         )}
       </div>
 
       {/* Text */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-1">
-          <p className={cn('text-sm truncate font-medium', isActive ? 'text-white' : 'text-slate-300')}>
+          <p className={cn('text-sm truncate font-medium', isActive ? 'text-indigo-700' : 'text-slate-700')}>
             {conv.name}
           </p>
           <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1037,7 +1780,7 @@ const SidebarItem = memo(function SidebarItem({ conv, isActive, dotClass, isDire
           </div>
         </div>
         {lastMsg && (
-          <p className="text-xs text-slate-400 truncate mt-0.5">
+          <p className="text-xs text-slate-500 truncate mt-0.5">
             {lastMsg.message_type === 'image' ? '📷 Image'
               : lastMsg.message_type === 'file' ? '📎 File'
               : lastMsg.body}
@@ -1055,9 +1798,10 @@ interface ChatHeaderProps {
   currentUserId: number | undefined
   onlineStatus: Map<number, string>
   avatarBg: (seed: number) => string
+  onCall?: (type: 'audio' | 'video') => void
 }
 
-const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus, avatarBg }: ChatHeaderProps) {
+const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus, avatarBg, onCall }: ChatHeaderProps) {
   const [showMembers, setShowMembers] = useState(false)
   const otherParticipant = conv.type === 'direct'
     ? conv.participants.find(p => p.user_id !== currentUserId)
@@ -1107,10 +1851,18 @@ const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus,
       <div className="flex items-center gap-1 flex-shrink-0">
         {conv.type === 'direct' && (
           <>
-            <button className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Audio call">
+            <button
+              onClick={() => onCall?.('audio')}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+              title="Audio call"
+            >
               <Phone className="w-4 h-4" />
             </button>
-            <button className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Video call">
+            <button
+              onClick={() => onCall?.('video')}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+              title="Video call"
+            >
               <Video className="w-4 h-4" />
             </button>
           </>

@@ -167,6 +167,18 @@ export const crmService = {
   getMcaMetrics: (data?: { period?: string; start_date?: string; end_date?: string }) =>
     api.post('/mca/dashboard-metrics', data || { period: 'month' }),
 
+  getRevenueTrend: () =>
+    api.get('/crm/analytics/revenue-trend'),
+
+  getPipelineVelocity: (period: AnalyticsPeriod = 'month') =>
+    api.get('/crm/analytics/pipeline-velocity', { params: { period } }),
+
+  getDealQuality: (period: AnalyticsPeriod = 'month') =>
+    api.get('/crm/analytics/deal-quality', { params: { period } }),
+
+  getStaleLeads: (days = 14) =>
+    api.get('/crm/analytics/stale-leads', { params: { days } }),
+
   getLeadStatusOverview: () =>
     api.get('/dashboard-lead-status'),
 
@@ -285,10 +297,16 @@ export const crmService = {
     api.get(`/crm-sms-template/${id}`),
 
   createSmsTemplate: (data: { sms_template_name: string; sms_template: string }) =>
-    api.put('/crm-add-sms-template', data),
+    api.put('/crm-add-sms-template', {
+      template_name: data.sms_template_name,
+      template_html: data.sms_template,
+    }),
 
   updateSmsTemplate: (id: number, data: Record<string, unknown>) =>
-    api.post(`/crm-sms-template/${id}`, data),
+    api.post(`/crm-sms-template/${id}`, {
+      template_name: data.sms_template_name ?? data.template_name,
+      template_html: data.sms_template     ?? data.template_html,
+    }),
 
   deleteSmsTemplate: (id: number) =>
     api.get(`/crm-delete-sms-template/${id}`),

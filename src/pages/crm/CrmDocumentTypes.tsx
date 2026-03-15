@@ -305,7 +305,6 @@ export function CrmDocumentTypes() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-900 truncate">{dt.title}</p>
-                            <p className="text-xs text-slate-400 font-mono truncate">{dt.type_title_url}</p>
                           </div>
                         </div>
                       </td>

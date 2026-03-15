@@ -20,72 +20,107 @@ export function CallControls({ isMuted, isOnHold, onToggleMute, onToggleHold, on
     setShowTransfer(false)
   }
 
+  const btnBase: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 5,
+    padding: '10px 4px',
+    borderRadius: 14,
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  }
+
   return (
-    <div className="px-4 space-y-2.5">
+    <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+
       {/* Row: Mute | Hold | Transfer */}
-      <div className="flex gap-2">
+      <div style={{ display: 'flex', gap: 8 }}>
+
         <button
           onClick={onToggleMute}
-          className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all"
           style={{
-            background: isMuted ? '#FEF3C7' : '#F1F5F9',
-            border: `1.5px solid ${isMuted ? '#FDE68A' : 'transparent'}`,
+            ...btnBase,
+            background: isMuted ? 'rgba(245,158,11,0.18)' : 'rgba(255,255,255,0.07)',
+            border: `1px solid ${isMuted ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.08)'}`,
           }}
         >
-          <div className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: isMuted ? '#F59E0B' : '#E2E8F0' }}>
+          <div
+            style={{
+              width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isMuted ? '#F59E0B' : 'rgba(255,255,255,0.1)',
+            }}
+          >
             {isMuted
-              ? <MicOff size={14} color="#fff" />
-              : <Mic    size={14} color="#64748B" />}
+              ? <MicOff size={15} color="#fff" />
+              : <Mic    size={15} color="rgba(148,163,184,0.8)" />}
           </div>
-          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: isMuted ? '#D97706' : '#64748B' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: isMuted ? '#FCD34D' : 'rgba(100,116,139,0.9)' }}>
             {isMuted ? 'UNMUTE' : 'MUTE'}
           </span>
         </button>
 
         <button
           onClick={onToggleHold}
-          className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all"
           style={{
-            background: isOnHold ? '#EFF6FF' : '#F1F5F9',
-            border: `1.5px solid ${isOnHold ? '#BFDBFE' : 'transparent'}`,
+            ...btnBase,
+            background: isOnHold ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.07)',
+            border: `1px solid ${isOnHold ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.08)'}`,
           }}
         >
-          <div className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: isOnHold ? '#3B82F6' : '#E2E8F0' }}>
+          <div
+            style={{
+              width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isOnHold ? '#3B82F6' : 'rgba(255,255,255,0.1)',
+            }}
+          >
             {isOnHold
-              ? <Play  size={14} color="#fff" />
-              : <Pause size={14} color="#64748B" />}
+              ? <Play  size={15} color="#fff" />
+              : <Pause size={15} color="rgba(148,163,184,0.8)" />}
           </div>
-          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: isOnHold ? '#2563EB' : '#64748B' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: isOnHold ? '#93C5FD' : 'rgba(100,116,139,0.9)' }}>
             {isOnHold ? 'RESUME' : 'HOLD'}
           </span>
         </button>
 
         <button
           onClick={() => setShowTransfer(p => !p)}
-          className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all"
           style={{
-            background: showTransfer ? '#F0FDF4' : '#F1F5F9',
-            border: `1.5px solid ${showTransfer ? '#BBF7D0' : 'transparent'}`,
+            ...btnBase,
+            background: showTransfer ? 'rgba(34,197,94,0.18)' : 'rgba(255,255,255,0.07)',
+            border: `1px solid ${showTransfer ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.08)'}`,
           }}
         >
-          <div className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: showTransfer ? '#22C55E' : '#E2E8F0' }}>
-            <ArrowRightLeft size={13} color={showTransfer ? '#fff' : '#64748B'} />
+          <div
+            style={{
+              width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: showTransfer ? '#22C55E' : 'rgba(255,255,255,0.1)',
+            }}
+          >
+            <ArrowRightLeft size={13} color={showTransfer ? '#fff' : 'rgba(148,163,184,0.8)'} />
           </div>
-          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: showTransfer ? '#16A34A' : '#64748B' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: showTransfer ? '#86EFAC' : 'rgba(100,116,139,0.9)' }}>
             TRANSFER
           </span>
         </button>
       </div>
 
-      {/* Transfer input — shown when Transfer clicked */}
+      {/* Transfer input */}
       {showTransfer && (
-        <div className="flex gap-1.5 items-center">
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input
-            className="input flex-1 text-sm font-mono"
-            placeholder="Enter extension…"
+            className="flex-1 outline-none bg-transparent font-mono text-sm"
+            style={{
+              padding: '7px 10px',
+              borderRadius: 10,
+              border: '1px solid rgba(99,102,241,0.4)',
+              background: 'rgba(99,102,241,0.1)',
+              color: '#C7D2FE',
+              fontSize: 13,
+            }}
+            placeholder="Extension…"
             value={transferExt}
             onChange={e => setTransferExt(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleTransfer()}
@@ -94,14 +129,20 @@ export function CallControls({ isMuted, isOnHold, onToggleMute, onToggleHold, on
           <button
             onClick={handleTransfer}
             disabled={!transferExt.trim()}
-            className="px-3 h-9 rounded-xl text-xs font-bold text-white disabled:opacity-40 flex-shrink-0"
-            style={{ background: '#6366F1' }}
+            style={{
+              padding: '7px 12px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 12,
+              opacity: transferExt.trim() ? 1 : 0.4, flexShrink: 0,
+            }}
           >
             Go
           </button>
           <button
             onClick={() => { setShowTransfer(false); setTransferExt('') }}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 flex-shrink-0"
+            style={{
+              padding: 7, borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'rgba(255,255,255,0.07)', color: 'rgba(148,163,184,0.8)', flexShrink: 0,
+            }}
           >
             <X size={13} />
           </button>

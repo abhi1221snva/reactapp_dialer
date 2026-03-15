@@ -180,7 +180,6 @@ const DIALER_SECTIONS: NavSection[] = [
     label: 'COMMUNICATIONS',
     minLevel: 1,
     items: [
-      { to: '/sms',  label: 'SMS Center', icon: MessageSquare,  minLevel: 1 },
       { to: '/chat', label: 'Team Chat',  icon: MessagesSquare, minLevel: 1 },
     ],
   },
@@ -238,7 +237,6 @@ const CRM_SECTIONS: NavSection[] = [
     minLevel: 1,
     items: [
       { to: '/gmail-mailbox', label: 'Gmail Inbox', icon: Inbox,         minLevel: 1 },
-      { to: '/sms',           label: 'SMS Center',  icon: MessageSquare, minLevel: 1 },
       { to: '/chat',          label: 'Team Chat',   icon: MessagesSquare,minLevel: 1 },
       { to: '/crm/sms-inbox',    label: 'SMS Inbox',    icon: MessageSquare, minLevel: 1 },
     ],

@@ -26,14 +26,12 @@ import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDo
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, CrmLabel } from '../../types/crm.types'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
-type TabId = 'contact' | 'business' | 'details' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant' | 'offers' | 'deal' | 'compliance'
+type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant' | 'offers' | 'deal' | 'compliance'
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
-  { id: 'contact',   label: 'Contact',         icon: User         },
-  { id: 'business',  label: 'Business',        icon: Briefcase    },
   { id: 'details',   label: 'Lead Info',       icon: Hash         },
   { id: 'activity',  label: 'Activity',        icon: Clock        },
   { id: 'documents', label: 'Documents',       icon: FolderOpen   },
@@ -464,61 +462,51 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
   const canUpload = !!selectedTypeId && selectedFiles.length > 0
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-4">
+    <div className="flex gap-0 divide-x divide-slate-100 h-full">
+
+      {/* ── Left: Document list ── */}
+      <div className="flex-1 min-w-0 pr-5 overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-slate-600">Upload Documents</p>
-          <button onClick={() => setShowTypeManager(true)} className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-emerald-600 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white transition-colors">
-            <Settings2 size={11} /> Manage Types
-          </button>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            {isLoading ? 'Documents' : `${docs.length} Document${docs.length !== 1 ? 's' : ''}`}
+          </span>
         </div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <select value={selectedTypeId} onChange={e => { setSelectedTypeId(e.target.value); setSubValue('') }} className="input text-sm flex-1 min-w-[160px]">
-            <option value="">— Select document type —</option>
-            {activeTypes.map((t: DocumentType) => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
-          </select>
-          {subValues.length > 0 && (
-            <select value={subValue} onChange={e => setSubValue(e.target.value)} className="input text-sm flex-1 min-w-[140px]">
-              <option value="">— Select sub-type —</option>
-              {subValues.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          )}
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button onClick={() => fileRef.current?.click()} disabled={!selectedTypeId || uploadMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border-2 border-dashed border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 transition-all disabled:opacity-40">
-            <Upload size={14} /> Choose Files
-          </button>
-          {computedDocType && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700">
-              <Tag size={11} /><span className="text-xs font-semibold">{computedDocType}</span>
+
+        {isLoading ? (
+          <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin text-emerald-500" /></div>
+        ) : docs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+              <FolderOpen size={22} className="text-slate-300" />
             </div>
-          )}
-          {selectedFiles.length > 0 && (
-            <button onClick={() => uploadMutation.mutate(selectedFiles)} disabled={!canUpload || uploadMutation.isPending} className="btn-primary ml-auto disabled:opacity-50">
-              {uploadMutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Uploading…</> : <><Upload size={14} /> Upload {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}</>}
-            </button>
-          )}
-          <input ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden" onChange={handleFileChange} />
-        </div>
-        <p className="text-[11px] text-slate-400 mt-2.5">PDF, DOC, DOCX, XLS, XLSX, JPG, PNG · max {MAX_FILE_MB} MB · up to {MAX_FILES} files</p>
-        {validationErrors.length > 0 && (
-          <div className="mt-3 rounded-xl bg-red-50 border border-red-100 p-3 space-y-1">
-            {validationErrors.map((err, i) => (
-              <p key={i} className="flex items-start gap-1.5 text-xs text-red-600"><AlertCircle size={12} className="mt-0.5 flex-shrink-0" /> {err}</p>
-            ))}
+            <p className="text-sm font-semibold text-slate-500">No documents yet</p>
+            <p className="text-xs text-slate-400 mt-1">Upload files using the panel on the right</p>
           </div>
-        )}
-        {selectedFiles.length > 0 && (
-          <div className="mt-3 space-y-1.5">
-            {selectedFiles.map((f, i) => {
-              const ic = getFileIcon(f.name)
+        ) : (
+          <div className="space-y-1.5">
+            {docs.map(doc => {
+              const ic = getFileIcon(doc.file_path)
               return (
-                <div key={i} className="flex items-center gap-3 rounded-xl bg-white border border-slate-200 px-3 py-2.5">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}><FileText size={13} className={ic.color} /></div>
-                  <span className="flex-1 text-xs font-medium text-slate-700 truncate">{f.name}</span>
-                  <span className="text-xs text-slate-400 flex-shrink-0">{formatBytes(f.size)}</span>
-                  <button onClick={() => { setSelectedFiles(p => p.filter((_, j) => j !== i)); setValidationErrors([]) }} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><X size={13} /></button>
+                <div key={doc.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-emerald-200 hover:shadow-sm transition-all group">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
+                    <FileText size={14} className={ic.color} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{doc.file_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700">
+                        <Tag size={8} /> {doc.document_type}
+                      </span>
+                      {doc.file_size ? <span className="text-[10px] text-slate-400">{formatBytes(Number(doc.file_size))}</span> : null}
+                      <span className="text-[10px] text-slate-400">{new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
+                    <button onClick={() => doc.file_path && downloadFile(doc.file_path, doc.file_name)} disabled={!doc.file_path} className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Download"><Download size={13} /></button>
+                    <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={13} /></button>
+                  </div>
                 </div>
               )
             })}
@@ -526,75 +514,136 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
         )}
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-emerald-500" /></div>
-      ) : docs.length === 0 ? (
-        <div className="rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3"><FolderOpen size={22} className="text-slate-400" /></div>
-          <p className="text-sm font-semibold text-slate-600">No documents yet</p>
-          <p className="text-xs text-slate-400 mt-1">Upload bank statements, ID, or any relevant files</p>
+      {/* ── Right: Upload panel ── */}
+      <div className="w-72 flex-shrink-0 pl-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Upload</span>
+          <button onClick={() => setShowTypeManager(true)} className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-emerald-600 transition-colors">
+            <Settings2 size={11} /> Manage Types
+          </button>
         </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1">{docs.length} Document{docs.length !== 1 ? 's' : ''}</p>
-          {docs.map(doc => {
-            const ic = getFileIcon(doc.file_path)
-            return (
-              <div key={doc.id} className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 hover:border-emerald-200 hover:shadow-sm transition-all group">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${ic.bg}`}><FileText size={16} className={ic.color} /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{doc.file_name}</p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700"><Tag size={8} /> {doc.document_type}</span>
-                    {doc.file_size ? <span className="text-[11px] text-slate-400">{formatBytes(Number(doc.file_size))}</span> : null}
-                    <span className="text-[11px] text-slate-400">{new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    {doc.uploaded_by_name && <span className="text-[11px] text-slate-400">by {doc.uploaded_by_name}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Preview"><Eye size={14} /></button>
-                  <button onClick={() => doc.file_path && downloadFile(doc.file_path, doc.file_name)} disabled={!doc.file_path} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Download"><Download size={14} /></button>
-                  <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={14} /></button>
-                </div>
-              </div>
-            )
-          })}
+
+        {/* Type selects */}
+        <div className="space-y-2 mb-3">
+          <select value={selectedTypeId} onChange={e => { setSelectedTypeId(e.target.value); setSubValue('') }} className="input text-sm w-full">
+            <option value="">— Document type —</option>
+            {activeTypes.map((t: DocumentType) => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
+          </select>
+          {subValues.length > 0 && (
+            <select value={subValue} onChange={e => setSubValue(e.target.value)} className="input text-sm w-full">
+              <option value="">— Sub-type —</option>
+              {subValues.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          )}
         </div>
-      )}
-      {viewDoc && <DocViewerModal doc={viewDoc} onClose={() => setViewDoc(null)} />}
-      {showTypeManager && <CrmDocumentTypesManager onClose={() => setShowTypeManager(false)} />}
+
+        {/* Drop zone */}
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={!selectedTypeId || uploadMutation.isPending}
+          className="w-full rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 bg-slate-50/50 py-6 flex flex-col items-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+            <Upload size={15} className="text-emerald-500" />
+          </div>
+          <span className="text-xs font-semibold text-slate-500">Choose files</span>
+          <span className="text-[10px] text-slate-400">PDF, DOC, XLS, JPG, PNG</span>
+        </button>
+        <input ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden" onChange={handleFileChange} />
+
+        <p className="text-[10px] text-slate-400 mt-2 text-center">Max {MAX_FILE_MB} MB · up to {MAX_FILES} files</p>
+
+        {/* Validation errors */}
+        {validationErrors.length > 0 && (
+          <div className="mt-3 rounded-lg bg-red-50 border border-red-100 p-2.5 space-y-1">
+            {validationErrors.map((err, i) => (
+              <p key={i} className="flex items-start gap-1.5 text-xs text-red-600"><AlertCircle size={11} className="mt-0.5 flex-shrink-0" />{err}</p>
+            ))}
+          </div>
+        )}
+
+        {/* Staged files */}
+        {selectedFiles.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {selectedFiles.map((f, i) => {
+              const ic = getFileIcon(f.name)
+              return (
+                <div key={i} className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2">
+                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${ic.bg}`}><FileText size={11} className={ic.color} /></div>
+                  <span className="flex-1 text-xs text-slate-700 truncate">{f.name}</span>
+                  <span className="text-[10px] text-slate-400 flex-shrink-0">{formatBytes(f.size)}</span>
+                  <button onClick={() => { setSelectedFiles(p => p.filter((_, j) => j !== i)); setValidationErrors([]) }} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><X size={11} /></button>
+                </div>
+              )
+            })}
+            <button
+              onClick={() => uploadMutation.mutate(selectedFiles)}
+              disabled={!canUpload || uploadMutation.isPending}
+              className="w-full mt-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+            >
+              {uploadMutation.isPending
+                ? <><Loader2 size={13} className="animate-spin" /> Uploading…</>
+                : <><Upload size={13} /> Upload {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}</>}
+            </button>
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }
 
 // ── Lender status helpers ───────────────────────────────────────────────────────
-const SUBMISSION_STATUS_MAP: Record<LenderSubmissionStatus, { label: string; bg: string; text: string }> = {
-  pending:     { label: 'Pending',     bg: 'bg-slate-100',   text: 'text-slate-600'  },
-  submitted:   { label: 'Submitted',   bg: 'bg-blue-100',    text: 'text-blue-700'   },
-  viewed:      { label: 'Viewed',      bg: 'bg-violet-100',  text: 'text-violet-700' },
-  approved:    { label: 'Approved',    bg: 'bg-emerald-100', text: 'text-emerald-700'},
-  declined:    { label: 'Declined',    bg: 'bg-red-100',     text: 'text-red-700'    },
-  no_response: { label: 'No Response', bg: 'bg-amber-100',   text: 'text-amber-700'  },
+const SUBMISSION_STATUS_MAP: Record<LenderSubmissionStatus, { label: string; bg: string; text: string; dot: string }> = {
+  pending:     { label: 'Pending',     bg: 'bg-slate-100',   text: 'text-slate-500',   dot: 'bg-slate-400'   },
+  submitted:   { label: 'Submitted',   bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-500'    },
+  viewed:      { label: 'Viewed',      bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-500'  },
+  approved:    { label: 'Approved',    bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  declined:    { label: 'Declined',    bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500'     },
+  no_response: { label: 'No Response', bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400'   },
 }
-const RESPONSE_STATUS_MAP: Record<LenderResponseStatus, { label: string; bg: string; text: string }> = {
-  pending:         { label: 'Pending',     bg: 'bg-slate-100',   text: 'text-slate-600'  },
-  approved:        { label: 'Approved',    bg: 'bg-emerald-100', text: 'text-emerald-700'},
-  declined:        { label: 'Declined',    bg: 'bg-red-100',     text: 'text-red-700'    },
-  needs_documents: { label: 'Needs Docs', bg: 'bg-amber-100',   text: 'text-amber-700'  },
-  no_response:     { label: 'No Response', bg: 'bg-slate-100',   text: 'text-slate-500'  },
+const RESPONSE_STATUS_MAP: Record<LenderResponseStatus, { label: string; bg: string; text: string; dot: string; border: string }> = {
+  pending:         { label: 'Awaiting',    bg: 'bg-slate-100',  text: 'text-slate-500',   dot: 'bg-slate-400',   border: 'border-l-slate-300'   },
+  approved:        { label: 'Approved',    bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-l-emerald-400'  },
+  declined:        { label: 'Declined',    bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-500',     border: 'border-l-red-400'      },
+  needs_documents: { label: 'Needs Docs', bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-400',   border: 'border-l-amber-400'    },
+  no_response:     { label: 'No Reply',    bg: 'bg-slate-100',  text: 'text-slate-500',   dot: 'bg-slate-300',   border: 'border-l-slate-200'    },
 }
 
-function StatusPill({ status, map }: { status: string; map: Record<string, { label: string; bg: string; text: string }> }) {
-  const cfg = map[status] ?? { label: status, bg: 'bg-slate-100', text: 'text-slate-600' }
-  return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+function StatusDot({ status, map }: { status: string; map: Record<string, { label: string; bg: string; text: string; dot: string }> }) {
+  const cfg = map[status] ?? { label: status, bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-400' }
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  )
+}
+
+const LENDER_COLORS = [
+  ['bg-blue-100', 'text-blue-700'], ['bg-violet-100', 'text-violet-700'],
+  ['bg-amber-100', 'text-amber-700'], ['bg-pink-100', 'text-pink-700'],
+  ['bg-cyan-100', 'text-cyan-700'], ['bg-orange-100', 'text-orange-700'],
+  ['bg-teal-100', 'text-teal-700'], ['bg-indigo-100', 'text-indigo-700'],
+]
+
+function LenderAvatar({ name }: { name: string }) {
+  const initials = name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase() || '?'
+  const [bg, text] = LENDER_COLORS[name.charCodeAt(0) % LENDER_COLORS.length]
+  return (
+    <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-xs font-bold ${bg} ${text}`}>
+      {initials}
+    </div>
+  )
 }
 
 // ── Response Update Modal ───────────────────────────────────────────────────────
 function ResponseModal({ submission, leadId, onClose }: { submission: LenderSubmission; leadId: number; onClose: () => void }) {
   const qc = useQueryClient()
-  const [responseStatus, setResponseStatus] = useState<LenderResponseStatus>(submission.response_status ?? 'pending')
+  const lenderName = submission.lender_name ?? `Lender #${submission.lender_id}`
+  const [responseStatus,   setResponseStatus]   = useState<LenderResponseStatus>(submission.response_status ?? 'pending')
   const [submissionStatus, setSubmissionStatus] = useState<LenderSubmissionStatus>(submission.submission_status ?? 'submitted')
-  const [responseNote, setResponseNote] = useState(submission.response_note ?? '')
+  const [responseNote,     setResponseNote]     = useState(submission.response_note ?? '')
 
   const mutation = useMutation({
     mutationFn: () => crmService.updateSubmissionResponse(leadId, submission.id, {
@@ -606,58 +655,75 @@ function ResponseModal({ submission, leadId, onClose }: { submission: LenderSubm
       toast.success('Response updated')
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-approvals', leadId] })
+      if (responseStatus === 'approved') {
+        toast.success(`Approval record created for ${lenderName}`, { id: 'approval-sync', duration: 3000 })
+      }
       onClose()
     },
     onError: () => toast.error('Failed to update response'),
   })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.45)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
-              <Building2 size={14} className="text-amber-600" />
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+          <LenderAvatar name={lenderName} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-800 truncate">{lenderName}</p>
+            <p className="text-[11px] text-slate-400">Update submission response</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {/* Two selects side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Lender Response</label>
+              <select className="input w-full text-sm" value={responseStatus} onChange={e => setResponseStatus(e.target.value as LenderResponseStatus)}>
+                <option value="pending">Awaiting</option>
+                <option value="approved">Approved</option>
+                <option value="declined">Declined</option>
+                <option value="needs_documents">Needs Docs</option>
+                <option value="no_response">No Reply</option>
+              </select>
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-800">{submission.lender_name ?? `Lender #${submission.lender_id}`}</p>
-              <p className="text-[11px] text-slate-400">Update lender response</p>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Send Status</label>
+              <select className="input w-full text-sm" value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value as LenderSubmissionStatus)}>
+                <option value="pending">Pending</option>
+                <option value="submitted">Submitted</option>
+                <option value="viewed">Viewed</option>
+                <option value="approved">Approved</option>
+                <option value="declined">Declined</option>
+                <option value="no_response">No Response</option>
+              </select>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"><X size={16} /></button>
-        </div>
-        <div className="p-5 space-y-4">
+
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Lender Response</label>
-            <select className="input w-full" value={responseStatus} onChange={e => setResponseStatus(e.target.value as LenderResponseStatus)}>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="declined">Declined</option>
-              <option value="needs_documents">Needs Documents</option>
-              <option value="no_response">No Response</option>
-            </select>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Note <span className="normal-case font-normal text-slate-400">(optional)</span>
+            </label>
+            <textarea
+              className="input w-full resize-none text-sm"
+              rows={3}
+              value={responseNote}
+              onChange={e => setResponseNote(e.target.value)}
+              placeholder="e.g. Approved $50k @ 1.35 factor rate…"
+            />
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Submission Status</label>
-            <select className="input w-full" value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value as LenderSubmissionStatus)}>
-              <option value="pending">Pending</option>
-              <option value="submitted">Submitted</option>
-              <option value="viewed">Viewed</option>
-              <option value="approved">Approved</option>
-              <option value="declined">Declined</option>
-              <option value="no_response">No Response</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Response Note <span className="font-normal text-slate-400">(optional)</span></label>
-            <textarea className="input w-full resize-none" rows={3} value={responseNote} onChange={e => setResponseNote(e.target.value)} placeholder="e.g. Approved for $50,000 at 1.35 factor rate…" />
-          </div>
-          <div className="flex items-center gap-2.5 pt-1">
-            <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="btn-primary disabled:opacity-50 flex-1">
-              {mutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : <>Save Response</>}
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="btn-primary flex-1 disabled:opacity-50">
+              {mutation.isPending ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : 'Save Response'}
             </button>
-            <button onClick={onClose} className="btn-outline">Cancel</button>
+            <button onClick={onClose} className="btn-outline px-4">Cancel</button>
           </div>
         </div>
       </div>
@@ -691,6 +757,11 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
   const subList       = submissions ?? []
 
+  // Stats
+  const approvedCount = subList.filter(s => s.response_status === 'approved').length
+  const declinedCount = subList.filter(s => s.response_status === 'declined').length
+  const pendingCount  = subList.filter(s => !['approved','declined'].includes(s.response_status ?? '')).length
+
   function toggleLender(id: number) {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -707,7 +778,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
     }),
     onSuccess: (res) => {
       const { submitted = [], failed = [] } = res.data?.data ?? {}
-      if (submitted.length) toast.success(`Application sent to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
+      if (submitted.length) toast.success(`Sent to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
       if (failed.length)    toast.error(`Failed for ${failed.length} lender${failed.length !== 1 ? 's' : ''}`)
       setShowSubmitForm(false); setSelectedIds(new Set()); setNotes(''); setPdfPath('')
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
@@ -716,108 +787,193 @@ function LendersPanel({ leadId }: { leadId: number }) {
     onError: () => toast.error('Submission failed'),
   })
 
+  const closeForm = () => { setShowSubmitForm(false); setSelectedIds(new Set()); setNotes(''); setPdfPath('') }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+
+      {/* ── Stats bar (only when there are submissions) ── */}
+      {subList.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-center">
+            <p className="text-xl font-bold text-emerald-700 leading-none">{approvedCount}</p>
+            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider mt-1">Approved</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-center">
+            <p className="text-xl font-bold text-slate-600 leading-none">{pendingCount}</p>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-1">Pending</p>
+          </div>
+          <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 text-center">
+            <p className="text-xl font-bold text-red-600 leading-none">{declinedCount}</p>
+            <p className="text-[10px] text-red-500 font-semibold uppercase tracking-wider mt-1">Declined</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Submit CTA / Form ── */}
       {!showSubmitForm ? (
-        <button onClick={() => setShowSubmitForm(true)} className="btn-primary w-full">
-          <Send size={14} /> Submit Application to Lenders
+        <button onClick={() => setShowSubmitForm(true)} className="btn-primary w-full justify-center">
+          <Send size={13} /> Submit to Lenders
         </button>
       ) : (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-emerald-50 border-b border-emerald-100">
+        <div className="rounded-2xl border border-emerald-200 bg-white overflow-hidden shadow-sm">
+          {/* Form header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-emerald-600">
             <div className="flex items-center gap-2">
-              <Send size={13} className="text-emerald-600" />
-              <span className="text-sm font-semibold text-slate-800">Submit Application</span>
+              <Send size={13} className="text-emerald-100" />
+              <span className="text-sm font-semibold text-white">Submit Application</span>
+              {selectedIds.size > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">
+                  {selectedIds.size} selected
+                </span>
+              )}
             </div>
-            <button onClick={() => { setShowSubmitForm(false); setSelectedIds(new Set()) }} className="p-1 text-slate-400 hover:text-slate-700">
+            <button onClick={closeForm} className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-white/10 transition-colors">
               <X size={14} />
             </button>
           </div>
-          <div className="p-4 space-y-4">
+
+          <div className="p-4 space-y-3">
+            {/* Lender picker */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-slate-600">Select Lenders</label>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Select Lenders</label>
                 {activeLenders.length > 0 && (
                   <button
                     onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
-                    className="text-[11px] text-emerald-600 hover:underline font-medium"
+                    className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold"
                   >
                     {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
                   </button>
                 )}
               </div>
+
               {activeLenders.length === 0 ? (
-                <p className="text-xs text-amber-600 flex items-center gap-1.5 py-2"><AlertCircle size={12} /> No active lenders configured.</p>
+                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  <AlertCircle size={12} /> No active lenders configured.
+                </div>
               ) : (
-                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                  {activeLenders.map(l => (
-                    <label key={l.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${selectedIds.has(l.id) ? 'border-emerald-300 bg-emerald-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <input type="checkbox" className="accent-emerald-600 w-4 h-4 flex-shrink-0" checked={selectedIds.has(l.id)} onChange={() => toggleLender(l.id)} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{l.lender_name}</p>
-                        {l.email && <p className="text-[11px] text-slate-400 truncate">{l.email}</p>}
-                      </div>
-                    </label>
-                  ))}
+                <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-0.5">
+                  {activeLenders.map(l => {
+                    const on = selectedIds.has(l.id)
+                    return (
+                      <label key={l.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border cursor-pointer select-none transition-all ${on ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40'}`}>
+                        <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all ${on ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
+                          {on && <Check size={9} className="text-white" strokeWidth={3} />}
+                        </div>
+                        <span className="text-xs font-medium text-slate-700 truncate leading-tight">{l.lender_name}</span>
+                      </label>
+                    )
+                  })}
                 </div>
               )}
-              {selectedIds.size > 0 && <p className="text-[11px] text-emerald-600 font-medium mt-1.5">{selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''} selected</p>}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application PDF path <span className="font-normal text-slate-400">(optional)</span></label>
-              <input className="input w-full text-xs" value={pdfPath} onChange={e => setPdfPath(e.target.value)} placeholder="crm_documents/client_1/lead_42/application.pdf" />
+
+            {/* PDF path + note side by side on wider screens, stacked on narrow */}
+            <div className="grid grid-cols-1 gap-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                  PDF Path <span className="normal-case font-normal text-slate-400">(optional)</span>
+                </label>
+                <input className="input w-full text-xs" value={pdfPath} onChange={e => setPdfPath(e.target.value)} placeholder="leads/42/application.pdf" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                  Cover Note <span className="normal-case font-normal text-slate-400">(optional)</span>
+                </label>
+                <textarea className="input w-full resize-none text-xs" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any context for the lender…" />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Cover note <span className="font-normal text-slate-400">(optional)</span></label>
-              <textarea className="input w-full resize-none" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any special context for the lender…" />
-            </div>
-            <div className="flex items-center gap-2.5">
-              <button onClick={() => submitMutation.mutate()} disabled={selectedIds.size === 0 || submitMutation.isPending} className="btn-primary flex-1 disabled:opacity-50">
-                {submitMutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Sending…</> : <><Send size={14} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>}
+
+            <div className="flex gap-2 pt-0.5">
+              <button
+                onClick={() => submitMutation.mutate()}
+                disabled={selectedIds.size === 0 || submitMutation.isPending}
+                className="btn-primary flex-1 justify-center disabled:opacity-50"
+              >
+                {submitMutation.isPending
+                  ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
+                  : <><Send size={13} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                }
               </button>
-              <button onClick={() => { setShowSubmitForm(false); setSelectedIds(new Set()) }} className="btn-outline">Cancel</button>
+              <button onClick={closeForm} className="btn-outline px-3">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Submission History ── */}
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Submission History</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">History</p>
+          {subList.length > 0 && <span className="text-[10px] text-slate-400">{subList.length} submission{subList.length !== 1 ? 's' : ''}</span>}
+        </div>
+
         {subsLoading ? (
-          <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-emerald-500" /></div>
+          <div className="flex justify-center py-10">
+            <Loader2 size={18} className="animate-spin text-emerald-500" />
+          </div>
         ) : subList.length === 0 ? (
-          <div className="rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
-            <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-3"><Building2 size={18} className="text-slate-400" /></div>
-            <p className="text-sm font-semibold text-slate-600">No submissions yet</p>
-            <p className="text-xs text-slate-400 mt-1">Submit an application to track lender responses</p>
+          <div className="rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+              <Building2 size={20} className="text-slate-300" />
+            </div>
+            <p className="text-sm font-semibold text-slate-500">No submissions yet</p>
+            <p className="text-xs text-slate-400 mt-1">Submit above to start tracking lender responses</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {subList.map(s => (
-              <div key={s.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 hover:shadow-sm transition-all group">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0 mt-0.5"><Building2 size={15} className="text-amber-600" /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{s.lender_name ?? `Lender #${s.lender_id}`}</p>
-                    {s.lender_email && <p className="text-[11px] text-slate-400 truncate">{s.lender_email}</p>}
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                      <StatusPill status={s.submission_status ?? 'pending'} map={SUBMISSION_STATUS_MAP} />
-                      <span className="text-slate-300">·</span>
-                      <StatusPill status={s.response_status ?? 'pending'} map={RESPONSE_STATUS_MAP} />
-                      {s.application_pdf && <><span className="text-slate-300">·</span><span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium"><FileText size={9} /> PDF attached</span></>}
+            {subList.map(s => {
+              const lenderName = s.lender_name ?? `Lender #${s.lender_id}`
+              const respCfg = RESPONSE_STATUS_MAP[s.response_status ?? 'pending']
+              const subCfg  = SUBMISSION_STATUS_MAP[s.submission_status ?? 'pending']
+              return (
+                <div key={s.id} className={`bg-white rounded-xl border border-slate-200 border-l-4 ${respCfg.border} px-3.5 py-3 hover:shadow-sm transition-shadow`}>
+                  <div className="flex items-start gap-2.5">
+                    <LenderAvatar name={lenderName} />
+                    <div className="flex-1 min-w-0">
+                      {/* Top row: name + date */}
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{lenderName}</p>
+                        {s.submitted_at && (
+                          <span className="text-[10px] text-slate-400 flex-shrink-0 tabular-nums">
+                            {new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      {/* Status row */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <StatusDot status={s.submission_status ?? 'pending'} map={SUBMISSION_STATUS_MAP} />
+                        <ChevronRight size={10} className="text-slate-300 flex-shrink-0" />
+                        <StatusDot status={s.response_status ?? 'pending'} map={RESPONSE_STATUS_MAP} />
+                        {s.application_pdf && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
+                            <FileText size={9} /> PDF
+                          </span>
+                        )}
+                      </div>
+                      {/* Response note */}
+                      {s.response_note && (
+                        <p className="mt-2 text-[11px] text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 italic leading-relaxed">
+                          "{s.response_note}"
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {s.submitted_at && <span className="text-[11px] text-slate-400 flex items-center gap-1"><Calendar size={9} /> {new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-                      {s.response_note && <span className="text-[11px] text-slate-500 italic truncate max-w-[180px]">"{s.response_note}"</span>}
-                    </div>
+                    <button
+                      onClick={() => setEditingSub(s)}
+                      className="flex-shrink-0 p-1.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors mt-0.5"
+                      title="Update response"
+                    >
+                      <Pencil size={12} />
+                    </button>
                   </div>
-                  <button onClick={() => setEditingSub(s)} className="flex-shrink-0 p-1.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors opacity-0 group-hover:opacity-100" title="Update response"><Pencil size={13} /></button>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
+
       {editingSub && <ResponseModal submission={editingSub} leadId={leadId} onClose={() => setEditingSub(null)} />}
     </div>
   )
@@ -892,13 +1048,33 @@ function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadNa
 }
 
 // ── PropertyRow — HubSpot-style label:value inline edit ───────────────────────
-function PropertyRow({ fieldKey, label, value, type = 'text', leadId, onUpdated }: {
+function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options, leadId, onUpdated }: {
   fieldKey: string; label: string; value: string | null | undefined
-  type?: 'text' | 'email' | 'tel' | 'textarea'; leadId: number; onUpdated: () => void
+  type?: 'text' | 'email' | 'tel' | 'textarea'
+  fieldType?: string        // CRM label field_type (dropdown, date, number, etc.)
+  options?: string | null   // JSON-encoded string[] for dropdown/radio
+  leadId: number; onUpdated: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
   const [saving,  setSaving]  = useState(false)
+
+  // Derive input type from fieldType if not explicitly set
+  const resolvedType: 'text' | 'email' | 'tel' | 'textarea' | 'number' | 'date' | 'select' = (() => {
+    if (fieldType === 'email')        return 'email'
+    if (fieldType === 'phone_number') return 'tel'
+    if (fieldType === 'number')       return 'number'
+    if (fieldType === 'date')         return 'date'
+    if (fieldType === 'textarea')     return 'textarea'
+    if (fieldType === 'dropdown' || fieldType === 'radio') return 'select'
+    return type
+  })()
+
+  const parsedOptions: string[] = (() => {
+    if (!options) return []
+    try { const o = JSON.parse(options); return Array.isArray(o) ? o.map(String) : [] }
+    catch { return [] }
+  })()
 
   function startEdit() { setDraft(value ?? ''); setEditing(true) }
   function cancel()    { setEditing(false) }
@@ -913,15 +1089,30 @@ function PropertyRow({ fieldKey, label, value, type = 'text', leadId, onUpdated 
     finally { setSaving(false); setEditing(false) }
   }
 
+  function renderDisplayValue() {
+    if (!value) return <span className="text-slate-300 text-xs">—</span>
+    if (resolvedType === 'date') {
+      try { return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+      catch { return value }
+    }
+    return value
+  }
+
   return (
     <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group">
       <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
       {editing ? (
         <div className="flex items-center gap-1 flex-1 min-w-0">
-          {type === 'textarea'
-            ? <textarea autoFocus rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
-            : <input autoFocus type={type} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
-          }
+          {resolvedType === 'textarea' ? (
+            <textarea autoFocus rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
+          ) : resolvedType === 'select' ? (
+            <select autoFocus className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)}>
+              <option value="">— select —</option>
+              {parsedOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <input autoFocus type={resolvedType} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
+          )}
           <button onMouseDown={e => { e.preventDefault(); save() }} disabled={saving} className="p-1 rounded bg-emerald-600 text-white flex-shrink-0 disabled:opacity-50">
             {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
           </button>
@@ -930,7 +1121,7 @@ function PropertyRow({ fieldKey, label, value, type = 'text', leadId, onUpdated 
       ) : (
         <button onClick={startEdit} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">
           <span className="text-sm text-slate-800 flex-1 truncate leading-tight">
-            {value || <span className="text-slate-300 text-xs">—</span>}
+            {renderDisplayValue()}
           </span>
           <Pencil size={10} className="text-slate-200 group-hover:text-emerald-400 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100" />
         </button>
@@ -1402,7 +1593,7 @@ export function CrmLeadDetail() {
   const lendersRef  = useRef<HTMLDivElement>(null)
   const tabBarRef   = useRef<HTMLDivElement>(null)
 
-  const [activeTab,          setActiveTab]          = useState<TabId>('contact')
+  const [activeTab,          setActiveTab]          = useState<TabId>('details')
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
   const [showMoreMenu,       setShowMoreMenu]       = useState(false)
   const [showPdfModal,       setShowPdfModal]       = useState(false)
@@ -1434,6 +1625,15 @@ export function CrmLeadDetail() {
     },
     staleTime: 60 * 1000,
     enabled: !!leadId,
+  })
+
+  const { data: leadFields } = useQuery({
+    queryKey: ['crm-lead-fields'],
+    queryFn: async () => {
+      const res = await crmService.getLeadFields()
+      return (res.data?.data ?? res.data ?? []) as CrmLabel[]
+    },
+    staleTime: 5 * 60 * 1000,
   })
 
   const docBadgeCount = docsForBadge?.length ?? 0
@@ -1499,111 +1699,145 @@ export function CrmLeadDetail() {
     <div className="min-h-screen bg-slate-50/40 -mx-5 -mt-5">
 
       {/* ── HEADER ── */}
-      <div className="relative bg-white border-b border-slate-200">
+      <div className="bg-white border-b border-slate-200">
         <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
-        <div className="relative max-w-[1800px] mx-auto">
+        <div className="max-w-[1800px] mx-auto px-5 h-14 flex items-center gap-3">
 
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 px-5 pt-3 pb-2 border-b border-slate-100">
-            <button onClick={() => navigate('/crm/leads')} className="flex items-center gap-1.5 text-slate-400 hover:text-slate-700 text-xs font-medium transition-colors">
-              <ArrowLeft size={13} /> Leads
+          {/* Back */}
+          <button onClick={() => navigate('/crm/leads')} className="flex items-center gap-1 text-slate-400 hover:text-slate-700 text-xs font-medium transition-colors flex-shrink-0">
+            <ArrowLeft size={13} />
+            <span className="hidden sm:inline">Leads</span>
+          </button>
+          <span className="text-slate-200 flex-shrink-0">/</span>
+
+          {/* Avatar */}
+          <div className={`w-8 h-8 rounded-lg ${avatarBg} flex items-center justify-center flex-shrink-0`}>
+            <span className="text-xs font-bold text-white leading-none">{leadInits}</span>
+          </div>
+
+          {/* Name */}
+          <h1 className="text-sm font-bold text-slate-900 truncate leading-tight flex-shrink-0 max-w-[180px] sm:max-w-xs">{fullName}</h1>
+
+          {/* Status dropdown */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => { setShowStatusDropdown(s => !s); setShowMoreMenu(false) }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-all hover:opacity-80"
+              style={{ background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}35` }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+              {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              <ChevronDown size={9} className="opacity-60" />
             </button>
-            <ChevronRight size={11} className="text-slate-300" />
-            <span className="text-xs font-semibold text-slate-600">Lead Detail</span>
-            <span className="text-xs text-slate-400 font-mono">#{lead.id}</span>
-            {tempStyle && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${tempStyle.bg} ${tempStyle.text}`}>
-                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: tempStyle.dot }} />
-                {tempStyle.label}
-              </span>
+            {showStatusDropdown && statuses && (
+              <div className="absolute top-full left-0 mt-1 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1 min-w-[200px]" onMouseLeave={() => setShowStatusDropdown(false)}>
+                {statuses.map((s: LeadStatus) => {
+                  const isCurrent = s.lead_title_url === String(lead.lead_status)
+                  const dotColor  = s.color_code ?? s.color ?? '#94a3b8'
+                  return (
+                    <button key={s.id}
+                      onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
+                      disabled={isCurrent || updateStatus.isPending}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                    >
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+                      <span className="flex-1">{s.lead_title}</span>
+                      {isCurrent && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
 
-          {/* Lead identity + actions */}
-          <div className="flex items-center gap-4 px-5 py-4">
-            <div className={`w-14 h-14 rounded-2xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-              <span className="text-lg font-bold text-white leading-none">{leadInits}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl font-bold text-slate-900 leading-tight">{fullName}</h1>
-                <div className="relative">
-                  <button
-                    onClick={() => { setShowStatusDropdown(s => !s); setShowMoreMenu(false) }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all hover:opacity-80"
-                    style={{ background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}40` }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                    {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                    <ChevronDown size={10} className="opacity-60" />
-                  </button>
-                  {showStatusDropdown && statuses && (
-                    <div className="absolute top-full left-0 mt-1 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1 min-w-[200px]" onMouseLeave={() => setShowStatusDropdown(false)}>
-                      {statuses.map((s: LeadStatus) => {
-                        const isCurrent = s.lead_title_url === String(lead.lead_status)
-                        const dotColor  = s.color_code ?? s.color ?? '#94a3b8'
-                        return (
-                          <button key={s.id}
-                            onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
-                            disabled={isCurrent || updateStatus.isPending}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-                          >
-                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-                            <span className="flex-1">{s.lead_title}</span>
-                            {isCurrent && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                {lead.company_name && <span className="flex items-center gap-1 text-xs text-slate-500"><Briefcase size={11} />{String(lead.company_name)}</span>}
-                {lead.phone_number && <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 transition-colors"><Phone size={11} />{formatPhoneNumber(String(lead.phone_number))}</a>}
-                {lead.email && <a href={`mailto:${lead.email}`} className="hidden sm:flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 transition-colors"><Mail size={11} />{String(lead.email)}</a>}
-                {(lead.assigned_name as string | undefined) && <span className="hidden md:flex items-center gap-1 text-xs text-slate-500"><UserCheck size={11} />{lead.assigned_name as string}</span>}
-                <span className="flex items-center gap-1 text-xs text-slate-400"><Calendar size={11} />{daysInSystem}d in pipeline</span>
-              </div>
-            </div>
-            {/* Actions */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {lead.phone_number && (
-                <a href={`tel:${lead.phone_number}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
-                  <Phone size={12} /> Call
-                </a>
-              )}
-              {lead.email && (
-                <a href={`mailto:${lead.email}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
-                  <Mail size={12} /> Email
-                </a>
-              )}
-              <button onClick={() => navigate(`/crm/leads/${leadId}/edit`)} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
-                <Pencil size={12} /> Edit
+          {/* Temperature badge */}
+          {tempStyle && (
+            <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
+              <span className="w-1 h-1 rounded-full" style={{ background: tempStyle.dot }} />
+              {tempStyle.label}
+            </span>
+          )}
+
+          {/* Contact meta chips */}
+          <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200 flex-1 min-w-0 overflow-hidden">
+            {lead.company_name && (
+              <span className="flex items-center gap-1 text-xs text-slate-500 truncate max-w-[160px]">
+                <Briefcase size={10} className="flex-shrink-0 text-slate-400" />
+                {String(lead.company_name)}
+              </span>
+            )}
+            {lead.phone_number && (
+              <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 transition-colors whitespace-nowrap flex-shrink-0">
+                <Phone size={10} className="flex-shrink-0" />
+                {formatPhoneNumber(String(lead.phone_number))}
+              </a>
+            )}
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-sky-600 transition-colors truncate max-w-[200px] flex-shrink-0">
+                <Mail size={10} className="flex-shrink-0" />
+                {String(lead.email)}
+              </a>
+            )}
+          </div>
+
+          {/* Spacer when meta is hidden */}
+          <div className="flex-1 lg:hidden" />
+
+          {/* Actions */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+            >
+              <Pencil size={11} /> Edit
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }}
+                className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <MoreVertical size={15} />
               </button>
-              <div className="relative">
-                <button onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }} className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 transition-colors">
-                  <MoreVertical size={15} />
-                </button>
-                {showMoreMenu && (
-                  <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1" onMouseLeave={() => setShowMoreMenu(false)}>
-                    <button onClick={() => { setShowMoreMenu(false); setShowPdfModal(true) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Printer size={13} /> Generate PDF</button>
-                    <button onClick={() => { setShowMoreMenu(false); setActiveTab('lenders') }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Send size={13} /> Send to Lender</button>
-                    <button onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><FileDown size={13} /> Download Lead</button>
-                    <div className="h-px bg-slate-100 my-1" />
-                    <button onClick={handleDeleteLead} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={13} /> Delete Lead</button>
-                  </div>
-                )}
-              </div>
+              {showMoreMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1" onMouseLeave={() => setShowMoreMenu(false)}>
+                  <button onClick={() => { setShowMoreMenu(false); setShowPdfModal(true) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Printer size={13} /> Generate PDF</button>
+                  <button onClick={() => { setShowMoreMenu(false); setActiveTab('lenders') }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Send size={13} /> Send to Lender</button>
+                  <button onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><FileDown size={13} /> Download Lead</button>
+                  <div className="h-px bg-slate-100 my-1" />
+                  <button onClick={handleDeleteLead} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={13} /> Delete Lead</button>
+                </div>
+              )}
             </div>
           </div>
 
         </div>
+
+        {/* ── Stat strip ── */}
+        <div className="border-t border-slate-100">
+          <div className="max-w-[1800px] mx-auto px-5 py-2 flex items-center gap-5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+            {[
+              { label: 'Lead type',   value: lead.lead_type ? String(lead.lead_type) : null },
+              { label: 'Assigned to', value: (lead.assigned_name as string | undefined) || null },
+              { label: 'Loan amount', value: loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` : null },
+              { label: 'Created',     value: lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null },
+              { label: 'In pipeline', value: `${daysInSystem} day${daysInSystem === 1 ? '' : 's'}` },
+            ].map(({ label, value }, i, arr) => (
+              <div key={label} className="flex items-center gap-5 flex-shrink-0">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap">{label}:</span>
+                  <span className={`text-[11px] font-semibold whitespace-nowrap ${value ? 'text-slate-700' : 'text-slate-300'}`}>{value ?? '—'}</span>
+                </div>
+                {i < arr.length - 1 && <span className="text-slate-200 text-xs select-none">·</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
 
       {/* ── SINGLE CARD ── */}
-      <div className="max-w-[1800px] mx-auto px-5 py-5 pb-8">
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 160px)' }}>
+      <div className="max-w-[1800px] mx-auto px-5 py-4 pb-8">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 130px)' }}>
 
           {/* Unified tab bar */}
           <div className="relative flex-shrink-0">
@@ -1632,11 +1866,6 @@ export function CrmLeadDetail() {
               )
             })}
             <div className="flex-1" />
-            {(activeTab === 'contact' || activeTab === 'business' || activeTab === 'details') && (
-              <button onClick={() => navigate(`/crm/leads/${leadId}/edit`)} className="flex items-center gap-1.5 px-4 py-3 text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors flex-shrink-0">
-                <Pencil size={10} /> Edit all
-              </button>
-            )}
             </div>
             {/* Fade + scroll-right hint for overflowing tabs */}
             <div
@@ -1650,61 +1879,69 @@ export function CrmLeadDetail() {
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto">
 
-            {activeTab === 'contact' && (
-              <div className="px-6 py-5">
-                <PropertyRow fieldKey="first_name"   label="First name" value={lead.first_name   as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="last_name"    label="Last name"  value={lead.last_name    as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="email"        label="Email"      value={lead.email        as string | undefined} type="email" leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="phone_number" label="Phone"      value={lead.phone_number as string | undefined} type="tel"   leadId={leadId} onUpdated={onLeadUpdated} />
-              </div>
-            )}
+            {activeTab === 'details' && (() => {
+              const allFields = leadFields ?? []
+              const CONTACT_KEYS  = new Set(['first_name','last_name','email','phone_number'])
+              const BUSINESS_KEYS = new Set(['company_name','address','city','state','zip'])
+              const extraContact  = allFields.filter(f => f.section === 'contact'  && !CONTACT_KEYS.has(f.field_key))
+              const extraBusiness = allFields.filter(f => (f.section === 'business' || f.section === 'address') && !BUSINESS_KEYS.has(f.field_key))
+              const extraOther    = allFields.filter(f => !['contact','business','address'].includes(f.section))
 
-            {activeTab === 'business' && (
-              <div className="px-6 py-5">
-                <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string, unknown>)['zip'] as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-              </div>
-            )}
+              return (
+                <div className="px-6 py-5 h-full">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100 h-full">
 
-            {activeTab === 'details' && (
-              <div className="px-6 py-5">
-                <div className="flex items-start py-1.5 border-b border-slate-50">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Status</span>
-                  <span className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: statusColor }}>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                    {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                  </span>
+                    {/* ── Col 1: Contact ── */}
+                    <div className="pr-6 pb-5 md:pb-0">
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <User size={11} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact</span>
+                      </div>
+                      <PropertyRow fieldKey="first_name"   label="First name" value={lead.first_name   as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="last_name"    label="Last name"  value={lead.last_name    as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="email"        label="Email"      value={lead.email        as string|undefined} type="email" leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="phone_number" label="Phone"      value={lead.phone_number as string|undefined} type="tel"   leadId={leadId} onUpdated={onLeadUpdated} />
+                      {extraContact.map(f => (
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      ))}
+                    </div>
+
+                    {/* ── Col 2: Business ── */}
+                    <div className="py-5 md:py-0 md:px-6">
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <Briefcase size={11} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business</span>
+                      </div>
+                      <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string,unknown>)['zip'] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      {extraBusiness.map(f => (
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      ))}
+                    </div>
+
+                    {/* ── Col 3: Custom fields ── */}
+                    <div className="pt-5 md:pt-0 md:pl-6">
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <Hash size={11} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Custom Fields</span>
+                      </div>
+                      {extraOther.length > 0 ? extraOther.map(f => (
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      )) : (
+                        <p className="text-xs text-slate-300 mt-1">No custom fields defined.</p>
+                      )}
+                    </div>
+
+                  </div>
                 </div>
-                <div className="flex items-start py-1.5 border-b border-slate-50">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Lead type</span>
-                  <span className="text-sm text-slate-800">{lead.lead_type ? String(lead.lead_type) : <span className="text-slate-300 text-xs">—</span>}</span>
-                </div>
-                <div className="flex items-start py-1.5 border-b border-slate-50">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Assigned to</span>
-                  <span className="text-sm text-slate-800">{(lead.assigned_name as string | undefined) || <span className="text-slate-300 text-xs">—</span>}</span>
-                </div>
-                <div className="flex items-start py-1.5 border-b border-slate-50">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Loan amount</span>
-                  <span className="text-sm text-slate-800">
-                    {loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g, '')).toLocaleString('en-US')}` : <span className="text-slate-300 text-xs">—</span>}
-                  </span>
-                </div>
-                <div className="flex items-start py-1.5 border-b border-slate-50">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Created</span>
-                  <span className="text-sm text-slate-800">{lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
-                </div>
-                <div className="flex items-start py-1.5">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">In pipeline</span>
-                  <span className="text-sm text-slate-800">{daysInSystem} days</span>
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {activeTab === 'activity'  && <div ref={activityRef}  className="p-5"><ActivityTimeline leadId={leadId} /></div>}
-            {activeTab === 'documents' && <div className="p-5"><DocumentsPanel leadId={leadId} /></div>}
+            {activeTab === 'documents' && <div className="px-5 py-4 h-full"><DocumentsPanel leadId={leadId} /></div>}
             {activeTab === 'lenders'   && <div ref={lendersRef}   className="p-5"><LendersPanel leadId={leadId} /></div>}
             {activeTab === 'approvals' && <div className="p-5"><ApprovalsSection leadId={leadId} /></div>}
             {activeTab === 'merchant'  && <div className="p-5"><MerchantPortalSection leadId={leadId} /></div>}

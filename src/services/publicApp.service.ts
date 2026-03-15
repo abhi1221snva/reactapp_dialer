@@ -61,6 +61,13 @@ export interface MerchantDocument {
   uploaded: string
 }
 
+export interface PublicDocumentType {
+  id: number
+  title: string
+  type_title_url: string
+  values: string | null
+}
+
 export interface MerchantPortalData {
   company: PublicCompany
   lead: MerchantLeadData
@@ -91,6 +98,10 @@ export const publicAppService = {
 
   updateMerchant(token: string, formData: Record<string, string>) {
     return http.post<{ success: boolean; message: string }>(`/public/merchant/${token}`, formData)
+  },
+
+  getDocumentTypes(token: string) {
+    return http.get<{ success: boolean; data: PublicDocumentType[] }>(`/public/merchant/${token}/document-types`)
   },
 
   uploadDocument(token: string, file: File, docType: string) {

@@ -56,8 +56,8 @@ export function CrmLayout() {
     <CrmHeaderContext.Provider value={{ setDescription, setActions }}>
       <div className="space-y-4">
 
-        {/* ── Page title row (hidden on dashboard — it has its own hero header) */}
-        {pathname !== '/crm/dashboard' && (
+        {/* ── Page title row (hidden on pages with their own header) */}
+        {pathname !== '/crm/dashboard' && pathname !== '/crm/document-types' && pathname !== '/crm/sms-inbox' && (
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-slate-900 leading-tight">{title}</h1>

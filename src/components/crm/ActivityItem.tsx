@@ -117,19 +117,19 @@ export function ActivityItem({ activity, onPin, isLast }: Props) {
   const palette = userName ? avatarPalette(userName) : null
 
   return (
-    <div className="flex gap-3 group">
+    <div className="flex gap-2.5 group">
 
       {/* ── Timeline spine ── */}
       <div className="flex flex-col items-center flex-shrink-0">
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
+          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
           style={{ background: config.iconBg, border: `1.5px solid ${config.iconColor}40` }}
         >
-          <Icon size={14} style={{ color: config.iconColor }} />
+          <Icon size={12} style={{ color: config.iconColor }} />
         </div>
         {!isLast && (
           <div
-            className="w-px flex-1 mt-1.5 min-h-[28px]"
+            className="w-px flex-1 mt-1 min-h-[16px]"
             style={{ background: 'linear-gradient(to bottom, #E2E8F0, #F1F5F9)' }}
           />
         )}
@@ -138,8 +138,8 @@ export function ActivityItem({ activity, onPin, isLast }: Props) {
       {/* ── Card ── */}
       <div
         className={cn(
-          'flex-1 rounded-xl border mb-3 transition-shadow duration-150',
-          'hover:shadow-md cursor-default',
+          'flex-1 rounded-lg border mb-1.5 transition-shadow duration-150',
+          'hover:shadow-sm cursor-default',
           isPinned
             ? 'bg-amber-50 border-amber-200'
             : 'bg-white border-slate-200 hover:border-slate-300',
@@ -150,10 +150,10 @@ export function ActivityItem({ activity, onPin, isLast }: Props) {
           boxShadow: isPinned ? '0 1px 6px rgba(245,158,11,0.10)' : undefined,
         }}
       >
-        <div className={cn('px-3', isNote ? 'pt-3 pb-2.5' : 'pt-2.5 pb-2')}>
+        <div className="px-3 pt-2 pb-1.5">
 
           {/* ── Header row: badge + pin ── */}
-          <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="flex items-center justify-between gap-2 mb-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Type badge */}
               <span
@@ -214,7 +214,7 @@ export function ActivityItem({ activity, onPin, isLast }: Props) {
           )}
 
           {/* ── Meta row: time + user avatar ── */}
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             {/* Relative time (primary) */}
             <span className="text-[11px] font-medium text-slate-400">
               {formatRelativeTime(activity.created_at)}

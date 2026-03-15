@@ -5,6 +5,7 @@ import { IncomingCallModal } from '../components/dialer/IncomingCallModal'
 import { WebPhone } from '../components/webphone/WebPhone'
 import { FloatingChat } from '../components/chat/FloatingChat'
 import { FloatingFab } from '../components/floating/FloatingFab'
+import { FloatingSms } from '../components/sms/FloatingSms'
 import { useUIStore } from '../stores/ui.store'
 import { useAuthStore } from '../stores/auth.store'
 import { Building2, LogOut } from 'lucide-react'
@@ -70,6 +71,7 @@ export function AppLayout() {
       <IncomingCallModal />
       <FloatingChat />
       <WebPhone />
+      <FloatingSms />
       <FloatingFab />
     </div>
   )

@@ -67,4 +67,30 @@ export const chatService = {
   /** Get a download URL for an attachment (authenticated stream) */
   getAttachmentDownloadUrl: (attachmentId: number) =>
     `${import.meta.env.VITE_API_URL}/team-chat/attachments/${attachmentId}/download`,
+
+  // ─── Call methods ────────────────────────────────────────────────────────
+
+  /** Initiate an audio or video call in a conversation */
+  initiateCall: (uuid: string, callType: 'audio' | 'video') =>
+    api.post(`/team-chat/conversations/${uuid}/call`, { call_type: callType }),
+
+  /** Send WebRTC signaling data (offer / answer / ice-candidate) */
+  callSignal: (uuid: string, payload: {
+    call_id: string
+    signal_type: 'offer' | 'answer' | 'ice-candidate'
+    signal_data: RTCSessionDescriptionInit | RTCIceCandidateInit
+    target_user_id: number
+  }) => api.post(`/team-chat/conversations/${uuid}/call/signal`, payload),
+
+  /** Accept an incoming call */
+  acceptCall: (uuid: string, callId: string, callerId: number) =>
+    api.post(`/team-chat/conversations/${uuid}/call/accept`, { call_id: callId, caller_id: callerId }),
+
+  /** Decline or end a call */
+  endCall: (uuid: string, callId: string, reason = 'ended') =>
+    api.post(`/team-chat/conversations/${uuid}/call/end`, { call_id: callId, reason }),
+
+  /** Get STUN/TURN ICE server config */
+  getIceServers: () =>
+    api.get<{ success: boolean; data: { iceServers: RTCIceServer[] } }>('/team-chat/ice-servers'),
 }

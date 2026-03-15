@@ -9,7 +9,7 @@ import {
   Users, TrendingUp, TrendingDown, Target, Activity,
   Award, DollarSign, ArrowRight, FileText,
   UserPlus, BarChart3, CheckCircle2,
-  Building2, RefreshCw,
+  Building2, RefreshCw, AlertTriangle, Clock, Shield,
 } from 'lucide-react'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
@@ -103,6 +103,49 @@ const DUMMY = {
       change: { leads: 12.4, volume: 8.7 },
     },
   },
+}
+
+const DUMMY_REVENUE = {
+  trend: Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(); d.setMonth(d.getMonth() - (11 - i))
+    return {
+      month: d.toISOString().slice(0, 7),
+      label: d.toLocaleString('default', { month: 'short', year: 'numeric' }),
+      total_funded: 80000 + _seed[i % _seed.length] * 12000,
+      deal_count: Math.max(1, Math.round(_seed[i % _seed.length] * 0.3)),
+    }
+  }),
+  total_annual: 1_680_000,
+  avg_monthly: 140_000,
+}
+
+const DUMMY_VELOCITY = {
+  stages: [
+    { status_slug: 'new_lead',     status_name: 'New Lead',     color: '#6366f1', avg_days: 2.1,  lead_count: 245 },
+    { status_slug: 'contacted',    status_name: 'Contacted',    color: '#06b6d4', avg_days: 4.7,  lead_count: 187 },
+    { status_slug: 'submitted',    status_name: 'Submitted',    color: '#8b5cf6', avg_days: 8.3,  lead_count: 134 },
+    { status_slug: 'under_review', status_name: 'Under Review', color: '#f59e0b', avg_days: 12.6, lead_count: 98  },
+    { status_slug: 'approved',     status_name: 'Approved',     color: '#10b981', avg_days: 3.2,  lead_count: 76  },
+  ],
+  max_days: 12.6,
+  bottleneck: { status_name: 'Under Review', avg_days: 12.6 },
+}
+
+const DUMMY_QUALITY = {
+  total_deals: 52, defaulted: 3, completed: 18, renewed: 9,
+  default_rate: 5.8, renewal_rate: 50.0,
+  avg_deal_size: 54615, avg_factor_rate: 1.32, avg_days_to_fund: 6.4,
+}
+
+const DUMMY_STALE = {
+  threshold_days: 14,
+  total_stale: 89,
+  by_stage: [
+    { status_slug: 'contacted', status_name: 'Contacted', color: '#06b6d4', count: 34, avg_days_stale: 21 },
+    { status_slug: 'new_lead',  status_name: 'New Lead',  color: '#6366f1', count: 28, avg_days_stale: 19 },
+    { status_slug: 'follow_up', status_name: 'Follow Up', color: '#f97316', count: 18, avg_days_stale: 17 },
+    { status_slug: 'submitted', status_name: 'Submitted', color: '#8b5cf6', count: 9,  avg_days_stale: 16 },
+  ],
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -302,6 +345,38 @@ export function CrmDashboard() {
     },
   })
 
+  const { data: revenueTrend, isLoading: loadingRevenue } = useQuery({
+    queryKey: ['crm-revenue-trend'],
+    queryFn: async () => {
+      const res = await crmService.getRevenueTrend()
+      return res.data?.data ?? res.data
+    },
+  })
+
+  const { data: pipelineVelocity, isLoading: loadingVelocity } = useQuery({
+    queryKey: ['crm-pipeline-velocity', period],
+    queryFn: async () => {
+      const res = await crmService.getPipelineVelocity(period)
+      return res.data?.data ?? res.data
+    },
+  })
+
+  const { data: dealQuality, isLoading: loadingQuality } = useQuery({
+    queryKey: ['crm-deal-quality', period],
+    queryFn: async () => {
+      const res = await crmService.getDealQuality(period)
+      return res.data?.data ?? res.data
+    },
+  })
+
+  const { data: staleLeads, isLoading: loadingStale } = useQuery({
+    queryKey: ['crm-stale-leads'],
+    queryFn: async () => {
+      const res = await crmService.getStaleLeads(14)
+      return res.data?.data ?? res.data
+    },
+  })
+
   // ── Derived data (falls back to DUMMY when API returns empty) ─────────────
   const rawDist = distribution?.distribution?.length ? distribution.distribution : DUMMY.distribution.distribution
   const distItems: { status_name: string; count: number; percentage: number; color?: string }[] =
@@ -352,6 +427,23 @@ export function CrmDashboard() {
   const funnelMax = funnelItems.length > 0 ? Math.max(...funnelItems.map(f => f.count), 1) : 1
 
   const statsLoading = loadingDist || loadingVel
+
+  // ── Status meta map: slug → { name, color } — for agent stacked bar ───────
+  const statusMeta: Record<string, { name: string; color: string }> = {}
+  ;(distribution?.distribution ?? DUMMY.distribution.distribution).forEach(
+    (d: Record<string, unknown>, i: number) => {
+      const slug  = String(d.status ?? d.lead_title_url ?? '')
+      const name  = String(d.title ?? d.status_name ?? slug).replace(/_/g, ' ')
+      const color = String((d.color ?? d.color_code) || PIE_COLORS[i % PIE_COLORS.length])
+      if (slug) statusMeta[slug] = { name, color }
+    }
+  )
+
+  // ── New insight derived data ───────────────────────────────────────────────
+  const revenueData  = revenueTrend?.trend?.length   ? revenueTrend   : DUMMY_REVENUE
+  const velocityData = pipelineVelocity?.stages?.length ? pipelineVelocity : DUMMY_VELOCITY
+  const qualityData  = dealQuality?.total_deals != null ? dealQuality  : DUMMY_QUALITY
+  const staleData    = staleLeads?.by_stage != null   ? staleLeads    : DUMMY_STALE
 
   return (
     <div className="space-y-5 pb-6">
@@ -590,42 +682,94 @@ export function CrmDashboard() {
             }
           />
           {loadingAgent ? (
-            <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+            <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
           ) : agents.length > 0 ? (
-            <div className="space-y-2.5">
-              {agents.slice(0, 8).map((a, idx) => {
-                const funded   = (a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)
-                const convRate = a.total > 0 ? Math.round((funded / a.total) * 100) : 0
-                const medal    = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
-                const maxTotal = agents[0]?.total ?? 1
-                const barPct   = maxTotal > 0 ? Math.round((a.total / maxTotal) * 100) : 0
-                return (
-                  <div key={a.user_name ?? idx} className="flex items-center gap-3">
-                    <div className={cn(
-                      'w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 bg-gradient-to-br',
-                      AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
-                    )}>
-                      {medal ?? initials(a.user_name ?? '?')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-[13px] font-semibold text-slate-800 truncate">{a.user_name ?? `Agent #${idx+1}`}</p>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                          <span className="text-[11px] font-bold text-slate-700 tabular-nums">{a.total} leads</span>
-                          <span className={cn('text-[11px] font-bold tabular-nums', convRate >= 50 ? 'text-emerald-600' : 'text-amber-600')}>
-                            {convRate}%
-                          </span>
+            <>
+              <div className="space-y-3">
+                {agents.slice(0, 8).map((a, idx) => {
+                  const funded   = (a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)
+                  const convRate = a.total > 0 ? Math.round((funded / a.total) * 100) : 0
+                  const medal    = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
+
+                  // Build stacked segments sorted by count desc
+                  const segments = Object.entries(a.by_status ?? {})
+                    .filter(([, count]) => (count as number) > 0)
+                    .map(([slug, count]) => ({
+                      slug,
+                      count: count as number,
+                      name:  statusMeta[slug]?.name  ?? slug.replace(/_/g, ' '),
+                      color: statusMeta[slug]?.color ?? '#94a3b8',
+                      pct:   a.total > 0 ? ((count as number) / a.total) * 100 : 0,
+                    }))
+                    .sort((x, y) => y.count - x.count)
+
+                  return (
+                    <div key={a.user_name ?? idx} className="flex items-center gap-3">
+                      <div className={cn(
+                        'w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 bg-gradient-to-br',
+                        AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
+                      )}>
+                        {medal ?? initials(a.user_name ?? '?')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[13px] font-semibold text-slate-800 truncate">{a.user_name ?? `Agent #${idx+1}`}</p>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <span className="text-[11px] font-bold text-slate-700 tabular-nums">{a.total.toLocaleString()} leads</span>
+                            <span className={cn(
+                              'text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full',
+                              convRate >= 15 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                            )}>
+                              {convRate}% funded
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Stacked pipeline status bar */}
+                        <div
+                          className="h-2.5 bg-slate-100 rounded-full overflow-hidden flex"
+                          title={segments.map(s => `${s.name}: ${s.count}`).join(' | ')}
+                        >
+                          {segments.map(seg => (
+                            <div
+                              key={seg.slug}
+                              style={{ width: `${seg.pct}%`, backgroundColor: seg.color }}
+                              className="h-full transition-all"
+                            />
+                          ))}
+                        </div>
+
+                        {/* Status pills — top 5 statuses */}
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {segments.slice(0, 5).map(seg => (
+                            <span key={seg.slug} className="flex items-center gap-1 text-[10px] text-slate-500">
+                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: seg.color }} />
+                              {seg.name}
+                              <span className="font-semibold text-slate-700 tabular-nums">{seg.count}</span>
+                            </span>
+                          ))}
+                          {segments.length > 5 && (
+                            <span className="text-[10px] text-slate-400">+{segments.length - 5} more</span>
+                          )}
                         </div>
                       </div>
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={cn('h-full rounded-full bg-gradient-to-r transition-all', AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length])}
-                          style={{ width: `${barPct}%` }} />
-                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+
+              {/* Legend — all unique pipeline statuses */}
+              {Object.keys(statusMeta).length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-50 flex flex-wrap gap-x-3 gap-y-1.5">
+                  {Object.entries(statusMeta).map(([slug, meta]) => (
+                    <span key={slug} className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: meta.color }} />
+                      {meta.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
             <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
               <Users size={28} />
@@ -660,6 +804,169 @@ export function CrmDashboard() {
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* ── Deal Quality KPIs ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <KpiCard
+          label="Default Rate"
+          value={loadingQuality ? '—' : `${qualityData.default_rate ?? 0}%`}
+          icon={Shield}
+          gradient="bg-gradient-to-br from-red-500 to-rose-600"
+          sub={loadingQuality ? '' : `${qualityData.defaulted ?? 0} of ${qualityData.total_deals ?? 0} deals defaulted`}
+          loading={loadingQuality}
+        />
+        <KpiCard
+          label="Renewal Rate"
+          value={loadingQuality ? '—' : `${qualityData.renewal_rate ?? 0}%`}
+          icon={RefreshCw}
+          gradient="bg-gradient-to-br from-indigo-500 to-blue-600"
+          sub={loadingQuality ? '' : `${qualityData.renewed ?? 0} of ${qualityData.completed ?? 0} renewed`}
+          loading={loadingQuality}
+        />
+        <KpiCard
+          label="Avg Time to Fund"
+          value={loadingQuality ? '—' : `${qualityData.avg_days_to_fund ?? 0}d`}
+          icon={Clock}
+          gradient="bg-gradient-to-br from-teal-500 to-cyan-600"
+          sub={loadingQuality ? '' : `Avg deal size ${fmtMoney(qualityData.avg_deal_size ?? 0)}`}
+          loading={loadingQuality}
+        />
+      </div>
+
+      {/* ── 12-Month Revenue Trend + Pipeline Velocity ───────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Revenue Trend */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader
+            title="12-Month Revenue Trend"
+            sub="Monthly funded volume"
+            right={
+              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                {fmtMoney(revenueData.total_annual ?? 0)} / yr
+              </span>
+            }
+          />
+          {loadingRevenue ? <Skeleton className="h-[180px]" /> : (
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={revenueData.trend ?? []} margin={{ left: -16, top: 4 }}>
+                <defs>
+                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                  tickFormatter={(v: string) => v.slice(0, 3)} interval={1} />
+                <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                  tickFormatter={(v: number) => fmtMoney(v)} />
+                <Tooltip
+                  formatter={(v: number) => [fmtMoney(v), 'Funded']}
+                  contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.10)', fontSize: 12 }}
+                />
+                <Area type="monotone" dataKey="total_funded" stroke="#10b981" strokeWidth={2}
+                  fill="url(#revenueGrad)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+            <span className="text-[11px] text-slate-400">Monthly average</span>
+            <span className="text-[13px] font-bold text-slate-700">{fmtMoney(revenueData.avg_monthly ?? 0)}</span>
+          </div>
+        </div>
+
+        {/* Pipeline Velocity */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <SectionHeader
+            title="Pipeline Velocity"
+            sub="Avg days per stage — bottleneck detection"
+            right={velocityData.bottleneck ? (
+              <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full flex items-center gap-1">
+                <AlertTriangle size={10} /> {velocityData.bottleneck.status_name}
+              </span>
+            ) : undefined}
+          />
+          {loadingVelocity ? (
+            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-8" />)}</div>
+          ) : (
+            <div className="space-y-3">
+              {(velocityData.stages ?? []).slice(0, 6).map((stage: { status_slug: string; status_name: string; color?: string; avg_days: number; lead_count: number }) => {
+                const pct          = velocityData.max_days > 0 ? Math.round((stage.avg_days / velocityData.max_days) * 100) : 0
+                const isBottleneck = velocityData.bottleneck?.status_name === stage.status_name
+                return (
+                  <div key={stage.status_slug} className="flex items-center gap-3">
+                    <div className="w-24 flex-shrink-0">
+                      <p className={cn('text-[11px] font-semibold truncate', isBottleneck ? 'text-amber-600' : 'text-slate-700')}>
+                        {stage.status_name}
+                      </p>
+                      <p className="text-[10px] text-slate-400">{stage.lead_count} leads</p>
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${pct}%`,
+                            background: isBottleneck ? '#fbbf24' : (stage.color || '#10b981'),
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <span className={cn('text-[12px] font-bold tabular-nums w-10 text-right flex-shrink-0', isBottleneck ? 'text-amber-600' : 'text-slate-600')}>
+                      {stage.avg_days}d
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Stale Leads Alert ────────────────────────────────────────────────── */}
+      {(loadingStale || (staleData.total_stale ?? 0) > 0) && (
+        <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
+          <SectionHeader
+            title="Stale Leads Alert"
+            sub="Leads with no activity for 14+ days — needs follow-up"
+            right={
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
+                  <AlertTriangle size={13} />
+                  {staleData.total_stale} leads need attention
+                </span>
+                <button onClick={() => navigate('/crm/leads')}
+                  className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
+                  View <ArrowRight size={12} />
+                </button>
+              </div>
+            }
+          />
+          {loadingStale ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {(staleData.by_stage ?? []).slice(0, 8).map((stage: { status_slug: string; status_name: string; color?: string; count: number; avg_days_stale: number }) => (
+                <div
+                  key={stage.status_slug}
+                  className="rounded-xl p-3 border border-slate-100 bg-slate-50 hover:bg-amber-50 hover:border-amber-100 transition-colors cursor-pointer"
+                  onClick={() => navigate('/crm/leads')}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: stage.color || '#6B7280' }} />
+                    <p className="text-[11px] font-semibold text-slate-700 truncate">{stage.status_name}</p>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stage.count}</p>
+                  <p className="text-[10px] text-slate-400">avg {stage.avg_days_stale}d without activity</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

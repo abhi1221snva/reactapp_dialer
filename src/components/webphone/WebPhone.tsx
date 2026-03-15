@@ -422,7 +422,6 @@ export function WebPhone() {
       <audio ref={ringback}  loop src="/asset/audio/ringbacktone.wav" />
       <audio ref={dtmfTone}       src="/asset/audio/dtmf.wav" />
 
-      {/* Incoming call popup */}
       {hasIncoming && (
         <IncomingCallPopup
           from={incomingFrom!}
@@ -431,25 +430,26 @@ export function WebPhone() {
         />
       )}
 
-      {/* ── Main panel ─────────────────────────────────────────────────────── */}
       <DraggableWidget
         isOpen={isOpen}
         onClose={() => setPhoneOpen(false)}
-        headerGradient="linear-gradient(145deg, #1e1b4b 0%, #312e81 55%, #4338ca 100%)"
+        headerGradient="linear-gradient(160deg, #0a0f1e 0%, #111827 50%, #1c1854 100%)"
         defaultRight={16}
-        defaultBottom={80}
-        width={300}
+        defaultBottom={20}
+        width={320}
         zIndex={62}
-        bodyHeight={440}
+        bodyHeight={470}
         headerLeft={
           <>
-            <div
-              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              style={{ background: dotColor, boxShadow: `0 0 0 3px ${dotColor}33, 0 0 8px ${dotColor}66` }}
-            />
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+              background: dotColor,
+              boxShadow: `0 0 0 3px ${dotColor}28, 0 0 10px ${dotColor}80`,
+              animation: (isInCall || isCalling) ? 'pulse 1.5s infinite' : undefined,
+            }} />
             <div>
-              <p className="text-white text-sm font-bold leading-none">Softphone</p>
-              <p className="leading-none mt-0.5" style={{ fontSize: '10px', color: 'rgba(165,180,252,0.8)', fontFamily: 'monospace' }}>
+              <p style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>WebPhone</p>
+              <p style={{ color: 'rgba(148,163,184,0.8)', fontSize: 10, fontFamily: 'monospace', marginTop: 3 }}>
                 {sipConfig.extension}
               </p>
             </div>
@@ -460,286 +460,341 @@ export function WebPhone() {
             onClick={canToggle ? (isActive ? sipDisable : sipEnable) : undefined}
             disabled={!canToggle}
             title={powerTitle}
-            className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: isBusy ? '#F59E0B' : powerBg }}
+            style={{
+              width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isBusy ? '#F59E0B' : powerBg,
+              opacity: !canToggle ? 0.5 : 1,
+              flexShrink: 0,
+              transition: 'opacity 0.15s',
+            }}
           >
-            {isBusy ? <Loader2 size={13} className="text-white animate-spin" /> : <Power size={13} className="text-white" />}
+            {isBusy
+              ? <Loader2 size={13} className="text-white animate-spin" />
+              : <Power size={13} className="text-white" />}
           </button>
         }
       >
-        <div>
 
-          {/* ── Status bar ─────────────────────────────────────────────────── */}
-          <div
-            className="flex items-center justify-between px-4 py-1.5"
-            style={{
-              background: isOnHold
-                ? 'linear-gradient(90deg,#EFF6FF,#DBEAFE)'
-                : isInCall
-                  ? 'linear-gradient(90deg,#F0FDF4,#DCFCE7)'
-                  : isCalling || isBusy
-                    ? 'linear-gradient(90deg,#FFFBEB,#FEF3C7)'
-                    : phoneState === 'error'
-                      ? 'linear-gradient(90deg,#FEF2F2,#FEE2E2)'
-                      : '#F8FAFC',
-            }}
-          >
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-              <span style={{ fontSize: '11px', fontWeight: 600, color: dotColor, letterSpacing: '0.04em' }}>
-                {stateLabel}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* Dark phone body                                                    */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <div style={{ background: '#080d1a', minHeight: '100%' }}>
+
+          {/* ── Status strip ── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '7px 16px',
+            background: isOnHold
+              ? 'rgba(59,130,246,0.14)'
+              : isInCall
+                ? 'rgba(34,197,94,0.12)'
+                : (isCalling || isBusy)
+                  ? 'rgba(245,158,11,0.12)'
+                  : phoneState === 'error'
+                    ? 'rgba(239,68,68,0.12)'
+                    : 'rgba(255,255,255,0.04)',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%', background: dotColor,
+                boxShadow: `0 0 6px ${dotColor}cc`,
+              }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: dotColor, letterSpacing: '0.06em' }}>
+                {stateLabel.toUpperCase()}
               </span>
             </div>
-            {/* Timer — only during active call */}
             {isInCall && (
-              <div className="flex items-center gap-1">
-                <Clock size={11} style={{ color: '#22C55E' }} />
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#16A34A', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Clock size={10} style={{ color: '#22C55E' }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#22C55E', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
                   {fmt(callDuration)}
                 </span>
               </div>
             )}
           </div>
 
-          {/* ── Error state ─────────────────────────────────────────────────── */}
+          {/* ── Error ── */}
           {phoneState === 'error' && (
-            <div className="mx-4 mt-3 rounded-xl p-3 space-y-2" style={{ background: '#FFF7ED', border: '1px solid #FED7AA' }}>
-              <div className="flex items-center gap-1.5">
-                <ShieldAlert size={12} className="text-orange-500 flex-shrink-0" />
-                <p className="text-xs font-semibold text-orange-700">{statusMsg}</p>
+            <div style={{ margin: '12px 14px', borderRadius: 12, padding: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.22)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <ShieldAlert size={13} style={{ color: '#F87171', flexShrink: 0 }} />
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#F87171' }}>{statusMsg}</p>
               </div>
               {sipConfig.certUrl && (
                 <>
-                  <p className="text-xs text-orange-600 leading-relaxed">
-                    If this is a certificate error, accept the SIP server cert first, then retry.
+                  <p style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.55, marginBottom: 6 }}>
+                    Certificate error? Accept the SIP cert first, then retry.
                   </p>
                   <a href={sipConfig.certUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 underline">
-                    <ExternalLink size={10} /> {sipConfig.certUrl}
+                    style={{ fontSize: 11, color: '#FCA5A5', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+                    <ExternalLink size={9} /> {sipConfig.certUrl}
                   </a>
                 </>
               )}
               <button
                 onClick={() => { setPhoneState('idle'); setTimeout(sipEnable, 100) }}
-                className="w-full flex items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-white py-2"
-                style={{ background: 'linear-gradient(135deg,#F59E0B,#D97706)', boxShadow: '0 2px 8px rgba(245,158,11,0.35)' }}
+                style={{
+                  width: '100%', height: 38, borderRadius: 10, border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg,#F59E0B,#D97706)',
+                  color: '#fff', fontWeight: 700, fontSize: 12, letterSpacing: '0.04em',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
               >
                 <Loader2 size={12} /> Retry Connection
               </button>
             </div>
           )}
 
-          {/* ── CALLING state: show who we're calling + cancel ─────────────── */}
+          {/* ── CALLING ── */}
           {isCalling && (
-            <div className="px-4 py-2.5 flex flex-col items-center gap-2.5">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg,#FEF3C7,#FDE68A)', border: '2px solid #F59E0B' }}>
-                  <PhoneCall size={24} style={{ color: '#D97706' }} className="animate-pulse" />
+            <div style={{ padding: '28px 16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              {/* Animated rings */}
+              <div style={{ position: 'relative', width: 88, height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="animate-ping" style={{
+                  position: 'absolute', inset: 0, borderRadius: '50%',
+                  background: 'rgba(245,158,11,0.18)',
+                }} />
+                <div className="animate-ping" style={{
+                  position: 'absolute', inset: 12, borderRadius: '50%',
+                  background: 'rgba(245,158,11,0.14)',
+                  animationDelay: '0.3s',
+                }} />
+                <div style={{
+                  width: 64, height: 64, borderRadius: '50%',
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '2px solid rgba(245,158,11,0.45)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <PhoneCall size={28} style={{ color: '#F59E0B' }} className="animate-pulse" />
                 </div>
-                <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: '#F59E0B' }}>Calling</p>
-                <p className="text-lg font-bold font-mono text-slate-800 tracking-wider">
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.18em', marginBottom: 6 }}>CALLING</p>
+                <p style={{ fontSize: 24, fontWeight: 700, color: '#F8FAFC', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
                   {countryCode}{number}
                 </p>
+                {selectedCountry && (
+                  <p style={{ fontSize: 11, color: 'rgba(148,163,184,0.6)', marginTop: 4 }}>
+                    {selectedCountry.flag} {selectedCountry.name}
+                  </p>
+                )}
               </div>
               <button
                 onClick={sipHangUp}
-                className="w-full flex items-center justify-center gap-2 rounded-2xl font-bold text-white"
                 style={{
-                  height: '40px', fontSize: '14px', letterSpacing: '0.04em',
-                  background: 'linear-gradient(135deg,#EF4444 0%,#DC2626 100%)',
-                  boxShadow: '0 4px 16px rgba(239,68,68,0.4)',
+                  width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg,#EF4444,#DC2626)',
+                  boxShadow: '0 6px 28px rgba(239,68,68,0.45)',
+                  color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '0.05em',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
-                <PhoneOff size={16} /> Cancel Call
+                <PhoneOff size={17} /> Cancel Call
               </button>
             </div>
           )}
 
-          {/* ── IN CALL state: timer + DTMF + controls + hangup ───────────── */}
+          {/* ── IN CALL ── */}
           {isInCall && (
-            <>
-              {/* DTMF dialpad */}
-              <div className="pt-3 pb-1">
-                <div className="px-4 pb-2">
-                  <div
-                    className="relative flex items-center"
-                    style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '12px' }}
-                  >
-                    <input
-                      ref={numberInputRef}
-                      className="flex-1 bg-transparent outline-none font-mono py-2.5 px-3"
-                      style={{ fontSize: '14px', fontWeight: 600, color: '#475569', letterSpacing: '0.04em',
-                               minWidth: 0, width: 0, overflow: 'hidden' }}
-                      placeholder="DTMF / digits"
-                      value={number}
-                      readOnly
-                    />
-                  </div>
+            <div>
+              {/* Caller display */}
+              <div style={{ padding: '14px 16px 10px', textAlign: 'center' }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+                  border: '2.5px solid rgba(34,197,94,0.45)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 8px',
+                  boxShadow: '0 0 20px rgba(34,197,94,0.2)',
+                }}>
+                  <Phone size={24} style={{ color: '#22C55E' }} />
                 </div>
-                <DialPad onPress={sipDtmf} />
+                <p style={{ fontSize: 20, fontWeight: 700, color: '#F8FAFC', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+                  {number || incomingFrom || '—'}
+                </p>
               </div>
 
-              {/* Mute / Hold / Transfer */}
-              <div style={{ height: '1px', background: '#F1F5F9', margin: '4px 16px' }} />
-              <div className="py-2">
-                <CallControls
-                  isMuted={isMuted}
-                  isOnHold={isOnHold}
-                  onToggleMute={sipToggleMute}
-                  onToggleHold={sipToggleHold}
-                  onTransfer={sipTransfer}
-                />
+              {/* DTMF */}
+              <div style={{ padding: '0 14px 6px' }}>
+                <div style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', padding: '6px 12px' }}>
+                  <input
+                    ref={numberInputRef}
+                    readOnly
+                    className="w-full bg-transparent outline-none font-mono"
+                    style={{ fontSize: 13, fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', border: 'none' }}
+                    placeholder="DTMF…"
+                    value={number}
+                  />
+                </div>
               </div>
 
-              {/* Hang Up */}
-              <div className="px-4 pb-2.5 pt-1">
+              <DialPad onPress={sipDtmf} compact />
+
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '6px 0' }} />
+
+              <CallControls
+                isMuted={isMuted}
+                isOnHold={isOnHold}
+                onToggleMute={sipToggleMute}
+                onToggleHold={sipToggleHold}
+                onTransfer={sipTransfer}
+              />
+
+              {/* Hang up */}
+              <div style={{ padding: '8px 14px 16px' }}>
                 <button
                   onClick={sipHangUp}
-                  className="w-full flex items-center justify-center gap-2.5 rounded-2xl font-bold text-white"
                   style={{
-                    height: '40px', fontSize: '14px', letterSpacing: '0.04em',
-                    background: 'linear-gradient(135deg,#EF4444 0%,#DC2626 100%)',
-                    boxShadow: '0 4px 16px rgba(239,68,68,0.4)',
+                    width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer',
+                    background: 'linear-gradient(135deg,#EF4444,#DC2626)',
+                    boxShadow: '0 6px 28px rgba(239,68,68,0.45)',
+                    color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '0.05em',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   }}
                 >
-                  <PhoneOff size={16} /> HANG UP
+                  <PhoneOff size={18} /> HANG UP
                 </button>
               </div>
-            </>
+            </div>
           )}
 
-          {/* ── IDLE / REGISTERED: country code + number + dialpad + call ──── */}
+          {/* ── IDLE / READY: dialpad ── */}
           {!isInCall && !isCalling && (
-            <>
-              {/* Number input row */}
-              <div className="px-4 pt-2 pb-1">
-                <div
-                  className="flex items-center gap-0 overflow-hidden"
-                  style={{ border: '1.5px solid #E2E8F0', borderRadius: '14px', background: '#F8FAFC' }}
-                >
-                  {/* Country code selector */}
-                  <div className="relative flex-shrink-0" style={{ borderRight: '1.5px solid #E2E8F0' }}>
+            <div>
+              {/* Country selector */}
+              <div style={{ padding: '12px 14px 4px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'rgba(255,255,255,0.05)', borderRadius: 11,
+                  padding: '7px 12px', border: '1px solid rgba(255,255,255,0.07)',
+                }}>
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
                     <select
                       value={countryCode}
                       onChange={e => setCountryCode(e.target.value)}
                       disabled={!isConnected}
-                      className="appearance-none outline-none bg-transparent cursor-pointer font-mono font-semibold pr-5 pl-3 py-2.5"
                       style={{
-                        fontSize: '13px',
-                        color: isConnected ? '#1E293B' : '#94A3B8',
-                        minWidth: '72px',
+                        appearance: 'none', WebkitAppearance: 'none',
+                        background: 'transparent', border: 'none', outline: 'none',
+                        color: isConnected ? '#CBD5E1' : 'rgba(148,163,184,0.35)',
+                        fontFamily: 'monospace', fontSize: 12, fontWeight: 600,
+                        cursor: isConnected ? 'pointer' : 'default',
+                        paddingRight: 16, minWidth: 66,
                       }}
                     >
                       {COUNTRY_CODES.map(c => (
-                        <option key={c.code} value={c.code}>
+                        <option key={c.code} value={c.code} style={{ background: '#1e293b', color: '#e2e8f0' }}>
                           {c.flag} {c.code}
                         </option>
                       ))}
                     </select>
-                    <ChevronDown
-                      size={11}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                      style={{ color: '#94A3B8' }}
-                    />
+                    <ChevronDown size={10} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }} />
                   </div>
-
-                  {/* Number input */}
-                  <input
-                    ref={numberInputRef}
-                    className="flex-1 bg-transparent outline-none font-mono py-2.5 px-2"
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: '#1E293B',
-                      letterSpacing: '0.04em',
-                      opacity: isConnected ? 1 : 0.4,
-                      minWidth: 0,
-                      width: 0,           /* force flex to control width, never auto-expand */
-                      overflow: 'hidden', /* clip — scrollLeft handles visibility */
-                    }}
-                    placeholder={isConnected ? 'Number' : '–'}
-                    value={number}
-                    disabled={!isConnected}
-                    inputMode="numeric"
-                    onChange={e => setNumber(e.target.value.replace(/[^0-9+*#]/g, ''))}
-                    onKeyDown={e => { if (e.key === 'Enter' && dialReady) sipCall() }}
-                  />
-
-                  {/* Backspace */}
-                  {number && isConnected && (
-                    <button
-                      onClick={() => setNumber(n => n.slice(0, -1))}
-                      className="p-2.5 flex-shrink-0 transition-colors"
-                      style={{ color: '#94A3B8' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = '#475569')}
-                      onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}
-                    >
-                      <Delete size={15} />
-                    </button>
-                  )}
+                  <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.1)' }} />
+                  <span style={{ fontSize: 11, color: 'rgba(100,116,139,0.8)', fontFamily: 'monospace', flex: 1 }}>
+                    {selectedCountry?.name ?? ''}
+                  </span>
                 </div>
+              </div>
 
-                {/* Preview: full dial number */}
-                {isConnected && number.trim() && (
-                  <p className="text-center mt-1.5" style={{ fontSize: '10px', color: '#94A3B8', fontFamily: 'monospace' }}>
-                    Will dial: <span style={{ color: '#6366F1', fontWeight: 700 }}>{countryCode}{number.trim()}</span>
-                    {selectedCountry && (
-                      <span style={{ marginLeft: '4px' }}>{selectedCountry.flag} {selectedCountry.name}</span>
-                    )}
-                  </p>
+              {/* Number display */}
+              <div style={{ padding: '8px 14px 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 68 }}>
+                <input
+                  ref={numberInputRef}
+                  className="bg-transparent outline-none text-center font-mono placeholder:text-slate-700"
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    fontSize: number.length > 10 ? 20 : number.length > 6 ? 26 : 32,
+                    fontWeight: 700,
+                    color: number ? '#F8FAFC' : 'rgba(71,85,105,0.6)',
+                    letterSpacing: '0.06em',
+                    transition: 'font-size 0.15s ease',
+                    cursor: isConnected ? 'text' : 'default',
+                  }}
+                  placeholder="· · · · · · · ·"
+                  value={number}
+                  disabled={!isConnected}
+                  inputMode="numeric"
+                  onChange={e => setNumber(e.target.value.replace(/[^0-9+*#]/g, ''))}
+                  onKeyDown={e => { if (e.key === 'Enter' && dialReady) sipCall() }}
+                />
+                {number && isConnected && (
+                  <button
+                    onClick={() => setNumber(n => n.slice(0, -1))}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#475569', padding: 4, borderRadius: 8, flexShrink: 0 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#94A3B8')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+                  >
+                    <Delete size={17} />
+                  </button>
                 )}
               </div>
 
+              {/* Dial preview */}
+              {isConnected && number.trim() && (
+                <p style={{ textAlign: 'center', fontSize: 10, color: '#334155', fontFamily: 'monospace', marginBottom: 4 }}>
+                  <span style={{ color: '#818cf8', fontWeight: 700 }}>{countryCode}{number}</span>
+                  {selectedCountry && <span style={{ marginLeft: 4 }}>{selectedCountry.flag}</span>}
+                </p>
+              )}
+
               {/* Dialpad */}
-              <div
-                className="py-1"
-                style={{ opacity: isConnected ? 1 : 0.3, pointerEvents: isConnected ? 'auto' : 'none' }}
-              >
+              <div style={{ opacity: isConnected ? 1 : 0.3, pointerEvents: isConnected ? 'auto' : 'none' }}>
                 <DialPad onPress={sipDtmf} />
               </div>
 
-              {/* Call button */}
-              <div className="px-4 pb-2.5">
+              {/* Action button */}
+              <div style={{ padding: '8px 14px 16px' }}>
                 {(phoneState === 'idle' || phoneState === 'registering' || phoneState === 'error') ? (
                   <button
                     onClick={sipEnable}
                     disabled={isBusy}
-                    className="w-full flex items-center justify-center gap-2.5 rounded-2xl font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{
-                      height: '40px', fontSize: '13px', letterSpacing: '0.04em',
+                      width: '100%', height: 52, borderRadius: 26, border: 'none',
+                      cursor: isBusy ? 'not-allowed' : 'pointer',
                       background: isBusy
-                        ? 'linear-gradient(135deg,#F59E0B 0%,#D97706 100%)'
-                        : 'linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)',
-                      boxShadow: isBusy ? '0 4px 16px rgba(245,158,11,0.35)' : '0 4px 16px rgba(99,102,241,0.35)',
+                        ? 'linear-gradient(135deg,#F59E0B,#D97706)'
+                        : 'linear-gradient(135deg,#6366F1,#8B5CF6)',
+                      boxShadow: isBusy
+                        ? '0 4px 20px rgba(245,158,11,0.35)'
+                        : '0 4px 20px rgba(99,102,241,0.4)',
+                      color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '0.05em',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      opacity: isBusy ? 0.9 : 1,
                     }}
                   >
                     {isBusy
-                      ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
-                      : <><Power size={15} /> Enable WebPhone</>
+                      ? <><Loader2 size={16} className="animate-spin" /> Connecting…</>
+                      : <><Power size={16} /> Enable WebPhone</>
                     }
                   </button>
                 ) : (
                   <button
                     onClick={sipCall}
                     disabled={!dialReady}
-                    className="w-full flex items-center justify-center gap-2.5 rounded-2xl font-bold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-35 disabled:cursor-not-allowed"
                     style={{
-                      height: '40px', fontSize: '14px', letterSpacing: '0.04em',
-                      background: 'linear-gradient(135deg,#22C55E 0%,#16A34A 100%)',
-                      boxShadow: dialReady ? '0 4px 16px rgba(34,197,94,0.4)' : 'none',
+                      width: '100%', height: 52, borderRadius: 26, border: 'none',
+                      cursor: dialReady ? 'pointer' : 'not-allowed',
+                      background: 'linear-gradient(135deg,#22C55E,#16A34A)',
+                      boxShadow: dialReady ? '0 6px 28px rgba(34,197,94,0.5)' : 'none',
+                      color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '0.05em',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      opacity: dialReady ? 1 : 0.3,
+                      transition: 'opacity 0.15s, box-shadow 0.15s',
                     }}
                   >
-                    <Phone size={16} /> CALL
+                    <Phone size={18} /> CALL
                   </button>
                 )}
               </div>
-            </>
+            </div>
           )}
+
         </div>
       </DraggableWidget>
-
-      {/* FAB is now handled by FloatingFab in AppLayout */}
     </>
   )
 }

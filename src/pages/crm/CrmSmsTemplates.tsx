@@ -1,167 +1,146 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Check, MessageSquare,
-  Copy, Search, Layers, ToggleLeft, Smartphone,
+  Search, Layers, ToggleLeft, ToggleRight, ChevronRight,
+  Smartphone, Copy, Inbox,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { SmsTemplate } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { cn } from '../../utils/cn'
 
+// ─── Variable groups ──────────────────────────────────────────────────────────
 const VARIABLE_GROUPS = [
-  {
-    label: 'Lead Info',
-    vars: ['[[first_name]]', '[[last_name]]', '[[phone_number]]', '[[email]]', '[[company_name]]'],
-  },
-  {
-    label: 'Status',
-    vars: ['[[lead_status]]'],
-  },
-  {
-    label: 'Legacy',
-    vars: ['[first_name]', '[last_name]'],
-  },
+  { label: 'Lead Info', vars: ['[[first_name]]', '[[last_name]]', '[[phone_number]]', '[[email]]', '[[company_name]]'] },
+  { label: 'Status',    vars: ['[[lead_status]]'] },
+  { label: 'Legacy',    vars: ['[first_name]', '[last_name]'] },
 ]
 
-interface FormState {
-  sms_template_name: string
-  sms_template: string
-}
-
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface FormState { sms_template_name: string; sms_template: string }
 const EMPTY_FORM: FormState = { sms_template_name: '', sms_template: '' }
 
-const SMS_SEGMENT_SIZE = 160
-
+// ─── SMS helpers ──────────────────────────────────────────────────────────────
+const SEG = 160
 function smsStats(text: string) {
-  const len = text.length
-  const segments = len === 0 ? 0 : Math.ceil(len / SMS_SEGMENT_SIZE)
-  const remaining = segments === 0 ? SMS_SEGMENT_SIZE : segments * SMS_SEGMENT_SIZE - len
+  const len      = text.length
+  const segments = len === 0 ? 0 : Math.ceil(len / SEG)
+  const remaining = segments === 0 ? SEG : segments * SEG - len
   return { len, segments, remaining }
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  iconBg,
-  iconColor,
-}: {
-  icon: React.ElementType
-  label: string
-  value: number | string
-  iconBg: string
-  iconColor: string
-}) {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-        <Icon size={19} className={iconColor} />
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-slate-900 leading-tight">{value}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{label}</p>
-      </div>
-    </div>
-  )
-}
-
-function PhoneMockup({ message }: { message: string }) {
+// ─── Phone mockup ─────────────────────────────────────────────────────────────
+function PhoneMockup({ message, compact = false }: { message: string; compact?: boolean }) {
   return (
     <div className="flex flex-col items-center">
       <div
-        className="relative bg-slate-900 rounded-[2.5rem] p-3 shadow-2xl"
-        style={{ width: '200px' }}
+        className="relative bg-slate-900 rounded-[2rem] shadow-2xl"
+        style={{ width: compact ? 180 : 210, padding: compact ? 10 : 12 }}
       >
         {/* Notch */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-16 h-4 bg-slate-800 rounded-full z-10" />
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-14 h-3.5 bg-slate-800 rounded-full z-10" />
         {/* Screen */}
-        <div className="bg-slate-100 rounded-[2rem] overflow-hidden flex flex-col" style={{ minHeight: '360px' }}>
+        <div className="bg-slate-100 rounded-[1.5rem] overflow-hidden flex flex-col" style={{ minHeight: compact ? 300 : 340 }}>
           {/* Status bar */}
-          <div className="bg-white px-4 pt-7 pb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">9:41</span>
+          <div className="bg-white px-3 pt-6 pb-1.5 flex items-center justify-between">
+            <span className="text-[10px] font-semibold text-slate-700">9:41</span>
             <div className="flex items-center gap-0.5">
-              <div className="w-3 h-1.5 bg-slate-700 rounded-sm opacity-80" />
+              <div className="w-2.5 h-1.5 bg-slate-700 rounded-sm opacity-80" />
               <div className="w-1 h-1.5 bg-slate-700 rounded-sm opacity-60" />
-              <div className="w-3 h-1.5 bg-slate-700 rounded-sm opacity-40" />
+              <div className="w-2.5 h-1.5 bg-slate-700 rounded-sm opacity-40" />
             </div>
           </div>
           {/* Contact header */}
-          <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-indigo-600">L</span>
+          <div className="bg-white border-b border-slate-100 px-3 py-2 flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-[9px] font-bold text-emerald-700">L</span>
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-800 leading-none">Lead Name</p>
-              <p className="text-xs text-slate-400 mt-0.5">Text Message</p>
+              <p className="text-[10px] font-semibold text-slate-800 leading-none">Lead Name</p>
+              <p className="text-[9px] text-slate-400 mt-0.5">Text Message</p>
             </div>
           </div>
-          {/* Messages */}
-          <div className="flex-1 p-3 bg-slate-50 overflow-y-auto">
+          {/* Messages area */}
+          <div className="flex-1 p-2.5 bg-slate-50 overflow-y-auto">
             {message ? (
               <div className="flex justify-end">
                 <div
-                  className="max-w-[82%] px-3 py-2 rounded-2xl rounded-br-sm text-xs text-white leading-relaxed break-words"
-                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+                  className="max-w-[85%] px-2.5 py-1.5 rounded-2xl rounded-br-sm text-[10px] text-white leading-relaxed break-words"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
                 >
                   {message}
                 </div>
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-xs text-slate-400 italic text-center px-2">
-                  Type a message to see preview
+              <div className="h-full flex items-center justify-center py-6">
+                <p className="text-[10px] text-slate-400 italic text-center px-2">
+                  Select a template to preview
                 </p>
               </div>
             )}
           </div>
           {/* Input bar */}
-          <div className="bg-white border-t border-slate-200 px-2 py-2 flex items-center gap-1.5">
-            <div className="flex-1 bg-slate-100 rounded-full px-3 py-1">
-              <span className="text-xs text-slate-400">iMessage</span>
+          <div className="bg-white border-t border-slate-100 px-2 py-1.5 flex items-center gap-1.5">
+            <div className="flex-1 bg-slate-100 rounded-full px-2.5 py-1">
+              <span className="text-[9px] text-slate-400">iMessage</span>
             </div>
-            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold leading-none">↑</span>
+            <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-[9px] font-bold">↑</span>
             </div>
           </div>
         </div>
         {/* Home bar */}
-        <div className="mt-2 mx-auto w-14 h-1 bg-slate-700 rounded-full" />
+        <div className="mt-1.5 mx-auto w-12 h-1 bg-slate-700 rounded-full" />
       </div>
     </div>
   )
 }
 
-function SmsModal({
-  editing,
-  onClose,
-  onSaved,
-}: {
-  editing?: SmsTemplate | null
-  onClose: () => void
-  onSaved: () => void
+// ─── Segment bar ──────────────────────────────────────────────────────────────
+function SegmentBar({ text }: { text: string }) {
+  const { len, segments, remaining } = smsStats(text)
+  if (len === 0) return null
+  const pct = Math.min((len / (segments * SEG)) * 100, 100)
+  const multi = segments > 1
+  return (
+    <div className="space-y-1">
+      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-200"
+          style={{ width: `${pct}%`, background: multi ? 'linear-gradient(90deg,#f59e0b,#ef4444)' : 'linear-gradient(90deg,#10b981,#059669)' }} />
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-slate-400">{remaining} chars left in segment</span>
+        <span className={cn('font-semibold', multi ? 'text-amber-600' : 'text-slate-400')}>
+          {len} chars · {segments} SMS{segments > 1 ? ` (${segments} msgs)` : ''}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Editor Modal ─────────────────────────────────────────────────────────────
+function SmsModal({ editing, onClose, onSaved }: {
+  editing?: SmsTemplate | null; onClose: () => void; onSaved: () => void
 }) {
-  const qc = useQueryClient()
+  const qc     = useQueryClient()
   const isEdit = !!editing
+  const taRef  = useRef<HTMLTextAreaElement>(null)
   const [form, setForm] = useState<FormState>(
     editing
       ? { sms_template_name: editing.sms_template_name, sms_template: editing.sms_template }
-      : EMPTY_FORM,
+      : EMPTY_FORM
   )
-
   const set = (k: keyof FormState, v: string) => setForm(f => ({ ...f, [k]: v }))
 
   const insertVar = (v: string) => {
-    const ta = document.getElementById('sms-body') as HTMLTextAreaElement
+    const ta = taRef.current
     if (!ta) { set('sms_template', form.sms_template + v); return }
-    const start = ta.selectionStart
-    const end = ta.selectionEnd
-    set('sms_template', form.sms_template.slice(0, start) + v + form.sms_template.slice(end))
-    setTimeout(() => {
-      ta.focus()
-      ta.setSelectionRange(start + v.length, start + v.length)
-    }, 10)
+    const s = ta.selectionStart, e = ta.selectionEnd
+    set('sms_template', form.sms_template.slice(0, s) + v + form.sms_template.slice(e))
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(s + v.length, s + v.length) }, 10)
   }
 
   const saveMutation = useMutation({
@@ -177,114 +156,71 @@ function SmsModal({
     onError: () => toast.error('Failed to save template'),
   })
 
-  const { len, segments, remaining } = smsStats(form.sms_template)
-  const progressPct = Math.min(
-    (len / (segments === 0 ? SMS_SEGMENT_SIZE : segments * SMS_SEGMENT_SIZE)) * 100,
-    100,
-  )
   const canSave = form.sms_template_name.trim() && form.sms_template.trim()
 
   return (
     <div className="modal-backdrop">
-      <div
-        className="modal-card flex flex-col"
-        style={{ maxWidth: '800px', width: '95vw', maxHeight: '92vh' }}
-      >
+      <div className="modal-card flex flex-col" style={{ maxWidth: 860, width: '96vw', maxHeight: '92vh' }}>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <MessageSquare size={16} className="text-emerald-600" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <MessageSquare size={15} className="text-emerald-600" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 leading-none">
-                {isEdit ? `Editing: ${editing!.sms_template_name}` : 'New SMS Template'}
+              <h2 className="text-[13px] font-semibold text-slate-900 leading-tight">
+                {isEdit ? editing!.sms_template_name : 'New SMS Template'}
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Use{' '}
-                <code className="font-mono bg-slate-100 px-1 rounded text-slate-600">
-                  {'[[variable]]'}
-                </code>{' '}
-                to personalize messages
+              <p className="text-[11px] text-slate-400">
+                Use <code className="font-mono bg-slate-100 px-1 rounded text-slate-600 text-[10px]">{'[[variable]]'}</code> to personalize messages
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="action-btn"><X size={15} /></button>
+          <button onClick={onClose} className="action-btn"><X size={14} /></button>
         </div>
 
-        {/* Body — two-panel */}
+        {/* Body */}
         <div className="flex-1 overflow-hidden flex min-h-0">
+
           {/* Left: form */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5 min-w-0">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 min-w-0">
+            {/* Name */}
             <div>
-              <label className="label">Template Name <span className="text-red-500">*</span></label>
-              <input
-                className="input w-full"
-                value={form.sms_template_name}
-                onChange={e => set('sms_template_name', e.target.value)}
-                placeholder="e.g. Application Received"
-              />
+              <label className="label">Template Name <span className="text-red-400">*</span></label>
+              <input className="input w-full text-sm" placeholder="e.g. Application Received"
+                value={form.sms_template_name} onChange={e => set('sms_template_name', e.target.value)} />
             </div>
 
+            {/* Body */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="label mb-0">
-                  Message Body <span className="text-red-500">*</span>
-                </label>
-                <span className={`text-xs font-medium ${segments > 1 ? 'text-amber-600' : 'text-slate-400'}`}>
-                  {len} chars · {segments} SMS segment{segments !== 1 ? 's' : ''}
-                </span>
-              </div>
+              <label className="label">Message Body <span className="text-red-400">*</span></label>
               <textarea
+                ref={taRef}
                 id="sms-body"
-                className="input w-full resize-none"
-                rows={5}
+                className="input w-full resize-none text-sm leading-relaxed"
+                rows={6}
                 value={form.sms_template}
                 onChange={e => set('sms_template', e.target.value)}
                 placeholder="Hi [[first_name]], your application has been received…"
               />
-              {/* Progress bar */}
-              <div className="mt-2 space-y-1">
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-200"
-                    style={{
-                      width: `${progressPct}%`,
-                      background:
-                        segments > 1
-                          ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
-                          : 'linear-gradient(90deg, #6366f1, #8b5cf6)',
-                    }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>{remaining} chars remaining in this segment</span>
-                  {segments > 1 && (
-                    <span className="text-amber-600 font-medium">
-                      Will send as {segments} messages
-                    </span>
-                  )}
-                </div>
+              <div className="mt-2">
+                <SegmentBar text={form.sms_template} />
               </div>
             </div>
 
-            {/* Variables */}
+            {/* Variable chips */}
             <div>
-              <p className="label-xs mb-3">Insert variable</p>
-              <div className="space-y-3">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Insert variable</p>
+              <div className="space-y-2.5">
                 {VARIABLE_GROUPS.map(group => (
                   <div key={group.label}>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      {group.label}
-                    </p>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{group.label}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {group.vars.map(v => (
-                        <button
-                          key={v}
-                          onClick={() => insertVar(v)}
-                          className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-mono hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                        >
-                          {v} <Copy size={9} className="text-slate-300" />
+                        <button key={v} onMouseDown={e => e.preventDefault()} onClick={() => insertVar(v)}
+                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 font-mono hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+                          {v} <Copy size={8} className="text-slate-300" />
                         </button>
                       ))}
                     </div>
@@ -295,52 +231,226 @@ function SmsModal({
           </div>
 
           {/* Right: phone preview */}
-          <div className="w-60 border-l border-slate-200 bg-slate-50 flex-shrink-0 flex flex-col items-center justify-center p-5 gap-4">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <Smartphone size={12} /> Live Preview
+          <div className="w-56 border-l border-slate-100 bg-slate-50/70 flex-shrink-0 flex flex-col items-center justify-center p-4 gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              <Smartphone size={11} /> Live Preview
             </div>
-            <PhoneMockup message={form.sms_template} />
+            <PhoneMockup message={form.sms_template} compact />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={!canSave || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
-          >
-            {saveMutation.isPending ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Check size={14} />
-            )}
+        <div className="flex items-center gap-3 px-5 py-3 border-t border-slate-100 bg-white flex-shrink-0">
+          <button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50">
+            {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
             {isEdit ? 'Save Changes' : 'Create Template'}
           </button>
           <button onClick={onClose} className="btn-outline">Cancel</button>
+          {!canSave && <p className="text-[11px] text-slate-400 ml-1">Name and message body are required</p>}
         </div>
       </div>
     </div>
   )
 }
 
+// ─── Left panel list item ─────────────────────────────────────────────────────
+function ListItem({ t, selected, onClick }: { t: SmsTemplate; selected: boolean; onClick: () => void }) {
+  const { len, segments } = smsStats(t.sms_template)
+  const snippet = t.sms_template.slice(0, 90)
+  return (
+    <button onClick={onClick} className={cn(
+      'w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors group relative',
+      selected && 'bg-emerald-50/60 border-l-[3px] border-l-emerald-500 hover:bg-emerald-50/80'
+    )}>
+      <div className="flex items-center gap-3">
+        {/* Status dot */}
+        <span className={cn('w-2 h-2 rounded-full flex-shrink-0 mt-0.5',
+          t.status === 1 ? 'bg-emerald-400' : 'bg-slate-300'
+        )} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-0.5">
+            <p className={cn('text-[13px] font-semibold truncate', selected ? 'text-emerald-700' : 'text-slate-800')}>
+              {t.sms_template_name}
+            </p>
+            {segments > 1 && (
+              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                {segments} msgs
+              </span>
+            )}
+          </div>
+          {snippet && (
+            <p className="text-[11px] text-slate-500 truncate leading-relaxed">{snippet}{t.sms_template.length > 90 ? '…' : ''}</p>
+          )}
+          <p className="text-[10px] text-slate-400 mt-0.5">{len} chars · {segments} segment{segments !== 1 ? 's' : ''}</p>
+        </div>
+        <ChevronRight size={11} className={cn('flex-shrink-0 transition-colors',
+          selected ? 'text-emerald-400' : 'text-slate-200 group-hover:text-slate-300'
+        )} />
+      </div>
+    </button>
+  )
+}
+
+// ─── Right panel: preview ─────────────────────────────────────────────────────
+function PreviewPanel({ t, onEdit, onToggle, onDelete, toggling, deleting }: {
+  t: SmsTemplate; onEdit: () => void; onToggle: () => void; onDelete: () => void
+  toggling: boolean; deleting: boolean
+}) {
+  const { len, segments, remaining } = smsStats(t.sms_template)
+  const multi = segments > 1
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0 bg-white">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+            t.status === 1 ? 'bg-emerald-50' : 'bg-slate-100'
+          )}>
+            <MessageSquare size={14} className={t.status === 1 ? 'text-emerald-600' : 'text-slate-400'} />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900 text-[14px] truncate">{t.sms_template_name}</p>
+            <p className="text-[11px] text-slate-400">SMS Template Preview</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+          <button onClick={onToggle} disabled={toggling}
+            className={cn('flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg font-medium border transition-all',
+              t.status === 1
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+            )}>
+            {toggling ? <Loader2 size={11} className="animate-spin" /> : t.status === 1 ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+            {t.status === 1 ? 'Active' : 'Inactive'}
+          </button>
+          <button onClick={onEdit}
+            className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg font-medium border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all">
+            <Pencil size={11} /> Edit
+          </button>
+          <button onClick={onDelete} disabled={deleting}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1.5 rounded-lg border border-red-200 bg-white text-red-500 hover:bg-red-50 transition-all">
+            {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Preview body */}
+      <div className="flex-1 overflow-y-auto bg-slate-50/80">
+        <div className="flex gap-6 p-6 h-full">
+
+          {/* Phone mockup */}
+          <div className="flex flex-col items-center justify-start pt-2 flex-shrink-0">
+            <PhoneMockup message={t.sms_template} />
+          </div>
+
+          {/* Info panel */}
+          <div className="flex-1 min-w-0 space-y-4">
+
+            {/* Stats strip */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Characters', value: len, color: 'text-slate-700' },
+                { label: 'SMS Segments', value: segments, color: multi ? 'text-amber-600' : 'text-emerald-600' },
+                { label: 'Chars remaining', value: remaining, color: 'text-slate-500' },
+              ].map(s => (
+                <div key={s.label} className="bg-white rounded-xl border border-slate-100 px-3 py-2.5">
+                  <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Segment warning */}
+            {multi && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50">
+                <span className="text-amber-500 text-[13px] mt-0.5">⚠</span>
+                <p className="text-[12px] text-amber-700">
+                  This message will be sent as <strong>{segments} separate SMS messages</strong>. Consider shortening it to reduce costs.
+                </p>
+              </div>
+            )}
+
+            {/* Full message card */}
+            <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Message content</p>
+                <span className="text-[10px] text-slate-400 font-mono">{len} / {segments * SEG}</span>
+              </div>
+              <div className="px-4 py-3">
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{t.sms_template}</p>
+              </div>
+            </div>
+
+            {/* Segment progress */}
+            {len > 0 && (
+              <div className="bg-white rounded-xl border border-slate-100 px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-semibold text-slate-500">Segment usage</p>
+                  <p className="text-[11px] text-slate-400">{segments} × 160 chars</p>
+                </div>
+                {Array.from({ length: segments }, (_, i) => {
+                  const start = i * SEG
+                  const end   = Math.min((i + 1) * SEG, len)
+                  const fill  = end - start
+                  const pct   = Math.round((fill / SEG) * 100)
+                  return (
+                    <div key={i} className="flex items-center gap-2 mb-1.5 last:mb-0">
+                      <span className="text-[10px] text-slate-400 w-14 flex-shrink-0">Msg {i + 1}</span>
+                      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all"
+                          style={{ width: `${pct}%`, background: multi ? 'linear-gradient(90deg,#f59e0b,#ef4444)' : 'linear-gradient(90deg,#10b981,#059669)' }} />
+                      </div>
+                      <span className="text-[10px] text-slate-400 w-8 text-right flex-shrink-0">{fill}/{SEG}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Empty select state ───────────────────────────────────────────────────────
+function SelectPrompt() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-slate-50/60 text-slate-300">
+      <div className="opacity-40">
+        <PhoneMockup message="" compact />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-medium text-slate-400">Select a template</p>
+        <p className="text-xs text-slate-300 mt-0.5">Click any template on the left to preview it</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 export function CrmSmsTemplates() {
   const qc = useQueryClient()
   const { setDescription, setActions } = useCrmHeader()
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState<SmsTemplate | null>(null)
-  const [search, setSearch] = useState('')
+
+  const [showModal, setShowModal]       = useState(false)
+  const [editing, setEditing]           = useState<SmsTemplate | null>(null)
+  const [selected, setSelected]         = useState<SmsTemplate | null>(null)
+  const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
 
+  const openCreate = () => { setEditing(null); setShowModal(true) }
+  const openEdit   = (t: SmsTemplate) => { setEditing(t); setShowModal(true) }
+  const closeModal = () => { setShowModal(false); setEditing(null) }
+
   useEffect(() => {
-    setDescription('Manage reusable SMS templates with dynamic variables')
+    setDescription('Reusable SMS templates with dynamic lead variables')
     setActions(
-      <button
-        onClick={() => { setEditing(null); setShowModal(true) }}
-        className="btn-primary flex items-center gap-2"
-      >
-        <Plus size={15} /> New Template
-      </button>,
+      <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+        <Plus size={14} /> New Template
+      </button>
     )
     return () => { setDescription(undefined); setActions(undefined) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -349,21 +459,26 @@ export function CrmSmsTemplates() {
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['sms-templates'],
     queryFn: async () => {
-      const res = await crmService.getSmsTemplates()
-      return (res.data?.data ?? res.data ?? []) as SmsTemplate[]
+      const res  = await crmService.getSmsTemplates()
+      const rows = (res.data?.data ?? res.data ?? []) as Record<string, unknown>[]
+      return rows.map(r => ({
+        ...r,
+        sms_template_name: r.template_name ?? r.sms_template_name ?? '',
+        sms_template:      r.template_html  ?? r.sms_template      ?? '',
+      })) as SmsTemplate[]
     },
     staleTime: 0,
   })
 
-  const allTemplates = rawData ?? []
+  const allTemplates  = rawData ?? []
+  const activeCount   = allTemplates.filter(t => t.status === 1).length
+  const inactiveCount = allTemplates.length - activeCount
+  const totalSegments = allTemplates.reduce((s, t) => s + smsStats(t.sms_template).segments, 0)
 
   const filtered = useMemo(() => {
+    const q = search.toLowerCase()
     return allTemplates.filter(t => {
-      const q = search.toLowerCase()
-      const matchSearch =
-        !q ||
-        t.sms_template_name.toLowerCase().includes(q) ||
-        t.sms_template.toLowerCase().includes(q)
+      const matchSearch = !q || t.sms_template_name.toLowerCase().includes(q) || t.sms_template.toLowerCase().includes(q)
       const matchStatus =
         statusFilter === 'all' ||
         (statusFilter === 'active' && t.status === 1) ||
@@ -372,223 +487,150 @@ export function CrmSmsTemplates() {
     })
   }, [allTemplates, search, statusFilter])
 
-  const activeCount = allTemplates.filter(t => t.status === 1).length
-  const inactiveCount = allTemplates.length - activeCount
-  const totalSegments = allTemplates.reduce((sum, t) => sum + smsStats(t.sms_template).segments, 0)
+  // Keep selected synced after mutations
+  useEffect(() => {
+    if (selected && rawData) {
+      const updated = rawData.find(t => t.id === selected.id)
+      if (updated) setSelected(updated)
+    }
+  }, [rawData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleMutation = useMutation({
-    mutationFn: (t: SmsTemplate) =>
-      crmService.toggleSmsTemplate(t.id, t.status === 1 ? 0 : 1),
+    mutationFn: (t: SmsTemplate) => crmService.toggleSmsTemplate(t.id, t.status === 1 ? 0 : 1),
     onSuccess: () => { toast.success('Updated'); qc.invalidateQueries({ queryKey: ['sms-templates'] }) },
     onError: () => toast.error('Failed to update'),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => crmService.deleteSmsTemplate(id),
-    onSuccess: () => { toast.success('Deleted'); qc.invalidateQueries({ queryKey: ['sms-templates'] }) },
+    onSuccess: () => { toast.success('Deleted'); setSelected(null); qc.invalidateQueries({ queryKey: ['sms-templates'] }) },
     onError: () => toast.error('Failed to delete'),
   })
 
+  const handleDelete = async (t: SmsTemplate) => {
+    if (await confirmDelete(t.sms_template_name)) deleteMutation.mutate(t.id)
+  }
+
   return (
-    <div className="space-y-5">
-      {/* Stats bar */}
-      {allTemplates.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard
-            icon={Layers}
-            label="Total Templates"
-            value={allTemplates.length}
-            iconBg="bg-emerald-50"
-            iconColor="text-emerald-600"
-          />
-          <StatCard
-            icon={Check}
-            label="Active"
-            value={activeCount}
-            iconBg="bg-indigo-50"
-            iconColor="text-indigo-500"
-          />
-          <StatCard
-            icon={ToggleLeft}
-            label="Total SMS Segments"
-            value={totalSegments}
-            iconBg="bg-slate-100"
-            iconColor="text-slate-500"
-          />
-        </div>
-      )}
+    <div className="flex flex-col gap-4 h-full">
 
-      {/* Search + filter */}
-      {allTemplates.length > 0 && (
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-            />
-            <input
-              className="input w-full pl-9 text-sm"
-              placeholder="Search templates…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+      {/* ── Compact header strip ──────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {allTemplates.length > 0 && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
+              <Layers size={12} className="text-emerald-500" /> {allTemplates.length} total
+            </span>
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {activeCount} active
+            </span>
+            {inactiveCount > 0 && (
+              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> {inactiveCount} inactive
+              </span>
+            )}
+            {totalSegments > 0 && (
+              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-full">
+                <MessageSquare size={11} /> {totalSegments} segments
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-100">
-            {(['all', 'active', 'inactive'] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className="px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all"
-                style={
-                  statusFilter === s
-                    ? { background: '#fff', color: '#059669', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
-                    : { color: '#6B7280' }
-                }
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Loading */}
+        {allTemplates.length > 0 && (
+          <>
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input className="input w-full pl-9 text-sm h-9" placeholder="Search templates…"
+                value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5 flex-shrink-0">
+              {(['all', 'active', 'inactive'] as const).map(s => (
+                <button key={s} onClick={() => setStatusFilter(s)}
+                  className={cn('px-3 py-1.5 rounded-md text-[11px] font-semibold capitalize transition-all',
+                    statusFilter === s ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  )}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Main panel ──────────────────────────────────────────────────────── */}
       {isLoading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 size={24} className="animate-spin text-emerald-500" />
+        <div className="flex justify-center py-24">
+          <Loader2 size={24} className="animate-spin text-emerald-400" />
         </div>
+
       ) : allTemplates.length === 0 ? (
-        /* Empty state */
-        <div className="table-wrapper text-center py-16">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm text-center py-20 px-8">
           <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
-            <MessageSquare size={28} className="text-emerald-500" />
+            <Inbox size={26} className="text-emerald-400" />
           </div>
           <p className="font-semibold text-slate-800 text-base">No SMS templates yet</p>
           <p className="text-sm mt-1.5 text-slate-400 max-w-xs mx-auto">
             Create templates to quickly send personalized text messages to your leads
           </p>
-          <button
-            onClick={() => { setEditing(null); setShowModal(true) }}
-            className="btn-primary mt-5 inline-flex items-center gap-2"
-            style={{ background: '#059669' }}
-          >
+          <button onClick={openCreate} className="btn-primary mt-5 inline-flex items-center gap-2">
             <Plus size={14} /> Create First Template
           </button>
         </div>
-      ) : filtered.length === 0 ? (
-        /* No results */
-        <div className="table-wrapper text-center py-12">
-          <Search size={28} className="mx-auto mb-3 text-slate-300" />
-          <p className="font-medium text-slate-600">No templates match your search</p>
-          <button
-            onClick={() => { setSearch(''); setStatusFilter('all') }}
-            className="text-xs text-emerald-600 hover:underline mt-2"
-          >
-            Clear filters
-          </button>
-        </div>
+
       ) : (
-        /* Template grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map(t => {
-            const { len, segments } = smsStats(t.sms_template)
-            const multiSegment = segments > 1
+        /* Two-panel layout */
+        <div className="flex rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex-1 min-h-0" style={{ minHeight: 520 }}>
 
-            return (
-              <div
-                key={t.id}
-                className="rounded-2xl border border-slate-200 bg-white overflow-hidden hover:shadow-md hover:border-slate-300 transition-all group"
-              >
-                {/* Accent stripe */}
-                <div
-                  className="h-1"
-                  style={{ background: 'linear-gradient(90deg, #10b981, #059669, #0d9488)' }}
-                />
-
-                <div className="p-5 space-y-3">
-                  {/* Title row */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
-                        <MessageSquare size={15} className="text-emerald-600" />
-                      </div>
-                      <p className="font-semibold text-sm truncate text-slate-900">
-                        {t.sms_template_name}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => toggleMutation.mutate(t)}
-                      className={[
-                        'flex-shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium transition-all border',
-                        t.status === 1
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200',
-                      ].join(' ')}
-                    >
-                      {t.status === 1 && <Check size={10} />}
-                      {t.status === 1 ? 'Active' : 'Off'}
-                    </button>
-                  </div>
-
-                  {/* SMS bubble preview */}
-                  <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-                    <div className="flex justify-end">
-                      <div
-                        className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-sm text-xs text-white leading-relaxed break-words"
-                        style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
-                      >
-                        {t.sms_template.slice(0, 120)}
-                        {t.sms_template.length > 120 ? '…' : ''}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Meta row */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">{len} chars</span>
-                    <span className="text-slate-200">·</span>
-                    <span
-                      className={[
-                        'text-xs px-2 py-0.5 rounded-full font-medium',
-                        multiSegment
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-slate-100 text-slate-500',
-                      ].join(' ')}
-                    >
-                      {segments} segment{segments !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => { setEditing(t); setShowModal(true) }}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium flex-1 justify-center hover:bg-slate-50 transition-colors"
-                    >
-                      <Pencil size={11} /> Edit
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (await confirmDelete(t.sms_template_name)) deleteMutation.mutate(t.id)
-                      }}
-                      className="action-btn-danger"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+          {/* Left: list */}
+          <div className="w-[320px] flex-shrink-0 border-r border-slate-100 flex flex-col">
+            <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/80 flex-shrink-0">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                {filtered.length} template{filtered.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {filtered.length === 0 ? (
+                <div className="text-center py-10 px-4">
+                  <Search size={22} className="mx-auto mb-2 text-slate-200" />
+                  <p className="text-xs font-medium text-slate-400">No templates match</p>
+                  <button onClick={() => { setSearch(''); setStatusFilter('all') }}
+                    className="text-[11px] text-emerald-500 hover:underline mt-1">Clear filters</button>
                 </div>
-              </div>
-            )
-          })}
+              ) : (
+                filtered.map(t => (
+                  <ListItem key={t.id} t={t} selected={selected?.id === t.id} onClick={() => setSelected(t)} />
+                ))
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
+              <button onClick={openCreate}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-slate-300 text-[12px] font-semibold text-slate-500 hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50/50 transition-all">
+                <Plus size={13} /> New Template
+              </button>
+            </div>
+          </div>
+
+          {/* Right: preview */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {selected ? (
+              <PreviewPanel
+                t={selected}
+                onEdit={() => openEdit(selected)}
+                onToggle={() => toggleMutation.mutate(selected)}
+                onDelete={() => handleDelete(selected)}
+                toggling={toggleMutation.isPending}
+                deleting={deleteMutation.isPending}
+              />
+            ) : (
+              <SelectPrompt />
+            )}
+          </div>
         </div>
       )}
 
       {showModal && (
-        <SmsModal
-          editing={editing}
-          onClose={() => { setShowModal(false); setEditing(null) }}
-          onSaved={() => { setShowModal(false); setEditing(null) }}
-        />
+        <SmsModal editing={editing} onClose={closeModal} onSaved={closeModal} />
       )}
     </div>
   )

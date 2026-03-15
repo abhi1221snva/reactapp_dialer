@@ -42,29 +42,6 @@ type TabKey =
 
 // ─── Dot colours per activity type ────────────────────────────────────────────
 
-const DOT_COLOR: Record<string, string> = {
-  note_added:         'bg-emerald-500',
-  call_made:          'bg-blue-500',
-  email_sent:         'bg-sky-500',
-  sms_sent:           'bg-violet-500',
-  status_change:      'bg-violet-500',
-  field_update:       'bg-slate-400',
-  document_uploaded:  'bg-amber-500',
-  task_created:       'bg-violet-400',
-  task_completed:     'bg-emerald-400',
-  lender_submitted:   'bg-orange-500',
-  lender_response:    'bg-red-500',
-  approval_requested: 'bg-amber-500',
-  approval_granted:   'bg-emerald-500',
-  approval_declined:  'bg-red-500',
-  affiliate_created:  'bg-indigo-500',
-  merchant_accessed:  'bg-sky-400',
-  lead_created:       'bg-emerald-600',
-  lead_imported:      'bg-slate-400',
-  lead_assigned:      'bg-indigo-400',
-  webhook_triggered:  'bg-amber-400',
-  system:             'bg-slate-400',
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,12 +87,12 @@ function DateDivider({ date }: { date: string }) {
   })()
 
   return (
-    <div className="flex items-center gap-3 my-4 px-1">
-      <div className="flex-1 h-px bg-slate-200" />
-      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 whitespace-nowrap">
+    <div className="flex items-center gap-3 my-2 px-1">
+      <div className="flex-1 h-px bg-slate-100" />
+      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-1 whitespace-nowrap">
         {label}
       </span>
-      <div className="flex-1 h-px bg-slate-200" />
+      <div className="flex-1 h-px bg-slate-100" />
     </div>
   )
 }
@@ -320,29 +297,6 @@ function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
   )
 }
 
-// ─── Timeline item wrapper with dot ──────────────────────────────────────────
-
-interface TimelineItemProps {
-  activityType: string
-  children: React.ReactNode
-}
-
-function TimelineItemWrapper({ activityType, children }: TimelineItemProps) {
-  const dotColor = DOT_COLOR[activityType] ?? 'bg-slate-400'
-
-  return (
-    <div className="pl-9 relative">
-      {/* Colored dot */}
-      <div
-        className={cn(
-          'absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-white shadow-sm z-10',
-          dotColor,
-        )}
-      />
-      {children}
-    </div>
-  )
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -413,20 +367,18 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
       return (
         <div key={activity.id}>
           {showDivider && <DateDivider date={activity.created_at} />}
-          <TimelineItemWrapper activityType={activity.activity_type}>
-            <ActivityItem
-              activity={activity}
-              onPin={id => pinMutation.mutate(id)}
-              isLast={idx === unpinnedItems.length - 1 && !hasNextPage}
-            />
-          </TimelineItemWrapper>
+          <ActivityItem
+            activity={activity}
+            onPin={id => pinMutation.mutate(id)}
+            isLast={idx === unpinnedItems.length - 1 && !hasNextPage}
+          />
         </div>
       )
     })
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
 
       {/* ── Compose area ── */}
       <ComposeArea
@@ -493,17 +445,15 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
                   <div className="flex-1 h-px bg-amber-100" />
                 </div>
 
-                {/* Pinned items with vertical connector + dots */}
-                <div className="relative">
-                  <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-amber-200 via-amber-100 to-transparent pointer-events-none" />
+                {/* Pinned items */}
+                <div>
                   {pinnedItems.map((activity, idx) => (
-                    <TimelineItemWrapper key={activity.id} activityType={activity.activity_type}>
-                      <ActivityItem
-                        activity={activity}
-                        onPin={id => pinMutation.mutate(id)}
-                        isLast={idx === pinnedItems.length - 1 && unpinnedItems.length === 0}
-                      />
-                    </TimelineItemWrapper>
+                    <ActivityItem
+                      key={activity.id}
+                      activity={activity}
+                      onPin={id => pinMutation.mutate(id)}
+                      isLast={idx === pinnedItems.length - 1 && unpinnedItems.length === 0}
+                    />
                   ))}
                 </div>
 
@@ -517,12 +467,9 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
               </div>
             )}
 
-            {/* Unpinned items with vertical connector + date dividers */}
+            {/* Unpinned items with date dividers */}
             {unpinnedItems.length > 0 && (
-              <div className="relative">
-                <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-emerald-200 via-slate-200 to-transparent pointer-events-none" />
-                {buildUnpinnedWithDividers()}
-              </div>
+              <div>{buildUnpinnedWithDividers()}</div>
             )}
 
             {/* Load more */}

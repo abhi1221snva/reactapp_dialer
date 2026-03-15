@@ -5,7 +5,7 @@ import {
   Building2, User, BarChart2, DollarSign, Landmark, FileText,
   ChevronDown, ChevronUp, Edit3, Check, X, Upload, Eye, EyeOff, Printer, ExternalLink, Clock, AlertCircle
 } from 'lucide-react'
-import { publicAppService, PublicFormSection, MerchantDocument } from '../../services/publicApp.service'
+import { publicAppService, PublicFormSection, MerchantDocument, PublicDocumentType } from '../../services/publicApp.service'
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
@@ -24,7 +24,6 @@ const SECTION_ICONS: Record<string, React.ReactNode> = {
   'Bank Information':     <Landmark size={17} />,
 }
 
-const DOC_TYPES = ['Bank Statement','Driver License','Business License','Tax Return','Voided Check','Profit & Loss','Other']
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
@@ -202,8 +201,18 @@ function EditableSection({ section, fields, token, onSaved }: SectionProps) {
 // ─── Document manager ─────────────────────────────────────────────────────────
 function DocManager({ token, docs, onUploaded }: { token: string; docs: MerchantDocument[]; onUploaded: () => void }) {
   const [over, setOver]     = useState(false)
-  const [docType, setDocType] = useState('Bank Statement')
+  const [docType, setDocType] = useState('')
   const [uploading, setUploading] = useState(false)
+
+  const { data: typeData } = useQuery({
+    queryKey: ['public-doc-types', token],
+    queryFn: async () => {
+      const res = await publicAppService.getDocumentTypes(token)
+      return (res.data?.data ?? []) as PublicDocumentType[]
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const docTypes = typeData ?? []
   const [err, setErr]       = useState('')
   const inp = useRef<HTMLInputElement>(null)
   const fmtSize = (n: number) => n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`
@@ -252,7 +261,8 @@ function DocManager({ token, docs, onUploaded }: { token: string; docs: Merchant
         <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Document Type</label>
         <select value={docType} onChange={e => setDocType(e.target.value)}
           style={{ padding: '10px 14px', border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 14, background: C.white, width: '100%', cursor: 'pointer', outline: 'none' }}>
-          {DOC_TYPES.map(t => <option key={t}>{t}</option>)}
+          <option value="">— Select type —</option>
+          {docTypes.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
         </select>
       </div>
 
