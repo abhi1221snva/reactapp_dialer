@@ -6,10 +6,10 @@ import {
   CreditCard, Radio, MessagesSquare, Hash, UserCog, List, Tag, ListChecks, FileText, ChevronUp,
   PhoneCall, Voicemail, Layers, Link2, ShieldCheck, PieChart,
   Mail, Building2, LogOut, X, ChevronDown,
-  Headphones, Clock, Globe, Bot, Calendar,
+  Headphones, Globe, Bot, Calendar,
   Mic, Inbox, BrainCircuit, Settings2, User, Camera,
   Wifi, DollarSign, BookMarked,
-  Target, CheckCircle2,
+  Target, CheckCircle2, Zap,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
@@ -33,6 +33,8 @@ const ADMIN_ALLOWED_ROUTES = new Set([
   '/crm/lenders',
   '/crm/affiliate-links',
   '/crm/company-settings',
+  '/crm/sms-inbox',
+  '/crm/automations',
   '/crm/approvals',
   '/sms',
   '/chat',
@@ -149,10 +151,8 @@ const DIALER_SECTIONS: NavSection[] = [
     minLevel: LEVELS.MANAGER,
     items: [
       { to: '/reports',                      label: 'CDR Report',           icon: BarChart3,  minLevel: LEVELS.MANAGER },
-      { to: '/reports/daily',                label: 'Daily Report',         icon: Clock,      minLevel: LEVELS.MANAGER },
       { to: '/reports/agent-summary',        label: 'Agent Summary',        icon: Users,      minLevel: LEVELS.MANAGER },
       { to: '/reports/disposition',          label: 'Disposition Report',   icon: ListChecks, minLevel: LEVELS.MANAGER },
-      { to: '/reports/live',                 label: 'Live Calls',           icon: PhoneCall,  minLevel: LEVELS.MANAGER },
       { to: '/reports/campaign-performance', label: 'Campaign Performance', icon: PieChart,   minLevel: LEVELS.MANAGER },
     ],
   },
@@ -240,6 +240,7 @@ const CRM_SECTIONS: NavSection[] = [
       { to: '/gmail-mailbox', label: 'Gmail Inbox', icon: Inbox,         minLevel: 1 },
       { to: '/sms',           label: 'SMS Center',  icon: MessageSquare, minLevel: 1 },
       { to: '/chat',          label: 'Team Chat',   icon: MessagesSquare,minLevel: 1 },
+      { to: '/crm/sms-inbox',    label: 'SMS Inbox',    icon: MessageSquare, minLevel: 1 },
     ],
   },
   {
@@ -253,9 +254,10 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'TEMPLATES',
     minLevel: LEVELS.MANAGER,
     items: [
-      { to: '/crm/email-templates', label: 'Email Templates', icon: Mail,          minLevel: LEVELS.MANAGER },
-      { to: '/crm/sms-templates',   label: 'SMS Templates',   icon: MessageSquare, minLevel: LEVELS.MANAGER },
-      { to: '/crm/pdf-templates',   label: 'PDF Templates',   icon: FileText,      minLevel: LEVELS.MANAGER },
+      { to: '/crm/email-templates',  label: 'Email Templates',  icon: Mail,          minLevel: LEVELS.MANAGER },
+      { to: '/crm/sms-templates',    label: 'SMS Templates',    icon: MessageSquare, minLevel: LEVELS.MANAGER },
+      { to: '/crm/pdf-templates',    label: 'PDF Templates',    icon: FileText,      minLevel: LEVELS.MANAGER },
+      { to: '/crm/document-types',   label: 'Document Types',   icon: Tag,           minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -265,6 +267,13 @@ const CRM_SECTIONS: NavSection[] = [
       { to: '/crm/lenders',          label: 'Lenders',          icon: Building2, minLevel: LEVELS.MANAGER },
       { to: '/crm/affiliate-links',  label: 'Affiliate Links',  icon: Link2,     minLevel: LEVELS.MANAGER },
       { to: '/crm/company-settings', label: 'Company Settings', icon: Globe,     minLevel: LEVELS.MANAGER },
+    ],
+  },
+  {
+    label: 'AUTOMATION',
+    minLevel: LEVELS.MANAGER,
+    items: [
+      { to: '/crm/automations', label: 'Automations', icon: Zap, minLevel: LEVELS.MANAGER },
     ],
   },
   {

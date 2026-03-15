@@ -208,7 +208,7 @@ export type AutomationTrigger =
   | 'approval_declined'
   | 'lead_updated'
 
-export type AutomationAction =
+export type AutomationActionType =
   | 'send_email'
   | 'send_sms'
   | 'assign_to'
@@ -221,7 +221,7 @@ export interface AutomationRule {
   name: string
   trigger: AutomationTrigger
   trigger_conditions?: Record<string, unknown>
-  action: AutomationAction
+  action: AutomationActionType
   action_config: Record<string, unknown>
   status: 0 | 1
   run_count: number
@@ -501,4 +501,254 @@ export interface AnalyticsSummary {
   conversion_rate: number
   avg_per_day: number
   top_status: string
+}
+
+// ─── Lender Offers ────────────────────────────────────────────────────────────
+
+export type OfferStatus = 'pending' | 'received' | 'accepted' | 'declined' | 'expired'
+
+export interface LenderOffer {
+  id: number
+  lead_id: number
+  lender_id: number
+  lender_name?: string
+  offered_amount: number
+  factor_rate: number
+  term_days: number
+  daily_payment: number
+  total_payback: number
+  stips_required?: string[]
+  offer_expires_at?: string
+  status: OfferStatus
+  decline_reason?: string
+  notes?: string
+  created_by?: number
+  created_at: string
+  updated_at?: string
+}
+
+// ─── Deal Stips ───────────────────────────────────────────────────────────────
+
+export type StipType = 'bank_statement' | 'voided_check' | 'drivers_license' | 'tax_return' | 'lease_agreement' | 'business_license' | 'void_check' | 'articles_of_incorporation' | 'custom'
+export type StipStatus = 'requested' | 'uploaded' | 'approved' | 'rejected'
+
+export interface DealStip {
+  id: number
+  lead_id: number
+  lender_id?: number
+  stip_name: string
+  stip_type: StipType
+  status: StipStatus
+  document_id?: number
+  requested_by: number
+  requested_at?: string
+  uploaded_at?: string
+  approved_at?: string
+  approved_by?: number
+  notes?: string
+  created_at: string
+}
+
+// ─── Funded Deals ─────────────────────────────────────────────────────────────
+
+export type FundedDealStatus = 'funded' | 'in_repayment' | 'paid_off' | 'defaulted' | 'renewed'
+
+export interface FundedDeal {
+  id: number
+  lead_id: number
+  lender_id: number
+  lender_name?: string
+  funded_amount: number
+  factor_rate: number
+  term_days: number
+  total_payback: number
+  daily_payment: number
+  funding_date: string
+  first_debit_date?: string
+  contract_number?: string
+  wire_confirmation?: string
+  renewal_eligible_at?: string
+  status: FundedDealStatus
+  closed_at?: string
+  created_by?: number
+  created_at: string
+  updated_at?: string
+}
+
+// ─── Merchant Positions ───────────────────────────────────────────────────────
+
+export interface MerchantPosition {
+  id: number
+  lead_id: number
+  lender_name: string
+  funded_amount: number
+  factor_rate?: number
+  daily_payment: number
+  start_date: string
+  est_payoff_date?: string
+  remaining_balance?: number
+  position_number: number
+  source: 'self' | 'reported' | 'imported'
+  notes?: string
+  created_at: string
+}
+
+// ─── Commissions ─────────────────────────────────────────────────────────────
+
+export type CommissionType = 'points' | 'percentage' | 'flat'
+export type DealType = 'new' | 'renewal'
+
+export interface CommissionRule {
+  id: number
+  lender_id?: number
+  deal_type: DealType
+  commission_type: CommissionType
+  value: number
+  split_agent_pct: number
+  status: number
+  created_at: string
+}
+
+export interface DealCommission {
+  id: number
+  lead_id: number
+  lender_id?: number
+  funded_amount: number
+  gross_commission: number
+  agent_id?: number
+  agent_commission: number
+  company_commission: number
+  status: 'pending' | 'paid'
+  paid_at?: string
+  paid_by?: number
+  notes?: string
+  created_at: string
+}
+
+export interface CommissionSummary {
+  total_gross: number
+  total_agent: number
+  total_company: number
+  by_agent: Array<{ agent_id: number; agent_name?: string; total: number }>
+}
+
+// ─── Compliance ───────────────────────────────────────────────────────────────
+
+export type ComplianceCheckType = 'ofac' | 'kyc' | 'fraud_flag' | 'credit_pull' | 'background' | 'sos_verification' | 'custom'
+export type ComplianceResult = 'pass' | 'fail' | 'pending' | 'skipped'
+
+export interface ComplianceCheck {
+  id: number
+  lead_id: number
+  check_type: ComplianceCheckType
+  result: ComplianceResult
+  score?: string
+  notes?: string
+  checked_by?: number
+  checked_at?: string
+  meta?: Record<string, unknown>
+  created_at: string
+}
+
+export interface AdvanceRegistryEntry {
+  id: number
+  ein?: string
+  ssn_last4?: string
+  lead_id?: number
+  lender_name: string
+  funded_amount: number
+  daily_payment?: number
+  start_date: string
+  est_payoff_date?: string
+  source: 'self' | 'reported' | 'shared'
+  created_at: string
+  business_name?: string
+  total_daily_burden?: number
+  position_count?: number
+}
+
+export interface StackingWarning {
+  positions: MerchantPosition[]
+  total_daily_burden: number
+  position_count: number
+}
+
+// ─── Automations ──────────────────────────────────────────────────────────────
+
+export type AutomationTriggerType = 'status_change' | 'field_update' | 'time_elapsed' | 'document_uploaded' | 'deal_funded' | 'stip_uploaded' | 'offer_received'
+export type AutomationLogStatus = 'success' | 'failed' | 'skipped'
+
+export interface AutomationAction {
+  type: 'email' | 'sms' | 'status_change' | 'assign' | 'task' | 'webhook'
+  [key: string]: unknown
+}
+
+export interface CrmAutomation {
+  id: number
+  name: string
+  description?: string
+  is_active: boolean
+  trigger_type: AutomationTriggerType
+  trigger_config: Record<string, unknown>
+  conditions?: Array<{ field: string; operator: string; value: string }>
+  actions: AutomationAction[]
+  status: number
+  run_count: number
+  last_run_at?: string
+  created_by?: number
+  created_at: string
+}
+
+export interface AutomationLog {
+  id: number
+  automation_id: number
+  lead_id: number
+  triggered_by?: number
+  status: AutomationLogStatus
+  output?: string
+  created_at: string
+  error_message?: string
+}
+
+// ─── SMS Inbox ────────────────────────────────────────────────────────────────
+
+export type SmsConversationStatus = 'open' | 'closed' | 'archived'
+export type SmsDirection = 'inbound' | 'outbound'
+export type SmsMessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'received'
+
+export interface SmsConversation {
+  id: number
+  lead_id: number
+  lead_phone: string
+  agent_id?: number
+  last_message_at?: string
+  unread_count: number
+  status: SmsConversationStatus
+  // Joined fields from crm_leads
+  company_name?: string
+  first_name?: string
+  last_name?: string
+  created_at: string
+}
+
+export interface SmsMessage {
+  id: number
+  conversation_id: number
+  direction: SmsDirection
+  body: string
+  from_number: string
+  to_number: string
+  status: SmsMessageStatus
+  twilio_sid?: string
+  sent_by?: number
+  created_at: string
+}
+
+// ─── Renewal Pipeline ─────────────────────────────────────────────────────────
+
+export interface RenewalPipelineItem extends FundedDeal {
+  days_until_eligible: number
+  company_name?: string
+  first_name?: string
+  last_name?: string
 }

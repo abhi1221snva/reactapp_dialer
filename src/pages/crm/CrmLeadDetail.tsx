@@ -8,7 +8,8 @@ import {
   Settings2, Mail, Phone, MapPin, Calendar, User, Briefcase,
   Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
   ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
-  Check, DollarSign, LayoutDashboard, ChevronRight,
+  Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
+  Activity,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -17,6 +18,9 @@ import { crmService } from '../../services/crm.service'
 import { ActivityTimeline } from '../../components/crm/ActivityTimeline'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { MerchantPortalSection } from '../../components/crm/MerchantPortalSection'
+import { OffersStipsTab } from '../../components/crm/OffersStipsTab'
+import { DealTab } from '../../components/crm/DealTab'
+import { ComplianceTab } from '../../components/crm/ComplianceTab'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDocumentTypesManager'
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
@@ -25,15 +29,20 @@ import { formatPhoneNumber } from '../../utils/format'
 import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus } from '../../types/crm.types'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
-type TabId = 'overview' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant'
+type TabId = 'contact' | 'business' | 'details' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant' | 'offers' | 'deal' | 'compliance'
 
-const TABS: { id: TabId; label: string; icon: LucideIcon; mobileLabel: string }[] = [
-  { id: 'overview',  label: 'Overview',        icon: LayoutDashboard, mobileLabel: 'Overview'  },
-  { id: 'activity',  label: 'Activity',         icon: Clock,           mobileLabel: 'Activity'  },
-  { id: 'documents', label: 'Documents',        icon: FolderOpen,      mobileLabel: 'Docs'      },
-  { id: 'lenders',   label: 'Lenders',          icon: Building2,       mobileLabel: 'Lenders'   },
-  { id: 'approvals', label: 'Approvals',        icon: CheckSquare,     mobileLabel: 'Approvals' },
-  { id: 'merchant',  label: 'Merchant Portal',  icon: ExternalLink,    mobileLabel: 'Merchant'  },
+const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: 'contact',   label: 'Contact',         icon: User         },
+  { id: 'business',  label: 'Business',        icon: Briefcase    },
+  { id: 'details',   label: 'Lead Info',       icon: Hash         },
+  { id: 'activity',  label: 'Activity',        icon: Clock        },
+  { id: 'documents', label: 'Documents',       icon: FolderOpen   },
+  { id: 'lenders',   label: 'Lenders',         icon: Building2    },
+  { id: 'approvals', label: 'Approvals',       icon: CheckSquare  },
+  { id: 'merchant',  label: 'Merchant Portal', icon: ExternalLink },
+  { id: 'offers',     label: 'Offers & Stips',  icon: DollarSign    },
+  { id: 'deal',       label: 'Deal',             icon: TrendingUp    },
+  { id: 'compliance', label: 'Compliance',       icon: ShieldCheck   },
 ]
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -102,65 +111,167 @@ function initials(name: string) {
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
 }
 
-// ── PipelineProgress ───────────────────────────────────────────────────────────
-function PipelineProgress({ statuses, currentStatus }: { statuses: LeadStatus[]; currentStatus: string }) {
-  const display = statuses.slice(0, 6)
-  const currentIdx = display.findIndex(s => s.lead_title_url === currentStatus)
+// ── KPI Bar ────────────────────────────────────────────────────────────────────
+function KpiBar({
+  leadId,
+  daysInSystem,
+  loanAmount,
+  onTabSwitch,
+}: {
+  leadId: number
+  daysInSystem: number
+  loanAmount: string | number | null | undefined
+  onTabSwitch: (tab: TabId) => void
+}) {
+  const { data: docs } = useQuery({
+    queryKey: ['lead-documents', leadId],
+    queryFn: async () => (res => (res.data?.data ?? res.data ?? []) as CrmDocument[])(await crmService.getLeadDocuments(leadId)),
+    staleTime: 60 * 1000,
+  })
+  const { data: submissions } = useQuery({
+    queryKey: ['lender-submissions', leadId],
+    queryFn: async () => {
+      const res = await crmService.getLenderSubmissions(leadId)
+      return (res.data?.data ?? res.data ?? []) as LenderSubmission[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const docCount  = docs?.length ?? 0
+  const subCount  = submissions?.length ?? 0
+  const approvedCount = submissions?.filter(s => s.response_status === 'approved').length ?? 0
+
+  const formatted = loanAmount
+    ? `$${Number(String(loanAmount).replace(/[^0-9.]/g, '')).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+    : '—'
+
+  const kpis = [
+    {
+      label: 'Loan Amount',
+      value: formatted,
+      icon: DollarSign,
+      iconBg: 'bg-emerald-100',
+      iconColor: 'text-emerald-600',
+      valueBold: true,
+      onClick: undefined as (() => void) | undefined,
+    },
+    {
+      label: 'Days in Pipeline',
+      value: `${daysInSystem}d`,
+      icon: TrendingUp,
+      iconBg: 'bg-sky-100',
+      iconColor: 'text-sky-600',
+      valueBold: false,
+      onClick: undefined as (() => void) | undefined,
+    },
+    {
+      label: 'Documents',
+      value: docCount,
+      icon: FileCheck2,
+      iconBg: 'bg-violet-100',
+      iconColor: 'text-violet-600',
+      valueBold: false,
+      onClick: () => onTabSwitch('documents'),
+    },
+    {
+      label: 'Lender Responses',
+      value: `${approvedCount}/${subCount}`,
+      icon: Building2,
+      iconBg: 'bg-amber-100',
+      iconColor: 'text-amber-600',
+      valueBold: false,
+      onClick: () => onTabSwitch('lenders'),
+    },
+  ]
 
   return (
-    <div className="px-5 py-3 border-t border-white/10">
+    <div className="max-w-[1800px] mx-auto px-5 py-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {kpis.map((kpi, i) => {
+          const Icon = kpi.icon
+          const Tag = kpi.onClick ? 'button' : 'div'
+          return (
+            <Tag
+              key={i}
+              onClick={kpi.onClick}
+              className={[
+                'bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center gap-3',
+                kpi.onClick ? 'cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-[0.98]' : '',
+              ].join(' ')}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${kpi.iconBg}`}>
+                <Icon size={18} className={kpi.iconColor} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none">{kpi.label}</p>
+                <p className={`text-xl mt-0.5 leading-tight truncate ${kpi.valueBold ? 'font-extrabold text-slate-900' : 'font-bold text-slate-800'}`}>
+                  {kpi.value}
+                </p>
+              </div>
+            </Tag>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── PipelineProgress ───────────────────────────────────────────────────────────
+function PipelineProgress({
+  statuses,
+  currentStatus,
+  onStatusClick,
+}: {
+  statuses: LeadStatus[]
+  currentStatus: string
+  onStatusClick: (statusUrl: string) => void
+}) {
+  const display     = statuses.slice(0, 6)
+  const currentIdx  = display.findIndex(s => s.lead_title_url === currentStatus)
+
+  return (
+    <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/50">
       <div className="flex items-center gap-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
         {display.map((s, i) => {
           const isActive    = i === currentIdx
           const isCompleted = currentIdx >= 0 && i < currentIdx
-          const isFuture    = currentIdx < 0 || i > currentIdx
           const isLast      = i === display.length - 1
 
           return (
             <div key={s.id} className="flex items-center flex-shrink-0">
-              {/* Step */}
-              <div className="flex flex-col items-center gap-1">
+              <button
+                title={s.lead_title}
+                disabled={isActive}
+                onClick={() => { if (!isActive) onStatusClick(s.lead_title_url) }}
+                className={['flex flex-col items-center gap-1 focus:outline-none rounded px-1 py-0.5', isActive ? 'cursor-default' : 'cursor-pointer hover:opacity-80'].join(' ')}
+              >
                 <div className="relative flex items-center justify-center">
-                  {/* Circle */}
                   {isActive ? (
-                    <div className="relative w-7 h-7 rounded-full flex items-center justify-center"
-                      style={{ background: 'rgba(16,185,129,0.9)', boxShadow: '0 0 0 3px rgba(16,185,129,0.3), 0 0 0 6px rgba(16,185,129,0.1)' }}
-                    >
-                      <span className="text-[10px] font-bold text-white leading-none">{i + 1}</span>
-                      {/* Pulse dot */}
-                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping" style={{ animationDuration: '2s' }} />
-                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center bg-emerald-600">
+                      <span className="text-[9px] font-bold text-white">{i + 1}</span>
                     </div>
                   ) : isCompleted ? (
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.6)' }}>
-                      <Check size={12} className="text-white" />
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center bg-emerald-100">
+                      <Check size={11} className="text-emerald-600" />
                     </div>
                   ) : (
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.15)' }}>
-                      <span className="text-[10px] font-medium text-white/35 leading-none">{i + 1}</span>
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center border border-slate-200 bg-white">
+                      <span className="text-[9px] font-medium text-slate-400">{i + 1}</span>
                     </div>
                   )}
                 </div>
-                <span
-                  className="text-[9px] font-semibold uppercase tracking-wide whitespace-nowrap max-w-[72px] text-center leading-tight"
-                  style={{ color: isActive ? '#6ee7b7' : isCompleted ? 'rgba(110,231,183,0.65)' : 'rgba(255,255,255,0.28)' }}
-                >
+                <span className={['text-[9px] font-medium whitespace-nowrap max-w-[64px] text-center leading-tight', isActive ? 'text-emerald-700 font-semibold' : isCompleted ? 'text-emerald-600' : 'text-slate-400'].join(' ')}>
                   {s.lead_title}
                 </span>
-              </div>
-              {/* Connector line */}
+              </button>
               {!isLast && (
-                <div className="mx-1.5 flex-shrink-0" style={{ width: '24px', height: '2px', borderRadius: '1px', background: isCompleted ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.1)' }} />
+                <div className="mx-1 flex-shrink-0 h-px w-5" style={{ background: isCompleted ? '#10b981' : '#e2e8f0' }} />
               )}
             </div>
           )
         })}
         {statuses.length > 6 && (
-          <div className="flex items-center ml-2 flex-shrink-0">
-            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
-              <span className="text-[8px] font-bold text-white/30">+{statuses.length - 6}</span>
-            </div>
-          </div>
+          <span className="text-[10px] text-slate-400 ml-2">+{statuses.length - 6} more</span>
         )}
       </div>
     </div>
@@ -780,8 +891,8 @@ function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadNa
   )
 }
 
-// ── InlineField ────────────────────────────────────────────────────────────────
-function InlineField({ fieldKey, label, value, type = 'text', leadId, onUpdated }: {
+// ── PropertyRow — HubSpot-style label:value inline edit ───────────────────────
+function PropertyRow({ fieldKey, label, value, type = 'text', leadId, onUpdated }: {
   fieldKey: string; label: string; value: string | null | undefined
   type?: 'text' | 'email' | 'tel' | 'textarea'; leadId: number; onUpdated: () => void
 }) {
@@ -790,65 +901,53 @@ function InlineField({ fieldKey, label, value, type = 'text', leadId, onUpdated 
   const [saving,  setSaving]  = useState(false)
 
   function startEdit() { setDraft(value ?? ''); setEditing(true) }
-  function cancel()    { setDraft(''); setEditing(false) }
+  function cancel()    { setEditing(false) }
 
   async function save() {
     if (draft === (value ?? '')) { setEditing(false); return }
     setSaving(true)
     try {
       await leadService.update(leadId, { [fieldKey]: draft })
-      onUpdated()
-      toast.success(`${label} updated`)
-    } catch {
-      toast.error(`Failed to update ${label}`)
-    } finally { setSaving(false); setEditing(false) }
-  }
-
-  if (editing) {
-    return (
-      <div className="space-y-1">
-        <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</label>
-        <div className="flex items-center gap-1.5">
-          {type === 'textarea' ? (
-            <textarea autoFocus rows={2} className="input flex-1 text-sm resize-none" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() } if (e.key === 'Escape') cancel() }} />
-          ) : (
-            <input autoFocus type={type} className="input flex-1 text-sm" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
-          )}
-          <button onMouseDown={e => { e.preventDefault(); save() }} disabled={saving} className="p-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex-shrink-0 disabled:opacity-60 transition-colors">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-          </button>
-          <button onMouseDown={e => { e.preventDefault(); cancel() }} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex-shrink-0 transition-colors"><X size={12} /></button>
-        </div>
-      </div>
-    )
+      onUpdated(); toast.success(`${label} updated`)
+    } catch { toast.error(`Failed to update ${label}`) }
+    finally { setSaving(false); setEditing(false) }
   }
 
   return (
-    <button onClick={startEdit} className="w-full text-left group rounded-lg px-2.5 py-2 hover:bg-emerald-50/70 transition-colors -mx-2.5 focus:outline-none">
-      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-0.5">{label}</p>
-      <div className="flex items-center gap-1.5">
-        <p className="text-sm font-medium text-slate-800 flex-1 truncate leading-snug">
-          {value || <span className="text-slate-300 italic font-normal text-xs">Click to edit…</span>}
-        </p>
-        <Pencil size={11} className="text-slate-200 group-hover:text-emerald-500 flex-shrink-0 transition-colors" />
-      </div>
-    </button>
+    <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group">
+      <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
+      {editing ? (
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          {type === 'textarea'
+            ? <textarea autoFocus rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
+            : <input autoFocus type={type} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
+          }
+          <button onMouseDown={e => { e.preventDefault(); save() }} disabled={saving} className="p-1 rounded bg-emerald-600 text-white flex-shrink-0 disabled:opacity-50">
+            {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+          </button>
+          <button onMouseDown={e => { e.preventDefault(); cancel() }} className="p-1 rounded bg-slate-100 text-slate-500 flex-shrink-0"><X size={10} /></button>
+        </div>
+      ) : (
+        <button onClick={startEdit} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">
+          <span className="text-sm text-slate-800 flex-1 truncate leading-tight">
+            {value || <span className="text-slate-300 text-xs">—</span>}
+          </span>
+          <Pencil size={10} className="text-slate-200 group-hover:text-emerald-400 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100" />
+        </button>
+      )}
+    </div>
   )
 }
 
-// ── FieldSection ───────────────────────────────────────────────────────────────
-function FieldSection({ title, icon: Icon, children, iconBg = 'bg-emerald-50', iconColor = 'text-emerald-600' }: {
-  title: string; icon: LucideIcon; children: ReactNode; iconBg?: string; iconColor?: string
-}) {
+// ── PropertyGroup — flat section label ─────────────────────────────────────────
+function PropertyGroup({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-          <Icon size={12} className={iconColor} />
-        </div>
-        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{title}</span>
+    <div>
+      <div className="flex items-center gap-1.5 mb-1.5 mt-4 first:mt-0">
+        <Icon size={11} className="text-slate-400" />
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</span>
       </div>
-      <div className="px-4 py-3 space-y-0.5">{children}</div>
+      <div>{children}</div>
     </div>
   )
 }
@@ -867,10 +966,10 @@ function LeadHeroCard({ lead, leadId, avatarBg, leadInits, statusColor, currentS
   return (
     <div
       className="rounded-2xl overflow-hidden shadow-md"
-      style={{ background: 'linear-gradient(135deg, #052e16 0%, #064e3b 60%, #065f46 100%)' }}
+      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%)' }}
     >
       {/* Top accent bar */}
-      <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #10b981, #34d399, #6ee7b7)' }} />
+      <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
 
       <div className="p-5">
         {/* Avatar + name row */}
@@ -971,173 +1070,312 @@ function LeadHeroCard({ lead, leadId, avatarBg, leadInits, statusColor, currentS
 }
 
 // ── Lead Profile Panel ─────────────────────────────────────────────────────────
-function LeadProfilePanel({ lead, leadId, onUpdated, onEditAll, avatarBg, leadInits, statusColor, currentStatus, daysInSystem, fullName }: {
+function LeadProfilePanel({ lead, leadId, onUpdated, onEditAll }: {
   lead: CrmLead; leadId: number; onUpdated: () => void; onEditAll: () => void
-  avatarBg: string; leadInits: string; statusColor: string; currentStatus: LeadStatus | undefined
-  daysInSystem: number; fullName: string
 }) {
   return (
-    <div className="space-y-4">
-      {/* Hero card */}
-      <LeadHeroCard
-        lead={lead}
-        leadId={leadId}
-        avatarBg={avatarBg}
-        leadInits={leadInits}
-        statusColor={statusColor}
-        currentStatus={currentStatus}
-        daysInSystem={daysInSystem}
-        fullName={fullName}
-      />
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span className="text-xs font-semibold text-slate-600">Lead Details</span>
+        <button onClick={onEditAll} className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors">
+          <Pencil size={10} /> Edit all
+        </button>
+      </div>
 
-      <FieldSection title="Contact Information" icon={User}>
-        <InlineField fieldKey="first_name"   label="First Name" value={lead.first_name   as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="last_name"    label="Last Name"  value={lead.last_name    as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="email"        label="Email"      value={lead.email        as string | undefined} type="email" leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="phone_number" label="Phone"      value={lead.phone_number as string | undefined} type="tel"   leadId={leadId} onUpdated={onUpdated} />
-      </FieldSection>
+      <div className="px-4 py-3">
 
-      <FieldSection title="Business Information" icon={Briefcase} iconBg="bg-violet-50" iconColor="text-violet-600">
-        <InlineField fieldKey="company_name" label="Business Name" value={lead.company_name as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="address"      label="Address"       value={lead.address      as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="city"         label="City"          value={lead.city         as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="state"        label="State"         value={lead.state        as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="zip"          label="ZIP"           value={(lead as Record<string, unknown>)['zip'] as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-        <InlineField fieldKey="country"      label="Country"       value={lead.country      as string | undefined} leadId={leadId} onUpdated={onUpdated} />
-      </FieldSection>
+        <PropertyGroup title="Contact" icon={User}>
+          <PropertyRow fieldKey="first_name"   label="First name"  value={lead.first_name   as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="last_name"    label="Last name"   value={lead.last_name    as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="email"        label="Email"       value={lead.email        as string | undefined} type="email" leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="phone_number" label="Phone"       value={lead.phone_number as string | undefined} type="tel"   leadId={leadId} onUpdated={onUpdated} />
+        </PropertyGroup>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-emerald-50/80 to-white border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
-              <DollarSign size={12} className="text-emerald-600" />
-            </div>
-            <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Funding &amp; Custom Fields</span>
-          </div>
-          <button onClick={onEditAll} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-2.5 py-1 rounded-lg hover:bg-emerald-50 border border-transparent hover:border-emerald-100 transition-colors">
-            <Pencil size={11} /> Edit All
-          </button>
-        </div>
-        <div className="p-4">
-          <DynamicFieldForm register={(() => {}) as never} defaultValues={lead as Record<string, unknown>} readOnly />
-        </div>
+        <PropertyGroup title="Business" icon={Briefcase}>
+          <PropertyRow fieldKey="company_name" label="Company"   value={lead.company_name as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="address"      label="Address"   value={lead.address      as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="city"         label="City"      value={lead.city         as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="state"        label="State"     value={lead.state        as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+          <PropertyRow fieldKey="zip"          label="ZIP"       value={(lead as Record<string, unknown>)['zip'] as string | undefined} leadId={leadId} onUpdated={onUpdated} />
+        </PropertyGroup>
+
+
       </div>
     </div>
   )
 }
 
-// ── Actions Panel ──────────────────────────────────────────────────────────────
-function ActionGroup({ title, icon: Icon, iconBg, iconColor, children }: {
-  title: string; icon: LucideIcon; iconBg: string; iconColor: string; children: ReactNode
-}) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-2 px-0.5">
-        <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-          <Icon size={11} className={iconColor} />
-        </div>
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</span>
-      </div>
-      <div className="space-y-1">{children}</div>
-    </div>
-  )
-}
-
-function ActionBtn({ icon: Icon, label, color, bg, onClick }: {
-  icon: LucideIcon; label: string; color: string; bg: string; onClick: () => void
-}) {
-  return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left hover:shadow-sm active:scale-[0.98] ${bg}`}>
-      <Icon size={14} className={`${color} flex-shrink-0`} />
-      <span className={color}>{label}</span>
-    </button>
-  )
-}
-
-function ActionsPanel({ lead, statuses, updateStatus, showStatusDropdown, setShowStatusDropdown, onScrollToActivity, onScrollToLenders, onGeneratePdf, onEditLead, onDeleteLead }: {
+// ── Compact Actions Panel ──────────────────────────────────────────────────────
+function CompactActionsPanel({
+  lead, statuses, updateStatus, showStatusDropdown, setShowStatusDropdown,
+  onScrollToActivity, onGoToLenders, onGeneratePdf, onEditLead, onDeleteLead,
+}: {
   lead: CrmLead; statuses: LeadStatus[] | undefined
   updateStatus: { mutate: (s: string) => void; isPending: boolean }
   showStatusDropdown: boolean; setShowStatusDropdown: (v: boolean) => void
-  onScrollToActivity: () => void; onScrollToLenders: () => void
+  onScrollToActivity: () => void; onGoToLenders: () => void
   onGeneratePdf: () => void; onEditLead: () => void; onDeleteLead: () => void
 }) {
+  const actions: {
+    icon: LucideIcon
+    label: string
+    iconColor: string
+    borderColor: string
+    hoverBorder: string
+    hoverBg: string
+    onClick: () => void
+    isLink?: boolean
+    href?: string
+    isDanger?: boolean
+  }[] = [
+    {
+      icon: Pencil,
+      label: 'Edit Lead',
+      iconColor: 'text-emerald-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-emerald-200',
+      hoverBg: 'hover:bg-emerald-50',
+      onClick: onEditLead,
+    },
+    {
+      icon: Trash2,
+      label: 'Delete',
+      iconColor: 'text-red-500',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-red-200',
+      hoverBg: 'hover:bg-red-50',
+      onClick: onDeleteLead,
+      isDanger: true,
+    },
+    {
+      icon: MessageSquare,
+      label: 'Add Note',
+      iconColor: 'text-slate-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-emerald-200',
+      hoverBg: 'hover:bg-emerald-50',
+      onClick: onScrollToActivity,
+    },
+    {
+      icon: Mail,
+      label: 'Email',
+      iconColor: 'text-sky-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-sky-200',
+      hoverBg: 'hover:bg-sky-50',
+      onClick: lead.email
+        ? () => window.open(`mailto:${String(lead.email)}`, '_self')
+        : () => toast('No email on file', { icon: '⚠️' }),
+    },
+    {
+      icon: Phone,
+      label: 'Call',
+      iconColor: 'text-blue-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-blue-200',
+      hoverBg: 'hover:bg-blue-50',
+      onClick: lead.phone_number
+        ? () => window.open(`tel:${String(lead.phone_number)}`, '_self')
+        : () => toast('No phone on file', { icon: '⚠️' }),
+    },
+    {
+      icon: Printer,
+      label: 'Gen PDF',
+      iconColor: 'text-violet-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-violet-200',
+      hoverBg: 'hover:bg-violet-50',
+      onClick: onGeneratePdf,
+    },
+    {
+      icon: Send,
+      label: 'Lenders',
+      iconColor: 'text-amber-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-amber-200',
+      hoverBg: 'hover:bg-amber-50',
+      onClick: onGoToLenders,
+    },
+    {
+      icon: ExternalLink,
+      label: 'Merchant',
+      iconColor: 'text-teal-600',
+      borderColor: 'border-slate-100',
+      hoverBorder: 'hover:border-teal-200',
+      hoverBg: 'hover:bg-teal-50',
+      onClick: () => toast('Scroll to Merchant Portal tab', { icon: 'ℹ️' }),
+    },
+  ]
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-700 to-emerald-600 border-b border-emerald-800">
-        <Zap size={14} className="text-white flex-shrink-0" />
-        <span className="text-xs font-bold text-white uppercase tracking-widest">Quick Actions</span>
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)' }}>
+        <div className="w-6 h-6 rounded-md bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+          <Zap size={12} className="text-emerald-400" />
+        </div>
+        <span className="text-xs font-bold text-white/90 uppercase tracking-widest">Quick Actions</span>
       </div>
-      <div className="p-4 space-y-5">
 
-        <ActionGroup title="Lead Actions" icon={ClipboardList} iconBg="bg-emerald-50" iconColor="text-emerald-600">
-          <ActionBtn icon={Pencil} label="Edit Lead"   color="text-emerald-700" bg="bg-emerald-50 hover:bg-emerald-100"  onClick={onEditLead}   />
-          <ActionBtn icon={Trash2} label="Delete Lead" color="text-red-600"     bg="bg-red-50 hover:bg-red-100"          onClick={onDeleteLead} />
-          <div className="relative">
-            <button
-              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition-all text-left hover:shadow-sm active:scale-[0.98]"
+      {/* Actions list */}
+      <div className="p-3">
+        <div className="grid grid-cols-1 gap-1">
+          {actions.map((action, i) => {
+            const Icon = action.icon
+            return (
+              <button
+                key={i}
+                onClick={action.onClick}
+                className={[
+                  'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-left active:scale-95',
+                  action.borderColor,
+                  action.hoverBorder,
+                  action.hoverBg,
+                ].join(' ')}
+              >
+                <Icon size={13} className={`${action.iconColor} flex-shrink-0`} />
+                <span className={`text-xs font-medium ${action.isDanger ? 'text-red-500' : 'text-slate-600'}`}>
+                  {action.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Status dropdown — full width below grid */}
+        <div className="relative mt-3">
+          <button
+            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 hover:border-emerald-300 bg-slate-50 hover:bg-emerald-50/50 text-slate-700 transition-all"
+          >
+            <Zap size={14} className="text-emerald-600 flex-shrink-0" />
+            <span className="flex-1 text-left">Change Status</span>
+            <ChevronDown size={13} className={`text-slate-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          {showStatusDropdown && statuses && (
+            <div
+              className="absolute left-0 right-0 top-full mt-1.5 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1"
+              onMouseLeave={() => setShowStatusDropdown(false)}
             >
-              <Zap size={14} className="text-violet-600 flex-shrink-0" />
-              <span className="flex-1">Change Status</span>
-              <ChevronDown size={12} className="text-violet-400" />
-            </button>
-            {showStatusDropdown && statuses && (
-              <div className="absolute left-0 right-0 top-full mt-1 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1" onMouseLeave={() => setShowStatusDropdown(false)}>
-                {statuses.map((s: LeadStatus) => {
-                  const isCurrent = s.lead_title_url === String(lead.lead_status)
-                  const dotColor = s.color_code ?? s.color ?? '#94a3b8'
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => updateStatus.mutate(s.lead_title_url)}
-                      disabled={isCurrent || updateStatus.isPending}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-                    >
-                      <span
-                        className="w-3 h-3 rounded-full flex-shrink-0 border border-white/50"
-                        style={{ background: dotColor, boxShadow: `0 0 0 1px ${dotColor}50` }}
-                      />
-                      <span className="flex-1">{s.lead_title}</span>
-                      {isCurrent && (
-                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>
-                      )}
-                    </button>
-                  )
-                })}
+              {statuses.map((s: LeadStatus) => {
+                const isCurrent = s.lead_title_url === String(lead.lead_status)
+                const dotColor = s.color_code ?? s.color ?? '#94a3b8'
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
+                    disabled={isCurrent || updateStatus.isPending}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0 border border-white/50"
+                      style={{ background: dotColor, boxShadow: `0 0 0 1px ${dotColor}50` }}
+                    />
+                    <span className="flex-1">{s.lead_title}</span>
+                    {isCurrent && (
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Quick Summary Card ─────────────────────────────────────────────────────────
+function QuickSummaryCard({
+  leadId,
+  onTabSwitch,
+}: {
+  leadId: number
+  onTabSwitch: (tab: TabId) => void
+}) {
+  const { data: docs } = useQuery({
+    queryKey: ['lead-documents', leadId],
+    queryFn: async () => (res => (res.data?.data ?? res.data ?? []) as CrmDocument[])(await crmService.getLeadDocuments(leadId)),
+    staleTime: 60 * 1000,
+  })
+  const { data: submissions } = useQuery({
+    queryKey: ['lender-submissions', leadId],
+    queryFn: async () => {
+      const res = await crmService.getLenderSubmissions(leadId)
+      return (res.data?.data ?? res.data ?? []) as LenderSubmission[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const docCount       = docs?.length ?? 0
+  const subCount       = submissions?.length ?? 0
+  const approvedCount  = submissions?.filter(s => s.response_status === 'approved').length ?? 0
+  const pendingCount   = submissions?.filter(s => (s.response_status ?? 'pending') === 'pending').length ?? 0
+
+  const rows = [
+    {
+      icon: FolderOpen,
+      iconBg: 'bg-violet-100',
+      iconColor: 'text-violet-600',
+      label: 'Documents',
+      value: docCount,
+      onClick: () => onTabSwitch('documents'),
+    },
+    {
+      icon: Building2,
+      iconBg: 'bg-amber-100',
+      iconColor: 'text-amber-600',
+      label: 'Lender Submissions',
+      value: subCount,
+      onClick: () => onTabSwitch('lenders'),
+    },
+    {
+      icon: Check,
+      iconBg: 'bg-emerald-100',
+      iconColor: 'text-emerald-600',
+      label: 'Lenders Approved',
+      value: approvedCount,
+      onClick: () => onTabSwitch('lenders'),
+    },
+    {
+      icon: Clock,
+      iconBg: 'bg-slate-100',
+      iconColor: 'text-slate-500',
+      label: 'Awaiting Response',
+      value: pendingCount,
+      onClick: () => onTabSwitch('lenders'),
+    },
+  ]
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+        <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+          <Activity size={12} className="text-emerald-600" />
+        </div>
+        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Quick Summary</span>
+      </div>
+      <div className="p-3 space-y-1.5">
+        {rows.map((row, i) => {
+          const Icon = row.icon
+          return (
+            <button
+              key={i}
+              onClick={row.onClick}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors group text-left"
+            >
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${row.iconBg}`}>
+                <Icon size={13} className={row.iconColor} />
               </div>
-            )}
-          </div>
-        </ActionGroup>
-
-        <div className="h-px bg-slate-100" />
-
-        <ActionGroup title="Communication" icon={MessageSquare} iconBg="bg-emerald-50" iconColor="text-emerald-600">
-          <ActionBtn icon={MessageSquare} label="Add Note" color="text-emerald-700" bg="bg-emerald-50 hover:bg-emerald-100" onClick={onScrollToActivity} />
-          {lead.email
-            ? <a href={`mailto:${String(lead.email)}`} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 hover:shadow-sm transition-all"><Mail size={14} className="text-sky-600 flex-shrink-0" /> Send Email</a>
-            : <ActionBtn icon={Mail} label="Send Email" color="text-sky-700" bg="bg-sky-50 hover:bg-sky-100" onClick={() => toast('No email on file', { icon: '⚠️' })} />
-          }
-          {lead.phone_number
-            ? <a href={`tel:${String(lead.phone_number)}`} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:shadow-sm transition-all"><Phone size={14} className="text-blue-600 flex-shrink-0" /> Call Lead</a>
-            : <ActionBtn icon={Phone} label="Call Lead" color="text-blue-700" bg="bg-blue-50 hover:bg-blue-100" onClick={() => toast('No phone on file', { icon: '⚠️' })} />
-          }
-        </ActionGroup>
-
-        <div className="h-px bg-slate-100" />
-
-        <ActionGroup title="Funding" icon={DollarSign} iconBg="bg-amber-50" iconColor="text-amber-600">
-          <ActionBtn icon={Printer}   label="Generate Application" color="text-violet-700" bg="bg-violet-50 hover:bg-violet-100" onClick={onGeneratePdf}     />
-          <ActionBtn icon={Send}      label="Submit to Lenders"    color="text-amber-700"  bg="bg-amber-50 hover:bg-amber-100"   onClick={onScrollToLenders} />
-          <ActionBtn icon={Building2} label="View Submissions"     color="text-amber-700"  bg="bg-amber-50 hover:bg-amber-100"   onClick={onScrollToLenders} />
-        </ActionGroup>
-
-        <div className="h-px bg-slate-100" />
-
-        <ActionGroup title="Documents" icon={FolderOpen} iconBg="bg-slate-100" iconColor="text-slate-600">
-          <ActionBtn icon={FileDown}     label="Download Lead"    color="text-slate-700" bg="bg-slate-50 hover:bg-slate-100" onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} />
-          <ActionBtn icon={ExternalLink} label="Merchant Portal" color="text-sky-700"   bg="bg-sky-50 hover:bg-sky-100"    onClick={() => toast('Scroll to Merchant Portal', { icon: 'ℹ️' })} />
-        </ActionGroup>
-
+              <span className="flex-1 text-sm text-slate-600 font-medium">{row.label}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-slate-800">{row.value}</span>
+                <ChevronRight size={12} className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -1162,8 +1400,9 @@ export function CrmLeadDetail() {
 
   const activityRef = useRef<HTMLDivElement>(null)
   const lendersRef  = useRef<HTMLDivElement>(null)
+  const tabBarRef   = useRef<HTMLDivElement>(null)
 
-  const [activeTab,          setActiveTab]          = useState<TabId>('overview')
+  const [activeTab,          setActiveTab]          = useState<TabId>('contact')
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
   const [showMoreMenu,       setShowMoreMenu]       = useState(false)
   const [showPdfModal,       setShowPdfModal]       = useState(false)
@@ -1179,6 +1418,26 @@ export function CrmLeadDetail() {
     queryFn: () => crmService.getLeadStatuses(),
     staleTime: 5 * 60 * 1000,
   })
+
+  // Counts for tab badges — read from query cache populated by KpiBar/QuickSummaryCard
+  const { data: docsForBadge } = useQuery({
+    queryKey: ['lead-documents', leadId],
+    queryFn: async () => (res => (res.data?.data ?? res.data ?? []) as CrmDocument[])(await crmService.getLeadDocuments(leadId)),
+    staleTime: 60 * 1000,
+    enabled: !!leadId,
+  })
+  const { data: subsForBadge } = useQuery({
+    queryKey: ['lender-submissions', leadId],
+    queryFn: async () => {
+      const res = await crmService.getLenderSubmissions(leadId)
+      return (res.data?.data ?? res.data ?? []) as LenderSubmission[]
+    },
+    staleTime: 60 * 1000,
+    enabled: !!leadId,
+  })
+
+  const docBadgeCount = docsForBadge?.length ?? 0
+  const subBadgeCount = subsForBadge?.length ?? 0
 
   const updateStatus = useMutation({
     mutationFn: (status: string) => crmService.bulkStatusChange({ lead_ids: [leadId], lead_status: status }),
@@ -1211,10 +1470,14 @@ export function CrmLeadDetail() {
   const currentStatus = statuses?.find(s => s.lead_title_url === String(lead.lead_status))
   const statusColor   = currentStatus?.color_code ?? currentStatus?.color ?? '#059669'
   const daysInSystem  = Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000)
-
-  function scrollTo(ref: RefObject<HTMLDivElement | null>) {
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const loanAmount    = (lead as Record<string, unknown>)["loan_amount"] as string | number | null | undefined
+  const leadTemp      = ((lead as Record<string, unknown>)["temperature"] as string | undefined)?.toLowerCase()
+  const TEMP_STYLES: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+    hot:  { label: 'Hot',  bg: 'bg-red-100',   text: 'text-red-600',   dot: '#ef4444' },
+    warm: { label: 'Warm', bg: 'bg-amber-100', text: 'text-amber-600', dot: '#f59e0b' },
+    cold: { label: 'Cold', bg: 'bg-blue-100',  text: 'text-blue-500',  dot: '#3b82f6' },
   }
+  const tempStyle = leadTemp ? TEMP_STYLES[leadTemp] : null
 
   async function handleDeleteLead() {
     if (!window.confirm(`Delete lead "${fullName}"? This cannot be undone.`)) return
@@ -1232,128 +1495,100 @@ export function CrmLeadDetail() {
     qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
   }
 
-  function goToActivity() {
-    setActiveTab('activity')
-    setTimeout(() => activityRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
-  }
-
-  function goToLenders() {
-    setActiveTab('lenders')
-    setTimeout(() => lendersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
-  }
-
   return (
     <div className="min-h-screen bg-slate-50/40 -mx-5 -mt-5">
 
-      {/* ═══════════════════════════════════════════════════════════
-          GRADIENT HERO HEADER — Emerald CRM Theme
-      ═══════════════════════════════════════════════════════════ */}
-      <div
-        className="relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #052e16 0%, #064e3b 50%, #065f46 100%)' }}
-      >
-        {/* Decorative orbs */}
-        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)' }} />
-        <div className="absolute bottom-0 left-1/4 w-48 h-48 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(52,211,153,0.1) 0%, transparent 70%)' }} />
-        <div className="absolute top-8 left-8 w-32 h-32 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(5,150,105,0.12) 0%, transparent 70%)' }} />
-
+      {/* ── HEADER ── */}
+      <div className="relative bg-white border-b border-slate-200">
+        <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
         <div className="relative max-w-[1800px] mx-auto">
+
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-white/10">
-            <button onClick={() => navigate('/crm/leads')} className="flex items-center gap-1.5 text-white/50 hover:text-white text-xs font-medium transition-colors">
+          <div className="flex items-center gap-2 px-5 pt-3 pb-2 border-b border-slate-100">
+            <button onClick={() => navigate('/crm/leads')} className="flex items-center gap-1.5 text-slate-400 hover:text-slate-700 text-xs font-medium transition-colors">
               <ArrowLeft size={13} /> Leads
             </button>
-            <ChevronRight size={11} className="text-white/25" />
-            <span className="text-white/40 text-xs">#{lead.id}</span>
-            {lead.lead_type && (
-              <><ChevronRight size={11} className="text-white/25" /><span className="text-white/40 text-xs">{String(lead.lead_type)}</span></>
-            )}
-            <div className="ml-auto">
-              <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-0.5 rounded-full uppercase tracking-widest">
-                CRM Command Center
+            <ChevronRight size={11} className="text-slate-300" />
+            <span className="text-xs font-semibold text-slate-600">Lead Detail</span>
+            <span className="text-xs text-slate-400 font-mono">#{lead.id}</span>
+            {tempStyle && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${tempStyle.bg} ${tempStyle.text}`}>
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: tempStyle.dot }} />
+                {tempStyle.label}
               </span>
-            </div>
+            )}
           </div>
 
-          {/* Lead summary + quick actions */}
+          {/* Lead identity + actions */}
           <div className="flex items-center gap-4 px-5 py-4">
-            {/* Avatar */}
-            <div
-              className={`w-14 h-14 rounded-2xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-2xl`}
-              style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.3), 0 0 0 3px rgba(255,255,255,0.1)' }}
-            >
+            <div className={`w-14 h-14 rounded-2xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
               <span className="text-lg font-bold text-white leading-none">{leadInits}</span>
             </div>
-
-            {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl font-bold text-white leading-tight">{fullName}</h1>
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-                  style={{ background: `${statusColor}25`, color: '#6ee7b7', border: `1px solid ${statusColor}50` }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse" style={{ background: statusColor }} />
-                  {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                </span>
+                <h1 className="text-xl font-bold text-slate-900 leading-tight">{fullName}</h1>
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowStatusDropdown(s => !s); setShowMoreMenu(false) }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all hover:opacity-80"
+                    style={{ background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}40` }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                    {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    <ChevronDown size={10} className="opacity-60" />
+                  </button>
+                  {showStatusDropdown && statuses && (
+                    <div className="absolute top-full left-0 mt-1 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1 min-w-[200px]" onMouseLeave={() => setShowStatusDropdown(false)}>
+                      {statuses.map((s: LeadStatus) => {
+                        const isCurrent = s.lead_title_url === String(lead.lead_status)
+                        const dotColor  = s.color_code ?? s.color ?? '#94a3b8'
+                        return (
+                          <button key={s.id}
+                            onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
+                            disabled={isCurrent || updateStatus.isPending}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                          >
+                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+                            <span className="flex-1">{s.lead_title}</span>
+                            {isCurrent && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-
-              {/* Meta chips */}
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {lead.phone_number && (
-                  <a href={`tel:${lead.phone_number}`}>
-                    <StatChip icon={Phone} label={formatPhoneNumber(String(lead.phone_number))} />
-                  </a>
-                )}
-                {lead.email && (
-                  <a href={`mailto:${lead.email}`} className="hidden sm:flex">
-                    <StatChip icon={Mail} label={String(lead.email)} />
-                  </a>
-                )}
-                {(lead.assigned_name as string | undefined) && (
-                  <div className="hidden md:flex"><StatChip icon={UserCheck} label={lead.assigned_name as string} /></div>
-                )}
-                {lead.company_name && (
-                  <div className="hidden lg:flex"><StatChip icon={Briefcase} label={String(lead.company_name)} /></div>
-                )}
-                <div className="hidden xl:flex"><StatChip icon={Calendar} label={`${daysInSystem}d in pipeline`} /></div>
+              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                {lead.company_name && <span className="flex items-center gap-1 text-xs text-slate-500"><Briefcase size={11} />{String(lead.company_name)}</span>}
+                {lead.phone_number && <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 transition-colors"><Phone size={11} />{formatPhoneNumber(String(lead.phone_number))}</a>}
+                {lead.email && <a href={`mailto:${lead.email}`} className="hidden sm:flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 transition-colors"><Mail size={11} />{String(lead.email)}</a>}
+                {(lead.assigned_name as string | undefined) && <span className="hidden md:flex items-center gap-1 text-xs text-slate-500"><UserCheck size={11} />{lead.assigned_name as string}</span>}
+                <span className="flex items-center gap-1 text-xs text-slate-400"><Calendar size={11} />{daysInSystem}d in pipeline</span>
               </div>
             </div>
-
-            {/* Header quick actions */}
+            {/* Actions */}
             <div className="flex items-center gap-2 flex-shrink-0">
               {lead.phone_number && (
-                <a href={`tel:${lead.phone_number}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)' }}>
+                <a href={`tel:${lead.phone_number}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
                   <Phone size={12} /> Call
                 </a>
               )}
               {lead.email && (
-                <a href={`mailto:${lead.email}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)' }}>
+                <a href={`mailto:${lead.email}`} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
                   <Mail size={12} /> Email
                 </a>
               )}
-              <button onClick={goToActivity} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)' }}>
-                <MessageSquare size={12} /> Note
-              </button>
-              <button onClick={() => setShowPdfModal(true)} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)' }}>
-                <Printer size={12} /> PDF
-              </button>
-              <button
-                onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-lg"
-                style={{ background: 'rgba(16,185,129,0.85)', color: '#fff' }}
-              >
+              <button onClick={() => navigate(`/crm/leads/${leadId}/edit`)} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
                 <Pencil size={12} /> Edit
               </button>
               <div className="relative">
-                <button onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }} className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors" style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                <button onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }} className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 transition-colors">
                   <MoreVertical size={15} />
                 </button>
                 {showMoreMenu && (
                   <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1" onMouseLeave={() => setShowMoreMenu(false)}>
-                    <button onClick={() => { setShowMoreMenu(false); goToActivity() }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors sm:hidden"><MessageSquare size={13} /> Add Note</button>
-                    <button onClick={() => { setShowMoreMenu(false); setShowPdfModal(true) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors lg:hidden"><Printer size={13} /> Generate PDF</button>
-                    <button onClick={() => { setShowMoreMenu(false); goToLenders() }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Send size={13} /> Send to Lender</button>
+                    <button onClick={() => { setShowMoreMenu(false); setShowPdfModal(true) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Printer size={13} /> Generate PDF</button>
+                    <button onClick={() => { setShowMoreMenu(false); setActiveTab('lenders') }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Send size={13} /> Send to Lender</button>
                     <button onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><FileDown size={13} /> Download Lead</button>
                     <div className="h-px bg-slate-100 my-1" />
                     <button onClick={handleDeleteLead} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={13} /> Delete Lead</button>
@@ -1363,175 +1598,127 @@ export function CrmLeadDetail() {
             </div>
           </div>
 
-          {/* ── Pipeline Progress Stepper ── */}
-          {statuses && statuses.length > 0 && (
-            <PipelineProgress
-              statuses={statuses}
-              currentStatus={String(lead.lead_status)}
-            />
-          )}
+        </div>
+      </div>
 
-          {/* ── Tab navigation bar ── */}
-          <div className="flex items-center gap-1 px-5 overflow-x-auto border-t border-white/10" style={{ scrollbarWidth: 'none' }}>
+      {/* ── SINGLE CARD ── */}
+      <div className="max-w-[1800px] mx-auto px-5 py-5 pb-8">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 160px)' }}>
+
+          {/* Unified tab bar */}
+          <div className="relative flex-shrink-0">
+            <div ref={tabBarRef} className="flex items-center border-b border-slate-100 bg-slate-50/40 overflow-x-auto scrollbar-hide">
             {TABS.map(tab => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
+              const badge = tab.id === 'documents' ? docBadgeCount : tab.id === 'lenders' ? subBadgeCount : 0
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={[
-                    'flex items-center gap-2 px-4 py-3 text-xs font-semibold border-b-2 transition-all whitespace-nowrap flex-shrink-0',
+                    'flex items-center gap-1.5 px-5 py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition-all flex-shrink-0',
                     isActive
-                      ? 'border-emerald-400 text-white'
-                      : 'border-transparent text-white/45 hover:text-white/75 hover:border-white/20',
+                      ? 'border-emerald-500 text-emerald-700 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
                   ].join(' ')}
                 >
-                  <Icon size={13} />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className="sm:hidden">{tab.mobileLabel}</span>
+                  <Icon size={13} className="flex-shrink-0" />
+                  {tab.label}
+                  {badge > 0 && (
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{badge}</span>
+                  )}
                 </button>
               )
             })}
+            <div className="flex-1" />
+            {(activeTab === 'contact' || activeTab === 'business' || activeTab === 'details') && (
+              <button onClick={() => navigate(`/crm/leads/${leadId}/edit`)} className="flex items-center gap-1.5 px-4 py-3 text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors flex-shrink-0">
+                <Pencil size={10} /> Edit all
+              </button>
+            )}
+            </div>
+            {/* Fade + scroll-right hint for overflowing tabs */}
+            <div
+              className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 flex items-center justify-end pr-1"
+              style={{ background: 'linear-gradient(to right, transparent, rgba(248,250,252,0.95))' }}
+            >
+              <ChevronRight size={14} className="text-slate-400" />
+            </div>
           </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto">
+
+            {activeTab === 'contact' && (
+              <div className="px-6 py-5">
+                <PropertyRow fieldKey="first_name"   label="First name" value={lead.first_name   as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="last_name"    label="Last name"  value={lead.last_name    as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="email"        label="Email"      value={lead.email        as string | undefined} type="email" leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="phone_number" label="Phone"      value={lead.phone_number as string | undefined} type="tel"   leadId={leadId} onUpdated={onLeadUpdated} />
+              </div>
+            )}
+
+            {activeTab === 'business' && (
+              <div className="px-6 py-5">
+                <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string, unknown>)['zip'] as string | undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+              </div>
+            )}
+
+            {activeTab === 'details' && (
+              <div className="px-6 py-5">
+                <div className="flex items-start py-1.5 border-b border-slate-50">
+                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Status</span>
+                  <span className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: statusColor }}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                    {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  </span>
+                </div>
+                <div className="flex items-start py-1.5 border-b border-slate-50">
+                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Lead type</span>
+                  <span className="text-sm text-slate-800">{lead.lead_type ? String(lead.lead_type) : <span className="text-slate-300 text-xs">—</span>}</span>
+                </div>
+                <div className="flex items-start py-1.5 border-b border-slate-50">
+                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Assigned to</span>
+                  <span className="text-sm text-slate-800">{(lead.assigned_name as string | undefined) || <span className="text-slate-300 text-xs">—</span>}</span>
+                </div>
+                <div className="flex items-start py-1.5 border-b border-slate-50">
+                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Loan amount</span>
+                  <span className="text-sm text-slate-800">
+                    {loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g, '')).toLocaleString('en-US')}` : <span className="text-slate-300 text-xs">—</span>}
+                  </span>
+                </div>
+                <div className="flex items-start py-1.5 border-b border-slate-50">
+                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">Created</span>
+                  <span className="text-sm text-slate-800">{lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                </div>
+                <div className="flex items-start py-1.5">
+                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5">In pipeline</span>
+                  <span className="text-sm text-slate-800">{daysInSystem} days</span>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'activity'  && <div ref={activityRef}  className="p-5"><ActivityTimeline leadId={leadId} /></div>}
+            {activeTab === 'documents' && <div className="p-5"><DocumentsPanel leadId={leadId} /></div>}
+            {activeTab === 'lenders'   && <div ref={lendersRef}   className="p-5"><LendersPanel leadId={leadId} /></div>}
+            {activeTab === 'approvals' && <div className="p-5"><ApprovalsSection leadId={leadId} /></div>}
+            {activeTab === 'merchant'  && <div className="p-5"><MerchantPortalSection leadId={leadId} /></div>}
+            {activeTab === 'offers'     && <div className="p-5"><OffersStipsTab leadId={leadId} /></div>}
+            {activeTab === 'deal'       && <div className="p-5"><DealTab leadId={leadId} /></div>}
+            {activeTab === 'compliance' && <div className="p-5"><ComplianceTab leadId={leadId} /></div>}
+
+          </div>
+
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════
-          TAB CONTENT
-      ═══════════════════════════════════════════════════════════ */}
-      <div className="max-w-[1800px] mx-auto px-5 py-5">
-
-        {/* ── OVERVIEW TAB ── */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[340px_1fr_268px] gap-5">
-            {/* Profile (sticky left) */}
-            <div className="xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-80px)] xl:overflow-y-auto xl:pb-4">
-              <LeadProfilePanel
-                lead={lead}
-                leadId={leadId}
-                onUpdated={onLeadUpdated}
-                onEditAll={() => navigate(`/crm/leads/${leadId}/edit`)}
-                avatarBg={avatarBg}
-                leadInits={leadInits}
-                statusColor={statusColor}
-                currentStatus={currentStatus}
-                daysInSystem={daysInSystem}
-                fullName={fullName}
-              />
-            </div>
-
-            {/* Center: activity preview */}
-            <div className="min-w-0">
-              <CollapsibleSection
-                title="Recent Activity"
-                icon={Clock}
-                defaultOpen={true}
-                headerRight={
-                  <button
-                    onClick={goToActivity}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
-                  >
-                    <Plus size={12} /> Add Note
-                  </button>
-                }
-              >
-                <ActivityTimeline leadId={leadId} />
-              </CollapsibleSection>
-            </div>
-
-            {/* Right: actions (sticky) */}
-            <div className="space-y-4 lg:col-span-2 xl:col-span-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-80px)] xl:overflow-y-auto xl:pb-4">
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 gap-4">
-                <ActionsPanel
-                  lead={lead}
-                  statuses={statuses}
-                  updateStatus={updateStatus}
-                  showStatusDropdown={showStatusDropdown}
-                  setShowStatusDropdown={setShowStatusDropdown}
-                  onScrollToActivity={goToActivity}
-                  onScrollToLenders={goToLenders}
-                  onGeneratePdf={() => setShowPdfModal(true)}
-                  onEditLead={() => navigate(`/crm/leads/${leadId}/edit`)}
-                  onDeleteLead={handleDeleteLead}
-                />
-                <SidebarCard title="Lender Submissions" icon={Building2} iconColor="text-amber-600" iconBg="bg-amber-50">
-                  <LendersPanel leadId={leadId} />
-                </SidebarCard>
-              </div>
-              <SidebarCard title="Approvals" icon={CheckSquare} iconColor="text-emerald-600" iconBg="bg-emerald-50">
-                <ApprovalsSection leadId={leadId} />
-              </SidebarCard>
-              <SidebarCard title="Merchant Portal" icon={ExternalLink} iconColor="text-sky-600" iconBg="bg-sky-50">
-                <MerchantPortalSection leadId={leadId} />
-              </SidebarCard>
-            </div>
-          </div>
-        )}
-
-        {/* ── ACTIVITY TAB ── */}
-        {activeTab === 'activity' && (
-          <div ref={activityRef} className="max-w-3xl mx-auto">
-            <CollapsibleSection
-              title="Activity Timeline"
-              icon={Clock}
-              defaultOpen={true}
-              headerRight={
-                <button onClick={() => scrollTo(activityRef)} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
-                  <Plus size={12} /> Add Note
-                </button>
-              }
-            >
-              <ActivityTimeline leadId={leadId} />
-            </CollapsibleSection>
-          </div>
-        )}
-
-        {/* ── DOCUMENTS TAB ── */}
-        {activeTab === 'documents' && (
-          <div className="max-w-3xl mx-auto">
-            <CollapsibleSection title="Documents" icon={FolderOpen} defaultOpen={true}>
-              <DocumentsPanel leadId={leadId} />
-            </CollapsibleSection>
-          </div>
-        )}
-
-        {/* ── LENDERS TAB ── */}
-        {activeTab === 'lenders' && (
-          <div ref={lendersRef} className="max-w-3xl mx-auto">
-            <SidebarCard title="Lender Submissions" icon={Building2} iconColor="text-amber-600" iconBg="bg-amber-50">
-              <LendersPanel leadId={leadId} />
-            </SidebarCard>
-          </div>
-        )}
-
-        {/* ── APPROVALS TAB ── */}
-        {activeTab === 'approvals' && (
-          <div className="max-w-3xl mx-auto">
-            <SidebarCard title="Approvals" icon={CheckSquare} iconColor="text-emerald-600" iconBg="bg-emerald-50">
-              <ApprovalsSection leadId={leadId} />
-            </SidebarCard>
-          </div>
-        )}
-
-        {/* ── MERCHANT TAB ── */}
-        {activeTab === 'merchant' && (
-          <div className="max-w-3xl mx-auto">
-            <SidebarCard title="Merchant Portal" icon={ExternalLink} iconColor="text-sky-600" iconBg="bg-sky-50">
-              <MerchantPortalSection leadId={leadId} />
-            </SidebarCard>
-          </div>
-        )}
-
-      </div>
-
-      {/* PDF Preview modal */}
       {showPdfModal && (
-        <PdfPreviewModal
-          leadId={leadId}
-          leadName={fullName}
-          onClose={() => setShowPdfModal(false)}
-        />
+        <PdfPreviewModal leadId={leadId} leadName={fullName} onClose={() => setShowPdfModal(false)} />
       )}
     </div>
   )

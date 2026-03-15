@@ -11,17 +11,60 @@ import { ActivityItem } from './ActivityItem'
 import { cn } from '../../utils/cn'
 import type { ActivityTimelineResponse, ActivityType } from '../../types/crm.types'
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
+// ─── Filter pills config ───────────────────────────────────────────────────────
 
-const TABS = [
-  { key: 'all',              label: 'All',              icon: LayoutList,    activeBg: 'bg-slate-800',     activeText: 'text-white',       inactiveBg: 'bg-white',       inactiveText: 'text-slate-600' },
-  { key: 'system',           label: 'System',           icon: Zap,           activeBg: 'bg-slate-100',     activeText: 'text-slate-700',   inactiveBg: 'bg-white',       inactiveText: 'text-slate-500' },
-  { key: 'lender_submitted', label: 'Lender',           icon: Send,          activeBg: 'bg-orange-500',    activeText: 'text-white',       inactiveBg: 'bg-white',       inactiveText: 'text-slate-500' },
-  { key: 'note_added',       label: 'Notes',            icon: MessageSquare, activeBg: 'bg-emerald-600',   activeText: 'text-white',       inactiveBg: 'bg-white',       inactiveText: 'text-slate-500' },
-  { key: 'lender_response',  label: 'Responses',        icon: AlertCircle,   activeBg: 'bg-red-500',       activeText: 'text-white',       inactiveBg: 'bg-white',       inactiveText: 'text-slate-500' },
+const FILTER_OPTIONS = [
+  { value: 'all',           label: 'All' },
+  { value: 'note_added',    label: 'Notes' },
+  { value: 'call_made',     label: 'Calls' },
+  { value: 'email_sent',    label: 'Emails' },
+  { value: 'status_change', label: 'Status' },
+  { value: 'document_uploaded', label: 'Docs' },
+  { value: 'lender_submitted',  label: 'Lender' },
+  { value: 'lender_response',   label: 'Responses' },
+  { value: 'system',            label: 'System' },
 ] as const
 
-type TabKey = (typeof TABS)[number]['key']
+type FilterValue = (typeof FILTER_OPTIONS)[number]['value']
+
+// ─── Legacy tab keys kept for query key compat ────────────────────────────────
+
+type TabKey =
+  | 'all'
+  | 'system'
+  | 'lender_submitted'
+  | 'note_added'
+  | 'lender_response'
+  | 'call_made'
+  | 'email_sent'
+  | 'status_change'
+  | 'document_uploaded'
+
+// ─── Dot colours per activity type ────────────────────────────────────────────
+
+const DOT_COLOR: Record<string, string> = {
+  note_added:         'bg-emerald-500',
+  call_made:          'bg-blue-500',
+  email_sent:         'bg-sky-500',
+  sms_sent:           'bg-violet-500',
+  status_change:      'bg-violet-500',
+  field_update:       'bg-slate-400',
+  document_uploaded:  'bg-amber-500',
+  task_created:       'bg-violet-400',
+  task_completed:     'bg-emerald-400',
+  lender_submitted:   'bg-orange-500',
+  lender_response:    'bg-red-500',
+  approval_requested: 'bg-amber-500',
+  approval_granted:   'bg-emerald-500',
+  approval_declined:  'bg-red-500',
+  affiliate_created:  'bg-indigo-500',
+  merchant_accessed:  'bg-sky-400',
+  lead_created:       'bg-emerald-600',
+  lead_imported:      'bg-slate-400',
+  lead_assigned:      'bg-indigo-400',
+  webhook_triggered:  'bg-amber-400',
+  system:             'bg-slate-400',
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,31 +75,64 @@ interface NoteForm {
 
 interface Props {
   leadId: number
+  onAddActivity?: () => void
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function isSameDay(a: string, b: string): boolean {
+  return new Date(a).toDateString() === new Date(b).toDateString()
+}
+
+// ─── Date divider ─────────────────────────────────────────────────────────────
+
+function DateDivider({ date }: { date: string }) {
+  const label = (() => {
+    const d = new Date(date)
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(today.getDate() - 1)
+    if (d.toDateString() === today.toDateString()) return 'Today'
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  })()
+
+  return (
+    <div className="flex items-center gap-3 my-4 px-1">
+      <div className="flex-1 h-px bg-slate-200" />
+      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 whitespace-nowrap">
+        {label}
+      </span>
+      <div className="flex-1 h-px bg-slate-200" />
+    </div>
+  )
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function ActivitySkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
+    <div className="space-y-0 animate-pulse pl-9">
       {[1, 2, 3].map(i => (
-        <div key={i} className="flex gap-3">
-          <div className="flex flex-col items-center flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-slate-200" />
-            {i < 3 && <div className="w-px flex-1 mt-1.5 min-h-[40px] bg-slate-100" />}
+        <div key={i} className="py-3 px-1">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-4 w-16 rounded-full bg-slate-200" />
+            <div className="h-3 w-12 rounded-full bg-slate-100" />
           </div>
-          <div className="flex-1 mb-3">
-            <div
-              className="rounded-xl border border-slate-200 bg-white p-3 space-y-2"
-              style={{ borderLeft: '3px solid #E2E8F0' }}
-            >
-              <div className="flex items-center gap-2">
-                <div className="h-4 w-16 rounded-full bg-slate-200" />
-              </div>
-              <div className={cn('h-4 rounded bg-slate-200', i === 2 ? 'w-4/5' : 'w-3/5')} />
-              <div className="h-3 w-2/5 rounded bg-slate-100" />
-            </div>
-          </div>
+          <div className={cn('h-4 rounded bg-slate-200 mb-1', i === 2 ? 'w-4/5' : 'w-3/5')} />
+          <div className="h-3 w-2/5 rounded bg-slate-100" />
         </div>
       ))}
     </div>
@@ -65,15 +141,21 @@ function ActivitySkeleton() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ tab }: { tab: TabKey }) {
-  const messages: Record<TabKey, { icon: React.ReactNode; title: string; sub: string }> = {
-    all:              { icon: <FileText size={32} className="text-slate-300" />,    title: 'No activity yet',          sub: 'Actions on this lead will appear here.' },
-    system:           { icon: <Zap size={32} className="text-slate-300" />,         title: 'No system events',         sub: 'Automated events will show up here.' },
-    lender_submitted: { icon: <Send size={32} className="text-orange-200" />,       title: 'No lender submissions',    sub: 'Submit to a lender from the Lenders panel.' },
-    note_added:       { icon: <MessageSquare size={32} className="text-emerald-200" />, title: 'No notes yet',         sub: 'Write a note above to get started.' },
-    lender_response:  { icon: <AlertCircle size={32} className="text-red-200" />,   title: 'No lender responses',      sub: 'Lender responses will appear here.' },
+function EmptyState({ filter }: { filter: FilterValue }) {
+  const messages: Partial<Record<FilterValue, { icon: React.ReactNode; title: string; sub: string }>> = {
+    all:              { icon: <FileText size={32} className="text-slate-300" />,               title: 'No activity yet',          sub: 'Actions on this lead will appear here.' },
+    system:           { icon: <Zap size={32} className="text-slate-300" />,                    title: 'No system events',         sub: 'Automated events will show up here.' },
+    lender_submitted: { icon: <Send size={32} className="text-orange-200" />,                  title: 'No lender submissions',    sub: 'Submit to a lender from the Lenders panel.' },
+    note_added:       { icon: <MessageSquare size={32} className="text-emerald-200" />,        title: 'No notes yet',             sub: 'Write a note above to get started.' },
+    lender_response:  { icon: <AlertCircle size={32} className="text-red-200" />,              title: 'No lender responses',      sub: 'Lender responses will appear here.' },
+    call_made:        { icon: <LayoutList size={32} className="text-blue-200" />,              title: 'No calls logged',          sub: 'Call activity will appear here.' },
+    email_sent:       { icon: <LayoutList size={32} className="text-sky-200" />,               title: 'No emails logged',         sub: 'Email activity will appear here.' },
+    status_change:    { icon: <LayoutList size={32} className="text-violet-200" />,            title: 'No status changes',        sub: 'Status changes will appear here.' },
+    document_uploaded:{ icon: <FileText size={32} className="text-amber-200" />,              title: 'No documents',             sub: 'Document uploads will appear here.' },
   }
-  const { icon, title, sub } = messages[tab]
+
+  const fallback = { icon: <FileText size={32} className="text-slate-300" />, title: 'No activity', sub: 'Nothing to show for this filter.' }
+  const { icon, title, sub } = messages[filter] ?? fallback
 
   return (
     <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -97,13 +179,21 @@ interface ComposeAreaProps {
 
 function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
   const [expanded, setExpanded] = useState(false)
+  const [noteText, setNoteText] = useState('')
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<NoteForm>({ defaultValues: { subject: '', body: '' } })
+
+  // Keep noteText in sync with the form body for char count
+  const watchedBody = watch('body')
+  useEffect(() => {
+    setNoteText(watchedBody ?? '')
+  }, [watchedBody])
 
   // Auto-focus textarea when expanded
   useEffect(() => {
@@ -114,12 +204,12 @@ function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
 
   function handleCancel() {
     reset()
+    setNoteText('')
     setExpanded(false)
   }
 
   function onSubmit(data: NoteForm) {
     onSave(data)
-    // Collapse is handled by parent on success via reset + setExpanded(false)
   }
 
   const { ref: bodyRegRef, ...bodyRegRest } = register('body', {
@@ -132,16 +222,16 @@ function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
       <button
         onClick={() => setExpanded(true)}
         className={cn(
-          'w-full text-left px-3 py-2.5 rounded-xl border border-slate-200 bg-white',
-          'text-sm text-slate-400 hover:text-slate-500 hover:border-emerald-300 hover:shadow-sm',
+          'w-full text-left px-4 py-3 rounded-2xl',
+          'bg-gradient-to-b from-slate-50 to-white border border-slate-200 shadow-sm',
+          'text-sm text-slate-400 hover:text-slate-500 hover:border-emerald-300 hover:shadow-md',
           'transition-all duration-150 cursor-text',
           'focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50',
         )}
-        style={{ borderLeft: '3px solid #059669' }}
       >
         <span className="flex items-center gap-2">
           <MessageSquare size={14} className="text-emerald-400 flex-shrink-0" />
-          Write a note…
+          Add a note, log a call, or record an update...
         </span>
       </button>
     )
@@ -151,49 +241,52 @@ function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
     <form
       onSubmit={handleSubmit(onSubmit)}
       className={cn(
-        'rounded-xl border border-emerald-300 bg-white shadow-sm overflow-hidden',
+        'rounded-2xl border border-slate-200 overflow-hidden shadow-sm',
+        'bg-gradient-to-b from-slate-50 to-white',
         'transition-all duration-200',
       )}
-      style={{ borderLeft: '3px solid #059669' }}
     >
       {/* Subject */}
-      <div className="border-b border-slate-100">
+      <div className="border-b border-slate-100 px-4 pt-3">
         <input
           {...register('subject')}
           placeholder="Subject (optional)"
           className={cn(
-            'w-full px-3 py-2 text-sm font-medium text-slate-700 placeholder-slate-300',
+            'w-full pb-2 text-sm font-medium text-slate-700 placeholder-slate-300',
             'bg-transparent outline-none',
           )}
         />
       </div>
 
       {/* Body */}
-      <div>
+      <div className="px-4 pt-2">
         <textarea
           {...bodyRegRest}
           ref={el => {
             bodyRegRef(el)
             bodyRef.current = el
           }}
-          placeholder="Add your note here…"
+          placeholder="Add a note, log a call, or record an update..."
           rows={4}
           className={cn(
-            'w-full px-3 py-2 text-sm text-slate-700 placeholder-slate-300',
+            'w-full text-sm text-slate-700 placeholder-slate-300 min-h-[80px]',
             'bg-transparent outline-none resize-none leading-relaxed',
           )}
         />
         {errors.body && (
-          <p className="px-3 pb-1 text-[11px] text-red-500">{errors.body.message}</p>
+          <p className="pb-1 text-[11px] text-red-500">{errors.body.message}</p>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border-t border-slate-100">
-        <span className="text-[11px] text-slate-400 flex items-center gap-1">
-          <MessageSquare size={10} className="text-emerald-500" />
-          Note
-        </span>
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50/80 border-t border-slate-100">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-slate-400 flex items-center gap-1">
+            <MessageSquare size={10} className="text-emerald-500" />
+            Note
+          </span>
+          <span className="text-[10px] text-slate-400 ml-auto">{noteText.length}/2000</span>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -227,13 +320,37 @@ function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
   )
 }
 
+// ─── Timeline item wrapper with dot ──────────────────────────────────────────
+
+interface TimelineItemProps {
+  activityType: string
+  children: React.ReactNode
+}
+
+function TimelineItemWrapper({ activityType, children }: TimelineItemProps) {
+  const dotColor = DOT_COLOR[activityType] ?? 'bg-slate-400'
+
+  return (
+    <div className="pl-9 relative">
+      {/* Colored dot */}
+      <div
+        className={cn(
+          'absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-white shadow-sm z-10',
+          dotColor,
+        )}
+      />
+      {children}
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ActivityTimeline({ leadId }: Props) {
+export function ActivityTimeline({ leadId, onAddActivity }: Props) {
   const qc = useQueryClient()
-  const [activeTab, setActiveTab] = useState<TabKey>('all')
+  const [activeFilter, setActiveFilter] = useState<FilterValue>('all')
 
-  const typeParam = activeTab === 'all' ? undefined : activeTab
+  const typeParam = activeFilter === 'all' ? undefined : (activeFilter as TabKey)
 
   const {
     data: infiniteData,
@@ -242,7 +359,7 @@ export function ActivityTimeline({ leadId }: Props) {
     hasNextPage,
     fetchNextPage,
   } = useInfiniteQuery({
-    queryKey: ['crm-activity', leadId, activeTab],
+    queryKey: ['crm-activity', leadId, activeFilter],
     queryFn: async ({ pageParam }: { pageParam: number }) => {
       const res = await crmService.getActivity(leadId, pageParam, 20, typeParam)
       return (res.data?.data ?? res.data) as ActivityTimelineResponse
@@ -261,7 +378,7 @@ export function ActivityTimeline({ leadId }: Props) {
   const unpinnedItems = allItems.filter(a => a.is_pinned !== 1)
 
   // ── Add note mutation ──
-  const [composeKey, setComposeKey] = useState(0) // used to remount compose area on success
+  const [composeKey, setComposeKey] = useState(0)
   const addNote = useMutation({
     mutationFn: (form: NoteForm) =>
       crmService.addActivity(leadId, {
@@ -271,8 +388,9 @@ export function ActivityTimeline({ leadId }: Props) {
       }),
     onSuccess: () => {
       toast.success('Note added')
-      setComposeKey(k => k + 1) // remount ComposeArea → resets form + collapses
+      setComposeKey(k => k + 1)
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      onAddActivity?.()
     },
     onError: () => toast.error('Failed to add note'),
   })
@@ -284,7 +402,28 @@ export function ActivityTimeline({ leadId }: Props) {
     onError: () => toast.error('Failed to update pin'),
   })
 
-  const isAllTab = activeTab === 'all'
+  const isAllTab = activeFilter === 'all'
+
+  // ── Build unpinned items with date dividers ──
+  function buildUnpinnedWithDividers() {
+    return unpinnedItems.map((activity, idx) => {
+      const prevActivity = unpinnedItems[idx - 1]
+      const showDivider = idx === 0 || (prevActivity && !isSameDay(activity.created_at, prevActivity.created_at))
+
+      return (
+        <div key={activity.id}>
+          {showDivider && <DateDivider date={activity.created_at} />}
+          <TimelineItemWrapper activityType={activity.activity_type}>
+            <ActivityItem
+              activity={activity}
+              onPin={id => pinMutation.mutate(id)}
+              isLast={idx === unpinnedItems.length - 1 && !hasNextPage}
+            />
+          </TimelineItemWrapper>
+        </div>
+      )
+    })
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -296,33 +435,33 @@ export function ActivityTimeline({ leadId }: Props) {
         isSaving={addNote.isPending}
       />
 
-      {/* ── Filter tabs ── */}
-      <div className="flex items-center gap-1 flex-wrap">
-        {TABS.map(tab => {
-          const Icon = tab.icon
-          const isActive = activeTab === tab.key
-          const showBadge = tab.key === 'all' && totalCount > 0 && !!infiniteData
+      {/* ── Filter pills ── */}
+      <div
+        className="flex items-center gap-2 overflow-x-auto pb-1"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {FILTER_OPTIONS.map(opt => {
+          const isActive = activeFilter === opt.value
+          const showBadge = opt.value === 'all' && totalCount > 0 && !!infiniteData
 
           return (
             <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              key={opt.value}
+              onClick={() => setActiveFilter(opt.value)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium',
-                'border transition-all duration-150',
+                'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors',
                 isActive
-                  ? cn(tab.activeBg, tab.activeText, 'border-transparent shadow-sm')
-                  : cn(tab.inactiveBg, tab.inactiveText, 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'),
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
               )}
             >
-              <Icon size={11} />
-              {tab.label}
+              {opt.label}
               {showBadge && (
                 <span
                   className={cn(
-                    'ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1',
+                    'ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1',
                     'rounded-full text-[10px] font-bold',
-                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+                    isActive ? 'bg-white/25 text-white' : 'bg-slate-300 text-slate-600',
                   )}
                 >
                   {totalCount > 999 ? '999+' : totalCount}
@@ -338,7 +477,7 @@ export function ActivityTimeline({ leadId }: Props) {
         {isLoading ? (
           <ActivitySkeleton />
         ) : allItems.length === 0 ? (
-          <EmptyState tab={activeTab} />
+          <EmptyState filter={activeFilter} />
         ) : (
           <>
             {/* Pinned section — only on All tab */}
@@ -353,14 +492,21 @@ export function ActivityTimeline({ leadId }: Props) {
                   </div>
                   <div className="flex-1 h-px bg-amber-100" />
                 </div>
-                {pinnedItems.map((activity, idx) => (
-                  <ActivityItem
-                    key={activity.id}
-                    activity={activity}
-                    onPin={id => pinMutation.mutate(id)}
-                    isLast={idx === pinnedItems.length - 1 && unpinnedItems.length === 0}
-                  />
-                ))}
+
+                {/* Pinned items with vertical connector + dots */}
+                <div className="relative">
+                  <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-amber-200 via-amber-100 to-transparent pointer-events-none" />
+                  {pinnedItems.map((activity, idx) => (
+                    <TimelineItemWrapper key={activity.id} activityType={activity.activity_type}>
+                      <ActivityItem
+                        activity={activity}
+                        onPin={id => pinMutation.mutate(id)}
+                        isLast={idx === pinnedItems.length - 1 && unpinnedItems.length === 0}
+                      />
+                    </TimelineItemWrapper>
+                  ))}
+                </div>
+
                 {unpinnedItems.length > 0 && (
                   <div className="flex items-center gap-2 my-3 px-1">
                     <div className="flex-1 h-px bg-slate-100" />
@@ -371,15 +517,13 @@ export function ActivityTimeline({ leadId }: Props) {
               </div>
             )}
 
-            {/* Unpinned items */}
-            {unpinnedItems.map((activity, idx) => (
-              <ActivityItem
-                key={activity.id}
-                activity={activity}
-                onPin={id => pinMutation.mutate(id)}
-                isLast={idx === unpinnedItems.length - 1 && !hasNextPage}
-              />
-            ))}
+            {/* Unpinned items with vertical connector + date dividers */}
+            {unpinnedItems.length > 0 && (
+              <div className="relative">
+                <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-emerald-200 via-slate-200 to-transparent pointer-events-none" />
+                {buildUnpinnedWithDividers()}
+              </div>
+            )}
 
             {/* Load more */}
             {hasNextPage && (

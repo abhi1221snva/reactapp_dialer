@@ -11,24 +11,30 @@ import {
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
 import { reportService } from '../../services/report.service'
-import { formatDateTime, formatDuration, formatPhoneNumber } from '../../utils/format'
+import { formatDateTime, formatDuration } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Field names match the actual /report API response:
+// SELECT c.id, c.extension, c.number, c.start_time, c.end_time, c.duration,
+//        c.route, c.call_recording, c.campaign_id, c.lead_id, c.type,
+//        d.title as disposition
+// FROM cdr as c LEFT JOIN disposition as d ON c.disposition_id = d.id
 
 interface CdrRow {
   id: number
-  phone_number: string
-  agent_name: string
-  duration: number
-  disposition: string
-  created_at: string
-  recording_url?: string
-  call_type?: string
-  route?: string
-  campaign?: string
-  campaign_name?: string
+  extension: string | null
+  number: string | null
+  start_time: string | null
+  end_time: string | null
+  duration: number | null
+  route: string | null
+  call_recording: string | null
+  campaign_id: number | null
+  lead_id: number | null
+  type: string | null
+  disposition: string | null
   [key: string]: unknown
 }
 
@@ -113,7 +119,7 @@ function AudioPlayerModal({ url, onClose }: { url: string; onClose: () => void }
   )
 }
 
-function DirectionBadge({ route }: { route?: string }) {
+function DirectionBadge({ route }: { route?: string | null }) {
   const r = (route || 'OUT').toUpperCase()
   if (r === 'IN') {
     return (
@@ -137,7 +143,8 @@ export function Reports() {
     end_date:         new Date().toISOString().split('T')[0],
     number:           '',
     extension:        '',
-    type:             '',
+    route:            '',       // IN / OUT direction filter
+    type:             '',       // call type: manual, dialer, etc.
     campaign_id:      '' as number | '',
     disposition_name: '',
     call_status:      '',
@@ -145,7 +152,7 @@ export function Reports() {
   const [page, setPage]               = useState(1)
   const [activePreset, setActivePreset] = useState('7 Days')
   const [showExportMenu, setShowExportMenu] = useState(false)
-  const [sortField, setSortField]     = useState('created_at')
+  const [sortField, setSortField]     = useState('start_time')
   const [sortDir, setSortDir]         = useState<'asc' | 'desc'>('desc')
   const [playingUrl, setPlayingUrl]   = useState<string | null>(null)
 
@@ -178,9 +185,10 @@ export function Reports() {
   const queryFilters: import('../../services/report.service').CdrFilters = {
     start_date: filters.start_date,
     end_date:   filters.end_date,
-    number:     filters.number,
-    extension:  filters.extension,
-    type:       filters.type,
+    ...(filters.number     ? { number:     filters.number }     : {}),
+    ...(filters.extension  ? { extension:  filters.extension }  : {}),
+    ...(filters.route      ? { route:      filters.route }      : {}),
+    ...(filters.type       ? { type:       filters.type }       : {}),
     ...(filters.campaign_id      ? { campaign:         filters.campaign_id }      : {}),
     ...(filters.disposition_name ? { disposition_name: filters.disposition_name } : {}),
     ...(filters.call_status      ? { status:           filters.call_status }      : {}),
@@ -193,6 +201,7 @@ export function Reports() {
     queryFn:  () => reportService.getCdr(queryFilters),
   })
 
+  // Response: { success, record_count, data: [...] }
   const rawRows: CdrRow[] = data?.data?.data || []
   const total = data?.data?.record_count || 0
 
@@ -207,17 +216,18 @@ export function Reports() {
     return sortDir === 'asc' ? cmp : -cmp
   })
 
-  // Stats
-  const answeredCalls  = rawRows.filter((r) => r.disposition === 'ANSWERED').length
+  // Stats — answered = duration > 0 (system-level, not disposition-based)
+  const answeredCalls  = rawRows.filter((r) => Number(r.duration) > 0).length
   const inboundCalls   = rawRows.filter((r) => (r.route || '').toUpperCase() === 'IN').length
   const outboundCalls  = rawRows.filter((r) => (r.route || '').toUpperCase() !== 'IN').length
   const avgDuration = rawRows.length > 0
-    ? Math.round(rawRows.reduce((s, r) => s + Number(r.duration), 0) / rawRows.length)
+    ? Math.round(rawRows.reduce((s, r) => s + Number(r.duration || 0), 0) / rawRows.length)
     : 0
 
+  // Disposition breakdown chart (uses joined disposition title)
   const dispositionMap: Record<string, number> = {}
   rawRows.forEach((r) => {
-    const d = r.disposition || 'UNKNOWN'
+    const d = r.disposition || 'Not Set'
     dispositionMap[d] = (dispositionMap[d] || 0) + 1
   })
   const chartData = Object.entries(dispositionMap)
@@ -236,20 +246,20 @@ export function Reports() {
     setPage(1)
   }
 
-  // CSV export (server-side, supports large datasets)
+  // CSV export (server-side)
   const handleExportCsv = async () => {
     setShowExportMenu(false)
     try {
-      // Remap frontend filter keys to match backend expectations
       const exportParams: Record<string, unknown> = {
-        start_date:  filters.start_date,
-        end_date:    filters.end_date,
-        number:      filters.number,
-        extension:   filters.extension,
-        ...(filters.campaign_id      ? { campaign_id:      filters.campaign_id }      : {}),
-        ...(filters.disposition_name ? { disposition_name: filters.disposition_name } : {}),
-        ...(filters.call_status      ? { status:           filters.call_status }      : {}),
-        ...(filters.type             ? { type:             filters.type }             : {}),
+        start_date: filters.start_date,
+        end_date:   filters.end_date,
+        ...(filters.number      ? { number:      filters.number }      : {}),
+        ...(filters.extension   ? { extension:   filters.extension }   : {}),
+        ...(filters.route       ? { route:       filters.route }       : {}),
+        ...(filters.type        ? { type:        filters.type }        : {}),
+        ...(filters.campaign_id       ? { campaign_id:      filters.campaign_id }      : {}),
+        ...(filters.disposition_name  ? { disposition_name: filters.disposition_name } : {}),
+        ...(filters.call_status       ? { status:           filters.call_status }      : {}),
       }
       const res = await reportService.exportCsv(exportParams)
       const url = URL.createObjectURL(res.data as Blob)
@@ -264,21 +274,22 @@ export function Reports() {
     }
   }
 
-  // Excel export — UTF-8 BOM CSV that Excel opens correctly
+  // Excel export — client-side with UTF-8 BOM
   const handleExportExcel = () => {
     setShowExportMenu(false)
     try {
       const BOM = '\uFEFF'
-      const header = ['Date/Time', 'Phone Number', 'Direction', 'Agent', 'Campaign', 'Duration', 'Disposition', 'Type'].join(',')
+      const header = ['Start Time', 'Number', 'Extension', 'Direction', 'Type', 'Duration', 'Disposition', 'Campaign ID', 'Recording'].join(',')
       const csvRows = rows.map((r) => [
-        `"${formatDateTime(r.created_at)}"`,
-        `"${r.phone_number || ''}"`,
+        `"${r.start_time ? formatDateTime(r.start_time) : ''}"`,
+        `"${r.number || ''}"`,
+        `"${r.extension || ''}"`,
         (r.route || 'OUT').toUpperCase(),
-        `"${r.agent_name || ''}"`,
-        `"${r.campaign_name || r.campaign || ''}"`,
+        `"${r.type || ''}"`,
         formatDuration(Number(r.duration || 0)),
         `"${r.disposition || ''}"`,
-        `"${r.call_type || ''}"`,
+        r.campaign_id || '',
+        `"${r.call_recording || ''}"`,
       ].join(','))
       const blob = new Blob([BOM + [header, ...csvRows].join('\n')], { type: 'text/csv;charset=utf-8' })
       const url  = URL.createObjectURL(blob)
@@ -311,8 +322,8 @@ export function Reports() {
       render: (r) => <DirectionBadge route={r.route} />,
     },
     {
-      key: 'phone_number',
-      header: 'Phone Number',
+      key: 'number',
+      header: 'Number',
       sortable: true,
       render: (r) => (
         <div className="flex items-center gap-1.5">
@@ -321,33 +332,44 @@ export function Reports() {
             : <PhoneOutgoing size={13} className="text-emerald-400 flex-shrink-0" />
           }
           <span className="font-mono text-sm font-semibold text-slate-900">
-            {formatPhoneNumber(r.phone_number)}
+            {r.number || '—'}
           </span>
         </div>
       ),
     },
     {
-      key: 'agent_name',
-      header: 'Agent',
+      key: 'extension',
+      header: 'Extension',
       sortable: true,
-      render: (r) => <span className="text-sm text-slate-700">{r.agent_name || '—'}</span>,
+      render: (r) => (
+        <span className="font-mono text-sm text-slate-700">{r.extension || '—'}</span>
+      ),
     },
     {
-      key: 'campaign',
-      header: 'Campaign',
+      key: 'type',
+      header: 'Type',
       render: (r) => {
-        const name = r.campaign_name || r.campaign || ''
-        return name
-          ? <Badge variant="blue">{String(name)}</Badge>
-          : <span className="text-slate-300 text-xs">—</span>
+        const typeMap: Record<string, string> = {
+          manual: 'Manual', dialer: 'Dialer',
+          predictive_dial: 'Predictive', c2c: 'C2C', outbound_ai: 'AI',
+        }
+        const label = r.type ? (typeMap[r.type] ?? r.type) : '—'
+        return <span className="text-xs text-slate-600">{label}</span>
       },
+    },
+    {
+      key: 'campaign_id',
+      header: 'Campaign',
+      render: (r) => r.campaign_id
+        ? <Badge variant="blue">#{r.campaign_id}</Badge>
+        : <span className="text-slate-300 text-xs">—</span>,
     },
     {
       key: 'duration',
       header: 'Duration',
       sortable: true,
       render: (r) => (
-        <span className="text-sm font-mono text-slate-700">{formatDuration(Number(r.duration))}</span>
+        <span className="text-sm font-mono text-slate-700">{formatDuration(Number(r.duration || 0))}</span>
       ),
     },
     {
@@ -355,23 +377,31 @@ export function Reports() {
       header: 'Disposition',
       sortable: true,
       render: (r) => {
-        const d = r.disposition || '-'
-        const variant = d === 'ANSWERED' ? 'green' : d === 'NO ANSWER' ? 'yellow' : d === 'BUSY' ? 'red' : 'gray'
-        return <Badge variant={variant}>{d}</Badge>
+        const d = r.disposition || '—'
+        const upper = d.toUpperCase()
+        const variant =
+          upper === 'ANSWERED' ? 'green' :
+          upper === 'NO ANSWER' || upper === 'NO_ANSWER' ? 'yellow' :
+          upper === 'BUSY' ? 'red' : 'gray'
+        return d !== '—' ? <Badge variant={variant}>{d}</Badge> : <span className="text-slate-300 text-xs">—</span>
       },
     },
     {
-      key: 'created_at',
+      key: 'start_time',
       header: 'Date / Time',
       sortable: true,
-      render: (r) => <span className="text-xs text-slate-400 whitespace-nowrap">{formatDateTime(r.created_at)}</span>,
+      render: (r) => (
+        <span className="text-xs text-slate-400 whitespace-nowrap">
+          {r.start_time ? formatDateTime(r.start_time) : '—'}
+        </span>
+      ),
     },
     {
-      key: 'recording',
+      key: 'call_recording',
       header: 'Recording',
-      render: (r) => r.recording_url ? (
+      render: (r) => r.call_recording ? (
         <button
-          onClick={() => setPlayingUrl(r.recording_url as string)}
+          onClick={() => setPlayingUrl(r.call_recording as string)}
           className={cn(
             'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all',
             'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200'
@@ -546,7 +576,7 @@ export function Reports() {
           <Filter size={14} className="text-slate-400" />
           <span className="text-sm font-semibold text-slate-700">Filter Records</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="form-group">
             <label className="label">From</label>
             <input
@@ -563,11 +593,23 @@ export function Reports() {
           </div>
           <div className="form-group">
             <label className="label">Direction</label>
+            <select className="input" value={filters.route}
+              onChange={(e) => { setFilters((f) => ({ ...f, route: e.target.value })); setPage(1) }}>
+              <option value="">All Directions</option>
+              <option value="IN">Inbound</option>
+              <option value="OUT">Outbound</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="label">Call Type</label>
             <select className="input" value={filters.type}
               onChange={(e) => { setFilters((f) => ({ ...f, type: e.target.value })); setPage(1) }}>
-              <option value="">All Directions</option>
-              <option value="inbound">Inbound</option>
-              <option value="outbound">Outbound</option>
+              <option value="">All Types</option>
+              <option value="manual">Manual</option>
+              <option value="dialer">Dialer</option>
+              <option value="predictive_dial">Predictive</option>
+              <option value="c2c">C2C</option>
+              <option value="outbound_ai">AI</option>
             </select>
           </div>
           <div className="form-group">
@@ -588,7 +630,7 @@ export function Reports() {
             />
           </div>
           <div className="form-group">
-            <label className="label">Phone Search</label>
+            <label className="label">Phone Number</label>
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -608,21 +650,6 @@ export function Reports() {
               {dispositionOptions.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="label">Call Status</label>
-            <select
-              className="input"
-              value={filters.call_status}
-              onChange={(e) => { setFilters((f) => ({ ...f, call_status: e.target.value })); setPage(1) }}
-            >
-              <option value="">All Statuses</option>
-              <option value="ANSWERED">Answered</option>
-              <option value="NO ANSWER">No Answer</option>
-              <option value="BUSY">Busy</option>
-              <option value="FAILED">Failed</option>
-              <option value="CANCELLED">Cancelled</option>
             </select>
           </div>
         </div>

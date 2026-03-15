@@ -6,6 +6,35 @@ import type {
   BulkDeletePayload,
   BulkExportPayload,
   AnalyticsPeriod,
+  LenderOffer,
+  DealStip,
+  StipType,
+  StipStatus,
+  FundedDeal,
+  MerchantPosition,
+  CommissionRule,
+  CommissionType,
+  DealType,
+  DealCommission,
+  CommissionSummary,
+  ComplianceCheckType,
+  ComplianceResult,
+  ComplianceCheck,
+  AdvanceRegistryEntry,
+  StackingWarning,
+  CrmAutomation,
+  AutomationAction,
+  AutomationLog,
+  AutomationTriggerType,
+  AutomationLogStatus,
+  SmsConversation,
+  SmsMessage,
+  SmsConversationStatus,
+  SmsDirection,
+  SmsMessageStatus,
+  RenewalPipelineItem,
+  OfferStatus,
+  FundedDealStatus,
 } from '../types/crm.types'
 
 export const crmService = {
@@ -370,4 +399,133 @@ export const crmService = {
       name: u.name ?? ([u.first_name, u.last_name].filter(Boolean).join(' ') || `User #${u.id}`),
     }))
   },
+
+  // ── Lender Offers ───────────────────────────────────────────────────────────
+  getOffers: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/offers`),
+
+  createOffer: (leadId: number, data: Partial<LenderOffer>) =>
+    api.put(`/crm/lead/${leadId}/offers`, data),
+
+  updateOffer: (leadId: number, offerId: number, data: Partial<LenderOffer>) =>
+    api.post(`/crm/lead/${leadId}/offers/${offerId}`, data),
+
+  acceptOffer: (leadId: number, offerId: number) =>
+    api.post(`/crm/lead/${leadId}/offers/${offerId}/accept`, {}),
+
+  deleteOffer: (leadId: number, offerId: number) =>
+    api.delete(`/crm/lead/${leadId}/offers/${offerId}`),
+
+  // ── Deal Stips ──────────────────────────────────────────────────────────────
+  getStips: (leadId: number, lenderId?: number) =>
+    api.get(`/crm/lead/${leadId}/stips`, { params: lenderId ? { lender_id: lenderId } : {} }),
+
+  createStip: (leadId: number, data: Partial<DealStip>) =>
+    api.put(`/crm/lead/${leadId}/stips`, data),
+
+  bulkCreateStips: (leadId: number, data: { lender_id?: number; stip_names: string[]; stip_type: StipType }) =>
+    api.post(`/crm/lead/${leadId}/stips/bulk`, data),
+
+  updateStip: (leadId: number, stipId: number, data: { status: StipStatus; notes?: string }) =>
+    api.post(`/crm/lead/${leadId}/stips/${stipId}`, data),
+
+  deleteStip: (leadId: number, stipId: number) =>
+    api.delete(`/crm/lead/${leadId}/stips/${stipId}`),
+
+  // ── Funded Deal ─────────────────────────────────────────────────────────────
+  getFundedDeal: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/funded-deal`),
+
+  fundDeal: (leadId: number, data: Partial<FundedDeal>) =>
+    api.put(`/crm/lead/${leadId}/funded-deal`, data),
+
+  updateFundedDeal: (leadId: number, dealId: number, data: Partial<FundedDeal>) =>
+    api.post(`/crm/lead/${leadId}/funded-deal/${dealId}`, data),
+
+  // ── Merchant Positions ──────────────────────────────────────────────────────
+  getPositions: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/positions`),
+
+  addPosition: (leadId: number, data: Partial<MerchantPosition>) =>
+    api.put(`/crm/lead/${leadId}/positions`, data),
+
+  deletePosition: (leadId: number, positionId: number) =>
+    api.delete(`/crm/lead/${leadId}/positions/${positionId}`),
+
+  // ── Commissions ─────────────────────────────────────────────────────────────
+  getCommissionRules: () =>
+    api.get('/crm/commission-rules'),
+
+  createCommissionRule: (data: Partial<CommissionRule>) =>
+    api.put('/crm/commission-rules', data),
+
+  updateCommissionRule: (id: number, data: Partial<CommissionRule>) =>
+    api.post(`/crm/commission-rules/${id}`, data),
+
+  deleteCommissionRule: (id: number) =>
+    api.delete(`/crm/commission-rules/${id}`),
+
+  getCommissions: (params?: { agent_id?: number; status?: string; date_from?: string; date_to?: string; page?: number }) =>
+    api.get('/crm/commissions', { params }),
+
+  markCommissionPaid: (id: number) =>
+    api.post(`/crm/commissions/${id}/mark-paid`, {}),
+
+  getCommissionSummary: (period?: string) =>
+    api.get('/crm/commissions/summary', { params: { period } }),
+
+  // ── Renewals ────────────────────────────────────────────────────────────────
+  getRenewalPipeline: (params?: { days?: number; lender_id?: number }) =>
+    api.get('/crm/renewals', { params }),
+
+  markRenewed: (leadId: number, dealId: number) =>
+    api.post(`/crm/lead/${leadId}/funded-deal/${dealId}/mark-renewed`, {}),
+
+  // ── Compliance ──────────────────────────────────────────────────────────────
+  getComplianceChecks: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/compliance`),
+
+  runComplianceCheck: (leadId: number, data: { check_type: ComplianceCheckType; result?: ComplianceResult; score?: string; notes?: string; meta?: Record<string, unknown> }) =>
+    api.put(`/crm/lead/${leadId}/compliance`, data),
+
+  updateComplianceCheck: (leadId: number, checkId: number, data: { result: ComplianceResult; notes?: string }) =>
+    api.post(`/crm/lead/${leadId}/compliance/${checkId}`, data),
+
+  searchAdvanceRegistry: (params: { ein?: string; ssn?: string }) =>
+    api.get('/crm/advance-registry/search', { params }),
+
+  getStackingWarning: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/stacking-warning`),
+
+  // ── Automations ─────────────────────────────────────────────────────────────
+  getAutomations: () =>
+    api.get('/crm/automations'),
+
+  createAutomation: (data: Partial<CrmAutomation>) =>
+    api.put('/crm/automations', data),
+
+  updateAutomation: (id: number, data: Partial<CrmAutomation>) =>
+    api.post(`/crm/automations/${id}`, data),
+
+  deleteAutomation: (id: number) =>
+    api.delete(`/crm/automations/${id}`),
+
+  toggleAutomation: (id: number) =>
+    api.patch(`/crm/automations/${id}/toggle`, {}),
+
+  getAutomationLogs: (id: number) =>
+    api.get(`/crm/automations/${id}/logs`),
+
+  // ── SMS Inbox ───────────────────────────────────────────────────────────────
+  getSmsConversations: (params?: { status?: string; page?: number }) =>
+    api.get('/crm/sms/conversations', { params }),
+
+  getSmsMessages: (conversationId: number) =>
+    api.get(`/crm/sms/conversations/${conversationId}/messages`),
+
+  sendSmsMessage: (conversationId: number, body: string) =>
+    api.post(`/crm/sms/conversations/${conversationId}/send`, { body }),
+
+  markConversationRead: (conversationId: number) =>
+    api.post(`/crm/sms/conversations/${conversationId}/read`, {}),
 }

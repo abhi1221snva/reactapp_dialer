@@ -2,12 +2,13 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Eye, FileText,
-  Star, Code2, ChevronDown, ChevronUp, Copy, Check,
+  Star, Code2, Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { PlaceholderPicker, type PickerPlaceholder } from '../../components/crm/PlaceholderPicker'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface PdfTemplate {
@@ -104,26 +105,30 @@ function TemplateModal({
 }) {
   const qc      = useQueryClient()
   const isEdit  = !!editing
-  const taRef   = useRef<HTMLTextAreaElement>(null)
-  const [tab, setTab]               = useState<'edit' | 'preview'>('edit')
-  const [name, setName]             = useState(editing?.template_name ?? '')
-  const [html, setHtml]             = useState(editing?.template_html ?? STARTER_HTML)
-  const [markAsApp, setMarkAsApp]   = useState(editing?.custom_type === 'signature_application')
-  const [copied, setCopied]         = useState<string | null>(null)
-  const [showFields, setShowFields] = useState(true)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const [tab, setTab]             = useState<'edit' | 'preview'>('edit')
+  const [name, setName]           = useState(editing?.template_name ?? '')
+  const [html, setHtml]           = useState(editing?.template_html ?? STARTER_HTML)
+  const [markAsApp, setMarkAsApp] = useState(editing?.custom_type === 'signature_application')
 
-  interface Placeholder { key: string; label: string; type: string; section: string; source: string }
-
-  // Load ALL available placeholders from both old + new label systems
-  const { data: placeholderData } = useQuery({
+  // Load placeholders — API returns bare keys like "first_name"; we wrap them
+  const { data: placeholderData, isLoading: placeholdersLoading } = useQuery({
     queryKey: ['pdf-placeholders'],
     queryFn: async () => {
       const res = await crmService.getPdfPlaceholders()
-      return (res.data?.data ?? res.data ?? []) as Placeholder[]
+      const raw = (res.data?.data ?? res.data ?? []) as Array<{
+        key: string; label: string; section: string; type?: string
+      }>
+      // Wrap bare key with [[...]] so the template receives the correct format
+      return raw.map<PickerPlaceholder>(p => ({
+        key:     `[[${p.key}]]`,
+        label:   p.label,
+        section: p.section,
+      }))
     },
     staleTime: 5 * 60 * 1000,
   })
-  const allPlaceholders = placeholderData ?? []
+  const pickerPlaceholders = placeholderData ?? []
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -154,14 +159,6 @@ function TemplateModal({
       ta.focus()
       ta.setSelectionRange(s + key.length, s + key.length)
     })
-    setCopied(key)
-    setTimeout(() => setCopied(null), 1200)
-  }
-
-  function copyPlaceholder(key: string) {
-    navigator.clipboard.writeText(key).catch(() => {})
-    setCopied(key)
-    setTimeout(() => setCopied(null), 1200)
   }
 
   return (
@@ -287,62 +284,12 @@ function TemplateModal({
           </div>
 
           {/* Right — placeholder picker */}
-          <div className="w-72 flex-shrink-0 flex flex-col overflow-hidden">
-            <div
-              className="flex items-center justify-between px-4 py-3 border-b border-slate-100 cursor-pointer select-none"
-              onClick={() => setShowFields(f => !f)}
-            >
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Field Placeholders</span>
-              {showFields ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-            </div>
-
-            {showFields && (
-              <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                <p className="text-[11px] text-slate-400">Click to insert at cursor position, or copy.</p>
-
-                {/* All placeholders grouped by section */}
-                {allPlaceholders.length === 0 ? (
-                  <p className="text-[11px] text-slate-400 italic">Loading fields…</p>
-                ) : (
-                  (() => {
-                    const sections = Array.from(new Set(allPlaceholders.map(f => f.section || 'Other')))
-                    return sections.map(section => (
-                      <div key={section}>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">{section}</p>
-                        <div className="space-y-1">
-                          {allPlaceholders.filter(f => (f.section || 'Other') === section).map(f => (
-                            <div key={f.key} className="flex items-center gap-1.5 group">
-                              <button
-                                onClick={() => insertPlaceholder(f.key)}
-                                className="flex-1 text-left px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200 hover:border-indigo-200 transition-all"
-                              >
-                                <span className="font-mono text-[11px] truncate block">{f.key}</span>
-                                {f.label && <span className="text-[10px] text-slate-400 block truncate">{f.label}</span>}
-                              </button>
-                              <button
-                                onClick={() => copyPlaceholder(f.key)}
-                                className="p-1.5 rounded text-slate-300 hover:text-indigo-500 transition-colors flex-shrink-0"
-                                title="Copy"
-                              >
-                                {copied === f.key ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  })()
-                )}
-
-                {/* Tips */}
-                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-[11px] text-amber-800 space-y-1.5">
-                  <p className="font-bold">Tips</p>
-                  <p>• <code className="bg-amber-100 px-1 rounded">[[field_key]]</code> — lead field value</p>
-                  <p>• <code className="bg-amber-100 px-1 rounded">[[signature_image]]</code> — renders the lead's signature as an image</p>
-                  <p>• Unknown placeholders are removed automatically when PDF is generated</p>
-                </div>
-              </div>
-            )}
+          <div className="w-72 flex-shrink-0 flex flex-col overflow-hidden border-l border-slate-100">
+            <PlaceholderPicker
+              placeholders={pickerPlaceholders}
+              loading={placeholdersLoading}
+              onInsert={insertPlaceholder}
+            />
           </div>
         </div>
       </div>
@@ -378,11 +325,19 @@ export function CrmPdfTemplates() {
 
   const setAppMutation = useMutation({
     mutationFn: async (tpl: PdfTemplate) => {
-      // Un-set any existing app template
+      // Un-set any existing app template — must include required fields (backend validates template_name + template_html)
       if (appTemplate && appTemplate.id !== tpl.id) {
-        await crmService.updateCustomTemplate(appTemplate.id, { custom_type: 'general' })
+        await crmService.updateCustomTemplate(appTemplate.id, {
+          template_name: appTemplate.template_name,
+          template_html: appTemplate.template_html,
+          custom_type: 'general',
+        })
       }
-      return crmService.updateCustomTemplate(tpl.id, { custom_type: 'signature_application' })
+      return crmService.updateCustomTemplate(tpl.id, {
+        template_name: tpl.template_name,
+        template_html: tpl.template_html,
+        custom_type: 'signature_application',
+      })
     },
     onSuccess: () => { toast.success('Set as Application Template'); qc.invalidateQueries({ queryKey: ['pdf-templates'] }) },
     onError: () => toast.error('Failed'),

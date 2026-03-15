@@ -40,6 +40,9 @@ import { CrmEmailTemplates } from './pages/crm/CrmEmailTemplates'
 import { CrmSmsTemplates } from './pages/crm/CrmSmsTemplates'
 import { CrmLenders } from './pages/crm/CrmLenders'
 import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
+import { CrmAutomations } from './pages/crm/CrmAutomations'
+import { CrmSmsInbox } from './pages/crm/CrmSmsInbox'
+import { CrmDocumentTypes } from './pages/crm/CrmDocumentTypes'
 import { Campaigns } from './pages/campaigns/Campaigns'
 import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
@@ -56,10 +59,8 @@ import { ListLeads } from './pages/lists/ListLeads'
 import { ListEditForm } from './pages/lists/ListEditForm'
 import { EditMapping } from './modules/lists/EditMapping'
 import { Reports } from './pages/reports/Reports'
-import { DailyReport } from './pages/reports/DailyReport'
 import { AgentSummary } from './pages/reports/AgentSummary'
 import { DispositionReport } from './pages/reports/DispositionReport'
-import { LiveCalls } from './pages/reports/LiveCalls'
 import { CampaignPerformance } from './pages/reports/CampaignPerformance'
 import { Profile } from './pages/profile/Profile'
 import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
@@ -153,6 +154,9 @@ export default function App() {
           <Route path="/crm/sms-templates" element={<CrmSmsTemplates />} />
           <Route path="/crm/pdf-templates" element={<CrmPdfTemplates />} />
           <Route path="/crm/lenders" element={<CrmLenders />} />
+          <Route path="/crm/automations" element={<CrmAutomations />} />
+          <Route path="/crm/sms-inbox" element={<CrmSmsInbox />} />
+          <Route path="/crm/document-types" element={<CrmDocumentTypes />} />
         </Route>
 
         {/* Campaigns */}
@@ -181,10 +185,8 @@ export default function App() {
         <Route path="/lists/:id/leads" element={<ListLeads />} />
 
         <Route path="/reports" element={<Reports />} />
-        <Route path="/reports/daily" element={<DailyReport />} />
         <Route path="/reports/agent-summary" element={<AgentSummary />} />
         <Route path="/reports/disposition" element={<DispositionReport />} />
-        <Route path="/reports/live" element={<LiveCalls />} />
         <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
         <Route path="/sms" element={<SMSCenter />} />
         <Route path="/chat" element={<TeamChat />} />

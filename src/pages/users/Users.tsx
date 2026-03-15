@@ -50,9 +50,26 @@ export function Users() {
   const table = useServerTable({ defaultLimit: 15 })
 
   const deleteMutation = useMutation({
+    // POST /edit-extension with is_deleted=1 — soft-delete by primary DB id.
+    // No easify_user_uuid needed; works for all users.
     mutationFn: (id: number) => userService.delete(id),
-    onSuccess: () => { toast.success('User deleted'); qc.invalidateQueries({ queryKey: ['users'] }) },
-    onError: () => toast.error('Failed to delete user'),
+    onSuccess: (res) => {
+      const data = (res as { data?: { success?: boolean | string; message?: string } })?.data
+      if (data?.success === false || data?.success === 'false') {
+        toast.error(data.message || 'Failed to delete user')
+        return
+      }
+      toast.success('User deleted')
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      const interceptorHandled = status && (status === 401 || status === 403 || status === 422 || status >= 500)
+      if (!interceptorHandled) {
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        toast.error(msg || 'Failed to delete user')
+      }
+    },
   })
 
   const columns: Column<Agent>[] = [
@@ -92,7 +109,7 @@ export function Users() {
       render: (row) => {
         const lvl = (row.user_level || row.level || 1) as number
         const variant = lvl >= 7 ? 'blue' as const : lvl >= 5 ? 'purple' as const : 'gray' as const
-        return <Badge variant={variant}>{row.role_name || levelLabel(lvl)}</Badge>
+        return <Badge variant={variant}>{levelLabel(lvl)}</Badge>
       },
     },
     {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, Trash2, Loader2, X, Check, Eye, Mail, Copy,
+  Plus, Pencil, Trash2, Loader2, X, Check, Eye, Mail,
   Search, Layers, AtSign, FileText, Zap, ToggleLeft,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -9,20 +9,40 @@ import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { EmailTemplate } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { PlaceholderPicker, type PickerPlaceholder } from '../../components/crm/PlaceholderPicker'
 
-const VARIABLE_GROUPS = [
-  {
-    label: 'Lead Info',
-    vars: ['[[first_name]]', '[[last_name]]', '[[email]]', '[[phone_number]]', '[[company_name]]'],
-  },
-  {
-    label: 'Status & Agent',
-    vars: ['[[lead_status]]', '[[assigned_to]]'],
-  },
-  {
-    label: 'Legacy Format',
-    vars: ['[first_name]', '[last_name]', '[email]'],
-  },
+// ── Email placeholder catalogue ───────────────────────────────────────────────
+const EMAIL_PLACEHOLDERS: PickerPlaceholder[] = [
+  { key: '[[first_name]]',   label: 'First Name',    section: 'Lead Info' },
+  { key: '[[last_name]]',    label: 'Last Name',     section: 'Lead Info' },
+  { key: '[[full_name]]',    label: 'Full Name',     section: 'Lead Info' },
+  { key: '[[email]]',        label: 'Email Address', section: 'Lead Info' },
+  { key: '[[phone_number]]', label: 'Phone Number',  section: 'Lead Info' },
+  { key: '[[mobile]]',       label: 'Mobile',        section: 'Lead Info' },
+  { key: '[[company_name]]', label: 'Company Name',  section: 'Lead Info' },
+  { key: '[[address]]',      label: 'Address',       section: 'Lead Info' },
+  { key: '[[city]]',         label: 'City',          section: 'Lead Info' },
+  { key: '[[state]]',        label: 'State',         section: 'Lead Info' },
+  { key: '[[lead_status]]',  label: 'Lead Status',   section: 'Status & System' },
+  { key: '[[lead_type]]',    label: 'Lead Type',     section: 'Status & System' },
+  { key: '[[assigned_to]]',  label: 'Assigned Agent','section': 'Status & System' },
+  { key: '[[lead_created_at]]', label: 'Date Created', section: 'Status & System' },
+  { key: '[[specialist_name]]',  label: 'Specialist Name',  section: 'Specialist' },
+  { key: '[[specialist_email]]', label: 'Specialist Email', section: 'Specialist' },
+  { key: '[[specialist_phone]]', label: 'Specialist Phone', section: 'Specialist' },
+  { key: '[[office_name]]',    label: 'Company Name',    section: 'Company Branding' },
+  { key: '[[office_email]]',   label: 'Company Email',   section: 'Company Branding' },
+  { key: '[[office_phone]]',   label: 'Company Phone',   section: 'Company Branding' },
+  { key: '[[office_address]]', label: 'Company Address', section: 'Company Branding' },
+  { key: '[first_name]', label: 'First Name (legacy)', section: 'Legacy Format' },
+  { key: '[last_name]',  label: 'Last Name (legacy)',  section: 'Legacy Format' },
+  { key: '[email]',      label: 'Email (legacy)',      section: 'Legacy Format' },
+]
+
+const EMAIL_PICKER_TIPS = [
+  '[[field_key]] — replaced with lead\'s value',
+  '[field] (single brackets) — legacy format',
+  'Both formats work in email templates',
 ]
 
 interface FormState {
@@ -38,7 +58,7 @@ const EMPTY_FORM: FormState = {
   subject: '',
   template_html: '',
   lead_status: '',
-  send_bcc: '',
+  send_bcc: '0',
 }
 
 function StatCard({
@@ -85,7 +105,7 @@ function TemplateModal({
           subject: editing.subject,
           template_html: editing.template_html,
           lead_status: editing.lead_status ?? '',
-          send_bcc: editing.send_bcc ?? '',
+          send_bcc: editing.send_bcc ?? '0',
         }
       : EMPTY_FORM,
   )
@@ -96,13 +116,15 @@ function TemplateModal({
   const insertVar = (v: string) => {
     const ta = document.getElementById('email-template-body') as HTMLTextAreaElement
     if (!ta) { set('template_html', form.template_html + v); return }
+    // selectionStart/End persist after blur — onMouseDown:preventDefault on Insert
+    // button in PlaceholderPicker keeps focus so cursor position is preserved
     const start = ta.selectionStart
-    const end = ta.selectionEnd
+    const end   = ta.selectionEnd
     set('template_html', form.template_html.slice(0, start) + v + form.template_html.slice(end))
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       ta.focus()
       ta.setSelectionRange(start + v.length, start + v.length)
-    }, 10)
+    })
   }
 
   const saveMutation = useMutation({
@@ -111,8 +133,8 @@ function TemplateModal({
         template_name: form.template_name,
         subject: form.subject,
         template_html: form.template_html,
+        send_bcc: form.send_bcc,
         ...(form.lead_status ? { lead_status: form.lead_status } : {}),
-        ...(form.send_bcc ? { send_bcc: form.send_bcc } : {}),
       }
       return isEdit
         ? crmService.updateEmailTemplate(editing!.id, payload)
@@ -199,21 +221,20 @@ function TemplateModal({
                       />
                     </div>
                   </div>
-                  <div>
+                  <div className="flex flex-col justify-center">
                     <label className="label">
-                      BCC Email{' '}
+                      Send BCC Copy{' '}
                       <span className="text-slate-400 font-normal text-xs">(optional)</span>
                     </label>
-                    <div className="relative">
-                      <AtSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <label className="flex items-center gap-2.5 cursor-pointer mt-1.5">
                       <input
-                        className="input w-full pl-9"
-                        type="email"
-                        value={form.send_bcc}
-                        onChange={e => set('send_bcc', e.target.value)}
-                        placeholder="bcc@example.com"
+                        type="checkbox"
+                        className="accent-indigo-600 w-4 h-4"
+                        checked={form.send_bcc === '1'}
+                        onChange={e => set('send_bcc', e.target.checked ? '1' : '0')}
                       />
-                    </div>
+                      <span className="text-sm text-slate-700">BCC a copy to the assigned agent</span>
+                    </label>
                   </div>
                 </div>
 
@@ -278,33 +299,13 @@ function TemplateModal({
                 </div>
               </div>
 
-              {/* Variables sidebar */}
-              <div className="w-52 border-l border-slate-200 flex-shrink-0 bg-slate-50 flex flex-col min-h-0">
-                <div className="px-4 pt-4 pb-3 border-b border-slate-200 flex-shrink-0">
-                  <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Variables</p>
-                  <p className="text-xs text-slate-400 mt-1">Click to insert at cursor</p>
-                </div>
-                <div className="p-3 space-y-4 overflow-y-auto flex-1">
-                  {VARIABLE_GROUPS.map(group => (
-                    <div key={group.label}>
-                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                        {group.label}
-                      </p>
-                      <div className="space-y-1">
-                        {group.vars.map(v => (
-                          <button
-                            key={v}
-                            onClick={() => insertVar(v)}
-                            className="flex items-center justify-between w-full text-left text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 font-mono hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition-colors group"
-                          >
-                            <span className="truncate">{v}</span>
-                            <Copy size={9} className="flex-shrink-0 ml-1 text-slate-300 group-hover:text-indigo-400" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {/* Variables sidebar — PlaceholderPicker */}
+              <div className="w-64 border-l border-slate-200 flex-shrink-0 bg-white flex flex-col min-h-0">
+                <PlaceholderPicker
+                  placeholders={EMAIL_PLACEHOLDERS}
+                  onInsert={insertVar}
+                  tipLines={EMAIL_PICKER_TIPS}
+                />
               </div>
             </div>
           ) : (
@@ -318,7 +319,7 @@ function TemplateModal({
                     {[
                       { label: 'From', value: 'noreply@rocketdialer.com' },
                       { label: 'To', value: '[[email]]' },
-                      ...(form.send_bcc ? [{ label: 'BCC', value: form.send_bcc }] : []),
+                      ...(form.send_bcc === '1' ? [{ label: 'BCC', value: 'Assigned agent (auto)' }] : []),
                     ].map(row => (
                       <div key={row.label} className="flex items-center gap-3 text-sm">
                         <span className="text-slate-400 text-xs w-10 text-right flex-shrink-0">{row.label}</span>
@@ -605,16 +606,16 @@ export function CrmEmailTemplates() {
                   </div>
 
                   {/* Meta badges */}
-                  {(t.lead_status || t.send_bcc) && (
+                  {(t.lead_status || t.send_bcc === '1') && (
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {t.lead_status && (
                         <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                           <Zap size={9} /> {t.lead_status}
                         </span>
                       )}
-                      {t.send_bcc && (
+                      {t.send_bcc === '1' && (
                         <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                          <AtSign size={9} /> BCC
+                          <AtSign size={9} /> BCC On
                         </span>
                       )}
                     </div>
