@@ -162,6 +162,61 @@ export function CrmLeadCreate() {
     Object.entries({ ...rawAll, ...data } as Record<string, unknown>).forEach(([k, v]) => {
       payload[k] = v === true ? '1' : v === false ? '0' : v
     })
+
+    // ── Manual EAV field validation ───────────────────────────────────────────
+    // zodResolver ignores RegisterOptions passed to register(), so we validate
+    // dynamic fields explicitly here before sending to the backend.
+    if (leadFields && leadFields.length > 0) {
+      const activeFields = leadFields.filter(
+        f => f.status === true || (f.status as unknown) == 1,
+      )
+      let hasErrors = false
+
+      for (const field of activeFields) {
+        if (field.field_type === 'checkbox') continue // checkboxes are always '0' or '1'
+
+        const rawVal = payload[field.field_key]
+        const strVal = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : ''
+        const isRequired = field.required === true || (field.required as unknown) == 1
+
+        if (isRequired && strVal === '') {
+          setError(field.field_key as keyof FormData, {
+            type: 'manual',
+            message: `${field.label_name} is required`,
+          })
+          hasErrors = true
+          continue
+        }
+
+        if (!strVal) continue // optional + empty → skip type check
+
+        let fieldError: string | null = null
+        switch (field.field_type) {
+          case 'email':
+            if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(strVal))
+              fieldError = `${field.label_name} must be a valid email address`
+            break
+          case 'phone_number':
+          case 'phone':
+            if (strVal.replace(/\D/g, '').length !== 10)
+              fieldError = `${field.label_name} must be exactly 10 digits`
+            break
+          case 'number':
+            if (isNaN(Number(strVal)))
+              fieldError = `${field.label_name} must be a numeric value`
+            break
+        }
+
+        if (fieldError) {
+          setError(field.field_key as keyof FormData, { type: 'manual', message: fieldError })
+          hasErrors = true
+        }
+      }
+
+      if (hasErrors) return // stop — do not submit
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (isEdit) updateMutation.mutate(payload)
     else createMutation.mutate(payload)
   }

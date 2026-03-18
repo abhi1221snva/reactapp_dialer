@@ -24,11 +24,31 @@ const DEFAULT_FORM = {
   notes: '',
 }
 
+type FormErrors = Partial<Record<keyof typeof DEFAULT_FORM, string>>
+
+function validateForm(form: typeof DEFAULT_FORM): FormErrors {
+  const errors: FormErrors = {}
+
+  if (form.email && !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(form.email.trim())) {
+    errors.email = 'Must be a valid email address'
+  }
+
+  if (form.phone_number) {
+    const digits = form.phone_number.replace(/\D/g, '')
+    if (digits.length !== 10) {
+      errors.phone_number = 'Phone number must be exactly 10 digits'
+    }
+  }
+
+  return errors
+}
+
 export function LeadForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(DEFAULT_FORM)
+  const [formErrors, setFormErrors] = useState<FormErrors>({})
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
     queryKey: ['lead', id],
@@ -85,7 +105,13 @@ export function LeadForm() {
     },
   })
 
-  const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
+  const set = (key: string, value: string) => {
+    setForm(f => ({ ...f, [key]: value }))
+    // Clear field error on change
+    if (formErrors[key as keyof FormErrors]) {
+      setFormErrors(e => { const n = { ...e }; delete n[key as keyof FormErrors]; return n })
+    }
+  }
 
   const statuses: Array<{ id: number; lead_status: string }> =
     statusesData?.data?.data || statusesData?.data || []
@@ -132,14 +158,32 @@ export function LeadForm() {
 
           <div className="form-group">
             <label className="label">Phone Number <span className="text-red-500">*</span></label>
-            <input className="input" value={form.phone_number}
-              onChange={e => set('phone_number', e.target.value)} placeholder="+1XXXXXXXXXX" required />
+            <input
+              className={`input${formErrors.phone_number ? ' border-red-400 focus:ring-red-400' : ''}`}
+              value={form.phone_number}
+              onChange={e => set('phone_number', e.target.value)}
+              placeholder="10-digit number"
+              maxLength={15}
+              inputMode="numeric"
+            />
+            {formErrors.phone_number && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.phone_number}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label className="label">Email</label>
-            <input type="email" className="input" value={form.email}
-              onChange={e => set('email', e.target.value)} placeholder="john@example.com" />
+            <input
+              type="email"
+              className={`input${formErrors.email ? ' border-red-400 focus:ring-red-400' : ''}`}
+              value={form.email}
+              onChange={e => set('email', e.target.value)}
+              placeholder="john@example.com"
+              autoComplete="email"
+            />
+            {formErrors.email && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>
+            )}
           </div>
 
           <div className="form-group">
@@ -246,7 +290,15 @@ export function LeadForm() {
       <div className="flex gap-3">
         <button onClick={() => navigate('/crm')} className="btn-outline flex-1">Cancel</button>
         <button
-          onClick={() => saveMutation.mutate()}
+          onClick={() => {
+            const errors = validateForm(form)
+            if (Object.keys(errors).length > 0) {
+              setFormErrors(errors)
+              return
+            }
+            setFormErrors({})
+            saveMutation.mutate()
+          }}
           disabled={!form.phone_number || saveMutation.isPending}
           className="btn-primary flex-1"
         >

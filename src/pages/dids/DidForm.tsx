@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
@@ -257,19 +257,19 @@ function PreviewCard({ form, extensions, ivrs, ringGroups }: {
 
   function resolveTarget(type: string, ext: string, ivr: string, queue: string, vm: string, fwd: string) {
     if (type === 'extension') {
-      const e = extensions.find(x => x.extension === ext)
+      const e = extensions.find(x => String(x.id) === String(ext))
       return e ? ([e.first_name, e.last_name].filter(Boolean).join(' ') || `Ext ${e.extension}`) : (ext ? `Ext ${ext}` : '')
     }
     if (type === 'ivr') {
-      const i = ivrs.find(x => x.ivr_id === ivr)
+      const i = ivrs.find(x => String(x.ivr_id) === String(ivr))
       return i ? (i.ivr_desc || i.ann_id || i.ivr_id) : ivr
     }
     if (type === 'queue') {
-      const r = ringGroups.find(x => (x.title || x.name || String(x.id)) === queue)
+      const r = ringGroups.find(x => String(x.id) === String(queue))
       return r ? (r.title || r.name || `Group #${r.id}`) : queue
     }
     if (type === 'voicemail') {
-      const e = extensions.find(x => x.extension === vm)
+      const e = extensions.find(x => String(x.id) === String(vm))
       return e ? ([e.first_name, e.last_name].filter(Boolean).join(' ') || `Ext ${e.extension}`) + ' (VM)' : (vm ? `Ext ${vm} (VM)` : '')
     }
     if (type === 'external') return fwd ? formatPhoneNumber(fwd) : ''
@@ -452,7 +452,7 @@ function RoutingTarget({
       <select className="input" value={extension} onChange={e => onChange('extension', e.target.value)}>
         <option value="">— Select an agent —</option>
         {extensions.map(ext => (
-          <option key={ext.id} value={ext.extension}>{extLabel(ext)}</option>
+          <option key={ext.id} value={String(ext.id)}>{extLabel(ext)}</option>
         ))}
       </select>
       <p className="text-[11px] text-slate-400 mt-1.5">{extensions.length} agent{extensions.length !== 1 ? 's' : ''} available</p>
@@ -466,7 +466,7 @@ function RoutingTarget({
       <select className="input" value={ivr_id} onChange={e => onChange('ivr_id', e.target.value)} disabled={loadingIvrs}>
         <option value="">{loadingIvrs ? 'Loading IVR menus…' : '— Select an IVR menu —'}</option>
         {ivrs.map(ivr => (
-          <option key={ivr.ivr_id} value={ivr.ivr_id}>
+          <option key={ivr.ivr_id} value={String(ivr.ivr_id)}>
             {ivr.ivr_desc || ivr.ann_id || ivr.ivr_id}
           </option>
         ))}
@@ -484,7 +484,7 @@ function RoutingTarget({
       <select className="input" value={ingroup} onChange={e => onChange('ingroup', e.target.value)} disabled={loadingRingGroups}>
         <option value="">{loadingRingGroups ? 'Loading ring groups…' : '— Select a ring group —'}</option>
         {ringGroups.map(rg => (
-          <option key={rg.id} value={rg.title || rg.name || String(rg.id)}>
+          <option key={rg.id} value={String(rg.id)}>
             {rgLabel(rg)}
           </option>
         ))}
@@ -502,7 +502,7 @@ function RoutingTarget({
       <select className="input" value={voicemail_id} onChange={e => onChange('voicemail_id', e.target.value)}>
         <option value="">— Select an agent / extension —</option>
         {extensions.map(ext => (
-          <option key={ext.id} value={ext.extension}>{extLabel(ext)}</option>
+          <option key={ext.id} value={String(ext.id)}>{extLabel(ext)}</option>
         ))}
       </select>
       <p className="text-[11px] text-slate-400 mt-1.5">Callers go directly to this agent's voicemail box</p>
@@ -532,16 +532,26 @@ export function DidForm() {
   const { id }     = useParams<{ id: string }>()
   const navigate   = useNavigate()
   const isEdit     = Boolean(id)
-  const [form, setForm]       = useState<FormState>(DEFAULT_FORM)
-  const [oohOpen, setOohOpen] = useState(false)
+  const [form, setForm]         = useState<FormState>(DEFAULT_FORM)
+  const [oohOpen, setOohOpen]   = useState(false)
+  // Prevents rendering with DEFAULT_FORM values before API data is applied.
+  // Create mode is immediately ready; edit mode waits for the useEffect to run.
+  const [formPopulated, setFormPopulated] = useState(!isEdit)
+  // Tracks which DID ID has been populated so re-runs (from dependency changes) don't overwrite user edits.
+  const didPopulateForId = useRef<string | undefined>(undefined)
 
   // ── Data queries ────────────────────────────────────────────────────────────
   const { data: existing, isLoading: loadingExisting } = useQuery({
     queryKey: ['did', id],
-    queryFn:  () => didService.getById(Number(id)),
-    enabled:  isEdit,
+    queryFn: async () => {
+      const res = await didService.getById(Number(id))
+      // Backend may return { data: {...} } or { data: [{...}] } — unwrap to the record
+      const d = res.data?.data ?? res.data
+      return (Array.isArray(d) ? d[0] : d) as Record<string, unknown> | null
+    },
+    enabled: isEdit,
   })
-  const { data: extensionsData } = useQuery({
+  const { data: extensionsData, isLoading: loadingExtensions } = useQuery({
     queryKey: ['extensions'],
     queryFn:  () => didService.getExtensions(),
   })
@@ -554,38 +564,94 @@ export function DidForm() {
     queryFn:  () => didService.getRingGroups(),
   })
 
+  // GET /extension may return { data: [...] } (flat) while POST endpoints return { data: { data: [...] } }
+  const extRaw    = (extensionsData as { data?: unknown })?.data
+  const extensions: ExtItem[]  = Array.isArray(extRaw)
+    ? (extRaw as ExtItem[])
+    : ((extRaw as { data?: ExtItem[] })?.data ?? [])
+
+  // Same flat/nested detection applied to IVR and ring-group endpoints
+  const ivrRaw    = (ivrData       as { data?: unknown })?.data
+  const ivrs:       IvrItem[]  = Array.isArray(ivrRaw)
+    ? (ivrRaw as IvrItem[])
+    : ((ivrRaw as { data?: IvrItem[] })?.data ?? [])
+
+  const rgRaw     = (ringGroupData as { data?: unknown })?.data
+  const ringGroups: RingItem[] = Array.isArray(rgRaw)
+    ? (rgRaw as RingItem[])
+    : ((rgRaw as { data?: RingItem[] })?.data ?? [])
+
   // ── Populate form on edit ────────────────────────────────────────────────────
+  // Wait for ALL dropdown data before populating so resolvers have the full lists.
+  // The ref guard prevents re-population after user starts editing.
   useEffect(() => {
-    const raw = existing?.data?.data
-    if (raw && !Array.isArray(raw) && typeof raw === 'object') {
-      const d = raw as Record<string, unknown>
-      const toStr = (v: unknown): string => {
-        if (typeof v === 'number') return DEST_TYPE_FROM_NUM[v] ?? 'extension'
-        const n = Number(v)
-        if (!isNaN(n) && DEST_TYPE_FROM_NUM[n] !== undefined) return DEST_TYPE_FROM_NUM[n]
-        return String(v || 'extension')
-      }
-      setForm({
-        cli:            String(d.cli            || ''),
-        cnam:           String(d.cnam           || ''),
-        dest_type:      toStr(d.dest_type),
-        extension:      String(d.extension      || ''),
-        ivr_id:         String(d.ivr_id         || ''),
-        voicemail_id:   String(d.voicemail_id   || ''),
-        ingroup:        String(d.ingroup        || ''),
-        forward_number: String(d.forward_number || ''),
-        operator:       String(d.operator       || d.voip_provider || ''),
-        sms:            d.sms         ? 1 : 0,
-        default_did:    d.default_did ? 1 : 0,
-        dest_type_ooh:      toStr(d.dest_type_ooh),
-        extension_ooh:      String(d.extension_ooh      || ''),
-        ivr_id_ooh:         String(d.ivr_id_ooh         || ''),
-        voicemail_id_ooh:   String(d.voicemail_id_ooh   || ''),
-        ingroup_ooh:        String(d.ingroup_ooh        || ''),
-        forward_number_ooh: String(d.forward_number_ooh || ''),
-      })
+    if (!isEdit || !existing || typeof existing !== 'object') return
+    if (didPopulateForId.current === id) return // already populated — preserve user edits
+    if (loadingExtensions || loadingIvrs || loadingRingGroups) return // wait for all lists
+
+    const d = existing as Record<string, unknown>
+
+    // Map numeric dest_type from DB (0=ivr,1=ext,2=vm,4=ext,8=queue) to string key.
+    const toStr = (v: unknown): string => {
+      if (v === null || v === undefined || v === '') return 'extension'
+      if (typeof v === 'number') return DEST_TYPE_FROM_NUM[v] ?? 'extension'
+      const n = Number(v)
+      if (!isNaN(n) && DEST_TYPE_FROM_NUM[n] !== undefined) return DEST_TYPE_FROM_NUM[n]
+      return String(v).toLowerCase() || 'extension'
     }
-  }, [existing])
+
+    // Strict bool — handles number 1, string "1", boolean true.
+    const toBool = (v: unknown): 0 | 1 =>
+      (v === 1 || v === '1' || v === true || v === 'true' ? 1 : 0)
+
+    // Resolve any backend extension value → ext.id (string).
+    // Option values for extension/voicemail selects use String(ext.id) so we must return the ID.
+    // Backend may store the extension number ("1001") OR the user_id ("5") — handle both.
+    const resolveToId = (rawVal: unknown): string => {
+      if (rawVal === null || rawVal === undefined || rawVal === '' || rawVal === 0 || rawVal === '0') return ''
+      const raw = String(rawVal).trim()
+      if (!raw || raw === '0') return ''
+      // Direct ID match (backend already stores ext.id / user_id)
+      if (extensions.find(e => String(e.id) === raw)) return raw
+      // Extension number match — convert to ext.id
+      const byExt = extensions.find(e => String(e.extension).trim() === raw)
+      return byExt ? String(byExt.id) : ''
+    }
+
+    // Resolve ring group: option values are now numeric IDs (String(rg.id)).
+    // Try ID match first; fall back to title match for legacy saved data.
+    const resolveRg = (rawVal: unknown): string => {
+      const raw = String(rawVal ?? '')
+      if (!raw) return ''
+      if (ringGroups.find(r => String(r.id) === raw)) return raw
+      const byTitle = ringGroups.find(r => String(r.title || r.name || '') === raw)
+      return byTitle ? String(byTitle.id) : raw
+    }
+
+    setForm({
+      cli:            String(d.cli            || ''),
+      cnam:           String(d.cnam           || ''),
+      dest_type:      toStr(d.dest_type),
+      // Use || so 0/"" fall through to the next candidate (backend may return 0 for unset)
+      extension:      resolveToId(d.extension      || d.ext_number || d.destination_extension),
+      ivr_id:         String(d.ivr_id         ?? ''),
+      // Voicemail boxes are often stored in the `extension` field with dest_type=2
+      voicemail_id:   resolveToId(d.voicemail_id   || d.extension),
+      ingroup:        resolveRg(d.ingroup),
+      forward_number: String(d.forward_number || ''),
+      operator:       String(d.operator       || d.voip_provider || ''),
+      sms:            toBool(d.sms ?? d.is_sms ?? d.sms_enabled),
+      default_did:    toBool(d.default_did ?? d.is_default ?? d.default),
+      dest_type_ooh:      toStr(d.dest_type_ooh),
+      extension_ooh:      resolveToId(d.extension_ooh      || d.ext_number_ooh),
+      ivr_id_ooh:         String(d.ivr_id_ooh         ?? ''),
+      voicemail_id_ooh:   resolveToId(d.voicemail_id_ooh   || d.extension_ooh),
+      ingroup_ooh:        resolveRg(d.ingroup_ooh),
+      forward_number_ooh: String(d.forward_number_ooh || ''),
+    })
+    didPopulateForId.current = id
+    setFormPopulated(true)
+  }, [existing, extensions, ringGroups, loadingExtensions, loadingIvrs, loadingRingGroups, id, isEdit])
 
   // ── Save mutation ────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -598,8 +664,8 @@ export function DidForm() {
 
         dest_type:      destNum,
         ivr_id:         destNum === 0 ? form.ivr_id         : '',
-        extension:      destNum === 1 ? form.extension       : '',
-        voicemail_id:   destNum === 2 ? form.voicemail_id   : '',
+        extension:      destNum === 1 ? (extensions.find(e => String(e.id) === form.extension)?.extension ?? form.extension) : '',
+        voicemail_id:   destNum === 2 ? (extensions.find(e => String(e.id) === form.voicemail_id)?.extension ?? form.voicemail_id) : '',
         forward_number: destNum === 4 ? form.forward_number : '',
         conf_id:        '',
         ingroup:        destNum === 8 ? form.ingroup         : '',
@@ -618,8 +684,8 @@ export function DidForm() {
 
         dest_type_ooh:       destNumOoh,
         ivr_id_ooh:          destNumOoh === 0 ? form.ivr_id_ooh         : '',
-        extension_ooh:       destNumOoh === 1 ? form.extension_ooh      : '',
-        voicemail_id_ooh:    destNumOoh === 2 ? form.voicemail_id_ooh   : '',
+        extension_ooh:       destNumOoh === 1 ? (extensions.find(e => String(e.id) === form.extension_ooh)?.extension ?? form.extension_ooh) : '',
+        voicemail_id_ooh:    destNumOoh === 2 ? (extensions.find(e => String(e.id) === form.voicemail_id_ooh)?.extension ?? form.voicemail_id_ooh) : '',
         forward_number_ooh:  destNumOoh === 4 ? form.forward_number_ooh : '',
         conf_id_ooh:         '',
         ingroup_ooh:         destNumOoh === 8 ? form.ingroup_ooh         : '',
@@ -660,10 +726,6 @@ export function DidForm() {
   const switchDestTypeOoh = (val: string) =>
     setForm(f => ({ ...f, dest_type_ooh: val, extension_ooh: '', ivr_id_ooh: '', voicemail_id_ooh: '', ingroup_ooh: '', forward_number_ooh: '' }))
 
-  const extensions:  ExtItem[]  = (extensionsData  as { data?: { data?: ExtItem[]  } })?.data?.data ?? []
-  const ivrs:        IvrItem[]  = (ivrData        as { data?: { data?: IvrItem[]  } })?.data?.data ?? []
-  const ringGroups:  RingItem[] = (ringGroupData  as { data?: { data?: RingItem[] } })?.data?.data ?? []
-
   function handleSave() {
     if (!form.cli.trim())                                            { toast.error('Phone number (CLI) is required.'); return }
     if (!form.operator)                                              { toast.error('Please select a VoIP provider.'); return }
@@ -675,7 +737,7 @@ export function DidForm() {
     saveMutation.mutate()
   }
 
-  if (isEdit && loadingExisting) return <PageLoader />
+  if (isEdit && (loadingExisting || !formPopulated || loadingExtensions || loadingIvrs || loadingRingGroups)) return <PageLoader />
 
   const activeDest = DEST_TYPES.find(d => d.value === form.dest_type) ?? DEST_TYPES[0]
 
@@ -692,21 +754,6 @@ export function DidForm() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="page-title">{isEdit ? 'Edit Phone Number' : 'Add Phone Number'}</h1>
-          {isEdit && form.cli && (
-            <p className="text-sm font-mono text-slate-500 mt-0.5">{formatPhoneNumber(form.cli)}</p>
-          )}
-        </div>
-        {/* ── Inline save / cancel — always visible at the top ── */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => navigate('/dids')} className="btn-outline">
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saveMutation.isPending} className="btn-primary">
-            {saveMutation.isPending
-              ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-              : isEdit ? 'Save Changes' : 'Add DID'
-            }
-          </button>
         </div>
       </div>
 

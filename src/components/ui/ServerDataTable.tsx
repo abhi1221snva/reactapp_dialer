@@ -46,10 +46,10 @@ interface Props<T extends Record<string, unknown>> {
   onSearchChange: (v: string) => void
   searchPlaceholder?: string
   filters?: FilterDef[]
-  activeFilters: Record<string, string>
-  onFilterChange: (key: string, value: string) => void
-  onResetFilters: () => void
-  hasActiveFilters: boolean
+  activeFilters?: Record<string, string>
+  onFilterChange?: (key: string, value: string) => void
+  onResetFilters?: () => void
+  hasActiveFilters?: boolean
 
   // pagination
   page: number
@@ -171,7 +171,7 @@ export function ServerDataTable<T extends Record<string, unknown>>({
   queryKey, queryFn, dataExtractor, totalExtractor,
   columns, keyField = 'id', emptyText = 'No records found', emptyIcon,
   search, onSearchChange, searchPlaceholder = 'Search…',
-  filters = [], activeFilters, onFilterChange, onResetFilters, hasActiveFilters,
+  filters = [], activeFilters = {}, onFilterChange = () => {}, onResetFilters = () => {}, hasActiveFilters = false,
   page, limit, onPageChange,
   headerActions,
 }: Props<T>) {

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { ServerDataTable, type Column, type FilterDef } from '../../components/ui/ServerDataTable'
+import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { RowActions } from '../../components/ui/RowActions'
 import { didService } from '../../services/did.service'
 import { useServerTable } from '../../hooks/useServerTable'
@@ -34,6 +34,23 @@ interface Did {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
+// Map numeric dest_type from DB (0=ivr,1=ext,2=vm,4=external,8=queue) to string key
+const DEST_NUM_MAP: Record<number, string> = {
+  0: 'ivr', 1: 'extension', 2: 'voicemail', 4: 'external', 5: 'conference', 8: 'queue',
+}
+
+function toDestKey(raw: string | number | undefined | null): string {
+  if (raw === null || raw === undefined) return 'extension'
+  if (typeof raw === 'string') {
+    const lower = raw.toLowerCase()
+    if (lower === 'extension' || lower === 'ivr' || lower === 'queue' || lower === 'voicemail' || lower === 'external') return lower
+    const n = Number(lower)
+    if (!isNaN(n) && DEST_NUM_MAP[n]) return DEST_NUM_MAP[n]
+    return 'extension'
+  }
+  return DEST_NUM_MAP[raw] ?? 'extension'
+}
+
 const DEST_CFG: Record<string, { label: string; Icon: React.ElementType; color: string; bg: string; gradient: string }> = {
   extension: { label: 'Extension', Icon: User,         color: 'text-blue-600',    bg: 'bg-blue-50',    gradient: 'from-blue-500 to-indigo-600' },
   ivr:       { label: 'IVR',       Icon: GitBranch,    color: 'text-purple-600',  bg: 'bg-purple-50',  gradient: 'from-purple-500 to-violet-600' },
@@ -41,16 +58,6 @@ const DEST_CFG: Record<string, { label: string; Icon: React.ElementType; color: 
   voicemail: { label: 'Voicemail', Icon: Voicemail,    color: 'text-amber-600',   bg: 'bg-amber-50',   gradient: 'from-amber-500 to-orange-600' },
   external:  { label: 'External',  Icon: ExternalLink, color: 'text-rose-600',    bg: 'bg-rose-50',    gradient: 'from-rose-500 to-pink-600' },
 }
-
-// Operator quick-filter tabs
-const OPERATOR_TABS = [
-  { value: '',       label: 'All',    dot: '',              activeClasses: 'bg-indigo-50  text-indigo-700  border-indigo-300' },
-  { value: 'twilio', label: 'Twilio', dot: 'bg-red-400',    activeClasses: 'bg-red-50     text-red-700     border-red-300' },
-  { value: 'plivo',  label: 'Plivo',  dot: 'bg-orange-400', activeClasses: 'bg-orange-50  text-orange-700  border-orange-300' },
-  { value: 'telnyx', label: 'Telnyx', dot: 'bg-sky-400',    activeClasses: 'bg-sky-50     text-sky-700     border-sky-300' },
-  { value: 'vonage', label: 'Vonage', dot: 'bg-violet-400', activeClasses: 'bg-violet-50  text-violet-700  border-violet-300' },
-  { value: 'other',  label: 'Other',  dot: 'bg-slate-400',  activeClasses: 'bg-slate-100  text-slate-700   border-slate-300' },
-]
 
 const OP_PILL: Record<string, string> = {
   twilio: 'bg-red-50    text-red-700    ring-red-200',
@@ -62,19 +69,7 @@ const OP_DOT: Record<string, string> = {
   twilio: 'bg-red-400', plivo: 'bg-orange-400', telnyx: 'bg-sky-400', vonage: 'bg-violet-400',
 }
 
-const ROUTE_FILTERS: FilterDef[] = [
-  {
-    key: 'dest_type',
-    label: 'Routing Type',
-    options: [
-      { value: 'extension', label: 'Extension' },
-      { value: 'ivr',       label: 'IVR' },
-      { value: 'queue',     label: 'Queue' },
-      { value: 'voicemail', label: 'Voicemail' },
-      { value: 'external',  label: 'External' },
-    ],
-  },
-]
+type RingItem = { id: number; title?: string; name?: string }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -87,7 +82,19 @@ export function Dids() {
     queryKey: ['extensions'],
     queryFn: () => didService.getExtensions(),
   })
-  const extensions: ExtItem[] = (extensionsData as { data?: { data?: ExtItem[] } })?.data?.data ?? []
+  const extRaw2    = (extensionsData as { data?: unknown })?.data
+  const extensions: ExtItem[] = Array.isArray(extRaw2)
+    ? (extRaw2 as ExtItem[])
+    : ((extRaw2 as { data?: ExtItem[] })?.data ?? [])
+
+  const { data: ringGroupData } = useQuery({
+    queryKey: ['ringgroup-list-dropdown'],
+    queryFn: () => didService.getRingGroups(),
+  })
+  const rgRaw2 = (ringGroupData as { data?: unknown })?.data
+  const ringGroups: RingItem[] = Array.isArray(rgRaw2)
+    ? (rgRaw2 as RingItem[])
+    : ((rgRaw2 as { data?: RingItem[] })?.data ?? [])
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => didService.delete(id),
@@ -112,17 +119,15 @@ export function Dids() {
     if (await confirmDelete(did.cli)) deleteMutation.mutate(did.id)
   }
 
-  const activeOperator = table.filters.operator ?? ''
-
   const columns: Column<Did>[] = [
     {
       // Phone number + CNAM + SMS/Default badges — all in one cell
       key: 'cli', header: 'Phone Number',
       render: (did) => {
-        const destKey = String(did.dest_type || 'extension').toLowerCase()
+        const destKey = toDestKey(did.dest_type as string | number | undefined)
         const dest    = DEST_CFG[destKey] ?? DEST_CFG.extension
-        const isDefault = Boolean(did.default_did)
-        const hasSms    = Boolean(did.sms)
+        const isDefault = Number(did.default_did) === 1
+        const hasSms    = Number(did.sms) === 1
         return (
           <div className="flex items-center gap-3">
             <div className={cn(
@@ -163,9 +168,51 @@ export function Dids() {
     {
       key: 'dest_type', header: 'Routing',
       render: (did) => {
-        const destKey = String(did.dest_type || 'extension').toLowerCase()
-        const dest    = DEST_CFG[destKey] ?? DEST_CFG.extension
-        const destName = did.destination_name || did.extension?.toString()
+        const destKey   = toDestKey(did.dest_type as string | number | undefined)
+        const dest      = DEST_CFG[destKey] ?? DEST_CFG.extension
+        const d = did as Record<string, unknown>
+        const destName = (() => {
+          if (destKey === 'extension') {
+            const extVal = String(did.extension ?? '')
+            if (!extVal) return null
+            // Try by extension number first, then by user ID (backend may store user_id)
+            const ext = extensions.find(e => String(e.extension) === extVal)
+              ?? extensions.find(e => String(e.id) === extVal)
+            if (ext) {
+              const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
+              return name ? `${name} (Ext ${ext.extension})` : `Ext ${ext.extension}`
+            }
+            return `Ext ${extVal}`
+          }
+          if (destKey === 'voicemail') {
+            const vmVal = String(d.voicemail_id ?? did.extension ?? '')
+            if (vmVal) {
+              const ext = extensions.find(e => String(e.extension) === vmVal)
+                ?? extensions.find(e => String(e.id) === vmVal)
+              if (ext) {
+                const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
+                return (name ? `${name}` : `Ext ${ext.extension}`) + ' (VM)'
+              }
+              return `Ext ${vmVal} (VM)`
+            }
+          }
+          if (destKey === 'queue') {
+            // ingroup is stored as ring group numeric ID
+            const ingroupVal = String(d.ingroup ?? '')
+            if (ingroupVal) {
+              const rg = ringGroups.find(r => String(r.id) === ingroupVal)
+                ?? ringGroups.find(r => String(r.title || r.name || '') === ingroupVal)
+              if (rg) return rg.title || rg.name || `Group #${rg.id}`
+            }
+          }
+          if (destKey === 'external') {
+            const fwd = String(d.forward_number ?? '')
+            if (fwd) return fwd
+          }
+          // IVR and fallback — use backend-provided destination_name
+          const dn = String(did.destination_name ?? '')
+          return (dn && dn !== 'Unknown Extension') ? dn : null
+        })()
         return (
           <div className="flex items-center gap-2">
             <div className={cn(
@@ -230,39 +277,11 @@ export function Dids() {
     <div className="space-y-5">
 
       {/* ── Page header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="page-header">
         <div>
           <h1 className="page-title">Phone Numbers</h1>
           <p className="page-subtitle">Manage DIDs, caller IDs, and inbound call routing</p>
         </div>
-        <button onClick={() => navigate('/dids/create')} className="btn-primary flex-shrink-0">
-          <Plus size={15} /> Add Number
-        </button>
-      </div>
-
-      {/* ── Operator quick-filter tabs ── */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mr-1">
-          Provider
-        </span>
-        {OPERATOR_TABS.map(tab => {
-          const isActive = activeOperator === tab.value
-          return (
-            <button
-              key={tab.value}
-              onClick={() => table.setFilter('operator', tab.value)}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all',
-                isActive
-                  ? tab.activeClasses
-                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              )}
-            >
-              {tab.dot && <span className={cn('w-1.5 h-1.5 rounded-full', tab.dot)} />}
-              {tab.label}
-            </button>
-          )
-        })}
       </div>
 
       {/* ── Data table ── */}
@@ -271,7 +290,13 @@ export function Dids() {
         queryFn={(params) => didService.list(params)}
         dataExtractor={(res: unknown) => {
           const r = res as { data?: { data?: Did[] } }
-          return r?.data?.data ?? []
+          const rows = r?.data?.data ?? []
+          if (!table.search) return rows
+          const q = table.search.toLowerCase()
+          return rows.filter(did =>
+            (did.cli  || '').toLowerCase().includes(q) ||
+            (did.cnam || '').toLowerCase().includes(q)
+          )
         }}
         totalExtractor={(res: unknown) => {
           const r = res as { data?: { total_rows?: number } }
@@ -281,11 +306,13 @@ export function Dids() {
         searchPlaceholder="Search numbers or caller ID…"
         emptyText="No phone numbers found"
         emptyIcon={<Hash size={40} />}
-        filters={ROUTE_FILTERS}
-        search={table.search}           onSearchChange={table.setSearch}
-        activeFilters={table.filters}   onFilterChange={table.setFilter}
-        onResetFilters={table.resetFilters} hasActiveFilters={table.hasActiveFilters}
+        search={table.search} onSearchChange={table.setSearch}
         page={table.page} limit={table.limit} onPageChange={table.setPage}
+        headerActions={
+          <button onClick={() => navigate('/dids/create')} className="btn-primary">
+            <Plus size={15} /> Add Number
+          </button>
+        }
       />
     </div>
   )

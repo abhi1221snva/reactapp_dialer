@@ -50,6 +50,7 @@ export interface MerchantLeadData {
   affiliate_code: string | null
   created_at: string
   fields: Record<string, string>
+  signature_url: string | null
   documents: MerchantDocument[]
 }
 
@@ -102,6 +103,13 @@ export const publicAppService = {
 
   getDocumentTypes(token: string) {
     return http.get<{ success: boolean; data: PublicDocumentType[] }>(`/public/merchant/${token}/document-types`)
+  },
+
+  saveSignature(token: string, signatureDataUri: string) {
+    return http.post<{ success: boolean; message: string; signature_url: string }>(
+      `/public/merchant/${token}/signature`,
+      { signature_image: signatureDataUri },
+    )
   },
 
   uploadDocument(token: string, file: File, docType: string) {

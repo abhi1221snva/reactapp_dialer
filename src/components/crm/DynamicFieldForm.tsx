@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, AlertCircle } from 'lucide-react'
-import type { UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form'
+import type { UseFormRegister, UseFormSetValue, FieldErrors, RegisterOptions } from 'react-hook-form'
 import { crmService } from '../../services/crm.service'
 import type { CrmLabel, FieldCondition } from '../../types/crm.types'
 
@@ -75,6 +75,52 @@ function parseOptions(raw?: string | null): string[] {
   return raw.split('|').map(s => s.trim()).filter(Boolean)
 }
 
+// ── Validation rules per field type ──────────────────────────────────────────
+function buildValidationRules(label: CrmLabel): RegisterOptions {
+  const isRequired = label.required === true || (label.required as unknown) == 1
+  const isCheckbox = label.field_type === 'checkbox'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rules: RegisterOptions<any, any> = {}
+
+  if (isRequired && !isCheckbox) {
+    rules.required = `${label.label_name} is required`
+  }
+
+  switch (label.field_type) {
+    case 'email':
+      rules.validate = (val: string) => {
+        if (!val || val.trim() === '') return true
+        return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(val.trim())
+          || `${label.label_name} must be a valid email address`
+      }
+      break
+
+    case 'phone_number':
+    case 'phone':
+      rules.validate = (val: string) => {
+        if (!val || val.trim() === '') return true
+        const digits = val.replace(/\D/g, '')
+        return digits.length === 10 || `${label.label_name} must be exactly 10 digits`
+      }
+      break
+
+    case 'number':
+      rules.validate = (val: string) => {
+        if (!val || val === '') return true
+        return !isNaN(Number(val)) || `${label.label_name} must be a numeric value`
+      }
+      break
+
+    case 'text':
+    case 'textarea':
+    case 'text_area':
+      rules.maxLength = { value: 500, message: `${label.label_name} must not exceed 500 characters` }
+      break
+  }
+
+  return rules
+}
+
 // ── Input renderer ────────────────────────────────────────────────────────────
 function renderInput(
   label: CrmLabel,
@@ -85,11 +131,13 @@ function renderInput(
   const ph = placeholder || label_name
   const baseClass = 'input w-full'
 
+  const rules = buildValidationRules(label)
+
   // ── Dropdown / Select ──────────────────────────────────────────────────────
   if (field_type === 'select_option' || field_type === 'dropdown' || field_type === 'select') {
     const opts = parseOptions(options)
     return (
-      <select {...register(field_key)} className={baseClass} defaultValue={defaultValue as string ?? ''}>
+      <select {...register(field_key, rules)} className={baseClass} defaultValue={defaultValue as string ?? ''}>
         <option value="">-- Select --</option>
         {opts.map(opt => <option key={opt} value={opt}>{opt}</option>)}
       </select>
@@ -105,7 +153,7 @@ function renderInput(
           <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="radio"
-              {...register(field_key)}
+              {...register(field_key, rules)}
               value={opt}
               defaultChecked={defaultValue === opt}
               className="h-3.5 w-3.5 border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -128,7 +176,7 @@ function renderInput(
         <input
           type="checkbox"
           id={field_key}
-          {...register(field_key)}
+          {...register(field_key, rules)}
           defaultChecked={isChecked}
           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
         />
@@ -144,7 +192,7 @@ function renderInput(
     return (
       <input
         type="date"
-        {...register(field_key)}
+        {...register(field_key, rules)}
         className={baseClass}
         defaultValue={defaultValue as string ?? ''}
       />
@@ -156,7 +204,7 @@ function renderInput(
     return (
       <input
         type="number"
-        {...register(field_key)}
+        {...register(field_key, rules)}
         className={baseClass}
         placeholder={ph}
         defaultValue={defaultValue as string ?? ''}
@@ -169,10 +217,11 @@ function renderInput(
     return (
       <input
         type="email"
-        {...register(field_key)}
+        {...register(field_key, rules)}
         className={baseClass}
         placeholder={ph}
         defaultValue={defaultValue as string ?? ''}
+        autoComplete="email"
       />
     )
   }
@@ -182,10 +231,12 @@ function renderInput(
     return (
       <input
         type="tel"
-        {...register(field_key)}
+        {...register(field_key, rules)}
         className={baseClass}
-        placeholder={ph}
+        placeholder={ph || '10-digit number'}
         defaultValue={defaultValue as string ?? ''}
+        maxLength={15}
+        inputMode="numeric"
       />
     )
   }
@@ -194,11 +245,12 @@ function renderInput(
   if (field_type === 'textarea' || field_type === 'text_area') {
     return (
       <textarea
-        {...register(field_key)}
+        {...register(field_key, rules)}
         className={baseClass + ' resize-none'}
         rows={3}
         placeholder={ph}
         defaultValue={defaultValue as string ?? ''}
+        maxLength={500}
       />
     )
   }
@@ -207,10 +259,11 @@ function renderInput(
   return (
     <input
       type="text"
-      {...register(field_key)}
+      {...register(field_key, rules)}
       className={baseClass}
       placeholder={ph}
       defaultValue={defaultValue as string ?? ''}
+      maxLength={500}
     />
   )
 }

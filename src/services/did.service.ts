@@ -18,15 +18,26 @@ function getUserSecret(): string {
   return ''
 }
 
+// String→numeric mapping that matches the backend DB values
+const DEST_TYPE_NUM: Record<string, number> = {
+  ivr: 0, extension: 1, voicemail: 2, external: 4, queue: 8,
+}
+
 export const didService = {
-  list: (params: TableParams) =>
-    api.post('/did', {
+  list: (params: TableParams) => {
+    const destTypeStr = params.filters.dest_type
+    // Backend filters dest_type against a numeric column — convert string key to number
+    const destTypeVal = destTypeStr
+      ? (DEST_TYPE_NUM[destTypeStr] !== undefined ? DEST_TYPE_NUM[destTypeStr] : destTypeStr)
+      : undefined
+    return api.post('/did', {
       start: (params.page - 1) * params.limit,
       limit: params.limit,
-      ...(params.search                ? { search:    params.search } : {}),
-      ...(params.filters.operator      ? { operator:  params.filters.operator } : {}),
-      ...(params.filters.dest_type     ? { dest_type: params.filters.dest_type } : {}),
-    }),
+      ...(params.search           ? { search: params.search, cli: params.search } : {}),
+      ...(params.filters.operator ? { operator:  params.filters.operator } : {}),
+      ...(destTypeVal !== undefined ? { dest_type: destTypeVal } : {}),
+    })
+  },
 
   // Use 'did_id' — NOT 'id'. Backend middleware checks body 'id' against
   // the authenticated user's ID; sending the DID record ID as 'id' causes
