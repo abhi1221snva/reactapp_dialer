@@ -115,6 +115,7 @@ export function FloatingFab() {
     chatOpen,  setChatOpen,
     phoneOpen, setPhoneOpen,
     smsOpen,   setSmsOpen,
+    phoneMinimized,
     phoneFabBg, phoneFabShadow, phoneFabIcon, phoneHasIncoming,
     phoneClickHandler,
     chatUnread,
@@ -150,7 +151,7 @@ export function FloatingFab() {
     ? '0 4px 18px rgba(52,211,153,0.65)'
     : '0 4px 14px rgba(5,150,105,0.5)'
 
-  const anyOpen = chatOpen || phoneOpen || smsOpen
+  const anyOpen = chatOpen || (phoneOpen && !phoneMinimized) || smsOpen
 
   return (
     <div

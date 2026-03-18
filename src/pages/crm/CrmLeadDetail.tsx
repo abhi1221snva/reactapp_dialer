@@ -26,7 +26,7 @@ import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDo
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, CrmLabel } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, CrmLabel, EmailTemplate } from '../../types/crm.types'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
 type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant' | 'offers' | 'deal' | 'compliance'
@@ -857,7 +857,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
                   {activeLenders.map(l => {
                     const on = selectedIds.has(l.id)
                     return (
-                      <label key={l.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border cursor-pointer select-none transition-all ${on ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40'}`}>
+                      <label key={l.id} onClick={() => toggleLender(l.id)} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border cursor-pointer select-none transition-all ${on ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40'}`}>
                         <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all ${on ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
                           {on && <Check size={9} className="text-white" strokeWidth={3} />}
                         </div>
@@ -975,6 +975,217 @@ function LendersPanel({ leadId }: { leadId: number }) {
       </div>
 
       {editingSub && <ResponseModal submission={editingSub} leadId={leadId} onClose={() => setEditingSub(null)} />}
+    </div>
+  )
+}
+
+// ── Send Email Modal ───────────────────────────────────────────────────────────
+function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaultTo: string; onClose: () => void }) {
+  const [to,            setTo]            = useState(defaultTo)
+  const [subject,       setSubject]       = useState('')
+  const [body,          setBody]          = useState('')
+  const [selectedTplId, setSelectedTplId] = useState<number | ''>('')
+  const [isHtml,        setIsHtml]        = useState(false)
+  const [resolving,     setResolving]     = useState(false)
+  const [tab,           setTab]           = useState<'compose' | 'preview'>('compose')
+
+  const { data: templates, isLoading: tplLoading } = useQuery({
+    queryKey: ['email-templates', 'online_application'],
+    queryFn: async () => {
+      const res = await crmService.getEmailTemplates({ type: 'online_application' })
+      return (res.data?.data ?? res.data ?? []) as EmailTemplate[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const handleTemplateChange = async (tplId: number | '') => {
+    setSelectedTplId(tplId)
+    if (tplId === '') { setSubject(''); setBody(''); setIsHtml(false); return }
+    setResolving(true)
+    try {
+      const res = await crmService.resolveEmailTemplate(leadId, tplId as number)
+      const resolved = res.data?.data ?? res.data
+      setSubject(resolved?.subject ?? '')
+      setBody(resolved?.body ?? '')
+      setIsHtml(true)
+    } catch {
+      toast.error('Failed to load template')
+    } finally {
+      setResolving(false)
+    }
+  }
+
+  const handleBodyChange = (val: string) => {
+    setBody(val)
+    setIsHtml(false)
+  }
+
+  const send = useMutation({
+    mutationFn: () => crmService.sendMerchantEmail(leadId, { to, subject, body, is_html: isHtml }),
+    onSuccess: () => { toast.success('Email sent'); onClose() },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send email'
+      toast.error(msg)
+    },
+  })
+
+  const previewHtml = isHtml ? body : body.replace(/\n/g, '<br />')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden" style={{ maxWidth: 760, maxHeight: '90vh' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0">
+              <Mail size={16} className="text-sky-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-800 text-sm leading-tight">Send Email to Merchant</p>
+              {to && <p className="text-[11px] text-slate-400 mt-0.5">{to}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Tab toggle */}
+            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+              {(['compose', 'preview'] as const).map(t => (
+                <button key={t} onClick={() => setTab(t)}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all capitalize ${tab === t ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+
+          {tab === 'compose' ? (
+            <div className="flex flex-col gap-4 p-6">
+              {/* Template picker */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                  Online Application Template <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedTplId}
+                    onChange={e => handleTemplateChange(e.target.value === '' ? '' : Number(e.target.value))}
+                    disabled={tplLoading || resolving}
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 text-slate-700 disabled:opacity-60"
+                  >
+                    <option value="">— Select a template to auto-fill subject & body —</option>
+                    {(templates ?? []).map(t => (
+                      <option key={t.id} value={t.id}>{t.template_name}</option>
+                    ))}
+                  </select>
+                  {resolving && (
+                    <div className="absolute inset-y-0 right-9 flex items-center pointer-events-none">
+                      <Loader2 size={13} className="animate-spin text-sky-500" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* To + Subject side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">To</label>
+                  <input
+                    type="email"
+                    value={to}
+                    onChange={e => setTo(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Subject</label>
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={e => { setSubject(e.target.value); setSelectedTplId('') }}
+                    placeholder="Enter subject..."
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400"
+                  />
+                </div>
+              </div>
+
+              {/* Body */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500">Message</label>
+                  {isHtml && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100">HTML template — switch to Preview to see rendered</span>
+                  )}
+                </div>
+                <textarea
+                  value={body}
+                  onChange={e => handleBodyChange(e.target.value)}
+                  rows={10}
+                  placeholder="Type your message or select a template above..."
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 resize-none font-mono leading-relaxed"
+                />
+              </div>
+            </div>
+
+          ) : (
+            /* Preview tab — rendered email card */
+            <div className="p-6 bg-slate-50 min-h-full">
+              <div className="max-w-xl mx-auto">
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  {/* Accent bar */}
+                  <div className="h-1 bg-gradient-to-r from-sky-400 via-blue-400 to-indigo-400" />
+                  {/* Email headers */}
+                  <div className="px-6 py-4 border-b border-slate-100 space-y-2">
+                    {[
+                      { label: 'To',      value: to || '—' },
+                      { label: 'Subject', value: subject || <span className="text-slate-400 italic">No subject</span> },
+                    ].map(row => (
+                      <div key={String(row.label)} className="flex items-start gap-3">
+                        <span className="text-slate-400 text-[11px] w-14 text-right flex-shrink-0 mt-0.5 font-medium">{row.label}</span>
+                        <span className={`text-sm ${row.label === 'Subject' ? 'font-semibold text-slate-900' : 'text-slate-600 font-mono text-[12px]'}`}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Email body rendered */}
+                  <div className="px-8 py-6 text-sm text-slate-700 leading-relaxed min-h-32">
+                    {body ? (
+                      <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                    ) : (
+                      <p className="text-slate-400 italic text-xs">No message content yet — go to Compose to write your email.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+          <p className="text-[11px] text-slate-400">
+            {body ? `${body.length.toLocaleString()} chars` : 'No content yet'}
+          </p>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
+            <button
+              onClick={() => send.mutate()}
+              disabled={send.isPending || !to || !subject || !body}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              Send Email
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   )
 }
@@ -1597,6 +1808,7 @@ export function CrmLeadDetail() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
   const [showMoreMenu,       setShowMoreMenu]       = useState(false)
   const [showPdfModal,       setShowPdfModal]       = useState(false)
+  const [showEmailModal,     setShowEmailModal]     = useState(false)
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -1786,6 +1998,12 @@ export function CrmLeadDetail() {
           {/* Actions */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
+              onClick={() => setShowEmailModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors"
+            >
+              <Mail size={11} /> Send Email
+            </button>
+            <button
               onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
             >
@@ -1889,25 +2107,23 @@ export function CrmLeadDetail() {
 
               return (
                 <div className="px-6 py-5 h-full">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100 h-full">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100 h-full">
 
-                    {/* ── Col 1: Contact ── */}
+                    {/* ── Col 1: Custom Fields ── */}
                     <div className="pr-6 pb-5 md:pb-0">
                       <div className="flex items-center gap-1.5 mb-3">
-                        <User size={11} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact</span>
+                        <Hash size={11} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Personal Information</span>
                       </div>
-                      <PropertyRow fieldKey="first_name"   label="First name" value={lead.first_name   as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="last_name"    label="Last name"  value={lead.last_name    as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="email"        label="Email"      value={lead.email        as string|undefined} type="email" leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="phone_number" label="Phone"      value={lead.phone_number as string|undefined} type="tel"   leadId={leadId} onUpdated={onLeadUpdated} />
-                      {extraContact.map(f => (
+                      {extraOther.length > 0 ? extraOther.map(f => (
                         <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      ))}
+                      )) : (
+                        <p className="text-xs text-slate-300 mt-1">No custom fields defined.</p>
+                      )}
                     </div>
 
                     {/* ── Col 2: Business ── */}
-                    <div className="py-5 md:py-0 md:px-6">
+                    <div className="pt-5 md:pt-0 md:pl-6">
                       <div className="flex items-center gap-1.5 mb-3">
                         <Briefcase size={11} className="text-slate-400" />
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business</span>
@@ -1920,19 +2136,6 @@ export function CrmLeadDetail() {
                       {extraBusiness.map(f => (
                         <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
                       ))}
-                    </div>
-
-                    {/* ── Col 3: Custom fields ── */}
-                    <div className="pt-5 md:pt-0 md:pl-6">
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <Hash size={11} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Custom Fields</span>
-                      </div>
-                      {extraOther.length > 0 ? extraOther.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      )) : (
-                        <p className="text-xs text-slate-300 mt-1">No custom fields defined.</p>
-                      )}
                     </div>
 
                   </div>
@@ -1956,6 +2159,9 @@ export function CrmLeadDetail() {
 
       {showPdfModal && (
         <PdfPreviewModal leadId={leadId} leadName={fullName} onClose={() => setShowPdfModal(false)} />
+      )}
+      {showEmailModal && (
+        <SendEmailModal leadId={leadId} defaultTo={String(lead?.email ?? '')} onClose={() => setShowEmailModal(false)} />
       )}
     </div>
   )

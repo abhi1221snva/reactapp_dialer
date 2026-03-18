@@ -43,6 +43,7 @@ import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
 import { CrmAutomations } from './pages/crm/CrmAutomations'
 import { CrmSmsInbox } from './pages/crm/CrmSmsInbox'
 import { CrmDocumentTypes } from './pages/crm/CrmDocumentTypes'
+import { CrmEmailSettings } from './pages/crm/CrmEmailSettings'
 import { Campaigns } from './pages/campaigns/Campaigns'
 import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
@@ -163,7 +164,8 @@ export default function App() {
           <Route path="/crm/lenders" element={<CrmLenders />} />
           <Route path="/crm/automations" element={<CrmAutomations />} />
           <Route path="/crm/sms-inbox" element={<CrmSmsInbox />} />
-          <Route path="/crm/document-types" element={<CrmDocumentTypes />} />
+          <Route path="/crm/document-types"  element={<CrmDocumentTypes />} />
+          <Route path="/crm/email-settings" element={<CrmEmailSettings />} />
         </Route>
 
         {/* Campaigns */}

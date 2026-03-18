@@ -85,9 +85,10 @@ function fmt(s: number) {
 export function WebPhone() {
   const { sipConfig, user } = useAuth()
 
-  const isOpen            = useFloatingStore(s => s.phoneOpen)
-  const setPhoneOpen      = useFloatingStore(s => s.setPhoneOpen)
-  const registerPhoneClick = useFloatingStore(s => s.registerPhoneClick)
+  const isOpen              = useFloatingStore(s => s.phoneOpen)
+  const setPhoneOpen        = useFloatingStore(s => s.setPhoneOpen)
+  const setPhoneMinimized   = useFloatingStore(s => s.setPhoneMinimized)
+  const registerPhoneClick  = useFloatingStore(s => s.registerPhoneClick)
   const setIsOpen = setPhoneOpen
 
   const [phoneState, setPhoneState]     = useState<PhoneState>('idle')
@@ -433,6 +434,7 @@ export function WebPhone() {
       <DraggableWidget
         isOpen={isOpen}
         onClose={() => setPhoneOpen(false)}
+        onMinimize={setPhoneMinimized}
         headerGradient="linear-gradient(160deg, #0a0f1e 0%, #111827 50%, #1c1854 100%)"
         defaultRight={16}
         defaultBottom={20}

@@ -268,13 +268,13 @@ export const crmService = {
     api.post('/crm-label/updateDisplayOrder', { ids }),
 
   // ── Email Templates ─────────────────────────────────────────────────────────
-  getEmailTemplates: () =>
-    api.get('/crm-email-templates'),
+  getEmailTemplates: (params?: { type?: string }) =>
+    api.get('/crm-email-templates', { params }),
 
   getEmailTemplate: (id: number) =>
     api.get(`/crm-email-template/${id}`),
 
-  createEmailTemplate: (data: { template_name: string; subject: string; template_html: string; lead_status?: string; send_bcc?: string }) =>
+  createEmailTemplate: (data: { template_name: string; subject: string; template_html: string; lead_status?: string; send_bcc?: string; email_type?: string }) =>
     api.put('/crm-add-email-template', data),
 
   updateEmailTemplate: (id: number, data: Record<string, unknown>) =>
@@ -535,7 +535,7 @@ export const crmService = {
     api.get(`/crm/automations/${id}/logs`),
 
   // ── SMS Inbox ───────────────────────────────────────────────────────────────
-  getSmsConversations: (params?: { status?: string; page?: number }) =>
+  getSmsConversations: (params?: { status?: string; agent_id?: number; page?: number }) =>
     api.get('/crm/sms/conversations', { params }),
 
   getSmsMessages: (conversationId: number) =>
@@ -546,4 +546,25 @@ export const crmService = {
 
   markConversationRead: (conversationId: number) =>
     api.post(`/crm/sms/conversations/${conversationId}/read`, {}),
+
+  getSmsSenderNumbers: () =>
+    api.get('/crm/sms/sender-numbers'),
+
+  getSmsAgents: () =>
+    api.get('/crm/sms/agents'),
+
+  assignSmsAgent: (conversationId: number, agentId: number | null) =>
+    api.post(`/crm/sms/conversations/${conversationId}/assign`, { agent_id: agentId }),
+
+  startNewSmsConversation: (phone_number: string, body: string, from_number?: string) =>
+    api.post('/crm/sms/new-conversation', { phone_number, body, from_number }),
+
+  sendSmsMessageFrom: (conversationId: number, body: string, from_number?: string) =>
+    api.post(`/crm/sms/conversations/${conversationId}/send`, { body, from_number }),
+
+  sendMerchantEmail: (leadId: number, data: { to: string; subject: string; body: string; is_html?: boolean }) =>
+    api.post(`/crm/lead/${leadId}/send-merchant-email`, data),
+
+  resolveEmailTemplate: (leadId: number, templateId: number) =>
+    api.get(`/crm/lead/${leadId}/resolve-email-template/${templateId}`),
 }

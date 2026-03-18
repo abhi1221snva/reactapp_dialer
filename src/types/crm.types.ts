@@ -75,6 +75,13 @@ export interface LeadStatus {
 
 // ─── Email Template ───────────────────────────────────────────────────────────
 
+export const EMAIL_TYPES = [
+  { value: 'general',             label: 'General' },
+  { value: 'online_application',  label: 'Online Application' },
+] as const
+
+export type EmailType = typeof EMAIL_TYPES[number]['value']
+
 export interface EmailTemplate {
   id: number
   template_name: string
@@ -82,6 +89,7 @@ export interface EmailTemplate {
   template_html: string
   lead_status?: string
   send_bcc?: string
+  email_type?: EmailType
   status: 0 | 1
   created_at?: string
   updated_at?: string
@@ -716,11 +724,18 @@ export type SmsConversationStatus = 'open' | 'closed' | 'archived'
 export type SmsDirection = 'inbound' | 'outbound'
 export type SmsMessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'received'
 
+export interface SmsAgent {
+  id: number
+  name: string
+  email: string
+}
+
 export interface SmsConversation {
   id: number
   lead_id: number
   lead_phone: string
   agent_id?: number
+  agent_name?: string
   last_message_at?: string
   unread_count: number
   status: SmsConversationStatus

@@ -9,42 +9,15 @@ import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { EmailTemplate } from '../../types/crm.types'
+import { EMAIL_TYPES } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { PlaceholderPicker, type PickerPlaceholder } from '../../components/crm/PlaceholderPicker'
 import { cn } from '../../utils/cn'
 
-// ─── Placeholder catalogue ────────────────────────────────────────────────────
-const EMAIL_PLACEHOLDERS: PickerPlaceholder[] = [
-  { key: '[[first_name]]',      label: 'First Name',        section: 'Lead Info' },
-  { key: '[[last_name]]',       label: 'Last Name',         section: 'Lead Info' },
-  { key: '[[full_name]]',       label: 'Full Name',         section: 'Lead Info' },
-  { key: '[[email]]',           label: 'Email Address',     section: 'Lead Info' },
-  { key: '[[phone_number]]',    label: 'Phone Number',      section: 'Lead Info' },
-  { key: '[[mobile]]',          label: 'Mobile',            section: 'Lead Info' },
-  { key: '[[company_name]]',    label: 'Company Name',      section: 'Lead Info' },
-  { key: '[[address]]',         label: 'Address',           section: 'Lead Info' },
-  { key: '[[city]]',            label: 'City',              section: 'Lead Info' },
-  { key: '[[state]]',           label: 'State',             section: 'Lead Info' },
-  { key: '[[lead_status]]',     label: 'Lead Status',       section: 'Status & System' },
-  { key: '[[lead_type]]',       label: 'Lead Type',         section: 'Status & System' },
-  { key: '[[assigned_to]]',     label: 'Assigned Agent',    section: 'Status & System' },
-  { key: '[[lead_created_at]]', label: 'Date Created',      section: 'Status & System' },
-  { key: '[[specialist_name]]', label: 'Specialist Name',   section: 'Specialist' },
-  { key: '[[specialist_email]]',label: 'Specialist Email',  section: 'Specialist' },
-  { key: '[[specialist_phone]]',label: 'Specialist Phone',  section: 'Specialist' },
-  { key: '[[office_name]]',     label: 'Company Name',      section: 'Company Branding' },
-  { key: '[[office_email]]',    label: 'Company Email',     section: 'Company Branding' },
-  { key: '[[office_phone]]',    label: 'Company Phone',     section: 'Company Branding' },
-  { key: '[[office_address]]',  label: 'Company Address',   section: 'Company Branding' },
-  { key: '[first_name]', label: 'First Name (legacy)', section: 'Legacy Format' },
-  { key: '[last_name]',  label: 'Last Name (legacy)',  section: 'Legacy Format' },
-  { key: '[email]',      label: 'Email (legacy)',      section: 'Legacy Format' },
-]
-
 const EMAIL_PICKER_TIPS = [
   "[[field_key]] — replaced with lead's value",
-  '[field] (single brackets) — legacy format',
-  'Both formats work in email templates',
+  'Includes all custom CRM Labels',
+  'Both [[key]] and [key] formats work',
 ]
 
 // ─── Form types ───────────────────────────────────────────────────────────────
@@ -54,9 +27,10 @@ interface FormState {
   template_html: string
   lead_status: string
   send_bcc: string
+  email_type: string
 }
 const EMPTY_FORM: FormState = {
-  template_name: '', subject: '', template_html: '', lead_status: '', send_bcc: '0',
+  template_name: '', subject: '', template_html: '', lead_status: '', send_bcc: '0', email_type: 'general',
 }
 
 // ─── Editor Modal ─────────────────────────────────────────────────────────────
@@ -69,9 +43,20 @@ function TemplateModal({
 }) {
   const qc     = useQueryClient()
   const isEdit = !!editing
+
+  const { data: placeholders, isLoading: placeholdersLoading } = useQuery({
+    queryKey: ['pdf-placeholders'],
+    queryFn: async () => {
+      const res = await crmService.getPdfPlaceholders()
+      const raw = (res.data?.data ?? res.data ?? []) as Array<{ key: string; label: string; section: string }>
+      return raw.map<PickerPlaceholder>(p => ({ key: `[[${p.key}]]`, label: p.label, section: p.section }))
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
   const [form, setForm] = useState<FormState>(
     editing
-      ? { template_name: editing.template_name, subject: editing.subject, template_html: editing.template_html, lead_status: editing.lead_status ?? '', send_bcc: editing.send_bcc ?? '0' }
+      ? { template_name: editing.template_name, subject: editing.subject, template_html: editing.template_html, lead_status: editing.lead_status ?? '', send_bcc: editing.send_bcc ?? '0', email_type: editing.email_type ?? 'general' }
       : EMPTY_FORM
   )
   const [tab, setTab] = useState<'edit' | 'preview'>('edit')
@@ -92,6 +77,7 @@ function TemplateModal({
       const payload = {
         template_name: form.template_name, subject: form.subject,
         template_html: form.template_html, send_bcc: form.send_bcc,
+        email_type: form.email_type || 'general',
         ...(form.lead_status ? { lead_status: form.lead_status } : {}),
       }
       return isEdit ? crmService.updateEmailTemplate(editing!.id, payload) : crmService.createEmailTemplate(payload)
@@ -146,8 +132,8 @@ function TemplateModal({
               {/* Left: form */}
               <div className="flex-1 overflow-y-auto p-5 space-y-4 min-w-0">
 
-                {/* Row 1: name + BCC */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Row 1: name + type + trigger */}
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="label">Template Name <span className="text-red-400">*</span></label>
                     <div className="relative">
@@ -155,6 +141,18 @@ function TemplateModal({
                       <input className="input w-full pl-8 text-sm" placeholder="e.g. Welcome Email"
                         value={form.template_name} onChange={e => set('template_name', e.target.value)} />
                     </div>
+                  </div>
+                  <div>
+                    <label className="label">Template Type</label>
+                    <select
+                      className="input w-full text-sm"
+                      value={form.email_type}
+                      onChange={e => set('email_type', e.target.value)}
+                    >
+                      {EMAIL_TYPES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="label">Lead Status Trigger <span className="text-slate-400 font-normal text-[11px]">(optional)</span></label>
@@ -215,7 +213,7 @@ function TemplateModal({
 
               {/* Right: placeholder picker */}
               <div className="w-60 border-l border-slate-100 flex-shrink-0 bg-slate-50/60 flex flex-col min-h-0">
-                <PlaceholderPicker placeholders={EMAIL_PLACEHOLDERS} onInsert={insertVar} tipLines={EMAIL_PICKER_TIPS} />
+                <PlaceholderPicker placeholders={placeholders ?? []} loading={placeholdersLoading} onInsert={insertVar} tipLines={EMAIL_PICKER_TIPS} />
               </div>
             </div>
 
@@ -234,17 +232,13 @@ function TemplateModal({
                 )}
                 <div className="rounded-xl overflow-hidden shadow-sm border border-slate-200 bg-white">
                   <div className="px-6 py-4 border-b border-slate-100 space-y-2.5">
-                    {[
-                      { label: 'From', value: 'noreply@rocketdialer.com' },
-                      { label: 'To',   value: '[[email]]' },
-                      ...(form.send_bcc === '1' ? [{ label: 'BCC', value: 'Assigned agent (auto)' }] : []),
-                    ].map(row => (
-                      <div key={row.label} className="flex items-center gap-3">
-                        <span className="text-slate-400 text-[11px] w-12 text-right flex-shrink-0 font-medium">{row.label}</span>
-                        <span className="text-slate-600 font-mono text-[11px]">{row.value}</span>
+                    {form.send_bcc === '1' && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 text-[11px] w-12 text-right flex-shrink-0 font-medium">BCC</span>
+                        <span className="text-slate-600 font-mono text-[11px]">Assigned agent (auto)</span>
                       </div>
-                    ))}
-                    <div className="flex items-start gap-3 pt-2 border-t border-slate-100">
+                    )}
+                    <div className="flex items-start gap-3 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0">
                       <span className="text-slate-400 text-[11px] w-12 text-right flex-shrink-0 mt-0.5 font-medium">Subject</span>
                       <span className="font-semibold text-slate-900 text-sm">
                         {form.subject || <span className="text-slate-400 font-normal italic text-xs">No subject</span>}
@@ -302,6 +296,11 @@ function ListItem({
               {t.template_name}
             </p>
             <div className="flex items-center gap-1 flex-shrink-0">
+              {t.email_type && t.email_type !== 'general' && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-600 uppercase tracking-wide">
+                  {EMAIL_TYPES.find(x => x.value === t.email_type)?.label ?? t.email_type}
+                </span>
+              )}
               {t.lead_status && <Zap size={9} className="text-amber-400" />}
               {t.send_bcc === '1' && <AtSign size={9} className="text-blue-400" />}
             </div>
@@ -377,8 +376,14 @@ function PreviewPanel({
         <div className="max-w-2xl mx-auto space-y-3">
 
           {/* Info badges */}
-          {(t.lead_status || t.send_bcc === '1') && (
+          {(t.email_type || t.lead_status || t.send_bcc === '1') && (
             <div className="flex flex-wrap gap-2">
+              {t.email_type && (
+                <div className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-700">
+                  <Mail size={11} />
+                  {EMAIL_TYPES.find(x => x.value === t.email_type)?.label ?? t.email_type}
+                </div>
+              )}
               {t.lead_status && (
                 <div className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
                   <Zap size={11} />
@@ -399,17 +404,13 @@ function PreviewPanel({
             <div className="h-0.5 bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400" />
             {/* Headers */}
             <div className="px-6 py-4 border-b border-slate-100 space-y-2">
-              {[
-                { label: 'From', value: 'noreply@rocketdialer.com' },
-                { label: 'To',   value: '[[email]]' },
-                ...(t.send_bcc === '1' ? [{ label: 'BCC', value: 'Assigned agent (auto)' }] : []),
-              ].map(row => (
-                <div key={row.label} className="flex items-center gap-3">
-                  <span className="text-slate-400 text-[11px] w-10 text-right flex-shrink-0">{row.label}</span>
-                  <span className="text-slate-600 font-mono text-[11px]">{row.value}</span>
+              {t.send_bcc === '1' && (
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-400 text-[11px] w-10 text-right flex-shrink-0">BCC</span>
+                  <span className="text-slate-600 font-mono text-[11px]">Assigned agent (auto)</span>
                 </div>
-              ))}
-              <div className="flex items-start gap-3 pt-2 border-t border-slate-100">
+              )}
+              <div className={`flex items-start gap-3 ${t.send_bcc === '1' ? 'pt-2 border-t border-slate-100' : ''}`}>
                 <span className="text-slate-400 text-[11px] w-10 text-right flex-shrink-0 mt-0.5">Subject</span>
                 <span className="font-semibold text-slate-900 text-sm">{t.subject}</span>
               </div>

@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   MessageSquare, Send, Loader2, CheckCheck, Search, Phone,
-  Check, Circle, Clock, ChevronRight,
+  Check, Circle, Clock, ChevronRight, SquarePen, X, UserCheck, ChevronDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import type { SmsConversation, SmsMessage } from '../../types/crm.types'
+import type { SmsConversation, SmsMessage, SmsAgent } from '../../types/crm.types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +32,19 @@ function formatDayLabel(ts: string) {
   if (diff === 0) return 'Today'
   if (diff === 86_400_000) return 'Yesterday'
   return new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+}
+
+/** Format a raw phone string into (NXX) NXX-XXXX or +1 (NXX) NXX-XXXX */
+function formatPhone(raw: string): string {
+  if (!raw) return raw
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+  if (digits.length === 11 && digits[0] === '1') {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+  }
+  return raw // return as-is for unusual formats
 }
 
 function getInitials(name: string) {
@@ -124,19 +137,29 @@ function ConversationItem({ conv, isActive, onClick }: {
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             maxWidth: 148, fontWeight: hasUnread ? 500 : 400,
           }}>
-            {conv.lead_phone}
+            {formatPhone(conv.lead_phone)}
           </span>
-          {hasUnread && (
-            <span style={{
-              minWidth: 20, height: 20, padding: '0 5px',
-              background: '#10b981', color: '#fff',
-              fontSize: 10, fontWeight: 800,
-              borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, marginLeft: 4,
-            }}>
-              {conv.unread_count > 9 ? '9+' : conv.unread_count}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 4 }}>
+            {conv.agent_name && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 8,
+                background: '#ede9fe', color: '#5b21b6', whiteSpace: 'nowrap',
+                maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {conv.agent_name.split(' ')[0]}
+              </span>
+            )}
+            {hasUnread && (
+              <span style={{
+                minWidth: 20, height: 20, padding: '0 5px',
+                background: '#10b981', color: '#fff',
+                fontSize: 10, fontWeight: 800,
+                borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {conv.unread_count > 9 ? '9+' : conv.unread_count}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </button>
@@ -185,6 +208,17 @@ function MessageBubble({ msg, showDay, dayLabel }: {
             ? '0 2px 8px rgba(5,150,105,0.25)'
             : '0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
         }}>
+          {/* from/to line for outbound */}
+          {isOut && msg.from_number && (
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '0 0 4px', letterSpacing: '0.02em' }}>
+              From: {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
+            </p>
+          )}
+          {!isOut && msg.from_number && (
+            <p style={{ fontSize: 10, color: '#94a3b8', margin: '0 0 4px', letterSpacing: '0.02em' }}>
+              {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
+            </p>
+          )}
           <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>
             {msg.body}
           </p>
@@ -210,20 +244,174 @@ function MessageBubble({ msg, showDay, dayLabel }: {
   )
 }
 
+// ─── SenderSelect ─────────────────────────────────────────────────────────────
+
+function SenderSelect({ numbers, value, onChange, compact = false }: {
+  numbers: { id: number; phone_number: string; friendly_name: string }[]
+  value: string
+  onChange: (v: string) => void
+  compact?: boolean
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: compact ? 0 : 8 }}>
+      {!compact && (
+        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>From:</span>
+      )}
+      {numbers.length > 0 ? (
+        <select
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{
+            flex: 1, padding: compact ? '4px 8px' : '6px 10px',
+            fontSize: 12, border: '1.5px solid #d1fae5', borderRadius: 8,
+            outline: 'none', color: '#0f172a', background: '#fff',
+            cursor: 'pointer', appearance: 'auto',
+          }}
+          onFocus={e => (e.target.style.borderColor = '#10b981')}
+          onBlur={e => (e.target.style.borderColor = '#d1fae5')}
+        >
+          <option value="">— Auto-select number —</option>
+          {numbers.map(n => (
+            <option key={n.id} value={n.phone_number}>
+              {n.friendly_name !== n.phone_number
+                ? `${n.friendly_name} (${formatPhone(n.phone_number)})`
+                : formatPhone(n.phone_number)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="tel"
+          placeholder="From number (e.g. +15551234567)"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{
+            flex: 1, padding: compact ? '4px 8px' : '6px 10px',
+            fontSize: 12, border: '1.5px solid #d1fae5', borderRadius: 8,
+            outline: 'none', color: '#0f172a', background: '#fff',
+          }}
+          onFocus={e => (e.target.style.borderColor = '#10b981')}
+          onBlur={e => (e.target.style.borderColor = '#d1fae5')}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── AgentAssignDropdown ──────────────────────────────────────────────────────
+
+function AgentAssignDropdown({ agents, currentAgentId, onAssign }: {
+  agents: SmsAgent[]
+  currentAgentId?: number
+  onAssign: (agentId: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const current = agents.find(a => a.id === currentAgentId)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '5px 10px', fontSize: 12, fontWeight: 600,
+          border: '1.5px solid #e2e8f0', borderRadius: 8,
+          background: current ? '#ede9fe' : '#f8fafc',
+          color: current ? '#5b21b6' : '#64748b',
+          cursor: 'pointer', transition: 'all 0.12s',
+        }}
+        title="Assign agent"
+      >
+        <UserCheck size={13} />
+        <span>{current ? current.name.split(' ')[0] : 'Assign'}</span>
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '110%', right: 0, zIndex: 200,
+          background: '#fff', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)',
+          minWidth: 180, padding: '4px 0', overflow: 'hidden',
+        }}>
+          <button
+            onClick={() => { onAssign(null); setOpen(false) }}
+            style={{
+              width: '100%', textAlign: 'left', padding: '8px 14px',
+              fontSize: 12, color: '#94a3b8', background: 'none', border: 'none',
+              cursor: 'pointer', fontStyle: 'italic',
+            }}
+          >
+            — Unassign —
+          </button>
+          {agents.map(a => (
+            <button
+              key={a.id}
+              onClick={() => { onAssign(a.id); setOpen(false) }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '8px 14px',
+                fontSize: 12, color: a.id === currentAgentId ? '#5b21b6' : '#1e293b',
+                background: a.id === currentAgentId ? '#f5f3ff' : 'none',
+                border: 'none', cursor: 'pointer', fontWeight: a.id === currentAgentId ? 600 : 400,
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => { if (a.id !== currentAgentId) (e.currentTarget as HTMLElement).style.background = '#f8fafc' }}
+              onMouseLeave={e => { if (a.id !== currentAgentId) (e.currentTarget as HTMLElement).style.background = 'none' }}
+            >
+              {a.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function CrmSmsInbox() {
   const qc = useQueryClient()
   const [activeId, setActiveId]           = useState<number | null>(null)
   const [statusFilter, setStatusFilter]   = useState<'open' | 'closed' | 'archived' | ''>('')
+  const [agentFilter, setAgentFilter]     = useState<number | ''>('')
   const [search, setSearch]               = useState('')
   const [body, setBody]                   = useState('')
+  const [fromNumber, setFromNumber]       = useState('')
+  const [showCompose, setShowCompose]     = useState(false)
+  const [newPhone, setNewPhone]           = useState('')
+  const [newBody, setNewBody]             = useState('')
   const bottomRef   = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const phoneRef    = useRef<HTMLInputElement>(null)
+
+  const { data: senderNumbersData } = useQuery({
+    queryKey: ['sms-sender-numbers'],
+    queryFn:  () => crmService.getSmsSenderNumbers().then(r => r.data?.data?.numbers ?? []) as Promise<{ id: number; phone_number: string; friendly_name: string }[]>,
+    staleTime: 5 * 60_000,
+  })
+
+  const { data: agentsData } = useQuery({
+    queryKey: ['sms-agents'],
+    queryFn:  () => crmService.getSmsAgents().then(r => r.data?.data?.agents ?? []) as Promise<SmsAgent[]>,
+    staleTime: 5 * 60_000,
+  })
+
+  const agents: SmsAgent[] = agentsData ?? []
 
   const { data: convsData, isLoading: convsLoading } = useQuery({
-    queryKey: ['sms-conversations', statusFilter],
-    queryFn:  () => crmService.getSmsConversations(statusFilter ? { status: statusFilter } : undefined).then(r => r.data.data),
+    queryKey: ['sms-conversations', statusFilter, agentFilter],
+    queryFn:  () => crmService.getSmsConversations({
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(agentFilter  ? { agent_id: agentFilter as number } : {}),
+    }).then(r => r.data.data),
     refetchInterval: 15_000,
   })
 
@@ -237,7 +425,7 @@ export function CrmSmsInbox() {
   })
 
   const sendMsg = useMutation({
-    mutationFn: () => crmService.sendSmsMessage(activeId!, body),
+    mutationFn: () => crmService.sendSmsMessageFrom(activeId!, body, fromNumber || undefined),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['sms-messages', activeId] })
       qc.invalidateQueries({ queryKey: ['sms-conversations'] })
@@ -250,6 +438,30 @@ export function CrmSmsInbox() {
   const markRead = useMutation({
     mutationFn: (id: number) => crmService.markConversationRead(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['sms-conversations'] }),
+  })
+
+  const assignAgent = useMutation({
+    mutationFn: ({ convId, agentId }: { convId: number; agentId: number | null }) =>
+      crmService.assignSmsAgent(convId, agentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sms-conversations'] })
+      toast.success('Agent updated')
+    },
+    onError: () => toast.error('Failed to assign agent.'),
+  })
+
+  const startConv = useMutation({
+    mutationFn: () => crmService.startNewSmsConversation(newPhone.trim(), newBody.trim(), fromNumber || undefined),
+    onSuccess: (res) => {
+      const conv = res.data?.data?.conversation
+      qc.invalidateQueries({ queryKey: ['sms-conversations', statusFilter, agentFilter] })
+      setShowCompose(false)
+      setNewPhone('')
+      setNewBody('')
+      if (conv?.id) setActiveId(conv.id)
+      toast.success('Message sent')
+    },
+    onError: () => toast.error('Failed to send message.'),
   })
 
   const selectConv = (id: number) => {
@@ -331,10 +543,100 @@ export function CrmSmsInbox() {
                 )}
               </div>
             </div>
+            {/* New message compose button */}
+            <button
+              onClick={() => { setShowCompose(s => !s); setTimeout(() => phoneRef.current?.focus(), 80) }}
+              title="New message"
+              style={{
+                width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer',
+                background: showCompose ? '#ecfdf5' : 'transparent',
+                color: showCompose ? '#059669' : '#94a3b8',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.12s',
+                boxShadow: showCompose ? 'inset 0 0 0 1.5px #6ee7b7' : 'none',
+              }}
+            >
+              <SquarePen size={15} />
+            </button>
           </div>
 
+          {/* ── Compose panel ───────────────────────────────── */}
+          {showCompose && (
+            <div style={{
+              background: '#f0fdf4', border: '1.5px solid #a7f3d0',
+              borderRadius: 12, padding: '12px 12px 10px', marginTop: 2,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  New Message
+                </span>
+                <button
+                  onClick={() => { setShowCompose(false); setNewPhone(''); setNewBody('') }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2, lineHeight: 1 }}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              <input
+                ref={phoneRef}
+                type="tel"
+                placeholder="To: phone number (e.g. +15551234567)"
+                value={newPhone}
+                onChange={e => setNewPhone(e.target.value)}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '7px 10px', fontSize: 12,
+                  border: '1.5px solid #d1fae5', borderRadius: 8,
+                  outline: 'none', color: '#0f172a', background: '#fff',
+                  marginBottom: 7,
+                }}
+                onFocus={e => (e.target.style.borderColor = '#10b981')}
+                onBlur={e => (e.target.style.borderColor = '#d1fae5')}
+              />
+              <SenderSelect numbers={senderNumbersData ?? []} value={fromNumber} onChange={setFromNumber} />
+              <textarea
+                rows={2}
+                placeholder="Type your message…"
+                value={newBody}
+                onChange={e => setNewBody(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey && newPhone.trim() && newBody.trim()) {
+                    e.preventDefault()
+                    startConv.mutate()
+                  }
+                }}
+                style={{
+                  width: '100%', boxSizing: 'border-box', resize: 'none',
+                  padding: '7px 10px', fontSize: 12,
+                  border: '1.5px solid #d1fae5', borderRadius: 8,
+                  outline: 'none', color: '#0f172a', background: '#fff',
+                  fontFamily: 'inherit', marginBottom: 8,
+                }}
+                onFocus={e => (e.target.style.borderColor = '#10b981')}
+                onBlur={e => (e.target.style.borderColor = '#d1fae5')}
+              />
+              <button
+                onClick={() => startConv.mutate()}
+                disabled={!newPhone.trim() || !newBody.trim() || startConv.isPending}
+                style={{
+                  width: '100%', padding: '7px 0', fontSize: 12, fontWeight: 600,
+                  border: 'none', borderRadius: 8, cursor: 'pointer',
+                  background: newPhone.trim() && newBody.trim() ? 'linear-gradient(135deg,#059669,#10b981)' : '#e2e8f0',
+                  color: newPhone.trim() && newBody.trim() ? '#fff' : '#94a3b8',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {startConv.isPending
+                  ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
+                  : <><Send size={13} /> Send Message</>
+                }
+              </button>
+            </div>
+          )}
+
           {/* Search */}
-          <div style={{ position: 'relative', marginBottom: 10 }}>
+          <div style={{ position: 'relative', marginBottom: 8, marginTop: showCompose ? 8 : 0 }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
             <input
               style={{
@@ -352,7 +654,7 @@ export function CrmSmsInbox() {
           </div>
 
           {/* Filter pills */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
             {FILTERS.map(f => (
               <button
                 key={f.value}
@@ -370,6 +672,31 @@ export function CrmSmsInbox() {
               </button>
             ))}
           </div>
+
+          {/* Agent filter */}
+          {agents.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <UserCheck size={12} style={{ color: '#94a3b8', flexShrink: 0 }} />
+              <select
+                value={agentFilter}
+                onChange={e => setAgentFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{
+                  flex: 1, padding: '5px 8px', fontSize: 11,
+                  border: '1.5px solid #e2e8f0', borderRadius: 8,
+                  outline: 'none', color: agentFilter ? '#5b21b6' : '#94a3b8',
+                  background: agentFilter ? '#f5f3ff' : '#f8fafc',
+                  cursor: 'pointer',
+                }}
+                onFocus={e => (e.target.style.borderColor = '#7c3aed')}
+                onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
+              >
+                <option value="">All agents</option>
+                {agents.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Conversation list */}
@@ -444,21 +771,38 @@ export function CrmSmsInbox() {
                 {activeName}
               </p>
               {activeConv && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
                   <Phone size={10} style={{ color: '#94a3b8' }} />
-                  <span style={{ fontSize: 12, color: '#64748b' }}>{activeConv.lead_phone}</span>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>{formatPhone(activeConv.lead_phone)}</span>
                   <span style={{
                     fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 20,
                     background: activeConv.status === 'open' ? '#ecfdf5' : '#f8fafc',
                     color: activeConv.status === 'open' ? '#059669' : '#94a3b8',
                     border: `1px solid ${activeConv.status === 'open' ? '#a7f3d0' : '#e2e8f0'}`,
-                    marginLeft: 4,
+                    marginLeft: 2,
                   }}>
                     {activeConv.status ?? 'open'}
                   </span>
+                  {activeConv.agent_name && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 20,
+                      background: '#ede9fe', color: '#5b21b6',
+                      border: '1px solid #ddd6fe', marginLeft: 2,
+                    }}>
+                      {activeConv.agent_name}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
+            {/* Agent assign */}
+            {agents.length > 0 && activeConv && (
+              <AgentAssignDropdown
+                agents={agents}
+                currentAgentId={activeConv.agent_id}
+                onAssign={agentId => assignAgent.mutate({ convId: activeConv.id, agentId })}
+              />
+            )}
             <ChevronRight size={16} style={{ color: '#cbd5e1' }} />
           </div>
 
@@ -492,6 +836,7 @@ export function CrmSmsInbox() {
             padding: '10px 14px 12px',
             flexShrink: 0,
           }}>
+            <SenderSelect numbers={senderNumbersData ?? []} value={fromNumber} onChange={setFromNumber} />
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
               <div style={{ flex: 1, position: 'relative' }}>
                 <textarea

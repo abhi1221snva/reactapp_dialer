@@ -36,6 +36,7 @@ const ADMIN_ALLOWED_ROUTES = new Set([
   '/crm/sms-inbox',
   '/crm/automations',
   '/crm/approvals',
+  '/crm/email-settings',
   '/sms',
   '/chat',
   '/gmail-mailbox',
@@ -256,6 +257,13 @@ const CRM_SECTIONS: NavSection[] = [
       { to: '/crm/sms-templates',    label: 'SMS Templates',    icon: MessageSquare, minLevel: LEVELS.MANAGER },
       { to: '/crm/pdf-templates',    label: 'PDF Templates',    icon: FileText,      minLevel: LEVELS.MANAGER },
       { to: '/crm/document-types',   label: 'Document Types',   icon: Tag,           minLevel: LEVELS.MANAGER },
+    ],
+  },
+  {
+    label: 'SETTINGS',
+    minLevel: LEVELS.MANAGER,
+    items: [
+      { to: '/crm/email-settings', label: 'Email Settings', icon: Mail, minLevel: LEVELS.MANAGER },
     ],
   },
   {

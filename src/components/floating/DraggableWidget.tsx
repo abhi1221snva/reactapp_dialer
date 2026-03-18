@@ -6,6 +6,8 @@ import { Minus, X } from 'lucide-react'
 export interface DraggableWidgetProps {
   isOpen: boolean
   onClose: () => void
+  /** Called when minimize state changes */
+  onMinimize?: (minimized: boolean) => void
   /** Left side of header — icon + title */
   headerLeft: ReactNode
   /** Extra controls on the right of the header (before Minimize/Close) */
@@ -27,6 +29,7 @@ export interface DraggableWidgetProps {
 export function DraggableWidget({
   isOpen,
   onClose,
+  onMinimize,
   headerLeft,
   headerRight,
   headerGradient = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
@@ -117,7 +120,7 @@ export function DraggableWidget({
           {headerRight}
 
           <button
-            onClick={() => setIsMinimized(v => !v)}
+            onClick={() => { setIsMinimized(v => { onMinimize?.(!v); return !v }) }}
             className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 flex items-center justify-center transition-colors"
             title={isMinimized ? 'Restore' : 'Minimize'}
           >

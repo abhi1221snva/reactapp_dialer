@@ -8,9 +8,11 @@ interface FloatingState {
   chatOpen: boolean
   phoneOpen: boolean
   smsOpen: boolean
+  phoneMinimized: boolean
   setChatOpen: (v: boolean) => void
   setPhoneOpen: (v: boolean) => void
   setSmsOpen: (v: boolean) => void
+  setPhoneMinimized: (v: boolean) => void
 
   // ── Phone FAB visual ───────────────────────────────────────────────────────
   phoneFabBg: string
@@ -41,6 +43,7 @@ export const useFloatingStore = create<FloatingState>((set) => ({
   chatOpen: false,
   phoneOpen: false,
   smsOpen: false,
+  phoneMinimized: false,
   setChatOpen: (v) => set((state) => ({
     chatOpen: v,
     phoneOpen: v ? false : state.phoneOpen,
@@ -48,6 +51,7 @@ export const useFloatingStore = create<FloatingState>((set) => ({
   })),
   setPhoneOpen: (v) => set((state) => ({
     phoneOpen: v,
+    phoneMinimized: v ? state.phoneMinimized : false,
     chatOpen: v ? false : state.chatOpen,
     smsOpen:  v ? false : state.smsOpen,
   })),
@@ -56,6 +60,7 @@ export const useFloatingStore = create<FloatingState>((set) => ({
     chatOpen:  v ? false : state.chatOpen,
     phoneOpen: v ? false : state.phoneOpen,
   })),
+  setPhoneMinimized: (v) => set({ phoneMinimized: v }),
 
   phoneFabBg: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
   phoneFabShadow: '0 6px 24px rgba(239,68,68,0.5)',
