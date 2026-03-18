@@ -97,12 +97,13 @@ interface SectionProps {
 }
 
 function EditableSection({ section, fields, token, onSaved }: SectionProps) {
-  const [open, setOpen]     = useState(false)
-  const [editing, setEdit]  = useState(false)
-  const [local, setLocal]   = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
-  const [err, setErr]       = useState('')
-  const [ok, setOk]         = useState(false)
+  const [open, setOpen]           = useState(false)
+  const [editing, setEdit]        = useState(false)
+  const [local, setLocal]         = useState<Record<string, string>>({})
+  const [savedFields, setSavedFields] = useState<Record<string, string> | null>(null)
+  const [saving, setSaving]       = useState(false)
+  const [err, setErr]             = useState('')
+  const [ok, setOk]               = useState(false)
 
   const startEdit = () => {
     const init: Record<string, string> = {}
@@ -116,6 +117,8 @@ function EditableSection({ section, fields, token, onSaved }: SectionProps) {
     setSaving(true); setErr('')
     try {
       await publicAppService.updateMerchant(token, local)
+      // Show saved values immediately in display mode — don't wait for refetch
+      setSavedFields({ ...local })
       setEdit(false); setOk(true); onSaved()
       setTimeout(() => setOk(false), 3000)
     } catch (e: unknown) {
@@ -124,8 +127,8 @@ function EditableSection({ section, fields, token, onSaved }: SectionProps) {
     } finally { setSaving(false) }
   }
 
-  // Display value
-  const display = (k: string) => fields[k] || '—'
+  // Display value: prefer just-saved values, then parent query data
+  const display = (k: string) => (savedFields ? savedFields[k] : fields[k]) || '—'
 
   return (
     <div style={{ border: `1.5px solid ${ok ? C.success : C.border}`, borderRadius: 14, overflow: 'hidden', transition: 'border-color .3s' }}>

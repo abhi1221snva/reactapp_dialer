@@ -23,7 +23,9 @@ export const didService = {
     api.post('/did', {
       start: (params.page - 1) * params.limit,
       limit: params.limit,
-      ...(params.search ? { search: params.search } : {}),
+      ...(params.search                ? { search:    params.search } : {}),
+      ...(params.filters.operator      ? { operator:  params.filters.operator } : {}),
+      ...(params.filters.dest_type     ? { dest_type: params.filters.dest_type } : {}),
     }),
 
   // Use 'did_id' — NOT 'id'. Backend middleware checks body 'id' against

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { ReactNode, ChangeEvent, RefObject, ComponentType } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -9,7 +9,7 @@ import {
   Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
   ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
-  Activity,
+  Activity, Search,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -23,6 +23,8 @@ import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDocumentTypesManager'
+import { RichEmailEditor } from '../../components/crm/RichEmailEditor'
+import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
@@ -979,35 +981,66 @@ function LendersPanel({ leadId }: { leadId: number }) {
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+/**
+ * Strip elements whose *text content* must not appear in TipTap
+ * (style/script rules, head blocks) and unwrap html/body wrappers.
+ * The resulting HTML is then safe to pass to TipTap's setContent().
+ */
+function cleanHtmlForEditor(html: string): string {
+  if (!html) return ''
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('style, script, head').forEach(el => el.remove())
+  return doc.body.innerHTML
+}
+
 // ── Send Email Modal ───────────────────────────────────────────────────────────
 function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaultTo: string; onClose: () => void }) {
   const [to,            setTo]            = useState(defaultTo)
   const [subject,       setSubject]       = useState('')
   const [body,          setBody]          = useState('')
   const [selectedTplId, setSelectedTplId] = useState<number | ''>('')
-  const [isHtml,        setIsHtml]        = useState(false)
   const [resolving,     setResolving]     = useState(false)
   const [tab,           setTab]           = useState<'compose' | 'preview'>('compose')
+  const editorRef = useRef<RichEmailEditorRef>(null)
+  const [tplSearch,     setTplSearch]     = useState('')
+  const [tplOpen,       setTplOpen]       = useState(false)
+  const tplDropRef = useRef<HTMLDivElement>(null)
 
   const { data: templates, isLoading: tplLoading } = useQuery({
-    queryKey: ['email-templates', 'online_application'],
+    queryKey: ['email-templates', 'all'],
     queryFn: async () => {
-      const res = await crmService.getEmailTemplates({ type: 'online_application' })
+      const res = await crmService.getEmailTemplates()
       return (res.data?.data ?? res.data ?? []) as EmailTemplate[]
     },
     staleTime: 60 * 1000,
   })
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tplDropRef.current && !tplDropRef.current.contains(e.target as Node)) {
+        setTplOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const handleTemplateChange = async (tplId: number | '') => {
     setSelectedTplId(tplId)
-    if (tplId === '') { setSubject(''); setBody(''); setIsHtml(false); return }
+    setTplOpen(false)
+    setTplSearch('')
+    if (tplId === '') {
+      setSubject('')
+      editorRef.current?.setContent('')
+      return
+    }
     setResolving(true)
     try {
       const res = await crmService.resolveEmailTemplate(leadId, tplId as number)
       const resolved = res.data?.data ?? res.data
       setSubject(resolved?.subject ?? '')
-      setBody(resolved?.body ?? '')
-      setIsHtml(true)
+      editorRef.current?.setContent(cleanHtmlForEditor(resolved?.body ?? ''))
     } catch {
       toast.error('Failed to load template')
     } finally {
@@ -1015,13 +1048,11 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
     }
   }
 
-  const handleBodyChange = (val: string) => {
-    setBody(val)
-    setIsHtml(false)
-  }
-
   const send = useMutation({
-    mutationFn: () => crmService.sendMerchantEmail(leadId, { to, subject, body, is_html: isHtml }),
+    mutationFn: () => {
+      const html = editorRef.current?.getContent() ?? body
+      return crmService.sendMerchantEmail(leadId, { to, subject, body: html, is_html: true })
+    },
     onSuccess: () => { toast.success('Email sent'); onClose() },
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send email'
@@ -1029,7 +1060,8 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
     },
   })
 
-  const previewHtml = isHtml ? body : body.replace(/\n/g, '<br />')
+  const bodyIsEmpty = !body || body.replace(/<[^>]*>/g, '').trim() === ''
+  const previewHtml = body
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -1070,24 +1102,118 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
             <div className="flex flex-col gap-4 p-6">
               {/* Template picker */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                  Online Application Template <span className="font-normal text-slate-400">(optional)</span>
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedTplId}
-                    onChange={e => handleTemplateChange(e.target.value === '' ? '' : Number(e.target.value))}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500">
+                    Email Template <span className="font-normal text-red-400">*</span>
+                  </label>
+                  <a href="/crm/email-templates" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 font-medium transition-colors">
+                    <Plus size={11} /> New Template
+                  </a>
+                </div>
+                <div className="relative" ref={tplDropRef}>
+                  {/* Combobox trigger */}
+                  <button
+                    type="button"
+                    onClick={() => !tplLoading && !resolving && setTplOpen(v => !v)}
                     disabled={tplLoading || resolving}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 text-slate-700 disabled:opacity-60"
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-left focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 disabled:opacity-60 transition-colors hover:border-slate-300"
                   >
-                    <option value="">— Select a template to auto-fill subject & body —</option>
-                    {(templates ?? []).map(t => (
-                      <option key={t.id} value={t.id}>{t.template_name}</option>
-                    ))}
-                  </select>
-                  {resolving && (
-                    <div className="absolute inset-y-0 right-9 flex items-center pointer-events-none">
-                      <Loader2 size={13} className="animate-spin text-sky-500" />
+                    <span className={selectedTplId === '' ? 'text-slate-400' : 'text-slate-700 font-medium'}>
+                      {selectedTplId !== ''
+                        ? (templates ?? []).find(t => t.id === selectedTplId)?.template_name ?? 'Selected template'
+                        : 'Select Email Template (Optional)'}
+                    </span>
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      {(resolving || tplLoading) && <Loader2 size={12} className="animate-spin text-sky-500" />}
+                      {selectedTplId !== '' && !resolving && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={e => { e.stopPropagation(); handleTemplateChange('') }}
+                          onKeyDown={e => e.key === 'Enter' && handleTemplateChange('')}
+                          className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                        ><X size={10} /></span>
+                      )}
+                      <ChevronDown size={14} className={`text-slate-400 transition-transform duration-150 ${tplOpen ? 'rotate-180' : ''}`} />
+                    </span>
+                  </button>
+
+                  {/* Dropdown panel */}
+                  {tplOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                      {/* Search input */}
+                      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+                        <Search size={13} className="text-slate-400 flex-shrink-0" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={tplSearch}
+                          onChange={e => setTplSearch(e.target.value)}
+                          placeholder="Search templates…"
+                          className="flex-1 text-xs outline-none text-slate-700 placeholder-slate-400 bg-transparent"
+                        />
+                        {tplSearch && (
+                          <button onClick={() => setTplSearch('')} className="text-slate-400 hover:text-slate-600 transition-colors">
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Options list */}
+                      <div className="max-h-52 overflow-y-auto py-1">
+                        {(() => {
+                          const filtered = (templates ?? []).filter(t =>
+                            !tplSearch ||
+                            t.template_name.toLowerCase().includes(tplSearch.toLowerCase()) ||
+                            (t.subject ?? '').toLowerCase().includes(tplSearch.toLowerCase())
+                          )
+                          if (filtered.length === 0) {
+                            return (
+                              <p className="px-3 py-4 text-xs text-slate-400 text-center">
+                                {tplLoading ? 'Loading templates…' : tplSearch ? `No templates matching "${tplSearch}"` : 'No templates available'}
+                              </p>
+                            )
+                          }
+                          return filtered.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => handleTemplateChange(t.id)}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-sky-50 transition-colors ${selectedTplId === t.id ? 'bg-sky-50' : ''}`}
+                            >
+                              <div className="min-w-0">
+                                <p className={`text-sm font-medium truncate ${selectedTplId === t.id ? 'text-sky-700' : 'text-slate-700'}`}>
+                                  {t.template_name}
+                                </p>
+                                {t.subject && (
+                                  <p className="text-[11px] text-slate-400 truncate mt-0.5">{t.subject}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                {t.email_type && (
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                    t.email_type === 'online_application'
+                                      ? 'bg-indigo-50 text-indigo-600'
+                                      : 'bg-slate-100 text-slate-500'
+                                  }`}>
+                                    {t.email_type === 'online_application' ? 'App' : 'General'}
+                                  </span>
+                                )}
+                                {selectedTplId === t.id && <Check size={13} className="text-sky-600" />}
+                              </div>
+                            </button>
+                          ))
+                        })()}
+                      </div>
+
+                      {/* Footer link */}
+                      <div className="border-t border-slate-100 px-3 py-2">
+                        <a href="/crm/email-templates" target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-[11px] text-sky-600 hover:text-sky-700 font-medium transition-colors">
+                          <ExternalLink size={11} /> Manage all email templates
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1116,21 +1242,10 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
                 </div>
               </div>
 
-              {/* Body */}
+              {/* Body — rich text editor */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-500">Message</label>
-                  {isHtml && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100">HTML template — switch to Preview to see rendered</span>
-                  )}
-                </div>
-                <textarea
-                  value={body}
-                  onChange={e => handleBodyChange(e.target.value)}
-                  rows={10}
-                  placeholder="Type your message or select a template above..."
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 resize-none font-mono leading-relaxed"
-                />
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Message</label>
+                <RichEmailEditor ref={editorRef} onChange={setBody} />
               </div>
             </div>
 
@@ -1170,13 +1285,13 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
         {/* Footer */}
         <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex-shrink-0">
           <p className="text-[11px] text-slate-400">
-            {body ? `${body.length.toLocaleString()} chars` : 'No content yet'}
+            {bodyIsEmpty ? 'No content yet' : `${body.replace(/<[^>]*>/g, '').length.toLocaleString()} chars`}
           </p>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
             <button
               onClick={() => send.mutate()}
-              disabled={send.isPending || !to || !subject || !body}
+              disabled={send.isPending || !selectedTplId || !to || !subject || bodyIsEmpty}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
