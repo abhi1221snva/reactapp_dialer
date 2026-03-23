@@ -1,33 +1,45 @@
 import { useState, useRef, useEffect } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { X, Save, Phone } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { X, Save, PhoneOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dncService } from '../../services/dnc.service'
+import { useAuthStore } from '../../stores/auth.store'
 
 interface Props {
   onClose: () => void
   onSaved: () => void
 }
 
+interface ExtItem {
+  id: number
+  name: string
+  extension: string
+  [key: string]: unknown
+}
+
 export function AddDncModal({ onClose, onSaved }: Props) {
-  const [number, setNumber] = useState('')
+  const [rawDigits, setRawDigits] = useState('')
   const [comment, setComment] = useState('')
   const [extension, setExtension] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const clientId = useAuthStore(s => s.user?.parent_id)
 
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50)
-  }, [])
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50) }, [])
+
+  const { data: extRes } = useQuery({
+    queryKey: ['extensions', clientId],
+    queryFn: () => dncService.getExtensions(),
+  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extensions: ExtItem[] = (extRes as any)?.data?.data ?? []
 
   const mutation = useMutation({
-    mutationFn: () => dncService.add(number.trim(), comment.trim(), extension.trim() || undefined),
+    mutationFn: () => dncService.add(rawDigits, comment.trim(), extension || undefined),
     onSuccess: (res) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const success = (res as any)?.data?.success
-      if (success === false || success === 'false') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const msg = (res as any)?.data?.message || 'Failed to add number'
-        toast.error(msg)
+      const r = res as any
+      if (r?.data?.success === false || r?.data?.success === 'false') {
+        toast.error(r?.data?.message || 'Failed to add number')
         return
       }
       toast.success('Number added to DNC list')
@@ -36,61 +48,88 @@ export function AddDncModal({ onClose, onSaved }: Props) {
     onError: () => toast.error('Failed to add number to DNC list'),
   })
 
-  // Number must be at least 10 digits
-  const isValid = number.trim().replace(/\D/g, '').length >= 10
+  const isValid = rawDigits.length === 10
+  const remaining = 10 - rawDigits.length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
-              <Phone size={15} className="text-red-500" />
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <PhoneOff size={15} className="text-red-500" />
             </div>
-            <h3 className="font-semibold text-slate-900 text-base">Add to DNC List</h3>
+            <div>
+              <h3 className="font-semibold text-slate-900 text-sm leading-tight">Add to DNC List</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Block a number from being dialed</p>
+            </div>
           </div>
-          <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600">
+          <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
             <X size={16} />
           </button>
         </div>
 
-        {/* Phone Number */}
-        <div className="form-group">
-          <label className="label">Phone Number *</label>
-          <input
-            ref={inputRef}
-            className="input"
-            placeholder="e.g. 9876543210"
-            value={number}
-            onChange={e => setNumber(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && isValid) mutation.mutate() }}
-          />
-          <p className="text-xs text-slate-400 mt-1">Minimum 10 digits, numbers only</p>
+        {/* Body */}
+        <div className="px-5 py-4 space-y-3">
+          {/* Phone Number */}
+          <div className="form-group">
+            <label className="label">
+              Phone Number <span className="text-red-400">*</span>
+            </label>
+            <input
+              ref={inputRef}
+              className="input font-mono"
+              placeholder="e.g. 9876543210"
+              value={rawDigits}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setRawDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              onKeyDown={e => { if (e.key === 'Enter' && isValid) mutation.mutate() }}
+            />
+            {rawDigits.length > 0 && rawDigits.length < 10 && (
+              <p className="text-xs text-amber-500 mt-1">
+                {remaining} more digit{remaining > 1 ? 's' : ''} needed
+              </p>
+            )}
+          </div>
+
+          {/* Extension */}
+          <div className="form-group">
+            <label className="label">
+              Extension <span className="text-xs text-slate-400 font-normal">— optional</span>
+            </label>
+            <select
+              className="input"
+              value={extension}
+              onChange={e => setExtension(e.target.value)}
+            >
+              <option value="">None</option>
+              {extensions.map(ext => (
+                <option key={ext.id} value={String(ext.extension)}>
+                  {ext.name} ({ext.extension})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Comment */}
+          <div className="form-group">
+            <label className="label">
+              Comment <span className="text-xs text-slate-400 font-normal">— optional</span>
+            </label>
+            <input
+              className="input"
+              placeholder="e.g. Customer requested removal"
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && isValid) mutation.mutate() }}
+            />
+          </div>
         </div>
 
-        {/* Extension (optional) */}
-        <div className="form-group">
-          <label className="label">Extension <span className="text-slate-400 font-normal">(optional)</span></label>
-          <input
-            className="input"
-            placeholder="e.g. 1001"
-            value={extension}
-            onChange={e => setExtension(e.target.value)}
-          />
-        </div>
-
-        {/* Comment */}
-        <div className="form-group">
-          <label className="label">Comment <span className="text-slate-400 font-normal">(optional)</span></label>
-          <input
-            className="input"
-            placeholder="e.g. Customer requested removal"
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-          />
-        </div>
-
-        <div className="flex gap-3 pt-1">
+        {/* Footer */}
+        <div className="flex gap-2 px-5 py-4 border-t border-slate-100">
           <button onClick={onClose} className="btn-outline flex-1">Cancel</button>
           <button
             onClick={() => mutation.mutate()}

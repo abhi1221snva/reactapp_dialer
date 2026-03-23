@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { Minus, X } from 'lucide-react'
+import { Minus, X, ChevronUp } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,17 +110,40 @@ export function DraggableWidget({
           height:     '52px',
           background: headerGradient,
           userSelect: 'none',
+          cursor:     isMinimized ? 'pointer' : 'default',
         }}
+        onClick={isMinimized ? () => { setIsMinimized(false); onMinimize?.(false) } : undefined}
+        title={isMinimized ? 'Click to expand' : undefined}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
           {headerLeft}
+          {isMinimized && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: 10,
+                fontWeight: 600,
+                color: 'rgba(255,255,255,0.7)',
+                background: 'rgba(255,255,255,0.12)',
+                borderRadius: 6,
+                padding: '2px 6px',
+                letterSpacing: '0.03em',
+                flexShrink: 0,
+              }}
+            >
+              <ChevronUp size={10} />
+              tap to expand
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
           {headerRight}
 
           <button
-            onClick={() => { setIsMinimized(v => { onMinimize?.(!v); return !v }) }}
+            onClick={(e) => { e.stopPropagation(); setIsMinimized(v => { onMinimize?.(!v); return !v }) }}
             className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 flex items-center justify-center transition-colors"
             title={isMinimized ? 'Restore' : 'Minimize'}
           >
@@ -128,7 +151,7 @@ export function DraggableWidget({
           </button>
 
           <button
-            onClick={onClose}
+            onClick={(e) => { e.stopPropagation(); onClose() }}
             className="w-7 h-7 rounded-lg bg-white/15 hover:bg-rose-500/80 flex items-center justify-center transition-colors"
             title="Close"
           >

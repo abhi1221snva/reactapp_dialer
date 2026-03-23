@@ -1,26 +1,23 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Phone, LayoutDashboard, Users, BarChart3, MessageSquare,
   ChevronRight, Activity,
   CreditCard, Radio, MessagesSquare, Hash, UserCog, List, Tag, ListChecks, FileText, ChevronUp,
-  PhoneCall, Voicemail, Layers, Link2, ShieldCheck, PieChart,
-  Mail, Building2, LogOut, X, ChevronDown,
+  PhoneCall, Voicemail, Layers, Link2, ShieldCheck, PieChart, MinusCircle,
+  Mail, Building2, X, ChevronDown,
   Headphones, Globe, Bot, Calendar,
-  Mic, Inbox, BrainCircuit, Settings2, User, Camera,
+  Mic, Inbox, BrainCircuit, Settings2, User,
   Wifi, DollarSign, BookMarked,
-  Target, CheckCircle2, Zap,
+  Target, CheckCircle2, Zap, Clock, CalendarDays,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
 import { useAuth } from '../hooks/useAuth'
-import { useAuthStore } from '../stores/auth.store'
 import { useNotificationStore } from '../stores/notification.store'
 import { useEngineStore } from '../stores/engine.store'
 import { initials } from '../utils/format'
 import { LEVELS } from '../utils/permissions'
-import api from '../api/axios'
-import toast from 'react-hot-toast'
 
 const ADMIN_ALLOWED_ROUTES = new Set([
   '/profile',
@@ -161,11 +158,13 @@ const DIALER_SECTIONS: NavSection[] = [
     label: 'VOICE',
     minLevel: LEVELS.ADMIN,
     items: [
-      { to: '/dids',              label: 'DID Management',   icon: Hash,      minLevel: LEVELS.ADMIN },
-      { to: '/ivr',               label: 'IVR Menus',        icon: PhoneCall, minLevel: LEVELS.ADMIN },
-      { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail, minLevel: LEVELS.ADMIN },
-      { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,     minLevel: LEVELS.MANAGER },
-      { to: '/ring-groups', label: 'Ring Groups', icon: Users, minLevel: LEVELS.ADMIN },
+      { to: '/dids',              label: 'DID Management',   icon: Hash,         minLevel: LEVELS.ADMIN },
+      { to: '/ivr',               label: 'IVR Menus',        icon: PhoneCall,    minLevel: LEVELS.ADMIN },
+      { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail,    minLevel: LEVELS.ADMIN },
+      { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,        minLevel: LEVELS.MANAGER },
+      { to: '/ring-groups',       label: 'Ring Groups',      icon: Users,        minLevel: LEVELS.ADMIN },
+      { to: '/call-times',        label: 'Call Times',       icon: Clock,        minLevel: LEVELS.ADMIN },
+      { to: '/holidays',          label: 'Holidays',         icon: CalendarDays, minLevel: LEVELS.ADMIN },
     ],
   },
   {
@@ -200,8 +199,9 @@ const DIALER_SECTIONS: NavSection[] = [
     label: 'SETTINGS',
     minLevel: LEVELS.ADMIN,
     items: [
-      { to: '/settings/dnc', label: 'DNC List',       icon: ShieldCheck, minLevel: LEVELS.ADMIN },
-      { to: '/settings/fax',  label: 'Fax Settings', icon: FileText,   minLevel: LEVELS.ADMIN },
+      { to: '/settings/dnc',     label: 'DNC List',          icon: ShieldCheck,  minLevel: LEVELS.ADMIN },
+      { to: '/settings/exclude', label: 'Exclude From List', icon: MinusCircle,  minLevel: LEVELS.ADMIN },
+      { to: '/settings/fax',     label: 'Fax Settings',      icon: FileText,     minLevel: LEVELS.ADMIN },
       { to: '/billing',       label: 'Billing',      icon: CreditCard, minLevel: LEVELS.ADMIN },
     ],
   },
@@ -237,22 +237,15 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'INBOX',
     minLevel: 1,
     items: [
-      { to: '/gmail-mailbox', label: 'Gmail Inbox', icon: Inbox,         minLevel: 1 },
       { to: '/chat',          label: 'Team Chat',   icon: MessagesSquare,minLevel: 1 },
-      { to: '/crm/sms-inbox',    label: 'SMS Inbox',    icon: MessageSquare, minLevel: 1 },
+      { to: '/crm/sms-inbox', label: 'SMS Inbox',   icon: MessageSquare, minLevel: 1 },
     ],
   },
   {
-    label: 'SCHEDULE',
-    minLevel: 1,
-    items: [
-      { to: '/google-calendar', label: 'Google Calendar', icon: Calendar, minLevel: 1 },
-    ],
-  },
-  {
-    label: 'TEMPLATES',
+    label: 'SETTINGS',
     minLevel: LEVELS.MANAGER,
     items: [
+      { to: '/crm/email-settings',   label: 'Email Settings',   icon: Mail,          minLevel: LEVELS.MANAGER },
       { to: '/crm/email-templates',  label: 'Email Templates',  icon: Mail,          minLevel: LEVELS.MANAGER },
       { to: '/crm/sms-templates',    label: 'SMS Templates',    icon: MessageSquare, minLevel: LEVELS.MANAGER },
       { to: '/crm/pdf-templates',    label: 'PDF Templates',    icon: FileText,      minLevel: LEVELS.MANAGER },
@@ -260,26 +253,18 @@ const CRM_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'SETTINGS',
-    minLevel: LEVELS.MANAGER,
+    label: 'INTEGRATIONS',
+    minLevel: 1,
     items: [
-      { to: '/crm/email-settings', label: 'Email Settings', icon: Mail, minLevel: LEVELS.MANAGER },
+      { to: '/gmail-mailbox',   label: 'Gmail Inbox',      icon: Inbox,    minLevel: 1 },
+      { to: '/google-calendar', label: 'Google Calendar',  icon: Calendar, minLevel: 1 },
     ],
   },
   {
     label: 'PARTNERS',
     minLevel: LEVELS.MANAGER,
     items: [
-      { to: '/crm/lenders',          label: 'Lenders',          icon: Building2, minLevel: LEVELS.MANAGER },
-      { to: '/crm/affiliate-links',  label: 'Affiliate Links',  icon: Link2,     minLevel: LEVELS.MANAGER },
-      { to: '/crm/company-settings', label: 'Company Settings', icon: Globe,     minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'AUTOMATION',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/crm/automations', label: 'Automations', icon: Zap, minLevel: LEVELS.MANAGER },
+      { to: '/crm/lenders', label: 'Lenders', icon: Building2, minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -446,36 +431,14 @@ function NavGroup({
 
 export function Sidebar() {
   const { sidebarCollapsed, mobileSidebarOpen, toggleSidebar, closeMobileSidebar } = useUIStore()
-  const { user, canAccess, logout } = useAuth()
-  const { updateUser } = useAuthStore()
+  const { user, canAccess } = useAuth()
   const { unreadSms } = useNotificationStore()
   const { engine } = useEngineStore()
   const navigate = useNavigate()
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
-  const [avatarUploading, setAvatarUploading] = useState(false)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const accent = ACCENT[engine]
 
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return }
-    if (file.size > 4 * 1024 * 1024) { toast.error('Image must be under 4 MB'); return }
-    const fd = new FormData()
-    fd.append('avatar', file)
-    setAvatarUploading(true)
-    try {
-      const res = await api.post('/profile/upload-avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      const url = res.data?.data?.profile_pic
-      if (url) { updateUser({ profile_pic: url }); toast.success('Profile picture updated!') }
-    } catch { /* handled by interceptor */ } finally {
-      setAvatarUploading(false)
-      if (avatarInputRef.current) avatarInputRef.current.value = ''
-    }
-  }
-
-  function handleNav(to: string) { navigate(to); closeMobileSidebar(); setShowProfileMenu(false) }
+  function handleNav(to: string) { navigate(to); closeMobileSidebar() }
 
   const rawSections = engine === 'dialer' ? DIALER_SECTIONS : CRM_SECTIONS
   const effectiveSections = rawSections.filter(s => s.label !== 'SYSTEM ADMIN' || canAccess(LEVELS.SUPERADMIN))
@@ -486,8 +449,6 @@ export function Sidebar() {
   const logoShadow = engine === 'dialer'
     ? '0 2px 10px rgba(99,102,241,0.35)'
     : '0 2px 10px rgba(16,185,129,0.35)'
-  const avatarBg = engine === 'dialer' ? '#6366F1' : '#059669'
-
   return (
     <div
       className={cn(
@@ -556,7 +517,7 @@ export function Sidebar() {
                   collapsed={sidebarCollapsed}
                   canAccess={canAccess}
                   unreadSms={unreadSms}
-                  onItemClick={() => { closeMobileSidebar(); setShowProfileMenu(false) }}
+                  onItemClick={() => { closeMobileSidebar() }}
                   accent={accent}
                 />
               ) : (
@@ -565,7 +526,7 @@ export function Sidebar() {
                     <NavLink
                       key={to}
                       to={to}
-                      onClick={() => { closeMobileSidebar(); setShowProfileMenu(false) }}
+                      onClick={() => { closeMobileSidebar() }}
                       title={sidebarCollapsed ? label : undefined}
                       className={({ isActive }) => cn(
                         'group relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
@@ -606,96 +567,6 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* ── User footer ───────────────────────────────────────────────────── */}
-      {user && (
-        <div className="flex-shrink-0 relative px-2 py-1.5 border-t border-slate-200">
-          {showProfileMenu && !sidebarCollapsed && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 rounded-xl py-1 z-50 overflow-hidden bg-white border border-slate-200 shadow-xl">
-              {profileMenuItems.map(({ to, label, icon: Icon }) => (
-                <button key={to} onClick={() => handleNav(to)}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                >
-                  <Icon size={14} className="flex-shrink-0 text-slate-400" />{label}
-                </button>
-              ))}
-              <div className="border-t border-slate-100 my-0.5" />
-              <button
-                onClick={() => { logout(); navigate('/login'); closeMobileSidebar() }}
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <LogOut size={14} className="flex-shrink-0 text-red-500" />Sign out
-              </button>
-            </div>
-          )}
-
-          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-
-          {!sidebarCollapsed ? (
-            <button
-              onClick={() => setShowProfileMenu(p => !p)}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all duration-200"
-              style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
-            >
-              <div
-                className="relative w-7 h-7 flex-shrink-0 group/av"
-                onClick={e => { e.stopPropagation(); avatarInputRef.current?.click() }}
-                title="Change profile picture"
-              >
-                {user.profile_pic ? (
-                  <img src={user.profile_pic} alt={user.name} className="w-7 h-7 rounded-full object-cover" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: avatarBg }}>
-                    {avatarUploading ? '…' : initials(user.name)}
-                  </div>
-                )}
-                <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover/av:opacity-100 transition-opacity cursor-pointer">
-                  <Camera size={10} className="text-white" />
-                </div>
-              </div>
-              <div className="min-w-0 flex-1 text-left leading-none">
-                <p className="text-[12px] font-semibold truncate text-slate-900">{user.name}</p>
-                <p className={cn('text-[10px] font-medium truncate', accent.roleColor)}>{getRoleLabel(user.level)}</p>
-              </div>
-              <ChevronUp size={13} className={cn('flex-shrink-0 text-slate-400 transition-transform duration-200', !showProfileMenu && 'rotate-180')} />
-            </button>
-          ) : (
-            <div className="flex justify-center py-0.5">
-              <div className="relative group/av" title="Change profile picture">
-                <button
-                  onClick={() => setShowProfileMenu(p => !p)}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
-                  style={user.profile_pic ? {} : { background: avatarBg }}
-                >
-                  {user.profile_pic ? <img src={user.profile_pic} alt={user.name} className="w-7 h-7 object-cover" /> : (avatarUploading ? '…' : initials(user.name))}
-                </button>
-                <button onClick={() => avatarInputRef.current?.click()}
-                  className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover/av:opacity-100 transition-opacity cursor-pointer"
-                  title="Change profile picture"
-                >
-                  <Camera size={10} className="text-white" />
-                </button>
-              </div>
-              {showProfileMenu && (
-                <div className="absolute bottom-full left-1 mb-1 w-40 rounded-xl py-1 z-50 overflow-hidden bg-white border border-slate-200 shadow-xl">
-                  {profileMenuItems.map(({ to, label, icon: Icon }) => (
-                    <button key={to} onClick={() => handleNav(to)}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                    >
-                      <Icon size={13} className="flex-shrink-0 text-slate-400" />{label}
-                    </button>
-                  ))}
-                  <div className="border-t border-slate-100 my-0.5" />
-                  <button onClick={() => { logout(); navigate('/login'); closeMobileSidebar() }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <LogOut size={13} className="flex-shrink-0 text-red-500" />Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── Collapse toggle (desktop only) ────────────────────────────────── */}
       <button

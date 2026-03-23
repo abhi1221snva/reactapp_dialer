@@ -2,10 +2,10 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Building2, User, BarChart2, DollarSign, Landmark, FileText,
-  Check, X, Upload, Eye, EyeOff, Printer, ExternalLink, Clock,
+  Building2, User, Users, BarChart2, DollarSign, Landmark, FileText,
+  Check, X, Upload, Eye, EyeOff, Printer, Clock,
   AlertCircle, CheckCircle2, ShieldCheck, ChevronRight,
-  Edit3, RefreshCw, ArrowLeft, ArrowRight,
+  Edit3, RefreshCw, ArrowLeft, ArrowRight, Trash2,
 } from 'lucide-react'
 import {
   publicAppService,
@@ -43,11 +43,12 @@ const C = {
 
 // ─── Section metadata ─────────────────────────────────────────────────────────
 const SMETA: Record<string, { icon: React.ReactNode; color: string; short: string }> = {
-  'Business Information': { icon: <Building2 size={15} />, color: '#4f46e5', short: 'Business' },
-  'Owner Information':    { icon: <User size={15} />,      color: '#0891b2', short: 'Owner'    },
-  'Business Details':     { icon: <BarChart2 size={15} />, color: '#7c3aed', short: 'Details'  },
-  'Funding Request':      { icon: <DollarSign size={15} />,color: '#059669', short: 'Funding'  },
-  'Bank Information':     { icon: <Landmark size={15} />,  color: '#d97706', short: 'Banking'  },
+  'Business Information':  { icon: <Building2 size={15} />, color: '#4f46e5', short: 'Business' },
+  'Owner Information':     { icon: <User size={15} />,      color: '#0891b2', short: 'Owner 1'  },
+  'Owner 2 Information':   { icon: <Users size={15} />,     color: '#0e7490', short: 'Owner 2'  },
+  'Business Details':      { icon: <BarChart2 size={15} />, color: '#7c3aed', short: 'Details'  },
+  'Funding Request':       { icon: <DollarSign size={15} />,color: '#059669', short: 'Funding'  },
+  'Bank Information':      { icon: <Landmark size={15} />,  color: '#d97706', short: 'Banking'  },
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -65,7 +66,7 @@ const EXT_COLORS: Record<string, string> = {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const ext   = (n: string) => n.split('.').pop()?.toLowerCase() ?? 'file'
+const ext   = (n: string | null | undefined) => (n ?? '').split('.').pop()?.toLowerCase() ?? 'file'
 const fmtDt = (s: string) => new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 function isSectionComplete(sec: PublicFormSection, vals: Record<string, string>) {
@@ -257,12 +258,25 @@ function SigPad({ token, existingUrl, onSaved }: {
 }
 
 // ─── Document step ────────────────────────────────────────────────────────────
+const MAX_FILE_MB  = 10
+const MAX_TOTAL_MB = 25
+const MAX_FILE_B   = MAX_FILE_MB * 1024 * 1024
+const MAX_TOTAL_B  = MAX_TOTAL_MB * 1024 * 1024
+
 function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDocument[]; onUploaded: () => void }) {
-  const [over, setOver]       = useState(false)
-  const [docType, setDocType] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [err, setErr]         = useState('')
-  const inp                   = useRef<HTMLInputElement>(null)
+  const [over, setOver]               = useState(false)
+  const [docType, setDocType]         = useState('')
+  const [uploading, setUploading]     = useState(false)
+  const [err, setErr]                 = useState('')
+  const [deleting, setDeleting]       = useState<number | null>(null)
+  // Viewer state
+  const [viewDoc, setViewDoc]         = useState<{ id: number; filename: string } | null>(null)
+  const [blobUrl, setBlobUrl]         = useState<string | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [viewErr, setViewErr]         = useState('')
+  // Confirm-delete state
+  const [confirmDoc, setConfirmDoc]   = useState<{ id: number; filename: string } | null>(null)
+  const inp                           = useRef<HTMLInputElement>(null)
 
   const { data: typeData } = useQuery({
     queryKey: ['pub-doc-types', token],
@@ -271,18 +285,146 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
   })
   const types = typeData ?? []
 
-  const upload = async (file: File) => {
-    if (!docType) { setErr('Select a document type first.'); return }
-    setUploading(true); setErr('')
-    try { await publicAppService.uploadDocument(token, file, docType); onUploaded() }
-    catch (e: unknown) { setErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Upload failed.') }
-    finally { setUploading(false) }
+  const validateFiles = (files: File[]): string | null => {
+    for (const f of files) {
+      if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') {
+        return `"${f.name}" is not a PDF. Only PDF files are accepted.`
+      }
+      if (f.size > MAX_FILE_B) {
+        return `"${f.name}" exceeds the ${MAX_FILE_MB} MB per-file limit.`
+      }
+    }
+    const totalSize = files.reduce((s, f) => s + f.size, 0)
+    if (totalSize > MAX_TOTAL_B) {
+      return `Total batch size exceeds ${MAX_TOTAL_MB} MB. Please upload fewer files.`
+    }
+    return null
   }
 
-  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) upload(f) }
+  const uploadFiles = async (files: File[]) => {
+    if (!docType) { setErr('Select a document type first.'); return }
+    const ve = validateFiles(files)
+    if (ve) { setErr(ve); return }
+    setUploading(true); setErr('')
+    try {
+      for (const f of files) {
+        await publicAppService.uploadDocument(token, f, docType)
+      }
+      onUploaded()
+    } catch (e: unknown) {
+      setErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Upload failed.')
+    } finally { setUploading(false) }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setOver(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length) uploadFiles(files)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDoc) return
+    const docId = confirmDoc.id
+    setConfirmDoc(null)
+    setDeleting(docId); setErr('')
+    try {
+      await publicAppService.deleteDocument(token, docId)
+      onUploaded()
+    } catch (e: unknown) {
+      setErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Delete failed.')
+    } finally { setDeleting(null) }
+  }
+
+  const openViewer = async (doc: MerchantDocument) => {
+    // Revoke previous blob URL to avoid memory leaks
+    if (blobUrl) URL.revokeObjectURL(blobUrl)
+    setBlobUrl(null); setViewErr(''); setViewLoading(true)
+    setViewDoc({ id: doc.id, filename: doc.filename })
+    try {
+      const res = await publicAppService.fetchDocumentBlob(token, doc.id)
+      const url = URL.createObjectURL(res.data)
+      setBlobUrl(url)
+    } catch {
+      setViewErr('Could not load document. Please try again.')
+    } finally { setViewLoading(false) }
+  }
+
+  const closeViewer = () => {
+    if (blobUrl) URL.revokeObjectURL(blobUrl)
+    setBlobUrl(null); setViewDoc(null); setViewErr(''); setViewLoading(false)
+  }
 
   return (
     <div style={{ display: 'flex', gap: 20, height: '100%' }}>
+
+      {/* ── Delete confirmation modal ── */}
+      {confirmDoc && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setConfirmDoc(null)}>
+          <div style={{ background: C.card, borderRadius: 16, padding: '28px 28px 24px', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: C.errorBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Trash2 size={20} color={C.error} />
+              </div>
+              <div>
+                <p style={{ margin: 0, fontWeight: 800, fontSize: 16, color: C.text }}>Delete Document?</p>
+                <p style={{ margin: 0, fontSize: 12, color: C.muted, marginTop: 2 }}>This action cannot be undone.</p>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: C.textMid, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', wordBreak: 'break-all' }}>
+              {confirmDoc.filename}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setConfirmDoc(null)}
+                style={{ padding: '8px 20px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.textMid, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirmDelete}
+                style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: C.error, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Inline PDF viewer modal ── */}
+      {viewDoc && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={closeViewer}>
+          <div style={{ width: '100%', maxWidth: 860, height: '90vh', background: C.card, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,.4)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: C.navy, flexShrink: 0 }}>
+              <span style={{ color: 'white', fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 640 }}>{viewDoc.filename}</span>
+              <button type="button" onClick={closeViewer}
+                style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 6, cursor: 'pointer', color: 'white', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <X size={15} />
+              </button>
+            </div>
+            <div style={{ flex: 1, position: 'relative' }}>
+              {viewLoading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ width: 36, height: 36, border: `3px solid ${C.indigoLt}`, borderTopColor: C.indigo, borderRadius: '50%', animation: 'spin .8s linear infinite', margin: '0 auto 12px' }} />
+                    <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>Loading document…</p>
+                  </div>
+                </div>
+              )}
+              {viewErr && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
+                  <div style={{ textAlign: 'center', color: C.muted }}>
+                    <AlertCircle size={32} style={{ marginBottom: 12, color: C.error }} />
+                    <p style={{ margin: 0, fontSize: 13 }}>{viewErr}</p>
+                  </div>
+                </div>
+              )}
+              {blobUrl && <iframe src={blobUrl} title={viewDoc.filename} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} />}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Left: upload */}
       <div style={{ flex: '0 0 360px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
@@ -303,10 +445,10 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
             ? <><div style={{ width: 32, height: 32, border: `3px solid ${C.indigoLt}`, borderTopColor: C.indigo, borderRadius: '50%', animation: 'spin .8s linear infinite' }} /><p style={{ color: C.indigo, fontSize: 13, margin: 0, fontWeight: 600 }}>Uploading…</p></>
             : <><Upload size={26} style={{ color: over ? C.indigo : C.muted }} />
               <p style={{ fontWeight: 600, color: over ? C.indigo : C.text, margin: 0, fontSize: 14 }}>{over ? 'Drop here' : 'Drag & drop or click'}</p>
-              <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>PDF, JPG, PNG, DOC — max 10 MB</p></>
+              <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>PDF only · max {MAX_FILE_MB} MB per file</p></>
           }
-          <input ref={inp} type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{ display: 'none' }}
-            onChange={e => e.target.files?.[0] && upload(e.target.files[0])} />
+          <input ref={inp} type="file" accept=".pdf" multiple style={{ display: 'none' }}
+            onChange={e => { if (e.target.files?.length) { uploadFiles(Array.from(e.target.files)); e.target.value = '' } }} />
         </div>
 
         {err && <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '8px 12px', color: '#7f1d1d', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{err}</div>}
@@ -323,12 +465,13 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
               <FileText size={32} style={{ opacity: .3 }} />
               <span>No documents uploaded yet</span>
             </div>
-          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
               {docs.map(d => {
                 const e2 = ext(d.filename)
                 const ec = EXT_COLORS[e2] ?? C.indigo
+                const isDeleting = deleting === d.id
                 return (
-                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', opacity: isDeleting ? 0.5 : 1, transition: 'opacity .2s' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: `${ec}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <FileText size={16} color={ec} />
                     </div>
@@ -339,10 +482,16 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
                         <span style={{ fontSize: 11, color: C.muted }}>{d.doc_type} · {fmtDt(d.uploaded)}</span>
                       </div>
                     </div>
-                    <a href={d.url} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 11px', border: `1.5px solid ${C.border}`, borderRadius: 7, color: C.indigo, fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0, background: C.card }}>
-                      <ExternalLink size={12} /> View
-                    </a>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button type="button" onClick={() => openViewer(d)} disabled={viewLoading}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 11px', border: `1.5px solid ${C.border}`, borderRadius: 7, color: C.indigo, fontSize: 12, fontWeight: 600, background: C.card, cursor: viewLoading ? 'wait' : 'pointer' }}>
+                        <Eye size={12} /> View
+                      </button>
+                      <button type="button" onClick={() => setConfirmDoc({ id: d.id, filename: d.filename })} disabled={isDeleting}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, border: `1.5px solid ${C.errorBdr}`, borderRadius: 7, color: C.error, background: C.errorBg, cursor: isDeleting ? 'wait' : 'pointer' }}>
+                        {isDeleting ? <div style={{ width: 10, height: 10, border: `2px solid ${C.errorBdr}`, borderTopColor: C.error, borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> : <Trash2 size={12} />}
+                      </button>
+                    </div>
                   </div>
                 )
               })}
@@ -357,17 +506,19 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
 export function MerchantPage() {
   const { leadToken } = useParams<{ leadToken: string }>()
   const qc            = useQueryClient()
-  const apiBase       = import.meta.env.VITE_API_URL ?? ''
+
 
   // Wizard state
-  const [step, setStep]         = useState(0)
-  const [sigUrl, setSigUrl]     = useState<string | null>(null)
-  // Per-section local edits: stepIdx → { fieldKey: value }
-  const [edits, setEdits]       = useState<Record<number, Record<string, string>>>({})
+  const [step, setStep]           = useState(0)
+  const [finished, setFinished]   = useState(false)
+  const [sigUrl, setSigUrl]       = useState<string | null>(null)
+  const [hasOwner2, setHasOwner2] = useState(false)
+  // Per-section local edits: sectionIdx → { fieldKey: value }
+  const [edits, setEdits]         = useState<Record<number, Record<string, string>>>({})
   const [fieldErrors, setFErrors] = useState<Record<string, string>>({})
-  const [saveErr, setSaveErr]   = useState('')
-  const [saving, setSaving]     = useState(false)
-  const [stepSaved, setStepSaved] = useState<Record<number, boolean>>({})
+  const [saveErr, setSaveErr]     = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['merchantPortal', leadToken],
@@ -381,6 +532,37 @@ export function MerchantPage() {
   }, [data?.lead?.signature_url])
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['merchantPortal', leadToken] })
+
+  // Download the application as a real PDF file (Content-Disposition: attachment).
+  // Falls back to the affiliate apply-form PDF endpoint if no CRM template exists.
+  const handlePdfClick = async () => {
+    if (pdfLoading || !leadToken) return
+    setPdfLoading(true)
+    try {
+      const res = await publicAppService.downloadMerchantPdf(leadToken)
+      const url = URL.createObjectURL(res.data)
+      const a   = document.createElement('a')
+      a.href     = url
+      a.download = 'application.pdf'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      // Fallback: apply-form download endpoint
+      try {
+        const res = await publicAppService.downloadApplyPdf(leadToken)
+        const url = URL.createObjectURL(res.data)
+        const a   = document.createElement('a')
+        a.href     = url
+        a.download = 'application.pdf'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      } catch { /* silent — both endpoints failed */ }
+    } finally { setPdfLoading(false) }
+  }
 
   // ── Loading ──
   if (isLoading) return (
@@ -410,57 +592,138 @@ export function MerchantPage() {
   }
 
   const { company, lead, sections } = data
-  const pdfUrl = `${apiBase}/public/merchant/${leadToken}/render-pdf`
 
-  // Steps: [section0, section1, ..., sectionN-1, signature, documents]
-  const SIG_STEP  = sections.length
-  const DOC_STEP  = sections.length + 1
-  const TOTAL     = sections.length + 2
-  const isLast    = step === TOTAL - 1
+  // ── Finished overlay ──────────────────────────────────────────────────────
+  if (finished) return (
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif", background: C.bg, overflow: 'hidden' }}>
+      <style>{`*{box-sizing:border-box;-webkit-font-smoothing:antialiased}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <header style={{ height: 54, background: C.navy, display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0, boxShadow: '0 1px 0 rgba(255,255,255,.06),0 2px 12px rgba(0,0,0,.2)', zIndex: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {company.logo_url
+            ? <img src={company.logo_url} alt="logo" style={{ height: 30, borderRadius: 6, objectFit: 'contain', background: 'white', padding: '2px 6px' }} />
+            : <div style={{ width: 34, height: 34, borderRadius: 9, background: `linear-gradient(135deg,${C.indigo},#7c3aed)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 15 }}>{(company.company_name || 'M').slice(0, 1)}</div>
+          }
+          <div>
+            <div style={{ color: 'white', fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>{company.company_name}</div>
+            <div style={{ color: '#94a3b8', fontSize: 10, letterSpacing: 0.6 }}>MERCHANT APPLICATION</div>
+          </div>
+        </div>
+      </header>
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ background: C.card, borderRadius: 20, maxWidth: 580, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,.1)', padding: '52px 40px', textAlign: 'center' }}>
+          {/* Success icon */}
+          <div style={{ width: 80, height: 80, borderRadius: '50%', background: C.successBg, border: `2px solid ${C.successBdr}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px', boxShadow: '0 0 0 10px rgba(16,185,129,.08)' }}>
+            <Check size={36} color={C.success} strokeWidth={2.5} />
+          </div>
+          <h2 style={{ fontSize: 26, fontWeight: 800, color: C.text, margin: '0 0 14px' }}>
+            Application Complete
+          </h2>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.75, margin: '0 0 8px' }}>
+            Your application has been saved and is currently under review.
+            Our team will reach out if additional information is needed.
+          </p>
+          <p style={{ fontSize: 13, color: C.subtle, margin: '0 0 36px' }}>
+            You can return to this portal at any time to make updates.
+          </p>
+          {/* Info badge */}
+          <div style={{ background: C.indigoPale, border: `1px solid ${C.indigoLt}`, borderRadius: 12, padding: '14px 20px', marginBottom: 32, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
+            <ShieldCheck size={20} color={C.indigo} style={{ flexShrink: 0 }} />
+            <div>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.indigo }}>Secure Application Portal</p>
+              <p style={{ margin: 0, fontSize: 12, color: C.muted, marginTop: 2 }}>
+                Your information is protected. You can re-open this page anytime using your unique link.
+              </p>
+            </div>
+          </div>
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => setFinished(false)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 28px', background: C.indigo, color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(79,70,229,.3)' }}>
+              <CheckCircle2 size={17} /> Return to Application
+            </button>
+            <button type="button" onClick={handlePdfClick} disabled={pdfLoading}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 28px', background: C.card, color: C.textMid, border: `1.5px solid ${C.border}`, borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: pdfLoading ? 'wait' : 'pointer' }}>
+              {pdfLoading
+                ? <><div style={{ width: 15, height: 15, border: `2px solid ${C.border}`, borderTopColor: C.indigo, borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Loading…</>
+                : <><Printer size={16} />Download Application PDF</>
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
-  // Get field values for a form step (merges lead.fields with local edits)
-  const getVals = (idx: number, sec: PublicFormSection): Record<string, string> => {
+  // ── Owner 2 detection ──────────────────────────────────────────────────────
+  const owner2SecIdx = sections.findIndex((s: PublicFormSection) =>
+    s.title === 'Owner 2 Information' || s.title.toLowerCase().includes('owner 2')
+  )
+  const owner1SecIdx = owner2SecIdx > 0 ? owner2SecIdx - 1 : -1
+
+  // ── Step map (excludes Owner 2 step when hasOwner2 is false) ───────────────
+  type StepInfo = { type: 'section'; secIdx: number } | { type: 'sig' } | { type: 'doc' }
+  const stepMap: StepInfo[] = [
+    ...sections
+      .map((_: PublicFormSection, i: number) => ({ type: 'section' as const, secIdx: i }))
+      .filter((s: { type: 'section'; secIdx: number }) => hasOwner2 || s.secIdx !== owner2SecIdx),
+    { type: 'sig' },
+    { type: 'doc' },
+  ]
+  const TOTAL  = stepMap.length
+  const isLast = step === TOTAL - 1
+
+  const curInfo  = stepMap[Math.min(step, TOTAL - 1)]
+  const curSecIdx = curInfo.type === 'section' ? curInfo.secIdx : -1
+  const curSec    = curSecIdx >= 0 ? sections[curSecIdx] as PublicFormSection : null
+
+  // ── Field helpers ─────────────────────────────────────────────────────────
+  const getVals = (secIdx: number, sec: PublicFormSection): Record<string, string> => {
     const base: Record<string, string> = {}
-    sec.fields.forEach(f => { base[f.key] = lead.fields[f.key] || '' })
-    return { ...base, ...(edits[idx] ?? {}) }
+    sec.fields.forEach((f: PublicFormField) => { base[f.key] = lead.fields[f.key] || '' })
+    return { ...base, ...(edits[secIdx] ?? {}) }
   }
 
-  const setField = (idx: number, key: string, val: string) => {
-    setEdits(prev => ({ ...prev, [idx]: { ...(prev[idx] ?? {}), [key]: val } }))
+  const setField = (secIdx: number, key: string, val: string) => {
+    setEdits(prev => ({ ...prev, [secIdx]: { ...(prev[secIdx] ?? {}), [key]: val } }))
     setFErrors(prev => { const n = { ...prev }; delete n[key]; return n })
     setSaveErr('')
   }
 
-  // Completion
-  const totalReq   = sections.reduce((a: number, s: PublicFormSection) => a + s.fields.filter(f => f.required).length, 0)
-  const filledReq  = sections.reduce((a: number, s: PublicFormSection, i: number) => a + s.fields.filter(f => f.required && !!(getVals(i, s)[f.key] || '').trim()).length, 0)
-  const hasSig     = !!sigUrl
-  const pct        = totalReq + 1 > 0 ? Math.round(((filledReq + (hasSig ? 1 : 0)) / (totalReq + 1)) * 100) : 0
+  // ── Completion ────────────────────────────────────────────────────────────
+  const hasSig    = !!sigUrl
+  const totalReq  = sections.reduce((a: number, s: PublicFormSection) => a + s.fields.filter((f: PublicFormField) => f.required).length, 0)
+  const filledReq = sections.reduce((a: number, s: PublicFormSection, i: number) => a + s.fields.filter((f: PublicFormField) => f.required && !!(getVals(i, s)[f.key] || '').trim()).length, 0)
+  const pct       = totalReq + 1 > 0 ? Math.round(((filledReq + (hasSig ? 1 : 0)) / (totalReq + 1)) * 100) : 0
 
-  // Navigate next (with save for form steps)
+  // ── Toggle Owner 2 ────────────────────────────────────────────────────────
+  const toggleOwner2 = (checked: boolean) => {
+    setHasOwner2(checked)
+    if (!checked && owner2SecIdx >= 0) {
+      // If currently at or past where owner2 was, jump back to owner1 step
+      const owner2WizPos = stepMap.findIndex(s => s.type === 'section' && s.secIdx === owner2SecIdx)
+      if (owner2WizPos >= 0 && step >= owner2WizPos) {
+        setStep(Math.max(0, owner2WizPos - 1))
+      }
+    }
+  }
+
+  // ── Navigate next ─────────────────────────────────────────────────────────
   const handleNext = async () => {
     setSaveErr('')
-    if (step < sections.length) {
-      const sec  = sections[step]
-      const vals = getVals(step, sec)
-
-      // Validate required
+    if (curInfo.type === 'section' && curSec) {
+      const vals = getVals(curSecIdx, curSec)
       const errs: Record<string, string> = {}
-      sec.fields.forEach(f => {
+      curSec.fields.forEach((f: PublicFormField) => {
         if (f.required && !(vals[f.key] || '').trim()) errs[f.key] = 'Required'
         if (f.type === 'email' && vals[f.key] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals[f.key])) errs[f.key] = 'Invalid email'
       })
       if (Object.keys(errs).length) { setFErrors(errs); return }
-
       setSaving(true)
       try {
         await publicAppService.updateMerchant(leadToken!, vals)
-        setStepSaved(s => ({ ...s, [step]: true }))
-        refresh()
-        setStep(s => s + 1)
-        setFErrors({})
+        refresh(); setStep(s => s + 1); setFErrors({})
       } catch (e: unknown) {
-        setSaveErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Save failed. Please try again.')
+        setSaveErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Save failed.')
       } finally { setSaving(false) }
     } else {
       setStep(s => Math.min(s + 1, TOTAL - 1))
@@ -469,31 +732,30 @@ export function MerchantPage() {
 
   const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setFErrors({}); setSaveErr('') }
 
-  const stepLabel = (i: number) => {
-    if (i < sections.length) return sections[i].title
-    if (i === SIG_STEP)  return 'Digital Signature'
+  // ── Step helpers ──────────────────────────────────────────────────────────
+  const stepLabel = (info: StepInfo) => {
+    if (info.type === 'section') return sections[info.secIdx].title
+    if (info.type === 'sig')     return 'Digital Signature'
     return 'Documents'
   }
-
-  const stepIcon = (i: number) => {
-    if (i < sections.length) return SMETA[sections[i].title]?.icon ?? <FileText size={15} />
-    if (i === SIG_STEP)  return <Edit3 size={15} />
+  const stepIcon = (info: StepInfo) => {
+    if (info.type === 'section') return SMETA[sections[info.secIdx].title]?.icon ?? <FileText size={15} />
+    if (info.type === 'sig')     return <Edit3 size={15} />
     return <FileText size={15} />
   }
-
-  const stepColor = (i: number): string => {
-    if (i < sections.length) return SMETA[sections[i].title]?.color ?? C.indigo
-    if (i === SIG_STEP) return '#7c3aed'
+  const stepColor = (info: StepInfo): string => {
+    if (info.type === 'section') return SMETA[sections[info.secIdx].title]?.color ?? C.indigo
+    if (info.type === 'sig')     return '#7c3aed'
     return '#9333ea'
   }
-
-  const isStepDone = (i: number): boolean => {
-    if (i < sections.length) return isSectionComplete(sections[i], getVals(i, sections[i]))
-    if (i === SIG_STEP)      return hasSig
+  const isStepDone = (info: StepInfo): boolean => {
+    if (info.type === 'section') return isSectionComplete(sections[info.secIdx], getVals(info.secIdx, sections[info.secIdx]))
+    if (info.type === 'sig')     return hasSig
     return (lead.documents?.length ?? 0) > 0
   }
 
-  const showNextLabel = isLast ? 'Finish' : step < sections.length ? 'Save & Next' : 'Next'
+  const showNextLabel = isLast ? 'Finish' : curInfo.type === 'section' ? 'Save & Next' : 'Next'
+  const isOwner1Step  = curInfo.type === 'section' && curSecIdx === owner1SecIdx && owner2SecIdx >= 0
 
   // ── Render ──
   return (
@@ -506,6 +768,7 @@ export function MerchantPage() {
         .step-enter{animation:fadeSlide .22s ease}
         ::-webkit-scrollbar{width:0px}
         *{scrollbar-width:none}
+        .o2-toggle:hover{border-color:#0891b2 !important}
       `}</style>
 
       {/* ── Header (54px) ── */}
@@ -520,7 +783,6 @@ export function MerchantPage() {
             <div style={{ color: '#94a3b8', fontSize: 10, letterSpacing: 0.6 }}>MERCHANT APPLICATION</div>
           </div>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <StatusBadge status={lead.lead_status} />
           <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
@@ -528,10 +790,11 @@ export function MerchantPage() {
             <Clock size={12} />{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </div>
           <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
-          <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 7, color: 'rgba(255,255,255,.9)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-            <Printer size={12} /> PDF
-          </a>
+          <button type="button" onClick={handlePdfClick} disabled={pdfLoading}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 7, color: 'rgba(255,255,255,.9)', fontSize: 12, fontWeight: 600, cursor: pdfLoading ? 'wait' : 'pointer' }}>
+            {pdfLoading ? <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> : <Printer size={12} />}
+            {pdfLoading ? 'Loading…' : 'PDF'}
+          </button>
         </div>
       </header>
 
@@ -540,7 +803,6 @@ export function MerchantPage() {
 
         {/* ── Sidebar (220px) ── */}
         <aside style={{ width: 220, background: C.sidebar, display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: `1px solid ${C.border}`, overflow: 'hidden' }}>
-          {/* Progress summary */}
           <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.7 }}>Progress</span>
@@ -551,30 +813,25 @@ export function MerchantPage() {
             </div>
           </div>
 
-          {/* Steps list */}
           <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            {Array.from({ length: TOTAL }, (_, i) => {
+            {stepMap.map((info, i) => {
               const active = i === step
-              const done   = isStepDone(i)
-              const color  = stepColor(i)
+              const done   = isStepDone(info)
+              const color  = stepColor(info)
               return (
                 <button key={i} type="button" onClick={() => { setStep(i); setFErrors({}); setSaveErr('') }}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: active ? `${color}22` : 'transparent', border: 'none', borderLeft: active ? `3px solid ${color}` : '3px solid transparent', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
-                  {/* Step icon */}
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: active ? `${color}18` : C.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: active ? color : done ? C.success : C.muted, flexShrink: 0, position: 'relative' }}>
-                    {stepIcon(i)}
+                    {stepIcon(info)}
                     {done && !active && (
                       <div style={{ position: 'absolute', top: -3, right: -3, width: 12, height: 12, borderRadius: '50%', background: C.success, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid ${C.card}` }}>
                         <Check size={7} color="white" strokeWidth={3} />
                       </div>
                     )}
                   </div>
-                  {/* Label */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: active ? 700 : 500, color: active ? color : done ? C.success : C.textMid, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stepLabel(i)}</div>
-                    <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>
-                      {done ? 'Complete' : active ? 'In progress' : 'Pending'}
-                    </div>
+                    <div style={{ fontSize: 12, fontWeight: active ? 700 : 500, color: active ? color : done ? C.success : C.textMid, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stepLabel(info)}</div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{done ? 'Complete' : active ? 'In progress' : 'Pending'}</div>
                   </div>
                   {active && <ChevronRight size={13} style={{ color, flexShrink: 0 }} />}
                 </button>
@@ -582,11 +839,9 @@ export function MerchantPage() {
             })}
           </nav>
 
-          {/* Security note */}
           <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 11 }}>
-              <ShieldCheck size={12} style={{ flexShrink: 0 }} />
-              <span>Encrypted & secure</span>
+              <ShieldCheck size={12} style={{ flexShrink: 0 }} /><span>Encrypted & secure</span>
             </div>
             {company.support_email && (
               <a href={`mailto:${company.support_email}`} style={{ display: 'block', fontSize: 11, color: '#4f46e5', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}>{company.support_email}</a>
@@ -600,21 +855,21 @@ export function MerchantPage() {
           {/* Step header */}
           <div style={{ padding: '16px 28px 0', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: `${stepColor(step)}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stepColor(step) }}>
-                {stepIcon(step)}
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: `${stepColor(curInfo)}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stepColor(curInfo) }}>
+                {stepIcon(curInfo)}
               </div>
               <div>
-                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>{stepLabel(step)}</h2>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>{stepLabel(curInfo)}</h2>
                 <p style={{ margin: 0, fontSize: 12, color: C.muted }}>
-                  {step < sections.length
-                    ? (SMETA[sections[step].title]?.short ? `Step ${step + 1} of ${TOTAL} · ${sections[step].title}` : `Step ${step + 1} of ${TOTAL}`)
-                    : step === SIG_STEP
+                  {curInfo.type === 'section'
+                    ? `Step ${step + 1} of ${TOTAL} · ${sections[curSecIdx].title}`
+                    : curInfo.type === 'sig'
                       ? `Step ${step + 1} of ${TOTAL} · Sign below to authorize your application`
                       : `Step ${step + 1} of ${TOTAL} · Upload supporting documents`
                   }
                 </p>
               </div>
-              {isStepDone(step) && (
+              {isStepDone(curInfo) && (
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: C.successBg, color: C.success, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, border: `1px solid ${C.successBdr}` }}>
                   <CheckCircle2 size={12} /> Complete
                 </span>
@@ -622,30 +877,52 @@ export function MerchantPage() {
             </div>
           </div>
 
-          {/* Step content area (fills, no visible scroll) */}
+          {/* Step content */}
           <div key={step} className="step-enter" style={{ flex: 1, padding: '16px 28px', overflow: 'hidden' }}>
-            {step < sections.length ? (
+            {curInfo.type === 'section' && curSec ? (
               /* ── Form step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
                 {saveErr && (
                   <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />{saveErr}
                   </div>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
-                  {sections[step].fields.map(f => (
+                  {curSec.fields.map((f: PublicFormField) => (
                     <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
-                      <FormField
-                        f={f}
-                        value={getVals(step, sections[step])[f.key] || ''}
-                        onChange={(k, v) => setField(step, k, v)}
-                        error={fieldErrors[f.key]}
-                      />
+                      <FormField f={f} value={getVals(curSecIdx, curSec!)[f.key] || ''}
+                        onChange={(k, v) => setField(curSecIdx, k, v)} error={fieldErrors[f.key]} />
                     </div>
                   ))}
                 </div>
+
+                {/* ── Owner 2 toggle (shown only on Owner 1 step) ── */}
+                {isOwner1Step && (
+                  <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: `1px dashed ${C.border}` }}>
+                    <label className="o2-toggle" onClick={() => toggleOwner2(!hasOwner2)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${hasOwner2 ? '#0891b2' : C.border}`, background: hasOwner2 ? '#f0f9ff' : C.card2, transition: 'all .2s', userSelect: 'none' }}>
+                      {/* Custom checkbox */}
+                      <span style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${hasOwner2 ? '#0891b2' : C.border}`, background: hasOwner2 ? '#0891b2' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
+                        {hasOwner2 && <Check size={11} color="white" strokeWidth={3} />}
+                      </span>
+                      <span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: hasOwner2 ? '#0e7490' : C.text, display: 'block', lineHeight: 1.3 }}>
+                          This business has a second owner
+                        </span>
+                        <span style={{ fontSize: 11, color: C.muted }}>
+                          {hasOwner2 ? 'Owner 2 section added to your application' : 'Check to add Owner 2 information'}
+                        </span>
+                      </span>
+                      {hasOwner2 && (
+                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, background: '#e0f2fe', color: '#0891b2', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20 }}>
+                          <Users size={11} /> Added
+                        </span>
+                      )}
+                    </label>
+                  </div>
+                )}
               </div>
-            ) : step === SIG_STEP ? (
+            ) : curInfo.type === 'sig' ? (
               /* ── Signature step ── */
               <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${hasSig ? C.successBdr : C.border}`, height: '100%', padding: '24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
                 <div style={{ maxWidth: 600, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -664,28 +941,25 @@ export function MerchantPage() {
             )}
           </div>
 
-          {/* ── Bottom bar (52px) ── */}
+          {/* ── Bottom bar ── */}
           <div style={{ height: 52, background: C.card, borderTop: `1px solid ${C.border}`, padding: '0 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 -2px 8px rgba(15,23,42,.05)' }}>
-            {/* Back */}
             <button type="button" onClick={handleBack} disabled={step === 0}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: `1.5px solid ${step === 0 ? '#f1f5f9' : C.border}`, borderRadius: 8, background: 'transparent', color: step === 0 ? C.subtle : C.textMid, fontSize: 13, fontWeight: 600, cursor: step === 0 ? 'not-allowed' : 'pointer', transition: 'all .15s' }}>
               <ArrowLeft size={14} /> Back
             </button>
 
-            {/* Step indicator dots */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {Array.from({ length: TOTAL }, (_, i) => (
+              {stepMap.map((info, i) => (
                 <button key={i} type="button" onClick={() => { setStep(i); setFErrors({}); setSaveErr('') }}
-                  style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepColor(i) : isStepDone(i) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
+                  style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepColor(info) : isStepDone(info) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
               ))}
             </div>
 
-            {/* Save & Next / Finish */}
             {isLast ? (
-              <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: C.success, color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none', boxShadow: '0 2px 8px rgba(16,185,129,.3)' }}>
-                <Printer size={14} /> Download PDF
-              </a>
+              <button type="button" onClick={() => setFinished(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,.3)' }}>
+                <Check size={14} /> Finish
+              </button>
             ) : (
               <button type="button" onClick={handleNext} disabled={saving}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: saving ? '#a5b4fc' : C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 2px 8px rgba(79,70,229,.3)', transition: 'all .15s' }}>

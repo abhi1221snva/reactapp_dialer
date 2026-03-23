@@ -34,6 +34,22 @@ function formatDayLabel(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 }
 
+/** Format digits as user types into (XXX)XXX-XXXX */
+function formatPhoneInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits.length ? `(${digits}` : ''
+  if (digits.length <= 6) return `(${digits.slice(0, 3)})${digits.slice(3)}`
+  return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
+/** Convert (XXX)XXX-XXXX display value to E.164 +1XXXXXXXXXX for API */
+function toE164(display: string): string {
+  const digits = display.replace(/\D/g, '')
+  if (digits.length === 10) return `+1${digits}`
+  if (digits.length === 11 && digits[0] === '1') return `+${digits}`
+  return display // already E.164 or unusual — pass as-is
+}
+
 /** Format a raw phone string into (NXX) NXX-XXXX or +1 (NXX) NXX-XXXX */
 function formatPhone(raw: string): string {
   if (!raw) return raw
@@ -451,7 +467,7 @@ export function CrmSmsInbox() {
   })
 
   const startConv = useMutation({
-    mutationFn: () => crmService.startNewSmsConversation(newPhone.trim(), newBody.trim(), fromNumber || undefined),
+    mutationFn: () => crmService.startNewSmsConversation(toE164(newPhone.trim()), newBody.trim(), fromNumber || undefined),
     onSuccess: (res) => {
       const conv = res.data?.data?.conversation
       qc.invalidateQueries({ queryKey: ['sms-conversations', statusFilter, agentFilter] })
@@ -502,11 +518,6 @@ export function CrmSmsInbox() {
     return { msg, showDay, dayLabel: showDay ? formatDayLabel(msg.created_at) : '' }
   })
 
-  const FILTERS: { label: string; value: typeof statusFilter }[] = [
-    { label: 'All', value: '' },
-    { label: 'Open', value: 'open' },
-    { label: 'Closed', value: 'closed' },
-  ]
 
   return (
     <div style={{ height: 'calc(100vh - 64px)', display: 'flex', overflow: 'hidden', background: '#f1f5f9' }}>
@@ -580,9 +591,9 @@ export function CrmSmsInbox() {
               <input
                 ref={phoneRef}
                 type="tel"
-                placeholder="To: phone number (e.g. +15551234567)"
+                placeholder="To: (XXX)XXX-XXXX"
                 value={newPhone}
-                onChange={e => setNewPhone(e.target.value)}
+                onChange={e => setNewPhone(formatPhoneInput(e.target.value))}
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   padding: '7px 10px', fontSize: 12,
@@ -651,26 +662,6 @@ export function CrmSmsInbox() {
               onFocus={e => (e.target.style.borderColor = '#10b981')}
               onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
             />
-          </div>
-
-          {/* Filter pills */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            {FILTERS.map(f => (
-              <button
-                key={f.value}
-                onClick={() => setStatusFilter(f.value)}
-                style={{
-                  flex: 1, padding: '5px 0', fontSize: 11, fontWeight: 600, borderRadius: 7,
-                  border: 'none', cursor: 'pointer',
-                  background: statusFilter === f.value ? '#ecfdf5' : 'transparent',
-                  color: statusFilter === f.value ? '#059669' : '#94a3b8',
-                  transition: 'all 0.12s ease',
-                  boxShadow: statusFilter === f.value ? 'inset 0 0 0 1.5px #6ee7b7' : 'none',
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
           </div>
 
           {/* Agent filter */}
@@ -774,15 +765,6 @@ export function CrmSmsInbox() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
                   <Phone size={10} style={{ color: '#94a3b8' }} />
                   <span style={{ fontSize: 12, color: '#64748b' }}>{formatPhone(activeConv.lead_phone)}</span>
-                  <span style={{
-                    fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 20,
-                    background: activeConv.status === 'open' ? '#ecfdf5' : '#f8fafc',
-                    color: activeConv.status === 'open' ? '#059669' : '#94a3b8',
-                    border: `1px solid ${activeConv.status === 'open' ? '#a7f3d0' : '#e2e8f0'}`,
-                    marginLeft: 2,
-                  }}>
-                    {activeConv.status ?? 'open'}
-                  </span>
                   {activeConv.agent_name && (
                     <span style={{
                       fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 20,
@@ -836,7 +818,6 @@ export function CrmSmsInbox() {
             padding: '10px 14px 12px',
             flexShrink: 0,
           }}>
-            <SenderSelect numbers={senderNumbersData ?? []} value={fromNumber} onChange={setFromNumber} />
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
               <div style={{ flex: 1, position: 'relative' }}>
                 <textarea

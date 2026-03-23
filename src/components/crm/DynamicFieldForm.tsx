@@ -382,19 +382,19 @@ export function DynamicFieldForm({
 
   // ── Edit mode: form inputs ────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {Object.entries(groups).map(([section, fields]) => {
         const visible = fields.filter(f => isVisible(f.conditions, formValues))
         if (visible.length === 0) return null
         return (
           <div key={section}>
             <h4
-              className="text-xs font-semibold uppercase mb-3"
+              className="text-[11px] font-semibold uppercase mb-2"
               style={{ color: '#6B7280', letterSpacing: '0.06em' }}
             >
               {humanizeSection(section)}
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
               {visible.map(label => {
                 const isRequired = label.required === true || (label.required as unknown) == 1
                 const isCheckbox = label.field_type === 'checkbox'
@@ -403,15 +403,15 @@ export function DynamicFieldForm({
                 return (
                   <div key={label.id}>
                     {!isCheckbox && (
-                      <label className="block text-sm font-medium mb-1" style={{ color: '#374151' }}>
+                      <label className="block text-xs font-medium mb-0.5" style={{ color: '#374151' }}>
                         {label.label_name}
                         {isRequired && <span className="ml-0.5 text-red-500">*</span>}
                       </label>
                     )}
                     {renderInput(label, register, defaultValues[label.field_key])}
                     {fieldError?.message && (
-                      <p className="flex items-center gap-1 text-xs mt-1 text-red-500">
-                        <AlertCircle size={11} />
+                      <p className="flex items-center gap-1 text-[11px] mt-0.5 text-red-500">
+                        <AlertCircle size={10} />
                         {String(fieldError.message)}
                       </p>
                     )}

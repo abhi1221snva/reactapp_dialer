@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Layers, X, Check, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, X, Check, ToggleLeft, ToggleRight, ChevronDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -30,13 +30,74 @@ interface Extension {
   [key: string]: unknown
 }
 
+// Form state uses extension number strings — the same format both create and update accept.
 const EMPTY_FORM = { title: '', extensions: [] as string[] }
 
 // ──────────── Helpers ────────────
 function parseExtensionField(raw: unknown): string[] {
   if (!raw) return []
-  if (Array.isArray(raw)) return raw.map(e => String(e).replace(/^SIP\//i, '').trim()).filter(Boolean)
-  return String(raw).split(/[,&]+/).map(e => e.replace(/^SIP\//i, '').trim()).filter(Boolean)
+  if (Array.isArray(raw)) {
+    return raw.flatMap(e => {
+      if (typeof e === 'object' && e !== null) {
+        const obj = e as Record<string, unknown>
+        const val = obj.extension ?? obj.ext ?? obj.number ?? obj.id
+        return val != null ? [String(val).replace(/^SIP\//i, '').trim()] : []
+      }
+      return [String(e).replace(/^SIP\//i, '').trim()]
+    }).filter(Boolean)
+  }
+  if (typeof raw === 'string') {
+    if (raw.startsWith('[')) {
+      try { return parseExtensionField(JSON.parse(raw)) } catch { /* fall through */ }
+    }
+    return raw.split(/[,;&|]+/).map(e => e.replace(/^SIP\//i, '').trim()).filter(Boolean)
+  }
+  return []
+}
+
+// ──────────── Extension Cell ────────────
+function ExtensionCell({ groupId, rowData }: { groupId: number; rowData: ExtGroup }) {
+  const listExts = useMemo(() => {
+    const raw =
+      rowData.extension_name  ??
+      rowData.extensions      ??
+      rowData.extension_list  ??
+      rowData.extension       ??
+      rowData.ext             ?? ''
+    return parseExtensionField(raw)
+  }, [rowData])
+
+  const { data: mapData } = useQuery({
+    queryKey: ['ext-group-map', groupId],
+    queryFn: () => extensiongroupService.getExtensionsForGroup(groupId),
+    staleTime: 60_000,
+    enabled: listExts.length === 0,
+    retry: 1,
+  })
+
+  const exts = useMemo(() => {
+    if (listExts.length > 0) return listExts
+    const rawData = (mapData as { data?: { data?: unknown } })?.data?.data
+    const items: Array<Record<string, unknown>> = Array.isArray(rawData) ? rawData : []
+    return items
+      .map(item =>
+        String(item.extension ?? item.ext ?? item.extension_number ?? '')
+          .replace(/^SIP\//i, '').trim()
+      )
+      .filter(Boolean)
+  }, [listExts, mapData])
+
+  if (exts.length === 0) return <span className="text-slate-400 text-sm">—</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {exts.slice(0, 4).map((e, i) => (
+        <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700 font-mono">{e}</span>
+      ))}
+      {exts.length > 4 && (
+        <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">+{exts.length - 4}</span>
+      )}
+    </div>
+  )
 }
 
 // ──────────── Extension Picker ────────────
@@ -128,17 +189,21 @@ function ExtGroupFormModal({
   const qc = useQueryClient()
   const [form, setForm] = useState(EMPTY_FORM)
 
+  // All available extensions from the picker endpoint — used to validate pre-fill values
+  // and to show the picker dropdown.
   const { data: extData } = useQuery({
     queryKey: ['extensions-for-eg'],
     queryFn: () => extensiongroupService.getExtensions(),
   })
   const extensions: Extension[] = (extData as { data?: { data?: Extension[] } })?.data?.data ?? []
 
-  // Fetch existing extension mappings for this group.
-  // The JOIN ON egm.extension = up.extension means only main-extension entries are returned,
-  // so these values are safe to send directly to the PATCH endpoint.
-  // This also avoids the spurious 403 that GET /extension-group/{id} returns for non-admin users.
-  const { data: groupMapData } = useQuery({
+  // Fetch which extensions currently belong to this group.
+  // staleTime: 0 ensures we always get fresh data when the modal reopens.
+  // The 'isFetching' flag is used to block form submission until data is ready.
+  const {
+    data: groupMapData,
+    isFetching: mapFetching,
+  } = useQuery({
     queryKey: ['ext-group-map', editing?.id],
     queryFn: () => extensiongroupService.getExtensionsForGroup(editing!.id),
     enabled: isOpen && !!editing?.id,
@@ -146,46 +211,128 @@ function ExtGroupFormModal({
     retry: false,
   })
 
+  // Single effect handles all pre-fill scenarios.
+  //
+  // Why a single effect (no ref guard):
+  //   The group map is async — it arrives AFTER the modal opens. A ref guard
+  //   ("already initialized") causes the effect to mark itself done before the map loads,
+  //   then ignores the map when it arrives, leaving form.extensions = [].
+  //   Re-running on every dep change is safe: extensions query has no time-based refetch,
+  //   and groupMapData only changes when a fresh fetch completes.
+  //
+  // Extension format: we store extension NUMBER strings (e.g. "1001") — the same format
+  //   the create endpoint accepts. Filtering against the picker guarantees we only send
+  //   active main extensions (excludes SIP/alt entries the map may return).
   useEffect(() => {
     if (!isOpen) return
 
     if (editing) {
-      // Response shape: axios wraps body in .data, so groupMapData.data = { success, data: [...items] }
-      const mapArr = (groupMapData as { data?: { data?: Array<Record<string, unknown>> } })?.data?.data ?? []
-      const groupExts = mapArr.map(item => String(item.extension ?? '')).filter(Boolean)
+      const rawData = (groupMapData as { data?: { data?: unknown } })?.data?.data
+      const mapArr: Array<Record<string, unknown>> = Array.isArray(rawData) ? rawData : []
+
+      // Extract every extension identifier the map returns (strips SIP/ prefix)
+      const allMapExts = mapArr
+        .map(item =>
+          String(item.extension ?? item.ext ?? item.extension_number ?? '')
+            .replace(/^SIP\//i, '').trim()
+        )
+        .filter(Boolean)
+
+      // Build a set of extension numbers that currently exist in the picker.
+      // The picker only lists active main extensions, so intersecting with it
+      // strips out deleted users and alt-extension entries automatically.
+      const pickerSet = new Set(
+        extensions
+          .map(e => String(e.extension ?? e.ext ?? '').replace(/^SIP\//i, '').trim())
+          .filter(Boolean)
+      )
+
+      // If picker hasn't loaded yet, keep all map exts (effect will re-run when picker loads).
+      // If picker is loaded, filter to the valid intersection only.
+      const validExts = pickerSet.size > 0
+        ? allMapExts.filter(v => pickerSet.has(v))
+        : allMapExts
 
       setForm({
         title:      String(editing.title ?? ''),
-        extensions: groupExts,
+        extensions: validExts,
       })
     } else {
       setForm(EMPTY_FORM)
     }
-  }, [isOpen, editing, groupMapData])
+  }, [isOpen, editing, groupMapData, extensions])
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       editing
         ? extensiongroupService.update(editing.id, data)
         : extensiongroupService.create(data),
-    // Await invalidation so the table reflects new data before modal closes
-    onSuccess: async () => {
+    onSuccess: async (res) => {
+      const body = (res as { data?: { success?: boolean | number | string; message?: string } })?.data
+      console.log('[ExtGroup response]', JSON.stringify(body))
+      // Backend may return success as boolean true, integer 1, or string "true"/"1".
+      // Treat any of these as success; everything else (false, 0, "false") is failure.
+      const succeeded =
+        body?.success === true  ||
+        body?.success === 1     ||
+        body?.success === 'true'||
+        body?.success === '1'
+      if (!succeeded) {
+        toast.error(body?.message || 'Failed to save group')
+        return
+      }
       toast.success(editing ? 'Group updated' : 'Group created')
       await qc.invalidateQueries({ queryKey: ['extension-groups'] })
+      await qc.invalidateQueries({ queryKey: ['ext-group-map', editing?.id] })
       onClose()
     },
-    onError: () => toast.error('Failed to save group'),
+    onError: (err: unknown) => {
+      const axiosErr = err as {
+        response?: { data?: { message?: string }; status?: number }
+        request?: unknown
+        message?: string
+      }
+      if (!axiosErr.response && axiosErr.request) {
+        toast.error('Request was blocked — possible CORS issue. Contact your server admin.')
+        return
+      }
+      const msg = axiosErr.response?.data?.message
+      toast.error(msg || 'Failed to save group')
+    },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim()) { toast.error('Title is required'); return }
-    // Backend GroupController@add and @patchNew both expect 'extensions' as array
-    mutation.mutate({
-      title:      form.title,
-      extensions: form.extensions,
-    })
+    if (!form.title.trim()) {
+      toast.error('Title is required')
+      return
+    }
+
+    // Block submit while the extension picker hasn't loaded — pre-fill filtering depends on it.
+    if (extensions.length === 0) {
+      toast.error('Extension data is loading — please try again in a moment')
+      return
+    }
+
+    // Block submit while the group's extension map is still fetching — submitting before
+    // it resolves would send an empty extensions array and the backend would reject it.
+    if (editing && mapFetching) {
+      toast.error('Loading group data — please wait a moment')
+      return
+    }
+
+    // Guard against empty extensions array for edit.
+    if (editing && form.extensions.length === 0) {
+      toast.error('Please select at least one extension')
+      return
+    }
+
+    const payload = { title: form.title.trim(), extensions: form.extensions.map(String) }
+    console.log('[ExtGroup submit]', { editing_id: editing?.id, payload })
+    mutation.mutate(payload)
   }
+
+  const isMapLoading = editing && mapFetching
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}
@@ -201,7 +348,10 @@ function ExtGroupFormModal({
         <div>
           <label className="label">
             Extensions
-            <span className="text-slate-400 font-normal ml-1">({form.extensions.length} selected)</span>
+            {isMapLoading
+              ? <span className="text-slate-400 font-normal ml-1 inline-flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Loading…</span>
+              : <span className="text-slate-400 font-normal ml-1">({form.extensions.length} selected)</span>
+            }
           </label>
           <ExtensionPicker
             selected={form.extensions}
@@ -212,7 +362,7 @@ function ExtGroupFormModal({
 
         <div className="flex justify-end gap-3 pt-1">
           <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-          <button type="submit" disabled={mutation.isPending} className="btn-primary">
+          <button type="submit" disabled={mutation.isPending || !!isMapLoading} className="btn-primary">
             {mutation.isPending ? 'Saving…' : editing ? 'Update Group' : 'Add Group'}
           </button>
         </div>
@@ -262,23 +412,7 @@ export function ExtensionGroups() {
     },
     {
       key: 'extensions', header: 'Extension',
-      render: (row) => {
-        // Check all possible field names the API might return
-        const raw =
-          row.extensions    ?? row.extension_name ??
-          row.extension_list ?? row.extension ?? ''
-        const exts = parseExtensionField(raw)
-        return exts.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {exts.slice(0, 4).map((e, i) => (
-              <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700 font-mono">{e}</span>
-            ))}
-            {exts.length > 4 && (
-              <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">+{exts.length - 4}</span>
-            )}
-          </div>
-        ) : <span className="text-slate-400 text-sm">—</span>
-      },
+      render: (row) => <ExtensionCell groupId={row.id} rowData={row} />,
     },
     {
       key: 'status', header: 'Status',
@@ -289,7 +423,6 @@ export function ExtensionGroups() {
       ),
     },
     {
-      // w-px whitespace-nowrap: makes column as narrow as content (matches Lead Status / Custom Fields)
       key: 'actions', header: 'Action',
       headerClassName: 'text-right',
       className: 'w-px whitespace-nowrap',

@@ -28,7 +28,7 @@ import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, CrmLabel, EmailTemplate } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, CrmLabel, EmailTemplate, SmsTemplate } from '../../types/crm.types'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
 type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant' | 'offers' | 'deal' | 'compliance'
@@ -736,11 +736,15 @@ function ResponseModal({ submission, leadId, onClose }: { submission: LenderSubm
 // ── Lenders Panel ──────────────────────────────────────────────────────────────
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
-  const [showSubmitForm, setShowSubmitForm] = useState(false)
-  const [selectedIds, setSelectedIds]       = useState<Set<number>>(new Set())
-  const [notes, setNotes]                   = useState('')
-  const [pdfPath, setPdfPath]               = useState('')
-  const [editingSub, setEditingSub]         = useState<LenderSubmission | null>(null)
+
+  const [showForm, setShowForm]         = useState(false)
+  const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set())
+  const [notes, setNotes]               = useState('')
+  const [templateId, setTemplateId]     = useState<number | ''>('')
+  const [uploadingDocs, setUploadingDocs] = useState(false)
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
+  const [editingSub, setEditingSub]     = useState<LenderSubmission | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: submissions, isLoading: subsLoading } = useQuery({
     queryKey: ['lender-submissions', leadId],
@@ -751,119 +755,130 @@ function LendersPanel({ leadId }: { leadId: number }) {
   })
 
   const { data: lendersData } = useQuery({
-    queryKey: ['lenders', 1],
-    queryFn: async () => (res => (res.data?.data?.data ?? res.data?.data ?? res.data?.records ?? res.data ?? []) as Lender[])(await crmService.getLenders({ per_page: 200 })),
+    queryKey: ['lenders-all'],
+    queryFn: async () => {
+      const res = await crmService.getLenders({ per_page: 200 })
+      return (res.data?.data?.data ?? res.data?.data ?? res.data?.records ?? res.data ?? []) as Lender[]
+    },
     staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: emailTemplates } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: async () => {
+      const res = await crmService.getEmailTemplates()
+      return (res.data?.data ?? res.data ?? []) as EmailTemplate[]
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: leadDocs } = useQuery({
+    queryKey: ['lead-documents', leadId],
+    queryFn: async () => {
+      const res = await crmService.getLeadDocuments(leadId)
+      return (res.data?.data ?? res.data ?? []) as CrmDocument[]
+    },
   })
 
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
   const subList       = submissions ?? []
-
-  // Stats
-  const approvedCount = subList.filter(s => s.response_status === 'approved').length
-  const declinedCount = subList.filter(s => s.response_status === 'declined').length
-  const pendingCount  = subList.filter(s => !['approved','declined'].includes(s.response_status ?? '')).length
+  const docs          = leadDocs ?? []
 
   function toggleLender(id: number) {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleDoc(id: number) {
+    setSelectedDocIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  const closeForm = () => {
+    setShowForm(false); setSelectedIds(new Set()); setNotes('')
+    setTemplateId(''); setSelectedDocIds(new Set())
+  }
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files?.length) return
+    const fd = new FormData()
+    Array.from(files).forEach(f => fd.append('files[]', f))
+    fd.append('document_type', 'Lender Submission')
+    setUploadingDocs(true)
+    try {
+      const res = await crmService.uploadLeadDocuments(leadId, fd)
+      const uploaded = (res.data?.data?.uploaded ?? res.data?.uploaded ?? []) as CrmDocument[]
+      uploaded.forEach(d => setSelectedDocIds(prev => new Set([...prev, d.id])))
+      qc.invalidateQueries({ queryKey: ['lead-documents', leadId] })
+      toast.success(`${uploaded.length} file(s) uploaded`)
+    } catch {
+      toast.error('Upload failed')
+    }
+    setUploadingDocs(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const submitMutation = useMutation({
     mutationFn: () => crmService.submitApplication(leadId, {
-      lender_ids: Array.from(selectedIds),
-      notes:      notes || undefined,
-      pdf_path:   pdfPath || undefined,
+      lender_ids:   Array.from(selectedIds),
+      notes:        notes || undefined,
+      document_ids: selectedDocIds.size ? Array.from(selectedDocIds) : undefined,
     }),
     onSuccess: (res) => {
       const { submitted = [], failed = [] } = res.data?.data ?? {}
       if (submitted.length) toast.success(`Sent to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
       if (failed.length)    toast.error(`Failed for ${failed.length} lender${failed.length !== 1 ? 's' : ''}`)
-      setShowSubmitForm(false); setSelectedIds(new Set()); setNotes(''); setPdfPath('')
+      closeForm()
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
     },
     onError: () => toast.error('Submission failed'),
   })
 
-  const closeForm = () => { setShowSubmitForm(false); setSelectedIds(new Set()); setNotes(''); setPdfPath('') }
-
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
 
-      {/* ── Stats bar (only when there are submissions) ── */}
-      {subList.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-center">
-            <p className="text-xl font-bold text-emerald-700 leading-none">{approvedCount}</p>
-            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider mt-1">Approved</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-center">
-            <p className="text-xl font-bold text-slate-600 leading-none">{pendingCount}</p>
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-1">Pending</p>
-          </div>
-          <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 text-center">
-            <p className="text-xl font-bold text-red-600 leading-none">{declinedCount}</p>
-            <p className="text-[10px] text-red-500 font-semibold uppercase tracking-wider mt-1">Declined</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Submit CTA / Form ── */}
-      {!showSubmitForm ? (
-        <button onClick={() => setShowSubmitForm(true)} className="btn-primary w-full justify-center">
+      {/* ── Submit Form ── */}
+      {!showForm ? (
+        <button onClick={() => setShowForm(true)} className="btn-primary w-full justify-center gap-2">
           <Send size={13} /> Submit to Lenders
         </button>
       ) : (
-        <div className="rounded-2xl border border-emerald-200 bg-white overflow-hidden shadow-sm">
-          {/* Form header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-emerald-600">
-            <div className="flex items-center gap-2">
-              <Send size={13} className="text-emerald-100" />
-              <span className="text-sm font-semibold text-white">Submit Application</span>
-              {selectedIds.size > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">
-                  {selectedIds.size} selected
-                </span>
-              )}
-            </div>
-            <button onClick={closeForm} className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-white/10 transition-colors">
-              <X size={14} />
-            </button>
+        <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+            <span className="text-sm font-semibold text-slate-700">Submit Application</span>
+            <button onClick={closeForm} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
           </div>
 
           <div className="p-4 space-y-3">
-            {/* Lender picker */}
+
+            {/* Lenders */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Select Lenders</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-slate-600">Lenders</label>
                 {activeLenders.length > 0 && (
                   <button
                     onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
-                    className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold"
-                  >
-                    {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
-                  </button>
+                    className="text-[11px] text-emerald-600 hover:underline"
+                  >{selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}</button>
                 )}
               </div>
-
               {activeLenders.length === 0 ? (
-                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                  <AlertCircle size={12} /> No active lenders configured.
-                </div>
+                <p className="text-xs text-slate-400">No active lenders configured.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-0.5">
+                <div className="space-y-1 max-h-44 overflow-y-auto">
                   {activeLenders.map(l => {
                     const on = selectedIds.has(l.id)
                     return (
-                      <label key={l.id} onClick={() => toggleLender(l.id)} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border cursor-pointer select-none transition-all ${on ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40'}`}>
-                        <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all ${on ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
-                          {on && <Check size={9} className="text-white" strokeWidth={3} />}
-                        </div>
-                        <span className="text-xs font-medium text-slate-700 truncate leading-tight">{l.lender_name}</span>
+                      <label key={l.id} className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg border cursor-pointer select-none transition-colors
+                        border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/40"
+                        style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() => toggleLender(l.id)}
+                          className="accent-emerald-600 w-3.5 h-3.5 flex-shrink-0"
+                        />
+                        <span className="text-xs text-slate-700 truncate">{l.lender_name}</span>
                       </label>
                     )
                   })}
@@ -871,20 +886,67 @@ function LendersPanel({ leadId }: { leadId: number }) {
               )}
             </div>
 
-            {/* PDF path + note side by side on wider screens, stacked on narrow */}
-            <div className="grid grid-cols-1 gap-2.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                  PDF Path <span className="normal-case font-normal text-slate-400">(optional)</span>
-                </label>
-                <input className="input w-full text-xs" value={pdfPath} onChange={e => setPdfPath(e.target.value)} placeholder="leads/42/application.pdf" />
+            {/* Email Template */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Email Template</label>
+              <select
+                className="input w-full text-sm"
+                value={templateId}
+                onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
+              >
+                <option value="">— Default —</option>
+                {(emailTemplates ?? []).map(t => (
+                  <option key={t.id} value={t.id}>{t.template_name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Documents */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-slate-600">Documents</label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingDocs}
+                  className="text-[11px] text-emerald-600 hover:underline disabled:opacity-50 flex items-center gap-1"
+                >
+                  {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                  Upload
+                </button>
+                <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
               </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                  Cover Note <span className="normal-case font-normal text-slate-400">(optional)</span>
-                </label>
-                <textarea className="input w-full resize-none text-xs" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any context for the lender…" />
-              </div>
+              {docs.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No documents yet.</p>
+              ) : (
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {docs.map(d => {
+                    const on = selectedDocIds.has(d.id)
+                    const fname = d.file_path?.split('/').pop() ?? `Doc #${d.id}`
+                    return (
+                      <label key={d.id} className="flex items-center gap-2 py-1 px-2 rounded border cursor-pointer select-none text-xs text-slate-700 border-slate-200 hover:border-emerald-200"
+                        style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                      >
+                        <input type="checkbox" checked={on} onChange={() => toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
+                        <FileText size={10} className="flex-shrink-0 text-slate-400" />
+                        <span className="truncate">{fname}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Note */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Note (optional)</label>
+              <textarea
+                className="input w-full resize-none text-sm"
+                rows={2}
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Additional notes for the lender…"
+              />
             </div>
 
             <div className="flex gap-2 pt-0.5">
@@ -906,69 +968,45 @@ function LendersPanel({ leadId }: { leadId: number }) {
 
       {/* ── Submission History ── */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">History</p>
-          {subList.length > 0 && <span className="text-[10px] text-slate-400">{subList.length} submission{subList.length !== 1 ? 's' : ''}</span>}
-        </div>
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
+          Submission History {subList.length > 0 && <span className="font-normal">({subList.length})</span>}
+        </p>
 
         {subsLoading ? (
-          <div className="flex justify-center py-10">
-            <Loader2 size={18} className="animate-spin text-emerald-500" />
-          </div>
+          <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
         ) : subList.length === 0 ? (
-          <div className="rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-10 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-              <Building2 size={20} className="text-slate-300" />
-            </div>
-            <p className="text-sm font-semibold text-slate-500">No submissions yet</p>
-            <p className="text-xs text-slate-400 mt-1">Submit above to start tracking lender responses</p>
-          </div>
+          <p className="text-xs text-slate-400 text-center py-6">No submissions yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {subList.map(s => {
               const lenderName = s.lender_name ?? `Lender #${s.lender_id}`
               const respCfg = RESPONSE_STATUS_MAP[s.response_status ?? 'pending']
-              const subCfg  = SUBMISSION_STATUS_MAP[s.submission_status ?? 'pending']
               return (
-                <div key={s.id} className={`bg-white rounded-xl border border-slate-200 border-l-4 ${respCfg.border} px-3.5 py-3 hover:shadow-sm transition-shadow`}>
-                  <div className="flex items-start gap-2.5">
-                    <LenderAvatar name={lenderName} />
-                    <div className="flex-1 min-w-0">
-                      {/* Top row: name + date */}
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{lenderName}</p>
-                        {s.submitted_at && (
-                          <span className="text-[10px] text-slate-400 flex-shrink-0 tabular-nums">
-                            {new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
-                      {/* Status row */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <StatusDot status={s.submission_status ?? 'pending'} map={SUBMISSION_STATUS_MAP} />
-                        <ChevronRight size={10} className="text-slate-300 flex-shrink-0" />
-                        <StatusDot status={s.response_status ?? 'pending'} map={RESPONSE_STATUS_MAP} />
-                        {s.application_pdf && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
-                            <FileText size={9} /> PDF
-                          </span>
-                        )}
-                      </div>
-                      {/* Response note */}
-                      {s.response_note && (
-                        <p className="mt-2 text-[11px] text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 italic leading-relaxed">
-                          "{s.response_note}"
-                        </p>
+                <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{lenderName}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <StatusDot status={s.submission_status ?? 'pending'} map={SUBMISSION_STATUS_MAP} />
+                      <span className="text-slate-300">›</span>
+                      <StatusDot status={s.response_status ?? 'pending'} map={RESPONSE_STATUS_MAP} />
+                      {s.submitted_at && (
+                        <span className="text-[10px] text-slate-400 tabular-nums">
+                          {new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                        </span>
                       )}
                     </div>
-                    <button
-                      onClick={() => setEditingSub(s)}
-                      className="flex-shrink-0 p-1.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors mt-0.5"
-                      title="Update response"
-                    >
-                      <Pencil size={12} />
-                    </button>
+                    {s.response_note && (
+                      <p className="text-[11px] text-slate-500 italic mt-1 truncate">"{s.response_note}"</p>
+                    )}
                   </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${respCfg.bg} ${respCfg.text} flex-shrink-0`}>
+                    {respCfg.label}
+                  </span>
+                  <button
+                    onClick={() => setEditingSub(s)}
+                    className="p-1 text-slate-300 hover:text-slate-600 flex-shrink-0"
+                    title="Update response"
+                  ><Pencil size={12} /></button>
                 </div>
               )
             })}
@@ -1374,12 +1412,13 @@ function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadNa
 }
 
 // ── PropertyRow — HubSpot-style label:value inline edit ───────────────────────
-function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options, leadId, onUpdated }: {
+function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options, leadId, onUpdated, readOnly = false }: {
   fieldKey: string; label: string; value: string | null | undefined
   type?: 'text' | 'email' | 'tel' | 'textarea'
   fieldType?: string        // CRM label field_type (dropdown, date, number, etc.)
   options?: string | null   // JSON-encoded string[] for dropdown/radio
   leadId: number; onUpdated: () => void
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
@@ -1427,7 +1466,9 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
   return (
     <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group">
       <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
-      {editing ? (
+      {readOnly ? (
+        <span className="text-sm text-slate-800 flex-1 truncate leading-tight">{renderDisplayValue()}</span>
+      ) : editing ? (
         <div className="flex items-center gap-1 flex-1 min-w-0">
           {resolvedType === 'textarea' ? (
             <textarea autoFocus rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
@@ -1898,6 +1939,168 @@ function QuickSummaryCard({
   )
 }
 
+// ── Send SMS Modal ─────────────────────────────────────────────────────────────
+function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultTo: string; onClose: () => void }) {
+  const [to,          setTo]          = useState(defaultTo)
+  const [body,        setBody]        = useState('')
+  const [fromNumber,  setFromNumber]  = useState('')
+  const [selectedTpl, setSelectedTpl] = useState<number | ''>('')
+
+  const MAX_SEGMENT = 160
+  const segments = Math.ceil((body.length || 1) / MAX_SEGMENT)
+  const charsLeft = segments * MAX_SEGMENT - body.length
+
+  const { data: senderNumbers, isLoading: numbersLoading } = useQuery({
+    queryKey: ['sms-sender-numbers'],
+    queryFn: async () => {
+      const res = await crmService.getSmsSenderNumbers()
+      return (res.data?.data ?? res.data?.numbers ?? res.data ?? []) as { phone_number: string; friendly_name?: string }[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const { data: templates } = useQuery({
+    queryKey: ['sms-templates'],
+    queryFn: async () => {
+      const res = await crmService.getSmsTemplates()
+      return (res.data?.data ?? res.data ?? []) as SmsTemplate[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  // Auto-select first sender number
+  useEffect(() => {
+    if (!fromNumber && senderNumbers && senderNumbers.length > 0) {
+      setFromNumber(senderNumbers[0].phone_number)
+    }
+  }, [senderNumbers, fromNumber])
+
+  const handleTemplateChange = (tplId: number | '') => {
+    setSelectedTpl(tplId)
+    if (tplId === '') { setBody(''); return }
+    const tpl = (templates ?? []).find(t => t.id === tplId)
+    if (tpl) setBody(tpl.sms_template)
+  }
+
+  const send = useMutation({
+    mutationFn: () => crmService.sendLeadSms(leadId, { to, body, from_number: fromNumber || undefined }),
+    onSuccess: () => { toast.success('SMS sent successfully'); onClose() },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send SMS'
+      toast.error(msg)
+    },
+  })
+
+  const canSend = to.trim().length > 0 && body.trim().length > 0 && !send.isPending
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden" style={{ maxWidth: 520 }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center">
+              <MessageSquare size={15} className="text-violet-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Send Text Message</h2>
+              <p className="text-xs text-slate-400 mt-0.5">SMS via connected number</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-3 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+
+          {/* Template picker */}
+          {(templates ?? []).length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Template <span className="text-slate-400">(optional)</span></label>
+              <select
+                value={selectedTpl}
+                onChange={e => handleTemplateChange(e.target.value === '' ? '' : Number(e.target.value))}
+                className="input w-full text-xs"
+              >
+                <option value="">— Select a template —</option>
+                {(templates ?? []).map(t => (
+                  <option key={t.id} value={t.id}>{t.sms_template_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* To / From row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">To <span className="text-red-500">*</span></label>
+              <input
+                type="tel"
+                value={to}
+                onChange={e => setTo(e.target.value)}
+                placeholder="e.g. +12025551234"
+                className="input w-full text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
+              {numbersLoading ? (
+                <div className="input w-full text-xs flex items-center gap-1.5 text-slate-400"><Loader2 size={12} className="animate-spin" /> Loading…</div>
+              ) : (
+                <select value={fromNumber} onChange={e => setFromNumber(e.target.value)} className="input w-full text-xs">
+                  <option value="">— Auto-select —</option>
+                  {(senderNumbers ?? []).map(n => (
+                    <option key={n.phone_number} value={n.phone_number}>
+                      {n.friendly_name ? `${n.friendly_name} (${n.phone_number})` : n.phone_number}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Message body */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-slate-600">Message <span className="text-red-500">*</span></label>
+              <span className={`text-[11px] font-mono ${charsLeft < 20 ? 'text-orange-500' : 'text-slate-400'}`}>
+                {charsLeft} chars · {segments} {segments === 1 ? 'segment' : 'segments'}
+              </span>
+            </div>
+            <textarea
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              rows={5}
+              placeholder="Type your message…"
+              className="input w-full text-sm resize-none"
+              maxLength={1600}
+            />
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-slate-50/60 flex-shrink-0">
+          <button type="button" onClick={onClose} className="btn-outline text-xs px-3 py-1.5 h-auto">Cancel</button>
+          <button
+            type="button"
+            disabled={!canSend}
+            onClick={() => send.mutate()}
+            className="flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50"
+          >
+            {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+            Send Text
+          </button>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 // ── Stat Chip ──────────────────────────────────────────────────────────────────
 function StatChip({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
@@ -1924,6 +2127,7 @@ export function CrmLeadDetail() {
   const [showMoreMenu,       setShowMoreMenu]       = useState(false)
   const [showPdfModal,       setShowPdfModal]       = useState(false)
   const [showEmailModal,     setShowEmailModal]     = useState(false)
+  const [showSmsModal,       setShowSmsModal]       = useState(false)
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -2119,6 +2323,12 @@ export function CrmLeadDetail() {
               <Mail size={11} /> Send Email
             </button>
             <button
+              onClick={() => setShowSmsModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors"
+            >
+              <MessageSquare size={11} /> Send Text
+            </button>
+            <button
               onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
             >
@@ -2231,7 +2441,7 @@ export function CrmLeadDetail() {
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Personal Information</span>
                       </div>
                       {extraOther.length > 0 ? extraOther.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
                       )) : (
                         <p className="text-xs text-slate-300 mt-1">No custom fields defined.</p>
                       )}
@@ -2243,13 +2453,13 @@ export function CrmLeadDetail() {
                         <Briefcase size={11} className="text-slate-400" />
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business</span>
                       </div>
-                      <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string,unknown>)['zip'] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
+                      <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
+                      <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
+                      <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
+                      <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string,unknown>)['zip'] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
                       {extraBusiness.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
                       ))}
                     </div>
 
@@ -2277,6 +2487,9 @@ export function CrmLeadDetail() {
       )}
       {showEmailModal && (
         <SendEmailModal leadId={leadId} defaultTo={String(lead?.email ?? '')} onClose={() => setShowEmailModal(false)} />
+      )}
+      {showSmsModal && (
+        <SendSmsModal leadId={leadId} defaultTo={String(lead?.phone_number ?? '')} onClose={() => setShowSmsModal(false)} />
       )}
     </div>
   )

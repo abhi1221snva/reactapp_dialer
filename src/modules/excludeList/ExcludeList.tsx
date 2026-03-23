@@ -1,37 +1,38 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ArrowLeft, PhoneOff, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowLeft, MinusCircle, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
-import { dncService } from '../../services/dnc.service'
+import { excludeListService } from '../../services/excludeList.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
-import { AddDncModal } from './AddDncModal'
-import { EditDncModal, type DncItem } from './EditDncModal'
+import { AddExcludeModal } from './AddExcludeModal'
+import { EditExcludeModal, type ExcludeItem } from './EditExcludeModal'
 import { UploadExcelModal } from '../../components/ui/UploadExcelModal'
 
-export function DncList() {
+export function ExcludeList() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showAdd, setShowAdd] = useState(false)
-  const [editItem, setEditItem] = useState<DncItem | null>(null)
+  const [editItem, setEditItem] = useState<ExcludeItem | null>(null)
   const [showUpload, setShowUpload] = useState(false)
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['dnc'] })
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['exclude-list'] })
 
   const deleteMutation = useMutation({
-    mutationFn: (number: string) => dncService.delete(number),
-    onSuccess: () => { toast.success('Number removed from DNC list'); invalidate() },
+    mutationFn: ({ number, campaign_id }: { number: string; campaign_id: number }) =>
+      excludeListService.delete(number, campaign_id),
+    onSuccess: () => { toast.success('Number removed from Exclude List'); invalidate() },
     onError: () => toast.error('Failed to remove number'),
   })
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => dncService.uploadExcel(file),
+    mutationFn: (file: File) => excludeListService.uploadExcel(file),
     onSuccess: (res) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const r = res as any
@@ -46,29 +47,34 @@ export function DncList() {
     onError: () => toast.error('Failed to upload file'),
   })
 
-  const columns: Column<DncItem>[] = [
+  const columns: Column<ExcludeItem>[] = [
     {
       key: 'number',
       header: 'Phone Number',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-            <PhoneOff size={13} className="text-red-500" />
+          <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+            <MinusCircle size={13} className="text-orange-500" />
           </div>
           <span className="text-sm font-medium text-slate-900 font-mono">{String(row.number)}</span>
         </div>
       ),
     },
     {
-      key: 'extension',
-      header: 'Extension',
-      render: (row) => <span className="text-sm text-slate-600">{row.extension || '—'}</span>,
+      key: 'first_name',
+      header: 'First Name',
+      render: (row) => <span className="text-sm text-slate-600">{row.first_name || '—'}</span>,
     },
     {
-      key: 'comment',
-      header: 'Comment',
+      key: 'last_name',
+      header: 'Last Name',
+      render: (row) => <span className="text-sm text-slate-600">{row.last_name || '—'}</span>,
+    },
+    {
+      key: 'company_name',
+      header: 'Company',
       render: (row) => (
-        <span className="text-sm text-slate-500 truncate max-w-xs block">{row.comment || '—'}</span>
+        <span className="text-sm text-slate-500 truncate max-w-xs block">{row.company_name || '—'}</span>
       ),
     },
     {
@@ -99,7 +105,7 @@ export function DncList() {
             variant: 'delete',
             onClick: async () => {
               if (await confirmDelete(String(row.number))) {
-                deleteMutation.mutate(String(row.number))
+                deleteMutation.mutate({ number: String(row.number), campaign_id: Number(row.campaign_id) })
               }
             },
             disabled: deleteMutation.isPending,
@@ -112,15 +118,15 @@ export function DncList() {
   return (
     <>
       {showAdd && (
-        <AddDncModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); invalidate() }} />
+        <AddExcludeModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); invalidate() }} />
       )}
       {editItem && (
-        <EditDncModal item={editItem} onClose={() => setEditItem(null)} onSaved={() => { setEditItem(null); invalidate() }} />
+        <EditExcludeModal item={editItem} onClose={() => setEditItem(null)} onSaved={() => { setEditItem(null); invalidate() }} />
       )}
       {showUpload && (
         <UploadExcelModal
-          title="Upload DNC Numbers"
-          description="Upload an Excel or CSV file to bulk-import numbers into the DNC list."
+          title="Upload Exclude List"
+          description="Upload an Excel or CSV file to bulk-import numbers into the Exclude List."
           onClose={() => setShowUpload(false)}
           onUpload={(file) => uploadMutation.mutateAsync(file)}
           isUploading={uploadMutation.isPending}
@@ -135,8 +141,8 @@ export function DncList() {
           <div className="flex-1">
             <div className="page-header">
               <div>
-                <h1 className="page-title">DNC List</h1>
-                <p className="page-subtitle">Do Not Call registry — numbers blocked from outbound dialing</p>
+                <h1 className="page-title">Exclude From List</h1>
+                <p className="page-subtitle">Numbers excluded from dialing campaigns</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowUpload(true)} className="btn-outline">
@@ -152,11 +158,11 @@ export function DncList() {
           </div>
         </div>
 
-        <ServerDataTable<DncItem>
-          queryKey={['dnc']}
-          queryFn={(params) => dncService.list(params)}
+        <ServerDataTable<ExcludeItem>
+          queryKey={['exclude-list']}
+          queryFn={(params) => excludeListService.list(params)}
           dataExtractor={(res: unknown) => {
-            const r = res as { data?: { data?: DncItem[] } }
+            const r = res as { data?: { data?: ExcludeItem[] } }
             return r?.data?.data ?? []
           }}
           totalExtractor={(res: unknown) => {
@@ -164,9 +170,9 @@ export function DncList() {
             return r?.data?.record_count ?? 0
           }}
           columns={columns}
-          searchPlaceholder="Search by phone number or extension…"
-          emptyText="No numbers in DNC list"
-          emptyIcon={<PhoneOff size={40} />}
+          searchPlaceholder="Search by phone, name, or company…"
+          emptyText="No numbers in Exclude List"
+          emptyIcon={<MinusCircle size={40} />}
           search={table.search}
           onSearchChange={table.setSearch}
           activeFilters={table.filters}

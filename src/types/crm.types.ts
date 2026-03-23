@@ -142,17 +142,51 @@ export interface Lender {
   email: string
   secondary_email?: string
   secondary_email2?: string
+  secondary_email3?: string
+  secondary_email4?: string
   contact_person?: string
   phone?: string
   status: 0 | 1
   api_status?: string | number
   address?: string
+  country?: string
   state?: string
   city?: string
   industry?: string
   notes?: string
-  min_avg_revenue?: number
-  min_monthly_deposit?: number
+  // Loan requirements
+  min_credit_score?: number | string
+  max_negative_days?: number | string
+  max_advance?: number | string
+  nsfs?: string
+  min_time_business?: string
+  min_amount?: number | string
+  min_deposits?: number | string
+  min_monthly_deposit?: number | string
+  min_avg_revenue?: number | string
+  max_position?: string
+  max_term?: string
+  daily_balance?: number | string
+  // Eligibility
+  white_label?: string
+  consolidation?: string
+  max_mca_payoff_amount?: number | string
+  reverse_consolidation?: string
+  sole_prop?: string
+  home_business?: string
+  non_profit?: string
+  daily?: string
+  coj_req?: string
+  bank_verify?: string
+  loc?: string
+  ownership_percentage?: string
+  factor_rate?: string
+  // Restrictions
+  prohibited_industry?: string
+  restricted_industry_note?: string
+  guideline_state?: string
+  restricted_state_note?: string
+  guideline_file?: string
   lender_api_type?: string
   created_at?: string
   updated_at?: string
@@ -197,6 +231,9 @@ export interface SubmitApplicationPayload {
   lender_ids: number[]
   notes?: string
   pdf_path?: string
+  document_ids?: number[]
+  email_subject?: string
+  email_html?: string
 }
 
 export interface UpdateSubmissionResponsePayload {

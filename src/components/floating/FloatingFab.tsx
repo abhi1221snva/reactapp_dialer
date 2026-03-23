@@ -115,7 +115,7 @@ export function FloatingFab() {
     chatOpen,  setChatOpen,
     phoneOpen, setPhoneOpen,
     smsOpen,   setSmsOpen,
-    phoneMinimized,
+    phoneMinimized, setPhoneMinimized,
     phoneFabBg, phoneFabShadow, phoneFabIcon, phoneHasIncoming,
     phoneClickHandler,
     chatUnread,
@@ -123,6 +123,11 @@ export function FloatingFab() {
   } = useFloatingStore()
 
   const handlePhoneClick = () => {
+    // Phone is open but minimized → restore it
+    if (phoneOpen && phoneMinimized) {
+      setPhoneMinimized(false)
+      return
+    }
     if (phoneClickHandler) {
       phoneClickHandler()
     } else {

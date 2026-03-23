@@ -122,4 +122,41 @@ export const publicAppService = {
       { headers: { 'Content-Type': 'multipart/form-data' } },
     )
   },
+
+  deleteDocument(token: string, docId: number) {
+    return http.delete<{ success: boolean; message: string }>(
+      `/public/merchant/${token}/document/${docId}`,
+    )
+  },
+
+  /** Fetch document bytes as a Blob (for safe blob: URL viewer — never exposes storage URL). */
+  fetchDocumentBlob(token: string, docId: number) {
+    return http.get<Blob>(`/public/document/${token}/view/${docId}`, { responseType: 'blob' })
+  },
+
+  /** Fetch merchant PDF HTML (CRM template). Falls back to apply-form PDF on error. */
+  fetchMerchantPdfHtml(token: string) {
+    return http.get<string>(`/public/merchant/${token}/render-pdf`, { responseType: 'text' })
+  },
+
+  /** Fetch the apply-form PDF HTML (always available — uses built-in template). */
+  fetchApplyPdfHtml(leadToken: string) {
+    return http.get<string>(`/public/apply/${leadToken}/pdf`, { responseType: 'text' })
+  },
+
+  /**
+   * Download the affiliate application as a real PDF file.
+   * Returns the binary content as a Blob for use with URL.createObjectURL.
+   */
+  downloadApplyPdf(token: string) {
+    return http.get<Blob>(`/public/apply/${token}/download`, { responseType: 'blob' })
+  },
+
+  /**
+   * Download the merchant application as a real PDF file.
+   * Returns the binary content as a Blob for use with URL.createObjectURL.
+   */
+  downloadMerchantPdf(token: string) {
+    return http.get<Blob>(`/public/merchant/${token}/download`, { responseType: 'blob' })
+  },
 }

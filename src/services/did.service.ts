@@ -45,11 +45,21 @@ export const didService = {
   getById: (id: number) =>
     api.post('/get-did-by-id', { token: getUserSecret(), did_id: id }),
 
-  create: (data: Record<string, unknown>) =>
-    api.post('/add-did', { token: getUserSecret(), ...data }),
+  create: (data: Record<string, unknown> | FormData) => {
+    if (data instanceof FormData) {
+      data.append('token', getUserSecret())
+      return api.post('/add-did', data)
+    }
+    return api.post('/add-did', { token: getUserSecret(), ...data })
+  },
 
-  update: (data: Record<string, unknown>) =>
-    api.post('/save-edit-did', { token: getUserSecret(), ...data }),
+  update: (data: Record<string, unknown> | FormData) => {
+    if (data instanceof FormData) {
+      data.append('token', getUserSecret())
+      return api.post('/save-edit-did', data)
+    }
+    return api.post('/save-edit-did', { token: getUserSecret(), ...data })
+  },
 
   // /delete-did uses Bearer-header auth — no body token required.
   delete: (id: number) =>
@@ -67,4 +77,7 @@ export const didService = {
 
   getRingGroups: () =>
     api.post('/ring-group', { start: 0, limit: 200 }),
+
+  getDepartments: () =>
+    api.post('/get-department-list', {}),
 }

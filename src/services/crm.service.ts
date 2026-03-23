@@ -565,6 +565,9 @@ export const crmService = {
   sendMerchantEmail: (leadId: number, data: { to: string; subject: string; body: string; is_html?: boolean }) =>
     api.post(`/crm/lead/${leadId}/send-merchant-email`, data),
 
+  sendLeadSms: (leadId: number, data: { to: string; body: string; from_number?: string }) =>
+    api.post(`/crm/lead/${leadId}/send-sms`, data),
+
   resolveEmailTemplate: (leadId: number, templateId: number) =>
     api.get(`/crm/lead/${leadId}/resolve-email-template/${templateId}`),
 }

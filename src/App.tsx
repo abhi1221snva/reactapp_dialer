@@ -39,6 +39,7 @@ import { CrmLeadFields } from './pages/crm/CrmLeadFields'
 import { CrmEmailTemplates } from './pages/crm/CrmEmailTemplates'
 import { CrmSmsTemplates } from './pages/crm/CrmSmsTemplates'
 import { CrmLenders } from './pages/crm/CrmLenders'
+import { CrmLenderForm } from './pages/crm/CrmLenderForm'
 import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
 import { CrmAutomations } from './pages/crm/CrmAutomations'
 import { CrmSmsInbox } from './pages/crm/CrmSmsInbox'
@@ -79,9 +80,12 @@ import { TwoFactorSetup } from './pages/settings/TwoFactorSetup'
 import { SecuritySettings } from './pages/settings/SecuritySettings'
 import { DispositionList } from './modules/dispositions/DispositionList'
 import { DncList } from './modules/dnc/DncList'
+import { ExcludeList } from './modules/excludeList/ExcludeList'
 import { FaxList } from './modules/fax/FaxList'
 import { Ivr } from './pages/ivr/Ivr'
 import { RingGroups } from './pages/ringgroups/RingGroups'
+import { CallTimes }  from './pages/voice/CallTimes'
+import { Holidays }   from './pages/voice/Holidays'
 import { ExtensionGroups } from './pages/extensiongroups/ExtensionGroups'
 import { VoicemailDrops } from './pages/voicemail/VoicemailDrops'
 import { Mailbox } from './pages/voicemail/Mailbox'
@@ -162,6 +166,8 @@ export default function App() {
           <Route path="/crm/sms-templates" element={<CrmSmsTemplates />} />
           <Route path="/crm/pdf-templates" element={<CrmPdfTemplates />} />
           <Route path="/crm/lenders" element={<CrmLenders />} />
+          <Route path="/crm/lenders/create" element={<CrmLenderForm />} />
+          <Route path="/crm/lenders/:id/edit" element={<CrmLenderForm />} />
           <Route path="/crm/automations" element={<CrmAutomations />} />
           <Route path="/crm/sms-inbox" element={<CrmSmsInbox />} />
           <Route path="/crm/document-types"  element={<CrmDocumentTypes />} />
@@ -206,6 +212,7 @@ export default function App() {
         <Route path="/settings/labels" element={<Labels />} />
         <Route path="/settings/dispositions" element={<DispositionList />} />
         <Route path="/settings/dnc" element={<DncList />} />
+        <Route path="/settings/exclude" element={<ExcludeList />} />
         <Route path="/settings/fax" element={<FaxList />} />
         <Route path="/settings/security" element={<SecuritySettings />} />
         <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
@@ -233,6 +240,10 @@ export default function App() {
 
         {/* Ring Groups */}
         <Route path="/ring-groups" element={<RingGroups />} />
+
+        {/* Call Times & Holidays */}
+        <Route path="/call-times" element={<CallTimes />} />
+        <Route path="/holidays"   element={<Holidays />} />
 
         {/* Extension Groups */}
         <Route path="/extension-groups" element={<ExtensionGroups />} />

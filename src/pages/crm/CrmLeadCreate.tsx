@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Loader2, AlertCircle, Check, Save, User, Tag,
-  Thermometer, Snowflake, Flame, ChevronRight, Calendar, Clock,
-  UserCheck, Hash, Zap,
+  ArrowLeft, Loader2, AlertCircle, Save,
+  Thermometer, Snowflake, Flame, Clock,
+  UserCheck, Zap, User, Building2, Users,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
@@ -16,21 +16,23 @@ import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
 
 const schema = z.object({
-  lead_status: z.string().min(1, 'Status is required'),
-  lead_type:   z.string().optional(),
-  assigned_to: z.string().optional(),
+  lead_status:  z.string().min(1, 'Status is required'),
+  lead_type:    z.string().optional(),
+  assigned_to:  z.string().optional(),
+  // Core lead fields — always editable regardless of crm_labels configuration
+  first_name:   z.string().optional(),
+  last_name:    z.string().optional(),
+  email:        z.string().optional(),
+  phone_number: z.string().optional(),
+  company_name: z.string().optional(),
+  address:      z.string().optional(),
+  city:         z.string().optional(),
+  state:        z.string().optional(),
+  zip:          z.string().optional(),
+  loan_amount:  z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-const AVATAR_BG = ['bg-indigo-500', 'bg-violet-500', 'bg-sky-500', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500']
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/)
-  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?'
-  return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
-}
 
 const LEAD_TYPE_OPTIONS = [
   {
@@ -50,13 +52,35 @@ const LEAD_TYPE_OPTIONS = [
   },
 ]
 
-// ── Main ───────────────────────────────────────────────────────────────────────
+// ── Section category buckets ────────────────────────────────────────────────
+const PERSONAL_SECTIONS  = new Set(['owner', 'contact', 'address', 'general', 'other'])
+const BUSINESS_SECTIONS  = new Set(['business', 'funding', 'financial', 'documents', 'custom'])
+const SECOND_OWNER_SECTIONS = new Set(['second_owner'])
+
+function bucketFields(fields: CrmLabel[] = []) {
+  const personal: CrmLabel[]     = []
+  const business: CrmLabel[]     = []
+  const secondOwner: CrmLabel[]  = []
+
+  for (const f of fields) {
+    const sec = f.section || 'other'
+    if (SECOND_OWNER_SECTIONS.has(sec))      secondOwner.push(f)
+    else if (BUSINESS_SECTIONS.has(sec))     business.push(f)
+    else                                      personal.push(f)
+  }
+  return { personal, business, secondOwner }
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
 export function CrmLeadCreate() {
   const { id } = useParams<{ id: string }>()
   const navigate  = useNavigate()
   const isEdit    = Boolean(id)
   const leadId    = id ? Number(id) : undefined
-  const [apiError, setApiError] = useState<string | null>(null)
+  const qc = useQueryClient()
+  const [apiError,         setApiError]         = useState<string | null>(null)
+  const [activeTab,        setActiveTab]        = useState<'personal' | 'business' | 'second_owner'>('personal')
+  const [hasSecondOwner,   setHasSecondOwner]   = useState(false)
 
   const {
     register, handleSubmit, setValue, watch, getValues, setError,
@@ -100,13 +124,69 @@ export function CrmLeadCreate() {
     enabled: isEdit && !!leadId,
   })
 
+  const { personal, business, secondOwner } = bucketFields(leadFields)
+
+  // Keys already covered by crm_labels — don't render them again in the core section
+  const labelKeys = new Set((leadFields ?? []).map(f => f.field_key))
+  const CORE_FIELD_DEFS: { key: keyof FormData; label: string; type?: string; placeholder?: string; colSpan?: boolean; maxLength?: number }[] = [
+    { key: 'first_name',   label: 'First Name',    placeholder: 'First name' },
+    { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name' },
+    { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address' },
+    { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone' },
+    { key: 'company_name', label: 'Company Name',   placeholder: 'Business / DBA name' },
+    { key: 'loan_amount',  label: 'Loan Amount',    placeholder: 'e.g. 50000' },
+    { key: 'address',      label: 'Address',        placeholder: 'Street address', colSpan: true },
+    { key: 'city',         label: 'City',           placeholder: 'City' },
+    { key: 'state',        label: 'State',          placeholder: 'State', maxLength: 2 },
+    { key: 'zip',          label: 'ZIP',            placeholder: 'ZIP' },
+  ]
+  // Only show core fields that are NOT already in crm_labels (avoids duplicate RHF registration)
+  const visibleCoreFields = CORE_FIELD_DEFS.filter(f => !labelKeys.has(f.key))
+
+  // Auto-enable second owner in edit mode if that data is populated
   useEffect(() => {
-    if (existing) {
-      setValue('lead_status', String(existing.lead_status))
-      setValue('lead_type',   existing.lead_type   ? String(existing.lead_type)   : '')
-      setValue('assigned_to', existing.assigned_to ? String(existing.assigned_to) : '')
+    if (existing && secondOwner.length > 0) {
+      const hasData = secondOwner.some(f => {
+        const val = (existing as Record<string, unknown>)[f.field_key]
+        return val !== null && val !== undefined && String(val).trim() !== ''
+      })
+      if (hasData) {
+        setHasSecondOwner(true)
+        setActiveTab('second_owner')
+      }
     }
-  }, [existing, setValue])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing])
+
+  useEffect(() => {
+    if (!existing) return
+    const ex = existing as Record<string, unknown>
+    setValue('lead_status',  String(existing.lead_status))
+    setValue('lead_type',    existing.lead_type   ? String(existing.lead_type)   : '')
+    setValue('assigned_to',  existing.assigned_to ? String(existing.assigned_to) : '')
+    // Core fields
+    const coreKeys = ['first_name','last_name','email','phone_number','company_name','address','city','state','zip','loan_amount'] as const
+    for (const k of coreKeys) {
+      const v = ex[k]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setValue(k as any, v !== null && v !== undefined ? String(v) : '')
+    }
+    // Pre-populate ALL EAV fields into the RHF store so inactive tabs are
+    // included in the payload and their existing values are preserved on save.
+    if (leadFields) {
+      for (const f of leadFields) {
+        const v = ex[f.field_key]
+        if (f.field_type === 'checkbox') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(setValue as (n: string, v: unknown) => void)(f.field_key, v === '1' || v === 1 || v === true)
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(setValue as (n: string, v: unknown) => void)(f.field_key, v !== null && v !== undefined ? String(v) : '')
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing, leadFields])
 
   const handleApiError = (err: unknown): string | null => {
     if (err && typeof err === 'object' && 'response' in err) {
@@ -146,6 +226,7 @@ export function CrmLeadCreate() {
     onSuccess: () => {
       setApiError(null)
       toast.success('Lead updated successfully')
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
       navigate(`/crm/leads/${leadId}`)
     },
     onError: (err) => {
@@ -163,9 +244,6 @@ export function CrmLeadCreate() {
       payload[k] = v === true ? '1' : v === false ? '0' : v
     })
 
-    // ── Manual EAV field validation ───────────────────────────────────────────
-    // zodResolver ignores RegisterOptions passed to register(), so we validate
-    // dynamic fields explicitly here before sending to the backend.
     if (leadFields && leadFields.length > 0) {
       const activeFields = leadFields.filter(
         f => f.status === true || (f.status as unknown) == 1,
@@ -173,7 +251,7 @@ export function CrmLeadCreate() {
       let hasErrors = false
 
       for (const field of activeFields) {
-        if (field.field_type === 'checkbox') continue // checkboxes are always '0' or '1'
+        if (field.field_type === 'checkbox') continue
 
         const rawVal = payload[field.field_key]
         const strVal = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : ''
@@ -188,7 +266,7 @@ export function CrmLeadCreate() {
           continue
         }
 
-        if (!strVal) continue // optional + empty → skip type check
+        if (!strVal) continue
 
         let fieldError: string | null = null
         switch (field.field_type) {
@@ -213,19 +291,15 @@ export function CrmLeadCreate() {
         }
       }
 
-      if (hasErrors) return // stop — do not submit
+      if (hasErrors) return
     }
-    // ─────────────────────────────────────────────────────────────────────────
 
     if (isEdit) updateMutation.mutate(payload)
     else createMutation.mutate(payload)
   }
 
   const isPending     = createMutation.isPending || updateMutation.isPending
-  const fullName      = isEdit && existing ? [existing.first_name, existing.last_name].filter(Boolean).join(' ') || `Lead #${leadId}` : ''
-  const avatarBg      = AVATAR_BG[(leadId ?? 0) % AVATAR_BG.length]
   const currentStatus = (statuses ?? []).find(s => s.lead_title_url === leadStatus)
-  const statusColor   = currentStatus?.color_code ?? currentStatus?.color ?? '#6366f1'
   const assignedAgent = (agents ?? []).find(a => String(a.id) === String(assignedTo))
 
   function goBack() {
@@ -233,385 +307,367 @@ export function CrmLeadCreate() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/40 -mx-5 -mt-5" style={{ paddingBottom: '90px' }}>
+    <div className="-mx-5 -mt-5 flex flex-col" style={{ height: 'calc(100vh - 70px)' }}>
 
-      {/* ═══════════════════════════════════════════════════
-          HERO BANNER
-      ═══════════════════════════════════════════════════ */}
-      <div
-        className="relative overflow-hidden"
-        style={{
-          background: isEdit
-            ? 'linear-gradient(135deg, #1e1b4b 0%, #312e81 35%, #4c1d95 100%)'
-            : 'linear-gradient(135deg, #1e40af 0%, #4338ca 60%, #312e81 100%)',
-        }}
-      >
-        {/* Decorative orbs */}
-        <div
-          className="absolute -top-24 -right-24 w-80 h-80 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)' }}
-        />
-        <div
-          className="absolute -bottom-12 left-1/3 w-56 h-56 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)' }}
-        />
-
-        <div className="relative px-6 pt-5 pb-7 max-w-[1600px] mx-auto">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 mb-6">
-            <button
-              onClick={goBack}
-              className="flex items-center gap-1.5 text-white/60 hover:text-white text-xs font-medium transition-colors"
-            >
-              <ArrowLeft size={13} />
-              {isEdit ? 'Lead' : 'Leads'}
-            </button>
-            <ChevronRight size={11} className="text-white/30" />
-            <span className="text-white/40 text-xs">CRM</span>
-            <ChevronRight size={11} className="text-white/30" />
-            <span className="text-white text-xs font-semibold">
-              {isEdit ? 'Edit Lead' : 'New Lead'}
-            </span>
-          </div>
-
-          {/* Lead identity */}
-          <div className="flex items-center gap-5">
-            {/* Avatar */}
-            {isEdit && fullName ? (
-              <div
-                className={`w-16 h-16 rounded-2xl ${avatarBg} flex items-center justify-center flex-shrink-0 shadow-2xl`}
-                style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.3), 0 0 0 3px rgba(255,255,255,0.1)' }}
-              >
-                <span className="text-2xl font-bold text-white leading-none">{initials(fullName)}</span>
-              </div>
-            ) : (
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 border border-white/20"
-                style={{ background: 'rgba(255,255,255,0.08)' }}
-              >
-                <User size={26} className="text-white/50" />
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-white leading-tight truncate">
-                {isEdit ? (fullName || `Lead #${leadId}`) : 'Create New Lead'}
-              </h1>
-              <div className="flex items-center gap-3 mt-2 flex-wrap">
-                {isEdit && leadId && (
-                  <span className="flex items-center gap-1 text-white/50 text-xs font-mono">
-                    <Hash size={10} /> #{leadId}
-                  </span>
-                )}
-                {currentStatus && (
-                  <span
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
-                    style={{
-                      background: `${statusColor}33`,
-                      color: '#fff',
-                      border: `1px solid ${statusColor}55`,
-                    }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                    {currentStatus.lead_title}
-                  </span>
-                )}
-                {isEdit && existing?.created_at && (
-                  <span className="flex items-center gap-1 text-white/40 text-xs">
-                    <Calendar size={10} />
-                    {new Date(existing.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                )}
-                {assignedAgent && (
-                  <span className="flex items-center gap-1 text-white/40 text-xs">
-                    <UserCheck size={10} /> {assignedAgent.name}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════
-          STICKY SAVE BAR
-      ═══════════════════════════════════════════════════ */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between px-6 py-3 max-w-[1600px] mx-auto">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold text-slate-800">
-              {isEdit ? 'Editing Lead' : 'New Lead'}
-            </span>
+      {/* ── Compact header ────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={goBack}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50 transition-all"
+          >
+            <ArrowLeft size={15} />
+          </button>
+          <div>
+            <h1 className="text-sm font-semibold text-slate-800 leading-tight">
+              {isEdit ? 'Edit Lead' : 'Create a new lead'}
+            </h1>
             {errors.lead_status && (
-              <span className="hidden sm:flex items-center gap-1 text-xs text-red-500">
-                <AlertCircle size={11} /> Status required
-              </span>
+              <p className="flex items-center gap-1 text-xs text-red-500 mt-0.5">
+                <AlertCircle size={10} /> Status required
+              </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={goBack}
-              className="btn-outline text-sm hidden sm:flex"
-            >
-              Cancel
-            </button>
-            <button
-              form="lead-form"
-              type="submit"
-              disabled={isPending}
-              className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50"
-            >
-              {isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Save size={14} />
-              )}
-              {isEdit ? 'Save Changes' : 'Create Lead'}
-            </button>
-          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goBack}
+            className="btn-outline text-xs px-3 py-1.5 h-auto hidden sm:flex"
+          >
+            Cancel
+          </button>
+          <button
+            form="lead-form"
+            type="submit"
+            disabled={isPending}
+            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 h-auto disabled:opacity-50"
+          >
+            {isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+            {isEdit ? 'Save Changes' : 'Create Lead'}
+          </button>
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════
-          MAIN CONTENT
-      ═══════════════════════════════════════════════════ */}
-      <div className="px-5 py-6 max-w-[1600px] mx-auto">
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-hidden">
+        <form id="lead-form" onSubmit={handleSubmit(onSubmit)} className="h-full">
+          <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_300px] gap-0">
 
-        {/* API error */}
-        {apiError && (
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 mb-5">
-            <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />
-            <p className="text-sm text-red-700">{apiError}</p>
-          </div>
-        )}
+            {/* ── LEFT: tabbed field panel ───────────────────────── */}
+            <div className="flex flex-col overflow-hidden border-r border-slate-200 bg-white">
 
-        <form id="lead-form" onSubmit={handleSubmit(onSubmit)}>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_320px] gap-6">
-
-            {/* ── LEFT: Dynamic field form ─────────────────────────────── */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              {/* Card header */}
-              <div
-                className="px-6 py-4 border-b border-slate-100 flex items-center gap-3"
-                style={{ background: 'linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%)' }}
-              >
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                  <Tag size={16} className="text-indigo-500" />
+              {/* Tab bar */}
+              {(personal.length > 0 || business.length > 0 || secondOwner.length > 0) && (
+                <div className="flex items-stretch border-b border-slate-200 bg-slate-50/70 flex-shrink-0 px-4 pt-3 gap-1">
+                  {personal.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('personal')}
+                      className={[
+                        'flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition-all -mb-px',
+                        activeTab === 'personal'
+                          ? 'bg-white border-slate-200 text-blue-600 shadow-sm'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
+                      ].join(' ')}
+                    >
+                      <User size={13} className={activeTab === 'personal' ? 'text-blue-500' : 'text-slate-400'} />
+                      Personal
+                    </button>
+                  )}
+                  {business.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('business')}
+                      className={[
+                        'flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition-all -mb-px',
+                        activeTab === 'business'
+                          ? 'bg-white border-slate-200 text-emerald-600 shadow-sm'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
+                      ].join(' ')}
+                    >
+                      <Building2 size={13} className={activeTab === 'business' ? 'text-emerald-500' : 'text-slate-400'} />
+                      Business
+                    </button>
+                  )}
+                  {secondOwner.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('second_owner')}
+                      className={[
+                        'flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition-all -mb-px',
+                        activeTab === 'second_owner'
+                          ? 'bg-white border-slate-200 text-violet-600 shadow-sm'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
+                      ].join(' ')}
+                    >
+                      <Users size={13} className={activeTab === 'second_owner' ? 'text-violet-500' : 'text-slate-400'} />
+                      2nd Owner
+                      {hasSecondOwner && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-500 flex-shrink-0" />
+                      )}
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Lead Information</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {isEdit ? 'Update the fields below to save changes' : 'Fill in all required fields to create the lead'}
-                  </p>
+              )}
+
+              {/* Tab content — scrollable, includes both core fields and dynamic fields */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-4">
+
+                  {apiError && (
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 mb-4">
+                      <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-red-500" />
+                      <p className="text-sm text-red-700">{apiError}</p>
+                    </div>
+                  )}
+
+                  {/* Core fields not covered by crm_labels — shown here to ensure they're always editable */}
+                  {visibleCoreFields.length > 0 && (
+                    <div className="mb-5 pb-5 border-b border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Lead Information</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+                        {visibleCoreFields.map(f => (
+                          <div key={f.key} className={f.colSpan ? 'sm:col-span-2' : ''}>
+                            <label className="block text-xs font-medium text-slate-600 mb-0.5">{f.label}</label>
+                            <input
+                              type={f.type ?? 'text'}
+                              {...register(f.key)}
+                              className="input w-full"
+                              placeholder={f.placeholder}
+                              maxLength={f.maxLength}
+                              autoComplete={f.type === 'email' ? 'email' : undefined}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(personal.length > 0 || business.length > 0 || secondOwner.length > 0) ? (
+                    <>
+                      {activeTab === 'personal' && personal.length > 0 && (
+                        <DynamicFieldForm
+                          register={register}
+                          setValue={setValue}
+                          defaultValues={existing as Record<string, unknown> | undefined}
+                          labels={personal}
+                          errors={errors}
+                          formValues={watch() as Record<string, unknown>}
+                        />
+                      )}
+                      {activeTab === 'business' && business.length > 0 && (
+                        <DynamicFieldForm
+                          register={register}
+                          setValue={setValue}
+                          defaultValues={existing as Record<string, unknown> | undefined}
+                          labels={business}
+                          errors={errors}
+                          formValues={watch() as Record<string, unknown>}
+                        />
+                      )}
+                      {activeTab === 'second_owner' && secondOwner.length > 0 && (
+                        <div>
+                          {/* Toggle */}
+                          <label className="flex items-center gap-2.5 mb-4 cursor-pointer select-none w-fit">
+                            <input
+                              type="checkbox"
+                              checked={hasSecondOwner}
+                              onChange={e => setHasSecondOwner(e.target.checked)}
+                              className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-medium text-slate-700">This lead has a second owner</span>
+                          </label>
+
+                          {hasSecondOwner ? (
+                            <DynamicFieldForm
+                              register={register}
+                              setValue={setValue}
+                              defaultValues={existing as Record<string, unknown> | undefined}
+                              labels={secondOwner}
+                              errors={errors}
+                              formValues={watch() as Record<string, unknown>}
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                                <Users size={18} className="text-slate-400" />
+                              </div>
+                              <p className="text-xs text-slate-400">Check the box above to add a second owner</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Fallback: no section metadata on fields */
+                    <DynamicFieldForm
+                      register={register}
+                      setValue={setValue}
+                      defaultValues={existing as Record<string, unknown> | undefined}
+                      labels={leadFields}
+                      errors={errors}
+                      formValues={watch() as Record<string, unknown>}
+                    />
+                  )}
+
                 </div>
               </div>
 
-              <div className="p-6">
-                <DynamicFieldForm
-                  register={register}
-                  setValue={setValue}
-                  defaultValues={existing as Record<string, unknown> | undefined}
-                  labels={leadFields}
-                  errors={errors}
-                  formValues={watch() as Record<string, unknown>}
-                />
-              </div>
             </div>
 
-            {/* ── RIGHT: Sidebar ─────────────────────────────────────────── */}
-            <div className="space-y-4 lg:sticky lg:top-[57px] lg:self-start lg:max-h-[calc(100vh-75px)] lg:overflow-y-auto lg:pb-6">
+            {/* ── RIGHT: metadata sidebar ──────────────────────────── */}
+            <div className="overflow-y-auto bg-white">
+              <div className="p-4 space-y-3">
 
-              {/* ── Status Picker ── */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-violet-50/80 to-white">
-                  <div className="w-6 h-6 rounded-md bg-violet-50 border border-violet-100 flex items-center justify-center flex-shrink-0">
-                    <Zap size={12} className="text-violet-600" />
+                {/* Status */}
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-violet-50/80 to-white">
+                    <div className="w-5 h-5 rounded-md bg-violet-50 border border-violet-100 flex items-center justify-center flex-shrink-0">
+                      <Zap size={11} className="text-violet-600" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Lead Status</span>
+                    <span className="ml-auto text-red-400 text-xs font-bold">*</span>
                   </div>
-                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Lead Status</span>
-                  <span className="ml-auto text-red-400 text-xs font-bold">*</span>
+                  <div className="p-3">
+                    {errors.lead_status && (
+                      <p className="flex items-center gap-1 text-xs text-red-500 mb-2">
+                        <AlertCircle size={10} /> {errors.lead_status.message}
+                      </p>
+                    )}
+                    <div className="relative">
+                      {currentStatus && (
+                        <span
+                          className="absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10"
+                          style={{ background: currentStatus.color_code ?? currentStatus.color ?? '#6366f1' }}
+                        />
+                      )}
+                      <select
+                        value={leadStatus}
+                        onChange={e => setValue('lead_status', e.target.value, { shouldValidate: true })}
+                        className={`input w-full text-xs ${currentStatus ? 'pl-7' : ''}`}
+                      >
+                        <option value="">— Select status —</option>
+                        {(statuses ?? []).map(s => (
+                          <option key={s.id} value={s.lead_title_url}>{s.lead_title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <div className="p-4">
-                  {errors.lead_status && (
-                    <p className="flex items-center gap-1 text-xs text-red-500 mb-3 px-1">
-                      <AlertCircle size={11} /> {errors.lead_status.message}
-                    </p>
-                  )}
-                  {(statuses ?? []).length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-3">Loading statuses…</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(statuses ?? []).map(s => {
-                        const color     = s.color_code ?? s.color ?? '#6366f1'
-                        const isSelected = leadStatus === s.lead_title_url
+
+                {/* Temperature */}
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-orange-50/60 to-white">
+                    <div className="w-5 h-5 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
+                      <Thermometer size={11} className="text-orange-500" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Temperature</span>
+                  </div>
+                  <div className="p-3">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {LEAD_TYPE_OPTIONS.map(({ value, label, Icon, idle, active }) => {
+                        const isSelected = leadType === value
                         return (
                           <button
-                            key={s.id}
+                            key={value}
                             type="button"
-                            onClick={() => setValue('lead_status', s.lead_title_url, { shouldValidate: true })}
+                            onClick={() => setValue('lead_type', isSelected ? '' : value)}
                             className={[
-                              'flex items-center gap-2 px-2.5 py-2 rounded-xl border-2 text-left transition-all text-xs font-medium',
-                              isSelected
-                                ? 'shadow-md'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                              'flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all',
+                              isSelected ? active : idle,
                             ].join(' ')}
-                            style={isSelected ? {
-                              borderColor: color,
-                              background: `${color}18`,
-                              color,
-                            } : {}}
                           >
-                            <span
-                              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                              style={{ background: color }}
-                            />
-                            <span className="truncate leading-tight">{s.lead_title}</span>
-                            {isSelected && (
-                              <Check size={10} className="ml-auto flex-shrink-0" />
-                            )}
+                            <Icon size={16} />
+                            <span className="text-xs font-semibold">{label}</span>
                           </button>
                         )
                       })}
                     </div>
-                  )}
+                    {!leadType && (
+                      <p className="text-xs text-slate-400 text-center mt-1.5">No temperature selected</p>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* ── Lead Temperature ── */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-orange-50/60 to-white">
-                  <div className="w-6 h-6 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
-                    <Thermometer size={12} className="text-orange-500" />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Temperature</span>
-                </div>
-                <div className="p-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {LEAD_TYPE_OPTIONS.map(({ value, label, Icon, idle, active }) => {
-                      const isSelected = leadType === value
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setValue('lead_type', isSelected ? '' : value)}
-                          className={[
-                            'flex flex-col items-center gap-1.5 py-3.5 rounded-xl border-2 transition-all',
-                            isSelected ? active : idle,
-                          ].join(' ')}
-                        >
-                          <Icon size={20} />
-                          <span className="text-xs font-semibold">{label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {!leadType && (
-                    <p className="text-xs text-slate-400 text-center mt-2 py-0.5">No temperature selected</p>
-                  )}
-                </div>
-              </div>
-
-              {/* ── Assigned Agent ── */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-sky-50/60 to-white">
-                  <div className="w-6 h-6 rounded-md bg-sky-50 border border-sky-100 flex items-center justify-center flex-shrink-0">
-                    <UserCheck size={12} className="text-sky-600" />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Assigned To</span>
-                </div>
-                <div className="p-4 space-y-3">
-                  {assignedAgent && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-sky-50 border border-sky-200">
-                      <div className="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                        <span className="text-xs font-bold text-white leading-none">
-                          {(assignedAgent.name ?? 'A').slice(0, 2).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-sky-800 leading-none">{assignedAgent.name}</p>
-                        <p className="text-xs text-sky-400 mt-0.5">Assigned agent</p>
-                      </div>
+                {/* Assigned Agent */}
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-sky-50/60 to-white">
+                    <div className="w-5 h-5 rounded-md bg-sky-50 border border-sky-100 flex items-center justify-center flex-shrink-0">
+                      <UserCheck size={11} className="text-sky-600" />
                     </div>
-                  )}
-                  <select
-                    {...register('assigned_to')}
-                    className="input w-full text-sm"
-                  >
-                    <option value="">— Unassigned —</option>
-                    {(agents ?? []).map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* ── Audit Info (edit mode) ── */}
-              {isEdit && existing && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-                    <div className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      <Clock size={12} className="text-slate-500" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Audit Trail</span>
+                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Assigned To</span>
                   </div>
-                  <div className="p-4 space-y-3">
-                    {[
-                      { label: 'Created by', value: existing.created_by_name as string | undefined },
-                      {
-                        label: 'Created at',
-                        value: existing.created_at
-                          ? new Date(existing.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                          : undefined,
-                      },
-                      { label: 'Updated by', value: existing.updated_by_name as string | undefined },
-                      {
-                        label: 'Updated at',
-                        value: (existing.updated_at as string | undefined)
-                          ? new Date(existing.updated_at as string).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                          : undefined,
-                      },
-                    ]
-                      .filter(r => r.value)
-                      .map(row => (
-                        <div key={row.label} className="flex items-start justify-between gap-3">
-                          <span className="text-xs text-slate-400 flex-shrink-0">{row.label}</span>
-                          <span className="text-xs font-medium text-slate-700 text-right leading-relaxed">{row.value}</span>
+                  <div className="p-3 space-y-2">
+                    {assignedAgent && (
+                      <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-sky-50 border border-sky-200">
+                        <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-white leading-none">
+                            {(assignedAgent.name ?? 'A').slice(0, 2).toUpperCase()}
+                          </span>
                         </div>
+                        <div>
+                          <p className="text-xs font-semibold text-sky-800 leading-none">{assignedAgent.name}</p>
+                          <p className="text-xs text-sky-400 mt-0.5">Assigned agent</p>
+                        </div>
+                      </div>
+                    )}
+                    <select {...register('assigned_to')} className="input w-full text-xs">
+                      <option value="">— Unassigned —</option>
+                      {(agents ?? []).map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
                       ))}
+                    </select>
                   </div>
                 </div>
-              )}
 
-              {/* Desktop save buttons */}
-              <div className="hidden lg:flex flex-col gap-2 sticky bottom-0">
-                <button
-                  form="lead-form"
-                  type="submit"
-                  disabled={isPending}
-                  className="btn-primary w-full justify-center disabled:opacity-50"
-                >
-                  {isPending && <Loader2 size={14} className="animate-spin" />}
-                  {isEdit ? 'Save Changes' : 'Create Lead'}
-                </button>
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="btn-outline w-full justify-center"
-                >
-                  Cancel
-                </button>
+                {/* Audit Trail (edit mode) */}
+                {isEdit && existing && (
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                      <div className="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
+                        <Clock size={11} className="text-slate-500" />
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Audit Trail</span>
+                    </div>
+                    <div className="p-3 space-y-2">
+                      {[
+                        { label: 'Created by', value: existing.created_by_name as string | undefined },
+                        {
+                          label: 'Created at',
+                          value: existing.created_at
+                            ? new Date(existing.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : undefined,
+                        },
+                        { label: 'Updated by', value: existing.updated_by_name as string | undefined },
+                        {
+                          label: 'Updated at',
+                          value: (existing.updated_at as string | undefined)
+                            ? new Date(existing.updated_at as string).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : undefined,
+                        },
+                      ]
+                        .filter(r => r.value)
+                        .map(row => (
+                          <div key={row.label} className="flex items-start justify-between gap-2">
+                            <span className="text-xs text-slate-400 flex-shrink-0">{row.label}</span>
+                            <span className="text-xs font-medium text-slate-700 text-right leading-relaxed">{row.value}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
               </div>
-
             </div>
+
           </div>
         </form>
       </div>
 
-      {/* ═══════════════════════════════════════════════════
-          MOBILE SAVE BAR
-      ═══════════════════════════════════════════════════ */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 flex items-center gap-3 px-5 py-4 bg-white border-t border-slate-200 shadow-lg z-20">
+      {/* ── Mobile save bar ──────────────────────────────────────────────── */}
+      <div className="lg:hidden flex items-center gap-3 px-5 py-3 bg-white border-t border-slate-200 shadow-lg flex-shrink-0">
         <button
           form="lead-form"
           type="submit"
