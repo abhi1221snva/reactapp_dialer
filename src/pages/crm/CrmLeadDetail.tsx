@@ -347,7 +347,7 @@ function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => voi
   const fileType = getFileType(doc.file_path)
 
   async function handleDownload() {
-    setDownloading(true); await downloadFile(doc.file_path, doc.file_name); setDownloading(false)
+    setDownloading(true); await downloadFile(doc.file_path ?? '', doc.file_name); setDownloading(false)
   }
 
   return (
@@ -379,10 +379,10 @@ function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => voi
       </div>
       <div className="flex-1 overflow-hidden flex items-center justify-center p-6">
         {fileType === 'pdf' && (
-          <iframe src={doc.file_path} title={doc.file_name} className="w-full h-full rounded-xl" style={{ maxWidth: '960px', border: 'none', background: '#fff' }} />
+          <iframe src={doc.file_path ?? undefined} title={doc.file_name} className="w-full h-full rounded-xl" style={{ maxWidth: '960px', border: 'none', background: '#fff' }} />
         )}
         {fileType === 'image' && (
-          <img src={doc.file_path} alt={doc.file_name} className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
+          <img src={doc.file_path ?? undefined} alt={doc.file_name} className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
         )}
         {fileType === 'other' && (
           <div className="flex flex-col items-center gap-4 text-center">
@@ -875,8 +875,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
 
   const openForm = () => {
     setShowForm(true)
-    // Pre-select all existing documents so they're attached by default
-    setSelectedDocIds(new Set((leadDocs ?? []).map(d => d.id)))
+    // Pre-select only docs that have a file on disk (attachable=true / file_path set)
+    setSelectedDocIds(new Set((leadDocs ?? []).filter(d => d.attachable !== false && d.file_path).map(d => d.id)))
   }
 
   const closeForm = () => {
@@ -1002,15 +1002,20 @@ function LendersPanel({ leadId }: { leadId: number }) {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-medium text-slate-600">Documents</label>
-                      {docs.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDocIds(selectedDocIds.size === docs.length ? new Set() : new Set(docs.map(d => d.id)))}
-                          className="text-[10px] text-slate-400 hover:text-emerald-600 underline"
-                        >
-                          {selectedDocIds.size === docs.length ? 'Deselect all' : 'Select all'}
-                        </button>
-                      )}
+                      {docs.length > 0 && (() => {
+                        const attachable = docs.filter(d => d.attachable !== false && !!d.file_path)
+                        if (!attachable.length) return null
+                        const allSelected = attachable.every(d => selectedDocIds.has(d.id))
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDocIds(allSelected ? new Set() : new Set(attachable.map(d => d.id)))}
+                            className="text-[10px] text-slate-400 hover:text-emerald-600 underline"
+                          >
+                            {allSelected ? 'Deselect all' : 'Select all'}
+                          </button>
+                        )
+                      })()}
                     </div>
                     <button
                       type="button"
@@ -1029,14 +1034,17 @@ function LendersPanel({ leadId }: { leadId: number }) {
                     <div className="space-y-1 max-h-32 overflow-y-auto">
                       {docs.map(d => {
                         const on = selectedDocIds.has(d.id)
+                        const canAttach = d.attachable !== false && !!d.file_path
                         const docLabel = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
                         return (
-                          <label key={d.id} className="flex items-center gap-2 py-1 px-2 rounded border cursor-pointer select-none text-xs text-slate-700 border-slate-200 hover:border-emerald-200"
-                            style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                          <label key={d.id} title={!canAttach ? 'File not on server — re-upload to attach' : undefined}
+                            className={`flex items-center gap-2 py-1 px-2 rounded border select-none text-xs border-slate-200 ${canAttach ? 'cursor-pointer text-slate-700 hover:border-emerald-200' : 'cursor-not-allowed text-slate-400 opacity-60'}`}
+                            style={on && canAttach ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
                           >
-                            <input type="checkbox" checked={on} onChange={() => toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
+                            <input type="checkbox" checked={on} disabled={!canAttach} onChange={() => canAttach && toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
                             <FileText size={10} className="flex-shrink-0 text-slate-400" />
                             <span className="truncate">{docLabel}</span>
+                            {!canAttach && <span className="ml-auto text-[9px] text-amber-500 flex-shrink-0">re-upload</span>}
                           </label>
                         )
                       })}

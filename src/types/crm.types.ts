@@ -114,10 +114,11 @@ export interface CrmDocument {
   document_type: string
   document_name?: string
   file_name: string
-  file_path: string
+  file_path: string | null
   file_size?: number | string
   uploaded_by?: number
   uploaded_by_name?: string
+  attachable?: boolean
   created_at: string
 }
 
