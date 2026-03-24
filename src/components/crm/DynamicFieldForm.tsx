@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, AlertCircle } from 'lucide-react'
-import type { UseFormRegister, UseFormSetValue, FieldErrors, RegisterOptions } from 'react-hook-form'
+import type { UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form'
+
 import { crmService } from '../../services/crm.service'
 import type { CrmLabel, FieldCondition } from '../../types/crm.types'
+import { buildFieldRules, parseFieldOptions } from '../../utils/fieldValidation'
 
 interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,61 +67,8 @@ function isVisible(
   })
 }
 
-// ── Parse options (JSON string or array) ─────────────────────────────────────
-function parseOptions(raw?: string | null): string[] {
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed.map(String)
-  } catch { /* fall through */ }
-  return raw.split('|').map(s => s.trim()).filter(Boolean)
-}
-
-// ── Validation rules per field type ──────────────────────────────────────────
-function buildValidationRules(label: CrmLabel): RegisterOptions {
-  const isRequired = label.required === true || (label.required as unknown) == 1
-  const isCheckbox = label.field_type === 'checkbox'
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rules: RegisterOptions<any, any> = {}
-
-  if (isRequired && !isCheckbox) {
-    rules.required = `${label.label_name} is required`
-  }
-
-  switch (label.field_type) {
-    case 'email':
-      rules.validate = (val: string) => {
-        if (!val || val.trim() === '') return true
-        return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(val.trim())
-          || `${label.label_name} must be a valid email address`
-      }
-      break
-
-    case 'phone_number':
-    case 'phone':
-      rules.validate = (val: string) => {
-        if (!val || val.trim() === '') return true
-        const digits = val.replace(/\D/g, '')
-        return digits.length === 10 || `${label.label_name} must be exactly 10 digits`
-      }
-      break
-
-    case 'number':
-      rules.validate = (val: string) => {
-        if (!val || val === '') return true
-        return !isNaN(Number(val)) || `${label.label_name} must be a numeric value`
-      }
-      break
-
-    case 'text':
-    case 'textarea':
-    case 'text_area':
-      rules.maxLength = { value: 500, message: `${label.label_name} must not exceed 500 characters` }
-      break
-  }
-
-  return rules
-}
+// ── Thin alias kept so renderInput() call-sites below are unchanged ──────────
+const parseOptions = parseFieldOptions
 
 // ── Input renderer ────────────────────────────────────────────────────────────
 function renderInput(
@@ -131,7 +80,7 @@ function renderInput(
   const ph = placeholder || label_name
   const baseClass = 'input w-full'
 
-  const rules = buildValidationRules(label)
+  const rules = buildFieldRules(label)
 
   // ── Dropdown / Select ──────────────────────────────────────────────────────
   if (field_type === 'select_option' || field_type === 'dropdown' || field_type === 'select') {

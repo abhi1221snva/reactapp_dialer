@@ -873,6 +873,12 @@ function LendersPanel({ leadId }: { leadId: number }) {
     setSelectedDocIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
+  const openForm = () => {
+    setShowForm(true)
+    // Pre-select all existing documents so they're attached by default
+    setSelectedDocIds(new Set((leadDocs ?? []).map(d => d.id)))
+  }
+
   const closeForm = () => {
     setShowForm(false); setSelectedIds(new Set()); setNotes('')
     setTemplateId(''); setSelectedDocIds(new Set())
@@ -923,7 +929,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
 
       {/* ── Submit Form ── */}
       {!showForm ? (
-        <button onClick={() => setShowForm(true)} className="btn-primary w-full justify-center gap-2">
+        <button onClick={openForm} className="btn-primary w-full justify-center gap-2">
           <Send size={13} /> Submit to Lenders
         </button>
       ) : (() => {
@@ -994,7 +1000,18 @@ function LendersPanel({ leadId }: { leadId: number }) {
                 {/* Documents */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-slate-600">Documents</label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-slate-600">Documents</label>
+                      {docs.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDocIds(selectedDocIds.size === docs.length ? new Set() : new Set(docs.map(d => d.id)))}
+                          className="text-[10px] text-slate-400 hover:text-emerald-600 underline"
+                        >
+                          {selectedDocIds.size === docs.length ? 'Deselect all' : 'Select all'}
+                        </button>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -1292,7 +1309,7 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-semibold text-slate-500">
-                    Email Template <span className="font-normal text-red-400">*</span>
+                    Email Template <span className="font-normal text-slate-400">(optional)</span>
                   </label>
                   <a href="/crm/email-templates" target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 font-medium transition-colors">
@@ -1479,7 +1496,7 @@ function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaul
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
             <button
               onClick={() => send.mutate()}
-              disabled={send.isPending || !selectedTplId || !to || !subject || bodyIsEmpty}
+              disabled={send.isPending || !to || !subject || bodyIsEmpty}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
@@ -1517,7 +1534,11 @@ function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadNa
     if (!data?.html) return
     const blob = new Blob([data.html], { type: 'text/html' })
     const url  = URL.createObjectURL(blob)
-    const a    = Object.assign(document.createElement('a'), { href: url, download: `${leadName.replace(/\s+/g, '_')}_application.html` })
+    const rawName = data?.lead_name || leadName
+    const safeName = rawName
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+    const a    = Object.assign(document.createElement('a'), { href: url, download: `${safeName}_application.html` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
     toast.success('Downloaded as HTML — open in browser and print to PDF')

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, Search, X, Check,
   GripVertical, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw,
-  Settings2,
+  Settings2, ListOrdered,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
@@ -28,14 +28,16 @@ const FIELD_TYPES = [
   { value: 'checkbox',     label: 'Checkbox' },
 ]
 
-// ── Structured sections (Task 3) ───────────────────────────────────────────────
+// ── Structured sections ────────────────────────────────────────────────────────
+// NOTE: 'Documents / Verification' intentionally excluded from the create/edit
+// dropdown. Existing records that carry this section still display correctly via
+// SECTION_MAP and humanizeSection() below.
 const STRUCTURED_SECTIONS = [
   { value: 'owner',     label: 'Owner Information' },
   { value: 'business',  label: 'Business Information' },
   { value: 'funding',   label: 'Funding Information' },
   { value: 'contact',   label: 'Contact Information' },
   { value: 'financial', label: 'Financial Information' },
-  { value: 'documents', label: 'Documents / Verification' },
   { value: 'custom',    label: 'Custom Fields' },
 ]
 
@@ -369,6 +371,191 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
   )
 }
 
+// ── Reorder Modal ─────────────────────────────────────────────────────────────
+// Shows ALL fields (no pagination) grouped by section, with drag-and-drop
+// reordering within each section.  On save the new order is persisted via
+// POST /crm/lead-fields/reorder which updates display_order for every field
+// in one DB transaction — the same order is then used everywhere in the system.
+interface ReorderModalProps {
+  allFields: CrmLabel[]
+  onClose: () => void
+  onSaved: () => void
+}
+
+function ReorderModal({ allFields, onClose, onSaved }: ReorderModalProps) {
+  const qc = useQueryClient()
+
+  // Derive canonical section order from data: sort sections by the minimum
+  // display_order of their fields so the list reflects the current sequence.
+  const sectionKeys = useMemo(() => {
+    const minOrder: Record<string, number> = {}
+    allFields.forEach(f => {
+      const key = f.section || 'general'
+      const ord = Number(f.display_order) || 9999
+      if (!(key in minOrder) || ord < minOrder[key]) minOrder[key] = ord
+    })
+    return Object.keys(minOrder).sort((a, b) => minOrder[a] - minOrder[b])
+  }, [allFields])
+
+  // Per-section ordered arrays — initialised from current display_order
+  const [sections, setSections] = useState<Record<string, CrmLabel[]>>(() => {
+    const map: Record<string, CrmLabel[]> = {}
+    const sorted = [...allFields].sort(
+      (a, b) => (Number(a.display_order) || 0) - (Number(b.display_order) || 0)
+    )
+    sorted.forEach(f => {
+      const key = f.section || 'general'
+      if (!map[key]) map[key] = []
+      map[key].push(f)
+    })
+    return map
+  })
+
+  const dragRef  = useRef<{ section: string; id: number } | null>(null)
+  const [dragOver, setDragOver] = useState<{ section: string; id: number } | null>(null)
+
+  const handleDragStart = (section: string, id: number, e: React.DragEvent) => {
+    dragRef.current = { section, id }
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent, section: string, targetId: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOver({ section, id: targetId })
+    if (!dragRef.current || dragRef.current.section !== section) return
+    if (dragRef.current.id === targetId) return
+    setSections(prev => {
+      const arr  = [...(prev[section] ?? [])]
+      const from = arr.findIndex(f => f.id === dragRef.current!.id)
+      const to   = arr.findIndex(f => f.id === targetId)
+      if (from === -1 || to === -1) return prev
+      const [moved] = arr.splice(from, 1)
+      arr.splice(to, 0, moved)
+      return { ...prev, [section]: arr }
+    })
+  }
+
+  const handleDragEnd = () => { dragRef.current = null; setDragOver(null) }
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      // Flatten all sections in canonical order → single ordered ID array
+      const ids = sectionKeys.flatMap(s => (sections[s] ?? []).map(f => f.id))
+      return crmService.reorderLeadFields(ids)
+    },
+    onSuccess: () => {
+      toast.success('Field order saved')
+      qc.invalidateQueries({ queryKey: ['crm-labels'] })
+      qc.invalidateQueries({ queryKey: ['crm-lead-fields'] })
+      onSaved()
+    },
+    onError: () => toast.error('Failed to save order'),
+  })
+
+  const totalFields = sectionKeys.reduce((n, s) => n + (sections[s]?.length ?? 0), 0)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,23,42,0.6)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+        {/* accent bar */}
+        <div className="h-1 bg-indigo-600 flex-shrink-0" />
+
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border-2 border-indigo-100 flex items-center justify-center">
+              <ListOrdered size={16} className="text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Reorder Fields</h2>
+              <p className="text-xs text-slate-400">
+                {totalFields} fields · {sectionKeys.length} sections · drag within a section to reorder
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Scrollable body — all sections */}
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
+          {sectionKeys.map(sKey => (
+            <div key={sKey}>
+              {/* Section header */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
+                  {humanizeSection(sKey)}
+                </span>
+                <span className="text-xs text-slate-400">
+                  ({sections[sKey]?.length ?? 0})
+                </span>
+                <div className="flex-1 h-px bg-slate-100" />
+              </div>
+
+              {/* Draggable field rows */}
+              <div className="space-y-1">
+                {(sections[sKey] ?? []).map(f => {
+                  const isDragging = dragRef.current?.id === f.id
+                  const isOver = dragOver?.section === sKey && dragOver?.id === f.id
+                               && dragRef.current?.id !== f.id
+                  return (
+                    <div
+                      key={f.id}
+                      draggable
+                      onDragStart={e => handleDragStart(sKey, f.id, e)}
+                      onDragOver={e => handleDragOver(e, sKey, f.id)}
+                      onDragEnd={handleDragEnd}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg border',
+                        'cursor-grab active:cursor-grabbing select-none transition-colors',
+                        isDragging ? 'opacity-40 bg-slate-50 border-slate-200'
+                          : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30',
+                        isOver ? 'border-indigo-400 bg-indigo-50/60 ring-1 ring-indigo-300' : '',
+                      )}
+                    >
+                      <GripVertical size={14} className="text-slate-300 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-800 flex-1 truncate">
+                        {f.label_name}
+                      </span>
+                      <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md flex-shrink-0">
+                        {typeLabel(f.field_type)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+          >
+            {saveMutation.isPending
+              ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+              : <><Check size={14} /> Save Order</>}
+          </button>
+          <button onClick={onClose} className="btn-outline">Cancel</button>
+          <span className="ml-auto text-xs text-slate-400">
+            Order is applied system-wide on save
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function CrmLeadFields() {
   const qc = useQueryClient()
@@ -378,6 +565,8 @@ export function CrmLeadFields() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [sectionFilter, setSectionFilter] = useState('')
+
+  const [showReorder, setShowReorder] = useState(false)
 
   const [dragId, setDragId]         = useState<number | null>(null)
   const [dragOverId, setDragOverId] = useState<number | null>(null)
@@ -526,6 +715,14 @@ export function CrmLeadFields() {
             className="btn-ghost btn-sm p-2 h-9 w-9" title="Refresh">
             <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           </button>
+          <button
+            onClick={() => setShowReorder(true)}
+            disabled={!allFields?.length}
+            className="btn-outline flex items-center gap-1.5 h-9 text-sm disabled:opacity-40"
+            title="Reorder all fields section-by-section"
+          >
+            <ListOrdered size={15} /> Reorder Fields
+          </button>
           <button onClick={openAdd} className="btn-primary">
             <Plus size={15} /> Add Field
           </button>
@@ -665,12 +862,21 @@ export function CrmLeadFields() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Create / Edit modal */}
       {showModal && (
         <FieldModal
           editing={editing}
           onClose={() => { setShowModal(false); setEditing(null) }}
           onSaved={() => { setShowModal(false); setEditing(null) }}
+        />
+      )}
+
+      {/* Reorder modal — loads ALL fields, no pagination, section-wise D&D */}
+      {showReorder && allFields && (
+        <ReorderModal
+          allFields={allFields}
+          onClose={() => setShowReorder(false)}
+          onSaved={() => setShowReorder(false)}
         />
       )}
     </div>

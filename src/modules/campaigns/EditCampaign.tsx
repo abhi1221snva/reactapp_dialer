@@ -399,8 +399,11 @@ export function EditCampaign() {
   useEffect(() => {
     const raw = (campaignData as { data?: { data?: CampaignApiData } })?.data?.data
     if (!raw) return
-    const c = raw as CampaignApiData
-    const existingDispositionIds = Array.isArray(c.disposition) ? c.disposition.map(d => d.id) : []
+    const c = raw as CampaignApiData & { dispositions?: unknown[] }
+    // Backend sends 'dispositions' (plural) as an array of string IDs e.g. ["1","3","5"]
+    const existingDispositionIds = Array.isArray(c.dispositions)
+      ? c.dispositions.map(d => Number(d))
+      : Array.isArray(c.disposition) ? c.disposition.map(d => d.id) : []
     reset({
       campaign_id: campaignId,
       title: c.title ?? '',
@@ -433,7 +436,8 @@ export function EditCampaign() {
       amd_drop_action: c.amd_drop_action ?? null,
       audio_message_amd: c.audio_message_amd != null ? String(c.audio_message_amd) : null,
       voice_message_amd: c.voice_message_amd != null ? String(c.voice_message_amd) : null,
-      redirect_to: c.redirect_to ?? '',
+      // Always coerce to string — DB stores as integer but JSX uses strict string comparisons ('1','2',…)
+      redirect_to: c.redirect_to != null ? String(c.redirect_to) : '',
       redirect_to_dropdown: c.redirect_to_dropdown != null ? String(c.redirect_to_dropdown) : null,
       no_agent_available_action: c.no_agent_available_action ?? null,
       no_agent_dropdown_action: c.no_agent_dropdown_action != null ? String(c.no_agent_dropdown_action) : null,

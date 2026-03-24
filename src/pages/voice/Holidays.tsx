@@ -140,19 +140,6 @@ export function Holidays() {
         </button>
       </div>
 
-      {/* Summary chips */}
-      <div className="flex flex-wrap gap-2">
-        <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white border border-slate-100 shadow-sm">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-amber-400 to-orange-500">
-            <CalendarDays size={13} className="text-white" />
-          </div>
-          <div>
-            <p className="text-[10px] text-slate-400 leading-none">Total Holidays</p>
-            <p className="text-sm font-black text-slate-800 leading-none mt-0.5">{holidays.length}</p>
-          </div>
-        </div>
-      </div>
-
       {/* Search */}
       <div className="relative max-w-sm">
         <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

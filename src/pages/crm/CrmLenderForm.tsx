@@ -393,6 +393,79 @@ export function CrmLenderForm() {
   return (
     <div className="pb-10 space-y-5">
 
+      {/* ── API Integration (full width) — shown at TOP ───────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
+          <div className="flex items-center gap-2">
+            <Zap size={14} className="text-indigo-500" />
+            <span className="text-sm font-semibold text-slate-800">API Integration</span>
+            {apiEnabled
+              ? <span className="badge badge-indigo text-[10px]">Enabled — submits via API</span>
+              : <span className="badge badge-slate text-[10px]">Disabled — submits via Email</span>
+            }
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <span className="text-xs text-slate-500">{apiEnabled ? 'On' : 'Off'}</span>
+            <button
+              type="button"
+              onClick={() => set('api_status', apiEnabled ? '0' : '1')}
+              className={`relative inline-flex h-5 w-9 rounded-full transition-colors duration-200 ${apiEnabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
+            >
+              <span className={`inline-block h-4 w-4 m-0.5 rounded-full bg-white shadow transition-transform duration-200 ${apiEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </label>
+        </div>
+        {apiEnabled && (
+          <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="col-span-2">
+              <label className="label">Lender API Type <span className="text-red-500">*</span></label>
+              <select className="input w-full" value={form.lender_api_type} onChange={e => set('lender_api_type', e.target.value)}>
+                <option value="">— Select integration —</option>
+                {LENDER_API_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="label">API Endpoint URL</label>
+              <input className="input w-full font-mono text-xs" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://api.lender.com/v1/" />
+            </div>
+            <div>
+              <label className="label">Username</label>
+              <input className="input w-full" value={form.username} onChange={e => set('username', e.target.value)} placeholder="API username" />
+            </div>
+            <div>
+              <label className="label">Password</label>
+              <input className="input w-full" type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="API password" />
+            </div>
+            <div>
+              <label className="label">API Key</label>
+              <input className="input w-full font-mono text-xs" value={form.api_key} onChange={e => set('api_key', e.target.value)} placeholder="API key or token" />
+            </div>
+            <div>
+              <label className="label">Partner API Key</label>
+              <input className="input w-full font-mono text-xs" value={form.partner_api_key} onChange={e => set('partner_api_key', e.target.value)} placeholder="Partner key (if required)" />
+            </div>
+            <div>
+              <label className="label">Auth URL</label>
+              <input className="input w-full font-mono text-xs" value={form.auth_url} onChange={e => set('auth_url', e.target.value)} placeholder="https://auth.lender.com/token" />
+            </div>
+            <div>
+              <label className="label">Client ID</label>
+              <input className="input w-full" value={form.client_id} onChange={e => set('client_id', e.target.value)} placeholder="OAuth client ID" />
+            </div>
+            <div>
+              <label className="label">Sales Rep Email</label>
+              <input className="input w-full" type="email" value={form.salesRepEmailAddress} onChange={e => set('salesRepEmailAddress', e.target.value)} placeholder="sales@lender.com" />
+            </div>
+          </div>
+        )}
+        {!apiEnabled && (
+          <div className="px-5 py-3 flex items-center gap-2 text-xs text-slate-500">
+            <span className="ri-mail-send-line text-base text-slate-400" />
+            Applications will be delivered to the lender's email address(es) configured below.
+          </div>
+        )}
+      </div>
+
       {/* ── Two-column section grid ──────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
 
@@ -642,70 +715,6 @@ export function CrmLenderForm() {
           </Section>
 
         </div>
-      </div>
-
-      {/* ── API Integration (full width) ─────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
-          <div className="flex items-center gap-2">
-            <Zap size={14} className="text-indigo-500" />
-            <span className="text-sm font-semibold text-slate-800">API Integration</span>
-            {apiEnabled && <span className="badge badge-indigo text-[10px]">Enabled</span>}
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <span className="text-xs text-slate-500">{apiEnabled ? 'On' : 'Off'}</span>
-            <button
-              type="button"
-              onClick={() => set('api_status', apiEnabled ? '0' : '1')}
-              className={`relative inline-flex h-5 w-9 rounded-full transition-colors duration-200 ${apiEnabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
-            >
-              <span className={`inline-block h-4 w-4 m-0.5 rounded-full bg-white shadow transition-transform duration-200 ${apiEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-            </button>
-          </label>
-        </div>
-        {apiEnabled && (
-          <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div className="col-span-2">
-              <label className="label">Lender API Type <span className="text-red-500">*</span></label>
-              <select className="input w-full" value={form.lender_api_type} onChange={e => set('lender_api_type', e.target.value)}>
-                <option value="">— Select integration —</option>
-                {LENDER_API_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="label">API Endpoint URL</label>
-              <input className="input w-full font-mono text-xs" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://api.lender.com/v1/" />
-            </div>
-            <div>
-              <label className="label">Username</label>
-              <input className="input w-full" value={form.username} onChange={e => set('username', e.target.value)} placeholder="API username" />
-            </div>
-            <div>
-              <label className="label">Password</label>
-              <input className="input w-full" type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="API password" />
-            </div>
-            <div>
-              <label className="label">API Key</label>
-              <input className="input w-full font-mono text-xs" value={form.api_key} onChange={e => set('api_key', e.target.value)} placeholder="API key or token" />
-            </div>
-            <div>
-              <label className="label">Partner API Key</label>
-              <input className="input w-full font-mono text-xs" value={form.partner_api_key} onChange={e => set('partner_api_key', e.target.value)} placeholder="Partner key (if required)" />
-            </div>
-            <div>
-              <label className="label">Auth URL</label>
-              <input className="input w-full font-mono text-xs" value={form.auth_url} onChange={e => set('auth_url', e.target.value)} placeholder="https://auth.lender.com/token" />
-            </div>
-            <div>
-              <label className="label">Client ID</label>
-              <input className="input w-full" value={form.client_id} onChange={e => set('client_id', e.target.value)} placeholder="OAuth client ID" />
-            </div>
-            <div>
-              <label className="label">Sales Rep Email</label>
-              <input className="input w-full" type="email" value={form.salesRepEmailAddress} onChange={e => set('salesRepEmailAddress', e.target.value)} placeholder="sales@lender.com" />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Bottom action bar ────────────────────────────────────────── */}

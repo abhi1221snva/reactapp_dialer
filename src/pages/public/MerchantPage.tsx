@@ -8,10 +8,11 @@ import {
   Edit3, RefreshCw, ArrowLeft, ArrowRight, Trash2,
 } from 'lucide-react'
 import {
-  publicAppService,
+  publicAppService, extractPdfFilename,
   PublicFormSection, PublicFormField,
   MerchantDocument, PublicDocumentType,
 } from '../../services/publicApp.service'
+import { validateSection, scrollToFirstError } from '../../utils/publicFormValidation'
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
@@ -134,7 +135,7 @@ function FormField({ f, value, onChange, error }: {
   })()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div data-field-key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <label style={{ fontSize: 11, fontWeight: 700, color: error ? C.error : C.muted, textTransform: 'uppercase', letterSpacing: 0.6, display: 'flex', gap: 3, alignItems: 'center' }}>
         {f.label}{f.required && <span style={{ color: C.error, fontSize: 13 }}>*</span>}
       </label>
@@ -538,28 +539,24 @@ export function MerchantPage() {
   const handlePdfClick = async () => {
     if (pdfLoading || !leadToken) return
     setPdfLoading(true)
-    try {
-      const res = await publicAppService.downloadMerchantPdf(leadToken)
-      const url = URL.createObjectURL(res.data)
+    const triggerDownload = (blob: Blob, filename: string) => {
+      const url = URL.createObjectURL(blob)
       const a   = document.createElement('a')
       a.href     = url
-      a.download = 'application.pdf'
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    }
+    try {
+      const res = await publicAppService.downloadMerchantPdf(leadToken)
+      triggerDownload(res.data, extractPdfFilename(res.headers as Record<string, string>))
     } catch {
       // Fallback: apply-form download endpoint
       try {
         const res = await publicAppService.downloadApplyPdf(leadToken)
-        const url = URL.createObjectURL(res.data)
-        const a   = document.createElement('a')
-        a.href     = url
-        a.download = 'application.pdf'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        triggerDownload(res.data, extractPdfFilename(res.headers as Record<string, string>))
       } catch { /* silent — both endpoints failed */ }
     } finally { setPdfLoading(false) }
   }
@@ -707,17 +704,61 @@ export function MerchantPage() {
     }
   }
 
+  // ── Inline field-level validation (same rules as ApplyPage) ─────────────
+  const runSectionValidation = (sec: PublicFormSection, vals: Record<string, string>): Record<string, string> => {
+    const errors: Record<string, string> = {}
+    console.error('[MerchantPage] runSectionValidation — section:', sec.title,
+      '| fields:', sec.fields.map(f => `${f.key}(${f.type} req=${f.required})`),
+      '| values:', vals,
+    )
+    for (const f of sec.fields) {
+      const raw = (vals[f.key] ?? '').trim()
+      const isEmpty = raw === ''
+      if (f.required && isEmpty) { errors[f.key] = `${f.label} is required`; continue }
+      if (isEmpty) continue
+      const t = f.type?.toLowerCase() ?? ''
+      if (t === 'email' || f.key.toLowerCase().includes('email')) {
+        if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(raw))
+          errors[f.key] = `${f.label} must be a valid email address`
+        continue
+      }
+      if (t === 'tel' || t === 'phone' || t === 'phone_number' || t === 'mobile'
+          || f.key.toLowerCase().includes('phone') || f.key.toLowerCase().includes('mobile')) {
+        const digits = raw.replace(/\D/g, '')
+        if (digits.length < 10 || digits.length > 15)
+          errors[f.key] = `${f.label} must be 10–15 digits (no letters)`
+        continue
+      }
+      if (t === 'number' || t === 'numeric' || t === 'integer') {
+        if (isNaN(Number(raw))) errors[f.key] = `${f.label} must be a numeric value`
+        continue
+      }
+      if (t === 'percentage') {
+        const n = Number(raw)
+        if (isNaN(n)) { errors[f.key] = `${f.label} must be a number`; continue }
+        if (n < 0 || n > 100) errors[f.key] = `${f.label} must be between 0 and 100`
+        continue
+      }
+      if (t === 'date') {
+        if (isNaN(Date.parse(raw))) errors[f.key] = `${f.label} must be a valid date`
+        continue
+      }
+    }
+    console.error('[MerchantPage] runSectionValidation result:', errors)
+    return errors
+  }
+
   // ── Navigate next ─────────────────────────────────────────────────────────
   const handleNext = async () => {
     setSaveErr('')
     if (curInfo.type === 'section' && curSec) {
       const vals = getVals(curSecIdx, curSec)
-      const errs: Record<string, string> = {}
-      curSec.fields.forEach((f: PublicFormField) => {
-        if (f.required && !(vals[f.key] || '').trim()) errs[f.key] = 'Required'
-        if (f.type === 'email' && vals[f.key] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals[f.key])) errs[f.key] = 'Invalid email'
-      })
-      if (Object.keys(errs).length) { setFErrors(errs); return }
+      const errs = runSectionValidation(curSec, vals)
+      if (Object.keys(errs).length) {
+        setFErrors(errs)
+        scrollToFirstError(Object.keys(errs))
+        return    // HARD STOP — do NOT save, do NOT advance
+      }
       setSaving(true)
       try {
         await publicAppService.updateMerchant(leadToken!, vals)
@@ -731,6 +772,22 @@ export function MerchantPage() {
   }
 
   const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setFErrors({}); setSaveErr('') }
+
+  // Sidebar / dot nav — backward free, forward requires validation
+  const handleStepNav = (target: number) => {
+    if (target === step) return
+    if (target > step) {
+      if (curInfo.type === 'section' && curSec) {
+        const vals = getVals(curSecIdx, curSec)
+        const errs = runSectionValidation(curSec, vals)
+        if (Object.keys(errs).length) { setFErrors(errs); scrollToFirstError(Object.keys(errs)); return }
+      }
+    } else {
+      setFErrors({})
+      setSaveErr('')
+    }
+    setStep(target)
+  }
 
   // ── Step helpers ──────────────────────────────────────────────────────────
   const stepLabel = (info: StepInfo) => {
@@ -819,7 +876,7 @@ export function MerchantPage() {
               const done   = isStepDone(info)
               const color  = stepColor(info)
               return (
-                <button key={i} type="button" onClick={() => { setStep(i); setFErrors({}); setSaveErr('') }}
+                <button key={i} type="button" onClick={() => handleStepNav(i)}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: active ? `${color}22` : 'transparent', border: 'none', borderLeft: active ? `3px solid ${color}` : '3px solid transparent', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: active ? `${color}18` : C.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: active ? color : done ? C.success : C.muted, flexShrink: 0, position: 'relative' }}>
                     {stepIcon(info)}
@@ -881,7 +938,13 @@ export function MerchantPage() {
           <div key={step} className="step-enter" style={{ flex: 1, padding: '16px 28px', overflow: 'hidden' }}>
             {curInfo.type === 'section' && curSec ? (
               /* ── Form step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(fieldErrors).length || saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
+                {Object.keys(fieldErrors).length > 0 && (
+                  <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    Please fix {Object.keys(fieldErrors).length} error{Object.keys(fieldErrors).length > 1 ? 's' : ''} before continuing.
+                  </div>
+                )}
                 {saveErr && (
                   <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />{saveErr}
@@ -950,7 +1013,7 @@ export function MerchantPage() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {stepMap.map((info, i) => (
-                <button key={i} type="button" onClick={() => { setStep(i); setFErrors({}); setSaveErr('') }}
+                <button key={i} type="button" onClick={() => handleStepNav(i)}
                   style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepColor(info) : isStepDone(info) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
               ))}
             </div>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Clock, Plus, Pencil, X, CheckCircle2, AlertCircle,
-  Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, CalendarDays,
+  Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { calltimeService, DAY_KEYS, type DayKey, type DaySchedule } from '../../services/calltime.service'
@@ -122,9 +122,6 @@ export function CallTimes() {
   const totalPages = Math.max(1, Math.ceil(totalRows / LIMIT))
   const pageRows   = filtered.slice((page - 1) * LIMIT, page * LIMIT)
 
-  // Count total active days across all schedules
-  const totalActiveDays = departments.reduce((sum, d) => sum + Object.keys(d.timings).length, 0)
-
   // ── Save mutation ──────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: () => calltimeService.saveCallTimings({
@@ -198,24 +195,6 @@ export function CallTimes() {
         <button onClick={openCreate} className="btn-primary flex-shrink-0 flex items-center gap-2">
           <Plus size={15} /> New Schedule
         </button>
-      </div>
-
-      {/* Summary chips */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { label: 'Total Schedules', value: departments.length, Icon: Clock,        bg: 'from-indigo-500 to-violet-600', iconCls: 'text-white' },
-          { label: 'Active Day Slots', value: totalActiveDays,   Icon: CalendarDays, bg: 'bg-blue-100',                   iconCls: 'text-blue-600' },
-        ].map(({ label, value, Icon, bg, iconCls }) => (
-          <div key={label} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white border border-slate-100 shadow-sm">
-            <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0', bg.startsWith('from') ? `bg-gradient-to-br ${bg}` : bg)}>
-              <Icon size={13} className={iconCls} />
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 leading-none">{label}</p>
-              <p className="text-sm font-black text-slate-800 leading-none mt-0.5">{value}</p>
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Search */}

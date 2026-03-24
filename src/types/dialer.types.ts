@@ -1,5 +1,7 @@
 export type CallState = 'idle' | 'ready' | 'ringing' | 'in-call' | 'wrapping' | 'paused'
 
+export type TransferState = 'idle' | 'initiating' | 'ringing' | 'merged'
+
 export interface Campaign {
   id: number
   campaign_name: string
@@ -12,6 +14,11 @@ export interface Campaign {
 
 export interface Lead {
   id: number
+  /**
+   * CRM lead ID — present when the queue row ID differs from the CRM record ID.
+   * Passed as `lead_id` to /call-number; falls back to `id` when absent.
+   */
+  lead_id?: number
   list_id: number
   phone_number: string
   first_name?: string
@@ -55,4 +62,36 @@ export interface IncomingCall {
   location_id: number
   parent_id: number
   user_ids: number[]
+}
+
+/**
+ * Payload for POST /call-transfer/initiate-updated
+ * Maps to DialerController@initiateTransferUpdated validation.
+ */
+export interface TransferRequest {
+  lead_id: number
+  /** Agent's alt_extension from their user profile (auth store). */
+  alt_extension: string
+  customer_phone_number: string
+  campaign_id: number
+  /** Required unless warm_call_transfer_type === 'did' */
+  forward_extension?: string
+  ring_group?: string
+  /** Required when warm_call_transfer_type === 'did' */
+  did_number?: string
+  /** 'crm' | 'dialer' */
+  domain: string
+  warm_call_transfer_type: 'extension' | 'ring_group' | 'did'
+}
+
+/** Local-only record built when a call starts; no dedicated CDR API exposed yet. */
+export interface CallLog {
+  id: string
+  lead_name: string
+  phone_number: string
+  /** Mapped from callNumber / hangup / saveDisposition lifecycle. */
+  status: 'connected' | 'missed' | 'failed' | 'busy' | 'no_answer'
+  duration: number     // seconds (0 if never connected)
+  campaign_name: string
+  started_at: string   // ISO string
 }

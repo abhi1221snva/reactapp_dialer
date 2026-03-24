@@ -36,7 +36,7 @@ export const RichEmailEditor = forwardRef<RichEmailEditorRef, Props>(({ onChange
     setContent: (html: string) => {
       if (!editor) return
       // emitUpdate=true ensures onUpdate fires → body state syncs → Send button enabled
-      editor.commands.setContent(html || '', { emitUpdate: false })
+      editor.commands.setContent(html || '', { emitUpdate: true })
     },
     getContent: () => editor?.getHTML() ?? '',
     isEmpty: () => editor?.isEmpty ?? true,

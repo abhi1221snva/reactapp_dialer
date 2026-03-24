@@ -89,6 +89,7 @@ export function WebPhone() {
   const setPhoneOpen        = useFloatingStore(s => s.setPhoneOpen)
   const setPhoneMinimized   = useFloatingStore(s => s.setPhoneMinimized)
   const registerPhoneClick  = useFloatingStore(s => s.registerPhoneClick)
+  const setPhoneRegistered  = useFloatingStore(s => s.setPhoneRegistered)
   const setIsOpen = setPhoneOpen
 
   const [phoneState, setPhoneState]     = useState<PhoneState>('idle')
@@ -127,6 +128,13 @@ export function WebPhone() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [phoneState])
+
+  // ── Publish SIP registration state to global store ────────────────────────
+  // Dialer.tsx reads phoneRegistered to decide if "Join Campaign" is allowed.
+  useEffect(() => {
+    setPhoneRegistered(phoneState === 'ready' || phoneState === 'in_call')
+    return () => setPhoneRegistered(false)   // clear on unmount
+  }, [phoneState, setPhoneRegistered])
 
   // ── Session events ────────────────────────────────────────────────────────
   // Mirrors the reference implementation: discriminate events by comparing
@@ -381,7 +389,42 @@ export function WebPhone() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  if (!user || !sipConfig || !sipConfig.extension) return null
+  if (!user || !sipConfig) return null
+
+  // Server address missing in user profile — show a clear card instead of
+  // attempting to connect (which would produce "wss://undefined:8089/ws").
+  if (!sipConfig.isConfigured) {
+    return (
+      <DraggableWidget
+        isOpen={isOpen}
+        onClose={() => setPhoneOpen(false)}
+        onMinimize={setPhoneMinimized}
+        headerGradient="linear-gradient(160deg, #0a0f1e 0%, #111827 50%, #1c1854 100%)"
+        defaultRight={16}
+        defaultBottom={20}
+        width={320}
+        zIndex={62}
+        bodyHeight={200}
+        headerLeft={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.2)' }} />
+            <p style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 700 }}>WebPhone</p>
+          </div>
+        }
+      >
+        <div style={{ background: '#080d1a', minHeight: '100%', padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center' }}>
+          <ShieldAlert size={28} style={{ color: '#F87171' }} />
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#F87171' }}>SIP Not Configured</p>
+          <p style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', lineHeight: 1.55 }}>
+            Your account is missing the Asterisk server address or SIP extension.
+            Contact your administrator to configure your user profile.
+          </p>
+        </div>
+      </DraggableWidget>
+    )
+  }
+
+  if (!sipConfig.extension) return null
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const isInCall    = phoneState === 'in_call'

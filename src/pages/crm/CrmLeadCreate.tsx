@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -50,6 +50,20 @@ const LEAD_TYPE_OPTIONS = [
     idle: 'border-blue-200 bg-blue-50 text-blue-500',
     active: 'border-blue-500 bg-blue-500 text-white shadow-lg shadow-blue-200',
   },
+]
+
+// ── Core fields (static — defined outside component so reference is stable) ──
+const CORE_FIELD_DEFS: { key: string; label: string; type?: string; placeholder?: string; colSpan?: boolean; maxLength?: number }[] = [
+  { key: 'first_name',   label: 'First Name',    placeholder: 'First name' },
+  { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name' },
+  { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address' },
+  { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone' },
+  { key: 'company_name', label: 'Company Name',   placeholder: 'Business / DBA name' },
+  { key: 'loan_amount',  label: 'Loan Amount',    placeholder: 'e.g. 50000' },
+  { key: 'address',      label: 'Address',        placeholder: 'Street address', colSpan: true },
+  { key: 'city',         label: 'City',           placeholder: 'City' },
+  { key: 'state',        label: 'State',          placeholder: 'State', maxLength: 2 },
+  { key: 'zip',          label: 'ZIP',            placeholder: 'ZIP' },
 ]
 
 // ── Section category buckets ────────────────────────────────────────────────
@@ -124,24 +138,19 @@ export function CrmLeadCreate() {
     enabled: isEdit && !!leadId,
   })
 
-  const { personal, business, secondOwner } = bucketFields(leadFields)
+  // Memoize so array references stay stable across re-renders (watch() causes re-renders on every
+  // keystroke; unstable references would trigger DynamicFieldForm's useEffect on every keystroke,
+  // resetting all EAV field values back to their original DB values and making fields uneditable).
+  const { personal, business, secondOwner } = useMemo(() => bucketFields(leadFields), [leadFields])
 
   // Keys already covered by crm_labels — don't render them again in the core section
-  const labelKeys = new Set((leadFields ?? []).map(f => f.field_key))
-  const CORE_FIELD_DEFS: { key: keyof FormData; label: string; type?: string; placeholder?: string; colSpan?: boolean; maxLength?: number }[] = [
-    { key: 'first_name',   label: 'First Name',    placeholder: 'First name' },
-    { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name' },
-    { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address' },
-    { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone' },
-    { key: 'company_name', label: 'Company Name',   placeholder: 'Business / DBA name' },
-    { key: 'loan_amount',  label: 'Loan Amount',    placeholder: 'e.g. 50000' },
-    { key: 'address',      label: 'Address',        placeholder: 'Street address', colSpan: true },
-    { key: 'city',         label: 'City',           placeholder: 'City' },
-    { key: 'state',        label: 'State',          placeholder: 'State', maxLength: 2 },
-    { key: 'zip',          label: 'ZIP',            placeholder: 'ZIP' },
-  ]
+  // Memoized so the set is stable and doesn't cause downstream re-effects
+  const labelKeys = useMemo(() => new Set((leadFields ?? []).map(f => f.field_key)), [leadFields])
   // Only show core fields that are NOT already in crm_labels (avoids duplicate RHF registration)
-  const visibleCoreFields = CORE_FIELD_DEFS.filter(f => !labelKeys.has(f.key))
+  const visibleCoreFields = useMemo(
+    () => CORE_FIELD_DEFS.filter(f => !labelKeys.has(f.key)),
+    [labelKeys],
+  )
 
   // Auto-enable second owner in edit mode if that data is populated
   useEffect(() => {
@@ -433,7 +442,7 @@ export function CrmLeadCreate() {
                             <label className="block text-xs font-medium text-slate-600 mb-0.5">{f.label}</label>
                             <input
                               type={f.type ?? 'text'}
-                              {...register(f.key)}
+                              {...register(f.key as keyof FormData)}
                               className="input w-full"
                               placeholder={f.placeholder}
                               maxLength={f.maxLength}

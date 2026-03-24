@@ -8,9 +8,10 @@ import {
   Edit3, ArrowLeft, ArrowRight, Phone, Mail, Clock,
 } from 'lucide-react'
 import {
-  publicAppService,
+  publicAppService, extractPdfFilename,
   PublicFormSection, PublicFormField, PublicCompany, SubmitResult,
 } from '../../services/publicApp.service'
+import { validateSection, scrollToFirstError } from '../../utils/publicFormValidation'
 
 // ─── Design tokens (identical to MerchantPage) ────────────────────────────────
 const C = {
@@ -76,7 +77,7 @@ const DOC_TYPES = [
 
 // ─── FormField (matches MerchantPage style) ───────────────────────────────────
 function FormField({ f, value, onChange, error }: {
-  f: PublicFormField; value: string; onChange: (k: string, v: string) => void; error?: boolean
+  f: PublicFormField; value: string; onChange: (k: string, v: string) => void; error?: string
 }) {
   const [show, setShow] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -128,14 +129,14 @@ function FormField({ f, value, onChange, error }: {
   })()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div data-field-key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <label style={{ fontSize: 11, fontWeight: 700, color: error ? C.error : C.muted, textTransform: 'uppercase', letterSpacing: 0.6, display: 'flex', gap: 3, alignItems: 'center' }}>
         {f.label}{f.required && <span style={{ color: C.error, fontSize: 13 }}>*</span>}
       </label>
       {input}
       {error && (
         <span style={{ fontSize: 11, color: C.error, display: 'flex', alignItems: 'center', gap: 3 }}>
-          <AlertCircle size={11} />Required
+          <AlertCircle size={11} />{error}
         </span>
       )}
     </div>
@@ -381,11 +382,11 @@ function SuccessScreen({ res, company }: { res: SubmitResult; company: PublicCom
   const handlePdfClick = async () => {
     if (pdfLoading) return
     setPdfLoading(true)
-    const triggerDownload = (blob: Blob) => {
+    const triggerDownload = (blob: Blob, filename: string) => {
       const url = URL.createObjectURL(blob)
       const a   = document.createElement('a')
       a.href     = url
-      a.download = 'application.pdf'
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -393,11 +394,11 @@ function SuccessScreen({ res, company }: { res: SubmitResult; company: PublicCom
     }
     try {
       const r = await publicAppService.downloadApplyPdf(res.lead_token)
-      triggerDownload(r.data)
+      triggerDownload(r.data, extractPdfFilename(r.headers as Record<string, string>))
     } catch {
       try {
         const r = await publicAppService.downloadMerchantPdf(res.lead_token)
-        triggerDownload(r.data)
+        triggerDownload(r.data, extractPdfFilename(r.headers as Record<string, string>))
       } catch { /* silent */ }
     } finally { setPdfLoading(false) }
   }
@@ -465,9 +466,11 @@ export function ApplyPage() {
   const company: PublicCompany | null = data?.company ?? null
   const sections: PublicFormSection[] = data?.sections ?? []
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+
   const [step, setStep]         = useState(0)
   const [form, setForm]         = useState<Record<string, string>>({})
-  const [errs, setErrs]         = useState<Record<string, boolean>>({})
+  const [errs, setErrs]         = useState<Record<string, string>>({})
   const [sig, setSig]           = useState('')
   const [sigSaved, setSigSaved] = useState(false)
   const [docs, setDocs]         = useState<UploadFile[]>([])
@@ -487,17 +490,140 @@ export function ApplyPage() {
     if (errs[k]) setErrs(e => { const n = { ...e }; delete n[k]; return n })
   }
 
-  const validate = () => {
-    if (step >= sections.length) return true
+  // ── Core validation — runs inline, handles all field_type variants ──────────
+  const runValidation = (): Record<string, string> => {
     const sec = sections[step]
-    const ne: Record<string, boolean> = {}
-    sec.fields.forEach((f: PublicFormField) => { if (f.required && !form[f.key]?.trim()) ne[f.key] = true })
-    setErrs(ne)
-    return !Object.keys(ne).length
+    // Log exact state so we can diagnose issues in the console
+    console.error('[ApplyPage] runValidation — step:', step,
+      '| sections.length:', sections.length,
+      '| section:', sec?.title ?? 'NONE',
+      '| fields:', sec?.fields?.map(f => `${f.key}(${f.type} req=${f.required})`),
+      '| form:', form,
+    )
+
+    if (!sec || !sec.fields || sec.fields.length === 0) {
+      console.error('[ApplyPage] WARNING: section has no fields — allowing navigation')
+      return {}
+    }
+
+    const errors: Record<string, string> = {}
+
+    for (const f of sec.fields) {
+      const raw = (form[f.key] ?? '').trim()
+      const isEmpty = raw === ''
+
+      // ── Required ──────────────────────────────────────────────────────────
+      if (f.required && isEmpty) {
+        errors[f.key] = `${f.label} is required`
+        continue
+      }
+      if (isEmpty) continue   // optional + empty → skip type check
+
+      // ── Type checks (handle all possible variants from backend) ───────────
+      const t = f.type?.toLowerCase() ?? ''
+
+      // Email
+      if (t === 'email' || f.key.toLowerCase().includes('email')) {
+        if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(raw)) {
+          errors[f.key] = `${f.label} must be a valid email address`
+        }
+        continue
+      }
+
+      // Phone — covers: tel, phone, phone_number, mobile, cell
+      if (t === 'tel' || t === 'phone' || t === 'phone_number' || t === 'mobile'
+          || f.key.toLowerCase().includes('phone') || f.key.toLowerCase().includes('mobile')) {
+        const digits = raw.replace(/\D/g, '')
+        if (digits.length < 10 || digits.length > 15) {
+          errors[f.key] = `${f.label} must be 10–15 digits (no letters)`
+        }
+        continue
+      }
+
+      // Number
+      if (t === 'number' || t === 'numeric' || t === 'integer') {
+        if (isNaN(Number(raw))) {
+          errors[f.key] = `${f.label} must be a numeric value`
+        }
+        continue
+      }
+
+      // Percentage
+      if (t === 'percentage') {
+        const n = Number(raw)
+        if (isNaN(n)) { errors[f.key] = `${f.label} must be a number`; continue }
+        if (n < 0 || n > 100) { errors[f.key] = `${f.label} must be between 0 and 100`; continue }
+        continue
+      }
+
+      // Date
+      if (t === 'date') {
+        if (isNaN(Date.parse(raw))) {
+          errors[f.key] = `${f.label} must be a valid date`
+        }
+        continue
+      }
+
+      // Text / Textarea length limit
+      if (t === 'text' || t === 'textarea' || t === 'text_area') {
+        const limit = (t === 'text') ? 255 : 500
+        if (raw.length > limit) {
+          errors[f.key] = `${f.label} must not exceed ${limit} characters`
+        }
+        continue
+      }
+
+      // Select / Dropdown — validate against allowed options
+      if ((t === 'select' || t === 'dropdown' || t === 'select_option') && f.options?.length) {
+        if (!f.options.includes(raw)) {
+          errors[f.key] = `${f.label} must be a valid option`
+        }
+        continue
+      }
+    }
+
+    console.error('[ApplyPage] runValidation result:', errors)
+    return errors
   }
 
-  const handleNext = () => { if (validate()) setStep(s => Math.min(s + 1, TOTAL - 1)) }
+  const validate = (): boolean => {
+    if (step >= sections.length) return true   // sig/doc steps — no fields to check
+    const errors = runValidation()
+    setErrs(errors)
+    if (Object.keys(errors).length > 0) {
+      scrollToFirstError(Object.keys(errors), scrollRef.current)
+      return false
+    }
+    return true
+  }
+
+  // Navigate forward — ALWAYS validates first. Step NEVER changes on failure.
+  const handleNext = () => {
+    if (step >= sections.length) {
+      // Sig / Doc steps — no form fields, allow freely
+      setStep(s => Math.min(s + 1, TOTAL - 1))
+      return
+    }
+    const errors = runValidation()
+    setErrs(errors)
+    if (Object.keys(errors).length > 0) {
+      scrollToFirstError(Object.keys(errors), scrollRef.current)
+      return   // ← HARD STOP — page does NOT advance
+    }
+    setErrs({})
+    setStep(s => Math.min(s + 1, TOTAL - 1))
+  }
+
   const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setErrs({}); setSubErr('') }
+
+  // Sidebar / dot nav — backward always free, forward gates on validate()
+  const handleStepNav = (target: number) => {
+    if (target === step) return
+    if (target > step && !validate()) return
+    setErrs({})
+    setSubErr('')
+    setStep(target)
+  }
 
   const submit = async () => {
     setSubErr(''); setSub(true)
@@ -661,7 +787,7 @@ export function ApplyPage() {
               const meta   = stepMeta(title)
               const color  = meta.color
               return (
-                <button key={i} type="button" onClick={() => { setStep(i); setErrs({}); setSubErr('') }}
+                <button key={i} type="button" onClick={() => handleStepNav(i)}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: active ? `${color}22` : 'transparent', border: 'none', borderLeft: active ? `3px solid ${color}` : '3px solid transparent', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: active ? `${color}18` : C.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: active ? color : done ? C.success : C.muted, flexShrink: 0, position: 'relative' }}>
                     {meta.icon}
@@ -724,7 +850,13 @@ export function ApplyPage() {
           <div key={step} className="step-enter" style={{ flex: 1, padding: '16px 28px', overflow: 'hidden' }}>
             {!isSig && !isDoc && curSec ? (
               /* ── Form step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(errs).length ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div ref={scrollRef} style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(errs).length ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+                {Object.keys(errs).length > 0 && (
+                  <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    Please fix {Object.keys(errs).length} error{Object.keys(errs).length > 1 ? 's' : ''} before continuing.
+                  </div>
+                )}
                 {subErr && (
                   <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />{subErr}
@@ -733,7 +865,7 @@ export function ApplyPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
                   {curSec.fields.map((f: PublicFormField) => (
                     <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
-                      <FormField f={f} value={form[f.key] || ''} onChange={change} error={!!errs[f.key]} />
+                      <FormField f={f} value={form[f.key] || ''} onChange={change} error={errs[f.key]} />
                     </div>
                   ))}
                 </div>
@@ -763,7 +895,7 @@ export function ApplyPage() {
             {/* Step dots */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {allSteps.map((title, i) => (
-                <button key={i} type="button" onClick={() => { setStep(i); setErrs({}); setSubErr('') }}
+                <button key={i} type="button" onClick={() => handleStepNav(i)}
                   style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepMeta(title).color : isStepDone(i) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
               ))}
             </div>

@@ -241,6 +241,11 @@ export const crmService = {
   deleteLeadField: (id: number) =>
     api.delete(`/crm/lead-fields/${id}`),
 
+  // Persist a new global display_order for ALL fields in one shot.
+  // ids = flat ordered array of crm_labels.id values across all sections.
+  reorderLeadFields: (ids: number[]) =>
+    api.post('/crm/lead-fields/reorder', { ids }),
+
   // ── CRM Labels (Custom Field Builder) ──────────────────────────────────────
   getCrmLabels: () =>
     api.get('/crm-labels'),

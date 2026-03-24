@@ -51,18 +51,31 @@ export function useAuth() {
 
   // Prefer domain name over raw IP for WSS — cert is issued for hostname, not IP
   const isIp = (h: string) => /^(\d{1,3}\.){3}\d{1,3}$/.test(h)
-  const wsHost = user
-    ? (!isIp(user.domain) ? user.domain : !isIp(user.server) ? user.server : user.server)
-    : ''
 
+  const resolveWsHost = (): string => {
+    if (!user) return ''
+    // Use domain if it's a hostname (not IP)
+    if (user.domain && !isIp(user.domain)) return user.domain
+    // Fall back to server if it's a hostname
+    if (user.server && !isIp(user.server)) return user.server
+    // Fall back to server IP (cert may not match but it's the only option)
+    return user.server || ''
+  }
+
+  const wsHost = resolveWsHost()
+
+  // sipConfig is always non-null when user exists:
+  // - isConfigured=true  → full SIP credentials present, webphone can connect
+  // - isConfigured=false → server/extension missing, show "SIP Not Configured" card
   const sipConfig = user
     ? {
         extension: user.alt_extension || user.extension,
         server: user.server,
         domain: user.domain,
         password: user.secret ? decodeSipSecret(user.secret) : '',
-        wsUri: `wss://${wsHost}:8089/ws`,
-        certUrl: `https://${user.server}:8089`,
+        wsUri: wsHost ? `wss://${wsHost}:8089/ws` : '',
+        certUrl: wsHost ? `https://${wsHost}:8089` : '',
+        isConfigured: !!wsHost && !!(user.alt_extension || user.extension),
       }
     : null
 

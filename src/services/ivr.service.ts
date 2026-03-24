@@ -32,4 +32,17 @@ export const ivrService = {
     }),
   createAudio: (data: Record<string, unknown>) => api.post('/add-audio-message', data),
   updateAudio: (data: Record<string, unknown>) => api.post('/edit-audio-message', data),
+  deleteAudio: (id: number) => api.post('/delete-audio-message', { auto_id: id }),
+
+  // Upload a raw audio file; returns { relative_path, filename }
+  uploadAudio: (formData: FormData) =>
+    api.post('/upload-audio', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  // Fetch stored audio file as Blob for in-browser playback
+  fetchAudioBlob: (subdir: string, filename: string) =>
+    api.get(`/crm/tenant-file/${subdir}/${encodeURIComponent(filename)}`, {
+      responseType: 'blob',
+    }),
 }

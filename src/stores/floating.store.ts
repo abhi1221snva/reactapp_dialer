@@ -26,6 +26,10 @@ interface FloatingState {
   setPhoneHasIncoming: (v: boolean) => void
   setPhoneStatusMsg: (v: string) => void
 
+  // ── Phone registration state (true when SIP stack says 'ready') ────────────
+  phoneRegistered: boolean
+  setPhoneRegistered: (v: boolean) => void
+
   // ── Phone action ─── (WebPhone registers this so FABMenu can call sipEnable)
   phoneClickHandler: (() => void) | null
   registerPhoneClick: (fn: () => void) => void
@@ -72,6 +76,9 @@ export const useFloatingStore = create<FloatingState>((set) => ({
   setPhoneFabIcon: (v) => set({ phoneFabIcon: v }),
   setPhoneHasIncoming: (v) => set({ phoneHasIncoming: v }),
   setPhoneStatusMsg: (v) => set({ phoneStatusMsg: v }),
+
+  phoneRegistered: false,
+  setPhoneRegistered: (v) => set({ phoneRegistered: v }),
 
   phoneClickHandler: null,
   registerPhoneClick: (fn) => set({ phoneClickHandler: fn }),

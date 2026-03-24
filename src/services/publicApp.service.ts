@@ -75,6 +75,35 @@ export interface MerchantPortalData {
   sections: PublicFormSection[]
 }
 
+/**
+ * Extract the filename from an axios response's Content-Disposition header.
+ * Falls back to `fallback` if the header is absent or has no filename.
+ *
+ * Backend sets:  Content-Disposition: attachment; filename="john_doe_application.pdf"
+ */
+export function extractPdfFilename(
+  headers: Record<string, string> | undefined,
+  fallback = 'application.pdf',
+): string {
+  const cd = headers?.['content-disposition'] ?? ''
+  const match = cd.match(/filename="([^"]+)"/)
+  return match ? match[1] : fallback
+}
+
+/**
+ * Sanitize a name segment into a safe filename part.
+ * - Transliterates accented chars (é→e, ñ→n, ü→u)
+ * - Lowercase, spaces/specials → underscore
+ */
+export function sanitizeNamePart(s: string): string {
+  return s
+    .normalize('NFD')                     // decompose: é → e + combining accent
+    .replace(/[\u0300-\u036f]/g, '')      // strip combining accent marks
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+}
+
 export const publicAppService = {
   // ── Affiliate Apply Form ──────────────────────────────────────────────────
   getApplyForm(affiliateCode: string) {
