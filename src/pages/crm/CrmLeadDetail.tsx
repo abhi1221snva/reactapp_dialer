@@ -494,13 +494,11 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
                     <FileText size={14} className={ic.color} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{doc.file_name}</p>
+                    <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{doc.document_type}</p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700">
-                        <Tag size={8} /> {doc.document_type}
-                      </span>
-                      {doc.file_size ? <span className="text-[10px] text-slate-400">{formatBytes(Number(doc.file_size))}</span> : null}
-                      <span className="text-[10px] text-slate-400">{new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <span className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">{doc.file_name}</span>
+                      {doc.file_size ? <span className="text-[10px] text-slate-400">· {formatBytes(Number(doc.file_size))}</span> : null}
+                      <span className="text-[10px] text-slate-400">· {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
                     </div>
                   </div>
@@ -639,101 +637,168 @@ function LenderAvatar({ name }: { name: string }) {
   )
 }
 
-// ── Response Update Modal ───────────────────────────────────────────────────────
-function ResponseModal({ submission, leadId, onClose }: { submission: LenderSubmission; leadId: number; onClose: () => void }) {
+// ── Inline Submission Row ────────────────────────────────────────────────────
+const INLINE_STATUS_OPTIONS = [
+  { value: 'pending',          label: 'Pending' },
+  { value: 'approved',         label: 'Approved' },
+  { value: 'declined',         label: 'Declined' },
+  { value: 'needs_documents',  label: 'Missing Docs' },
+] as const
+
+// Parse stored note log: entries separated by "\n---\n"
+function parseNoteLog(raw: string): { ts: string; text: string }[] {
+  if (!raw.trim()) return []
+  return raw.split('\n---\n').map(entry => {
+    const nl = entry.indexOf('\n')
+    if (nl === -1) return { ts: '', text: entry.trim() }
+    const firstLine = entry.slice(0, nl).trim()
+    const rest      = entry.slice(nl + 1).trim()
+    // first line is timestamp if it matches [Mar 23, 2026 8:14 PM]
+    if (/^\[.+\]$/.test(firstLine)) return { ts: firstLine.slice(1, -1), text: rest }
+    return { ts: '', text: entry.trim() }
+  }).filter(e => e.text)
+}
+
+function buildAppendedNote(existing: string, newText: string): string {
+  const ts      = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const entry   = `[${ts}]\n${newText.trim()}`
+  return existing.trim() ? `${existing.trim()}\n---\n${entry}` : entry
+}
+
+function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number }) {
   const qc = useQueryClient()
-  const lenderName = submission.lender_name ?? `Lender #${submission.lender_id}`
-  const [responseStatus,   setResponseStatus]   = useState<LenderResponseStatus>(submission.response_status ?? 'pending')
-  const [submissionStatus, setSubmissionStatus] = useState<LenderSubmissionStatus>(submission.submission_status ?? 'submitted')
-  const [responseNote,     setResponseNote]     = useState(submission.response_note ?? '')
+  const [editing,  setEditing]  = useState(false)
+  const [status,   setStatus]   = useState<LenderResponseStatus>(sub.response_status ?? 'pending')
+  const [newNote,  setNewNote]  = useState('')
+  const existingNotes = sub.response_note ?? ''
+  const noteLog       = parseNoteLog(existingNotes)
+
+  const statusColors: Record<string, string> = {
+    approved:        'text-white bg-emerald-500 border-emerald-500',
+    declined:        'text-white bg-red-500 border-red-500',
+    needs_documents: 'text-white bg-orange-400 border-orange-400',
+    pending:         'text-slate-600 bg-slate-100 border-slate-300',
+  }
+  const statusLabel: Record<string, string> = {
+    approved: 'Approved', declined: 'Declined', needs_documents: 'Missing Docs', pending: 'Pending',
+  }
 
   const mutation = useMutation({
-    mutationFn: () => crmService.updateSubmissionResponse(leadId, submission.id, {
-      response_status:   responseStatus,
-      submission_status: submissionStatus,
-      response_note:     responseNote || undefined,
-    }),
+    mutationFn: () => {
+      const combined = newNote.trim() ? buildAppendedNote(existingNotes, newNote) : existingNotes
+      return crmService.updateSubmissionResponse(leadId, sub.id, {
+        response_status:   status,
+        submission_status: sub.submission_status ?? 'submitted',
+        response_note:     combined || undefined,
+      })
+    },
     onSuccess: () => {
-      toast.success('Response updated')
+      toast.success('Saved')
+      setNewNote('')
+      setEditing(false)
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-approvals', leadId] })
-      if (responseStatus === 'approved') {
-        toast.success(`Approval record created for ${lenderName}`, { id: 'approval-sync', duration: 3000 })
-      }
-      onClose()
     },
-    onError: () => toast.error('Failed to update response'),
+    onError: () => toast.error('Failed to save'),
   })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.45)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-          <LenderAvatar name={lenderName} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-slate-800 truncate">{lenderName}</p>
-            <p className="text-[11px] text-slate-400">Update submission response</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0">
-            <X size={15} />
-          </button>
+    <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+      {/* Summary row */}
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-slate-800 truncate">
+            {sub.lender_name ?? `Lender #${sub.lender_id}`}
+          </p>
+          {sub.submitted_at && (
+            <p className="text-[10px] text-slate-400 tabular-nums">
+              {new Date(sub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+            </p>
+          )}
         </div>
-
-        <div className="p-5 space-y-3">
-          {/* Two selects side by side */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Lender Response</label>
-              <select className="input w-full text-sm" value={responseStatus} onChange={e => setResponseStatus(e.target.value as LenderResponseStatus)}>
-                <option value="pending">Awaiting</option>
-                <option value="approved">Approved</option>
-                <option value="declined">Declined</option>
-                <option value="needs_documents">Needs Docs</option>
-                <option value="no_response">No Reply</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Send Status</label>
-              <select className="input w-full text-sm" value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value as LenderSubmissionStatus)}>
-                <option value="pending">Pending</option>
-                <option value="submitted">Submitted</option>
-                <option value="viewed">Viewed</option>
-                <option value="approved">Approved</option>
-                <option value="declined">Declined</option>
-                <option value="no_response">No Response</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
-              Note <span className="normal-case font-normal text-slate-400">(optional)</span>
-            </label>
-            <textarea
-              className="input w-full resize-none text-sm"
-              rows={3}
-              value={responseNote}
-              onChange={e => setResponseNote(e.target.value)}
-              placeholder="e.g. Approved $50k @ 1.35 factor rate…"
-            />
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="btn-primary flex-1 disabled:opacity-50">
-              {mutation.isPending ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : 'Save Response'}
-            </button>
-            <button onClick={onClose} className="btn-outline px-4">Cancel</button>
-          </div>
-        </div>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 ${statusColors[status] ?? statusColors.pending}`}>
+          {statusLabel[status] ?? status}
+        </span>
+        <button
+          onClick={() => setEditing(v => !v)}
+          className={`p-1 rounded flex-shrink-0 transition-colors ${editing ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600'}`}
+          title="Edit"
+        >
+          <Pencil size={12} />
+        </button>
       </div>
+
+      {/* Note log — always visible if notes exist */}
+      {noteLog.length > 0 && (
+        <div className="border-t border-slate-100 divide-y divide-slate-100">
+          {[...noteLog].reverse().map((e, i) => (
+            <div key={i} className="flex items-start gap-2 px-3 py-1.5 bg-slate-50">
+              <span className="text-slate-300 mt-0.5 flex-shrink-0 text-[10px]">•</span>
+              <div className="min-w-0 flex-1">
+                <span className="text-xs text-slate-700 font-medium">{e.text}</span>
+                {e.ts && <span className="text-[10px] text-slate-500 ml-1.5">{e.ts}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Edit form — toggled by pencil */}
+      {editing && (
+        <div className="border-t border-slate-100 p-3 space-y-2 bg-white">
+          <select
+            className="w-full text-xs font-semibold border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-white text-slate-700"
+            value={status}
+            onChange={e => setStatus(e.target.value as LenderResponseStatus)}
+          >
+            {INLINE_STATUS_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <textarea
+            className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-400 placeholder:text-slate-400"
+            rows={2}
+            value={newNote}
+            onChange={e => setNewNote(e.target.value)}
+            placeholder="Add a note…"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+              className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1"
+            >
+              {mutation.isPending ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : 'Save'}
+            </button>
+            <button onClick={() => setEditing(false)} className="px-3 text-xs text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Submission notes (auto-tracked doc history) */}
+      {sub.notes && (
+        <div className="mt-2 px-3 pb-2">
+          <div className="bg-slate-50 rounded-lg border border-slate-100 p-2.5 text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
+            {sub.notes}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Lenders Panel ──────────────────────────────────────────────────────────────
+/** Replace [[field_key]] placeholders with actual lead values. */
+function fillPlaceholders(html: string, lead: Record<string, unknown>): string {
+  return html.replace(/\[\[(\w+)\]\]/g, (match, key: string) => {
+    const val = lead[key]
+    return val !== null && val !== undefined && val !== '' ? String(val) : match
+  })
+}
+
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
 
@@ -743,8 +808,14 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const [templateId, setTemplateId]     = useState<number | ''>('')
   const [uploadingDocs, setUploadingDocs] = useState(false)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
-  const [editingSub, setEditingSub]     = useState<LenderSubmission | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Re-use cached lead data (already fetched by parent — no extra request)
+  const { data: leadData } = useQuery({
+    queryKey: ['crm-lead', leadId],
+    queryFn: async () => (r => (r.data?.data ?? r.data) as CrmLead)(await leadService.getById(leadId)),
+    staleTime: 5 * 60 * 1000,
+  })
 
   const { data: submissions, isLoading: subsLoading } = useQuery({
     queryKey: ['lender-submissions', leadId],
@@ -784,6 +855,17 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const subList       = submissions ?? []
   const docs          = leadDocs ?? []
 
+  // Compute preview template + filled HTML at component scope so the mutation can use them
+  const previewTemplate = templateId !== ''
+    ? (emailTemplates ?? []).find(t => t.id === templateId) ?? null
+    : null
+
+  const previewHtml = previewTemplate
+    ? (leadData
+        ? fillPlaceholders(previewTemplate.template_html, leadData as Record<string, unknown>)
+        : previewTemplate.template_html)
+    : ''
+
   function toggleLender(id: number) {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
@@ -821,6 +903,9 @@ function LendersPanel({ leadId }: { leadId: number }) {
       lender_ids:   Array.from(selectedIds),
       notes:        notes || undefined,
       document_ids: selectedDocIds.size ? Array.from(selectedDocIds) : undefined,
+      // Pass rendered template HTML + subject when a template is selected
+      email_html:    previewHtml || undefined,
+      email_subject: previewTemplate?.subject || undefined,
     }),
     onSuccess: (res) => {
       const { submitted = [], failed = [] } = res.data?.data ?? {}
@@ -841,130 +926,226 @@ function LendersPanel({ leadId }: { leadId: number }) {
         <button onClick={() => setShowForm(true)} className="btn-primary w-full justify-center gap-2">
           <Send size={13} /> Submit to Lenders
         </button>
-      ) : (
-        <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
-            <span className="text-sm font-semibold text-slate-700">Submit Application</span>
-            <button onClick={closeForm} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-          </div>
+      ) : (() => {
+        return (
+          <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+              <span className="text-sm font-semibold text-slate-700">Submit Application</span>
+              <button onClick={closeForm} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+            </div>
 
-          <div className="p-4 space-y-3">
+            {/* two-col when preview active */}
+            <div className={previewTemplate ? 'flex divide-x divide-slate-100' : ''}>
 
-            {/* Lenders */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-medium text-slate-600">Lenders</label>
-                {activeLenders.length > 0 && (
+              {/* ── Form fields ── */}
+              <div className={previewTemplate ? 'w-72 flex-shrink-0 p-4 space-y-3' : 'p-4 space-y-3'}>
+
+                {/* Lenders */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-slate-600">Lenders</label>
+                    {activeLenders.length > 0 && (
+                      <button
+                        onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
+                        className="text-[11px] text-emerald-600 hover:underline"
+                      >{selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}</button>
+                    )}
+                  </div>
+                  {activeLenders.length === 0 ? (
+                    <p className="text-xs text-slate-400">No active lenders configured.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-44 overflow-y-auto">
+                      {activeLenders.map(l => {
+                        const on = selectedIds.has(l.id)
+                        return (
+                          <label key={l.id} className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg border cursor-pointer select-none transition-colors
+                            border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/40"
+                            style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggleLender(l.id)}
+                              className="accent-emerald-600 w-3.5 h-3.5 flex-shrink-0"
+                            />
+                            <span className="text-xs text-slate-700 truncate">{l.lender_name}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Email Template */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Email Template</label>
+                  <select
+                    className="input w-full text-sm"
+                    value={templateId}
+                    onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
+                  >
+                    <option value="">— Default —</option>
+                    {(emailTemplates ?? []).map(t => (
+                      <option key={t.id} value={t.id}>{t.template_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Documents */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-600">Documents</label>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingDocs}
+                      className="text-[11px] text-emerald-600 hover:underline disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                      Upload
+                    </button>
+                    <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
+                  </div>
+                  {docs.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No documents yet.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {docs.map(d => {
+                        const on = selectedDocIds.has(d.id)
+                        const docLabel = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
+                        return (
+                          <label key={d.id} className="flex items-center gap-2 py-1 px-2 rounded border cursor-pointer select-none text-xs text-slate-700 border-slate-200 hover:border-emerald-200"
+                            style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                          >
+                            <input type="checkbox" checked={on} onChange={() => toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
+                            <FileText size={10} className="flex-shrink-0 text-slate-400" />
+                            <span className="truncate">{docLabel}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Note (optional)</label>
+                  <textarea
+                    className="input w-full resize-none text-sm"
+                    rows={2}
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Additional notes for the lender…"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-0.5">
                   <button
-                    onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
-                    className="text-[11px] text-emerald-600 hover:underline"
-                  >{selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}</button>
-                )}
+                    onClick={() => submitMutation.mutate()}
+                    disabled={selectedIds.size === 0 || submitMutation.isPending}
+                    className="btn-primary flex-1 justify-center disabled:opacity-50"
+                  >
+                    {submitMutation.isPending
+                      ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
+                      : <><Send size={13} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                    }
+                  </button>
+                  <button onClick={closeForm} className="btn-outline px-3">Cancel</button>
+                </div>
               </div>
-              {activeLenders.length === 0 ? (
-                <p className="text-xs text-slate-400">No active lenders configured.</p>
-              ) : (
-                <div className="space-y-1 max-h-44 overflow-y-auto">
-                  {activeLenders.map(l => {
-                    const on = selectedIds.has(l.id)
-                    return (
-                      <label key={l.id} className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg border cursor-pointer select-none transition-colors
-                        border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/40"
-                        style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          onChange={() => toggleLender(l.id)}
-                          className="accent-emerald-600 w-3.5 h-3.5 flex-shrink-0"
-                        />
-                        <span className="text-xs text-slate-700 truncate">{l.lender_name}</span>
-                      </label>
-                    )
-                  })}
+
+              {/* ── Email preview panel ── */}
+              {previewTemplate && (
+                <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+                  {/* macOS-style window chrome */}
+                  <div className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0" style={{ background: '#1e293b' }}>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-400 hover:bg-red-500 transition-colors cursor-default" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400 hover:bg-amber-500 transition-colors cursor-default" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 hover:bg-emerald-500 transition-colors cursor-default" />
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-md text-slate-400 text-[11px]" style={{ background: '#334155' }}>
+                        <Mail size={10} />
+                        <span>Email Preview</span>
+                      </div>
+                    </div>
+                    <div className="w-[52px]" /> {/* balance spacer */}
+                  </div>
+
+                  {/* Email reading pane */}
+                  <div className="flex-1 flex flex-col overflow-hidden bg-white">
+
+                    {/* Subject + meta header */}
+                    <div className="px-5 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
+                      <h3 className="text-sm font-bold text-slate-900 leading-snug mb-3 truncate">
+                        {previewTemplate.subject || previewTemplate.template_name}
+                      </h3>
+
+                      {/* Sender row */}
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+                          style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
+                          <Mail size={13} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-slate-800">Submission Email</span>
+                            <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                            <span className="text-[11px] text-slate-500">to</span>
+                            {selectedIds.size > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                                <Building2 size={9} className="text-slate-500" />
+                                {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Template badge + attachments hint */}
+                      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
+                          style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
+                          <Check size={9} />
+                          {previewTemplate.template_name}
+                        </span>
+                        {selectedDocIds.size > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
+                            <FileText size={9} />
+                            {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Email body iframe */}
+                    <div className="flex-1 overflow-auto bg-slate-50" style={{ minHeight: 260 }}>
+                      <div className="p-3 h-full">
+                        <div className="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden h-full" style={{ minHeight: 240 }}>
+                          <iframe
+                            key={previewTemplate.id}
+                            srcDoc={previewHtml}
+                            className="w-full border-0 block"
+                            style={{ minHeight: 240, height: '100%' }}
+                            sandbox="allow-same-origin"
+                            title="Email body preview"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-
-            {/* Email Template */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Email Template</label>
-              <select
-                className="input w-full text-sm"
-                value={templateId}
-                onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
-              >
-                <option value="">— Default —</option>
-                {(emailTemplates ?? []).map(t => (
-                  <option key={t.id} value={t.id}>{t.template_name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Documents */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-slate-600">Documents</label>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingDocs}
-                  className="text-[11px] text-emerald-600 hover:underline disabled:opacity-50 flex items-center gap-1"
-                >
-                  {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
-                  Upload
-                </button>
-                <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
-              </div>
-              {docs.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No documents yet.</p>
-              ) : (
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {docs.map(d => {
-                    const on = selectedDocIds.has(d.id)
-                    const fname = d.file_path?.split('/').pop() ?? `Doc #${d.id}`
-                    return (
-                      <label key={d.id} className="flex items-center gap-2 py-1 px-2 rounded border cursor-pointer select-none text-xs text-slate-700 border-slate-200 hover:border-emerald-200"
-                        style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
-                      >
-                        <input type="checkbox" checked={on} onChange={() => toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
-                        <FileText size={10} className="flex-shrink-0 text-slate-400" />
-                        <span className="truncate">{fname}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Note */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Note (optional)</label>
-              <textarea
-                className="input w-full resize-none text-sm"
-                rows={2}
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Additional notes for the lender…"
-              />
-            </div>
-
-            <div className="flex gap-2 pt-0.5">
-              <button
-                onClick={() => submitMutation.mutate()}
-                disabled={selectedIds.size === 0 || submitMutation.isPending}
-                className="btn-primary flex-1 justify-center disabled:opacity-50"
-              >
-                {submitMutation.isPending
-                  ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
-                  : <><Send size={13} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
-                }
-              </button>
-              <button onClick={closeForm} className="btn-outline px-3">Cancel</button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Submission History ── */}
       <div>
@@ -977,44 +1158,13 @@ function LendersPanel({ leadId }: { leadId: number }) {
         ) : subList.length === 0 ? (
           <p className="text-xs text-slate-400 text-center py-6">No submissions yet.</p>
         ) : (
-          <div className="space-y-1.5">
-            {subList.map(s => {
-              const lenderName = s.lender_name ?? `Lender #${s.lender_id}`
-              const respCfg = RESPONSE_STATUS_MAP[s.response_status ?? 'pending']
-              return (
-                <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{lenderName}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <StatusDot status={s.submission_status ?? 'pending'} map={SUBMISSION_STATUS_MAP} />
-                      <span className="text-slate-300">›</span>
-                      <StatusDot status={s.response_status ?? 'pending'} map={RESPONSE_STATUS_MAP} />
-                      {s.submitted_at && (
-                        <span className="text-[10px] text-slate-400 tabular-nums">
-                          {new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                        </span>
-                      )}
-                    </div>
-                    {s.response_note && (
-                      <p className="text-[11px] text-slate-500 italic mt-1 truncate">"{s.response_note}"</p>
-                    )}
-                  </div>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${respCfg.bg} ${respCfg.text} flex-shrink-0`}>
-                    {respCfg.label}
-                  </span>
-                  <button
-                    onClick={() => setEditingSub(s)}
-                    className="p-1 text-slate-300 hover:text-slate-600 flex-shrink-0"
-                    title="Update response"
-                  ><Pencil size={12} /></button>
-                </div>
-              )
-            })}
+          <div className="space-y-2">
+            {subList.map(s => (
+              <SubmissionRow key={s.id} sub={s} leadId={leadId} />
+            ))}
           </div>
         )}
       </div>
-
-      {editingSub && <ResponseModal submission={editingSub} leadId={leadId} onClose={() => setEditingSub(null)} />}
     </div>
   )
 }
@@ -1557,6 +1707,15 @@ function LeadHeroCard({ lead, leadId, avatarBg, leadInits, statusColor, currentS
                 {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               </span>
             </div>
+
+            {/* Business info — single row */}
+            <p className="mt-2 text-[11px] text-slate-400 truncate">
+              {[
+                lead.company_name ? String(lead.company_name) : null,
+                lead.phone_number ? formatPhoneNumber(String(lead.phone_number)) : null,
+                lead.email        ? String(lead.email) : null,
+              ].filter(Boolean).join('  ·  ')}
+            </p>
           </div>
         </div>
 
@@ -2232,7 +2391,10 @@ export function CrmLeadDetail() {
       {/* ── HEADER ── */}
       <div className="bg-white border-b border-slate-200">
         <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
-        <div className="max-w-[1800px] mx-auto px-5 h-14 flex items-center gap-3">
+        <div className="max-w-[1800px] mx-auto px-5 py-2 flex flex-col gap-1.5">
+
+          {/* ── Row 1: nav + name + status + actions ── */}
+          <div className="flex items-center gap-3">
 
           {/* Back */}
           <button onClick={() => navigate('/crm/leads')} className="flex items-center gap-1 text-slate-400 hover:text-slate-700 text-xs font-medium transition-colors flex-shrink-0">
@@ -2289,30 +2451,7 @@ export function CrmLeadDetail() {
             </span>
           )}
 
-          {/* Contact meta chips */}
-          <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200 flex-1 min-w-0 overflow-hidden">
-            {lead.company_name && (
-              <span className="flex items-center gap-1 text-xs text-slate-500 truncate max-w-[160px]">
-                <Briefcase size={10} className="flex-shrink-0 text-slate-400" />
-                {String(lead.company_name)}
-              </span>
-            )}
-            {lead.phone_number && (
-              <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 transition-colors whitespace-nowrap flex-shrink-0">
-                <Phone size={10} className="flex-shrink-0" />
-                {formatPhoneNumber(String(lead.phone_number))}
-              </a>
-            )}
-            {lead.email && (
-              <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-sky-600 transition-colors truncate max-w-[200px] flex-shrink-0">
-                <Mail size={10} className="flex-shrink-0" />
-                {String(lead.email)}
-              </a>
-            )}
-          </div>
-
-          {/* Spacer when meta is hidden */}
-          <div className="flex-1 lg:hidden" />
+          <div className="flex-1" />
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -2352,6 +2491,31 @@ export function CrmLeadDetail() {
               )}
             </div>
           </div>
+          </div>{/* end row 1 */}
+
+          {/* ── Row 2: contact info ── */}
+          {(lead.company_name || lead.phone_number || lead.email) && (
+            <div className="flex items-center gap-3 pl-1">
+              {lead.company_name && (
+                <span className="flex items-center gap-1 text-xs text-slate-500 truncate max-w-[180px]">
+                  <Briefcase size={10} className="flex-shrink-0 text-slate-400" />
+                  {String(lead.company_name)}
+                </span>
+              )}
+              {lead.phone_number && (
+                <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-600 transition-colors whitespace-nowrap">
+                  <Phone size={10} className="flex-shrink-0" />
+                  {formatPhoneNumber(String(lead.phone_number))}
+                </a>
+              )}
+              {lead.email && (
+                <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-xs text-slate-400 hover:text-sky-600 transition-colors truncate max-w-[220px]">
+                  <Mail size={10} className="flex-shrink-0" />
+                  {String(lead.email)}
+                </a>
+              )}
+            </div>
+          )}
 
         </div>
 
