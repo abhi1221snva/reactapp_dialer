@@ -51,6 +51,7 @@ export interface MerchantLeadData {
   created_at: string
   fields: Record<string, string>
   signature_url: string | null
+  signature_url_2: string | null
   documents: MerchantDocument[]
 }
 
@@ -134,10 +135,14 @@ export const publicAppService = {
     return http.get<{ success: boolean; data: PublicDocumentType[] }>(`/public/merchant/${token}/document-types`)
   },
 
-  saveSignature(token: string, signatureDataUri: string) {
+  saveSignature(
+    token: string,
+    signatureDataUri: string,
+    field: 'signature_image' | 'owner_2_signature_image' = 'signature_image',
+  ) {
     return http.post<{ success: boolean; message: string; signature_url: string }>(
       `/public/merchant/${token}/signature`,
-      { signature_image: signatureDataUri },
+      { signature_image: signatureDataUri, field },
     )
   },
 

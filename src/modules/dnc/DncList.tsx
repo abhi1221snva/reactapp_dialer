@@ -1,17 +1,25 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, ArrowLeft, PhoneOff, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { dncService } from '../../services/dnc.service'
 import { useServerTable } from '../../hooks/useServerTable'
-import { formatDateTime } from '../../utils/format'
+import { formatDateTime, formatPhoneUS } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { AddDncModal } from './AddDncModal'
 import { EditDncModal, type DncItem } from './EditDncModal'
 import { UploadExcelModal } from '../../components/ui/UploadExcelModal'
+
+interface ExtItem {
+  id: number
+  first_name: string
+  last_name: string
+  extension: string
+  [key: string]: unknown
+}
 
 export function DncList() {
   const navigate = useNavigate()
@@ -21,6 +29,15 @@ export function DncList() {
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<DncItem | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+
+  const { data: extRes } = useQuery({
+    queryKey: ['extensions'],
+    queryFn: () => dncService.getExtensions(),
+    staleTime: 5 * 60_000,
+  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extensions: ExtItem[] = (extRes as any)?.data?.data ?? []
+  const extMap = new Map(extensions.map(e => [String(e.extension), `${e.first_name} ${e.last_name}`.trim()]))
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['dnc'] })
 
@@ -55,14 +72,19 @@ export function DncList() {
           <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
             <PhoneOff size={13} className="text-red-500" />
           </div>
-          <span className="text-sm font-medium text-slate-900 font-mono">{String(row.number)}</span>
+          <span className="text-sm font-medium text-slate-900 font-mono">{formatPhoneUS(row.number)}</span>
         </div>
       ),
     },
     {
       key: 'extension',
       header: 'Extension',
-      render: (row) => <span className="text-sm text-slate-600">{row.extension || '—'}</span>,
+      render: (row) => {
+        const code = String(row.extension || '')
+        if (!code) return <span className="text-sm text-slate-400">—</span>
+        const name = extMap.get(code)
+        return <span className="text-sm text-slate-600">{name ? `${name} (${code})` : code}</span>
+      },
     },
     {
       key: 'comment',

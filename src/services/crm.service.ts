@@ -233,10 +233,18 @@ export const crmService = {
     placeholder?: string
     required?: boolean
     options?: string
+    validation_rules?: unknown[]
   }) => api.post('/crm/lead-fields', data),
 
   updateLeadField: (id: number, data: Record<string, unknown>) =>
     api.post(`/crm/lead-fields/${id}`, data),
+
+  /** Auto-suggest validation rules for a field based on its key / label / type. */
+  suggestValidation: (params: { field_key: string; label_name?: string; field_type?: string }) =>
+    api.get<{ success: boolean; data: import('../types/crm.types').ValidationRule[] }>(
+      '/crm/lead-fields/suggest-validation',
+      { params },
+    ),
 
   deleteLeadField: (id: number) =>
     api.delete(`/crm/lead-fields/${id}`),

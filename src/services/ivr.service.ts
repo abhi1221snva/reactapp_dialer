@@ -7,6 +7,7 @@ export const ivrService = {
     api.post('/ivr', {
       start: (params.page - 1) * params.limit,
       limit: params.limit,
+      ...(params.search ? { search: params.search } : {}),
     }),
 
   create: (data: Record<string, unknown>) => api.post('/add-ivr', data),
@@ -45,4 +46,8 @@ export const ivrService = {
     api.get(`/crm/tenant-file/${subdir}/${encodeURIComponent(filename)}`, {
       responseType: 'blob',
     }),
+
+  // Destination lookups for IVR Menu routing
+  getClientExtensions: () => api.post('/get-client-extension', {}),
+  getRingGroups: () => api.post('/ring-group', {}),
 }

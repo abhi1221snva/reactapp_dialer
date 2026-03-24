@@ -42,6 +42,13 @@ export interface FieldCondition {
 
 // ─── CRM Label (Dynamic Field Definition) — from crm_labels (new EAV arch) ───
 
+/** A single validation rule object stored in crm_labels.validation_rules */
+export interface ValidationRule {
+  rule: string
+  value?: number | string
+  value2?: number | string
+}
+
 export interface CrmLabel {
   id: number
   label_name: string      // display label (e.g. "First Name")
@@ -51,6 +58,7 @@ export interface CrmLabel {
   options?: string | null // JSON-encoded string array for dropdown/radio
   placeholder?: string
   conditions?: FieldCondition[] | null
+  validation_rules?: ValidationRule[] | null
   required: boolean
   display_order: number
   status: boolean

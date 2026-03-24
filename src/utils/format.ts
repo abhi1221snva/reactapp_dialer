@@ -17,6 +17,26 @@ export function formatPhoneNumber(phone: string): string {
   return phone
 }
 
+export function formatPhoneUS(phone: string | number): string {
+  const digits = String(phone).replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+  if (digits.length === 11 && digits[0] === '1') {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+  }
+  return String(phone)
+}
+
+/** Formats partial digits as-you-type into US format, e.g. "646553" → "+1 (646) 553" */
+export function formatPartialPhoneUS(digits: string): string {
+  const d = digits.replace(/\D/g, '').slice(0, 10)
+  if (d.length === 0) return ''
+  if (d.length <= 3) return `+1 (${d}`
+  if (d.length <= 6) return `+1 (${d.slice(0, 3)}) ${d.slice(3)}`
+  return `+1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+}
+
 export function formatDate(date: string | Date): string {
   if (!date) return '-'
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })

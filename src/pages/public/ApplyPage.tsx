@@ -471,8 +471,10 @@ export function ApplyPage() {
   const [step, setStep]         = useState(0)
   const [form, setForm]         = useState<Record<string, string>>({})
   const [errs, setErrs]         = useState<Record<string, string>>({})
-  const [sig, setSig]           = useState('')
-  const [sigSaved, setSigSaved] = useState(false)
+  const [sig, setSig]             = useState('')
+  const [sigSaved, setSigSaved]   = useState(false)
+  const [sig2, setSig2]           = useState('')
+  const [sigSaved2, setSigSaved2] = useState(false)
   const [docs, setDocs]         = useState<UploadFile[]>([])
   const [submitting, setSub]    = useState(false)
   const [subErr, setSubErr]     = useState('')
@@ -630,6 +632,7 @@ export function ApplyPage() {
     try {
       const payload = { ...form }
       if (sig) payload['signature_image'] = sig
+      if (sig2) payload['owner_2_signature_image'] = sig2
 
       const res = await publicAppService.submitApplication(affiliateCode!, payload)
       const out = (res.data as unknown as SubmitResult).lead_token
@@ -871,10 +874,40 @@ export function ApplyPage() {
                 </div>
               </div>
             ) : isSig ? (
-              /* ── Signature step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved ? C.successBdr : C.border}`, height: '100%', padding: '24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
-                <div style={{ maxWidth: 600, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              /* ── Dual Signature step ── */
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved ? C.successBdr : C.border}`, height: '100%', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 0, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+
+                {/* ── Signature 1: Applicant ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#7c3aed18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Edit3 size={13} color="#7c3aed" />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Applicant Signature</span>
+                    <span style={{ fontSize: 11, color: C.error }}>*</span>
+                    {sigSaved && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
+                  </div>
+                  <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <ShieldCheck size={14} style={{ flexShrink: 0 }} />
+                    By signing, you certify that all information provided is accurate and complete.
+                  </div>
                   <SigPad onSave={(d) => { setSig(d); setSigSaved(!!d) }} saved={sigSaved} />
+                </div>
+
+                {/* ── Divider ── */}
+                <div style={{ borderTop: `1px dashed ${C.border}`, margin: '4px 0 20px' }} />
+
+                {/* ── Signature 2: Co-Applicant ── */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#0891b218', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Edit3 size={13} color="#0891b2" />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Co-Applicant Signature</span>
+                    <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
+                    {sigSaved2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
+                  </div>
+                  <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d) }} saved={sigSaved2} />
                 </div>
               </div>
             ) : (

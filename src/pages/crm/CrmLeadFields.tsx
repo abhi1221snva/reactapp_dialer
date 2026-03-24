@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, Search, X, Check,
   GripVertical, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw,
-  Settings2, ListOrdered,
+  Settings2, ListOrdered, Sparkles, ChevronDown, ShieldCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
@@ -12,7 +12,7 @@ import { RowActions } from '../../components/ui/RowActions'
 import { Badge } from '../../components/ui/Badge'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { cn } from '../../utils/cn'
-import type { CrmLabel } from '../../types/crm.types'
+import type { CrmLabel, ValidationRule } from '../../types/crm.types'
 
 const PER_PAGE = 15
 
@@ -128,25 +128,65 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
   )
 }
 
+// ── Validation Rule Definitions ────────────────────────────────────────────────
+interface RuleDef {
+  value: string
+  label: string
+  hasValue: boolean
+  hasValue2?: boolean
+  valueLabel?: string
+  value2Label?: string
+  valueType?: 'number' | 'text'
+}
+
+const RULE_DEFINITIONS: RuleDef[] = [
+  { value: 'required',       label: 'Required',          hasValue: false },
+  { value: 'nullable',       label: 'Nullable',          hasValue: false },
+  { value: 'numeric',        label: 'Numeric',           hasValue: false },
+  { value: 'integer',        label: 'Integer',           hasValue: false },
+  { value: 'email',          label: 'Email',             hasValue: false },
+  { value: 'url',            label: 'URL',               hasValue: false },
+  { value: 'date',           label: 'Date',              hasValue: false },
+  { value: 'alpha',          label: 'Letters Only',      hasValue: false },
+  { value: 'alpha_num',      label: 'Letters & Numbers', hasValue: false },
+  { value: 'alpha_spaces',   label: 'Letters & Spaces',  hasValue: false },
+  { value: 'min',            label: 'Min Length',        hasValue: true,  valueLabel: 'Chars', valueType: 'number' },
+  { value: 'max',            label: 'Max Length',        hasValue: true,  valueLabel: 'Chars', valueType: 'number' },
+  { value: 'digits',         label: 'Exact Digits',      hasValue: true,  valueLabel: 'Count', valueType: 'number' },
+  { value: 'digits_between', label: 'Digits Between',    hasValue: true, hasValue2: true, valueLabel: 'Min', value2Label: 'Max', valueType: 'number' },
+  { value: 'min_value',      label: 'Min Value',         hasValue: true,  valueLabel: 'Value', valueType: 'number' },
+  { value: 'max_value',      label: 'Max Value',         hasValue: true,  valueLabel: 'Value', valueType: 'number' },
+  { value: 'before',         label: 'Before Date',       hasValue: true,  valueLabel: 'Date (e.g. today)', valueType: 'text' },
+  { value: 'after',          label: 'After Date',        hasValue: true,  valueLabel: 'Date (e.g. today)', valueType: 'text' },
+  { value: 'in',             label: 'In List',           hasValue: true,  valueLabel: 'Values (comma-sep)', valueType: 'text' },
+  { value: 'regex',          label: 'Regex',             hasValue: true,  valueLabel: 'Pattern (e.g. /^[A-Z]+$/)', valueType: 'text' },
+]
+
+const RULE_DEF_MAP: Record<string, RuleDef> = Object.fromEntries(
+  RULE_DEFINITIONS.map(r => [r.value, r])
+)
+
 // ── Field Form State ───────────────────────────────────────────────────────────
 interface FieldFormState {
-  label_name:  string
-  field_type:  string
-  section:     string
-  placeholder: string
-  required:    boolean
-  status:      boolean
-  values:      string  // one option per line, for dropdown/radio
+  label_name:       string
+  field_type:       string
+  section:          string
+  placeholder:      string
+  required:         boolean
+  status:           boolean
+  values:           string  // one option per line, for dropdown/radio
+  validation_rules: ValidationRule[]
 }
 
 const EMPTY_FORM: FieldFormState = {
-  label_name:  '',
-  field_type:  'text',
-  section:     'owner',
-  placeholder: '',
-  required:    false,
-  status:      true,
-  values:      '',
+  label_name:       '',
+  field_type:       'text',
+  section:          'owner',
+  placeholder:      '',
+  required:         false,
+  status:           true,
+  values:           '',
+  validation_rules: [],
 }
 
 function parseValuesToLines(v?: string | null): string {

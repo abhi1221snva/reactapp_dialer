@@ -4,6 +4,7 @@ import { X, Save, MinusCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { excludeListService } from '../../services/excludeList.service'
 import { campaignService } from '../../services/campaign.service'
+import { formatPhoneUS } from '../../utils/format'
 
 export interface ExcludeItem {
   number: string | number
@@ -74,7 +75,7 @@ export function EditExcludeModal({ item, onClose, onSaved }: Props) {
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 text-sm leading-tight">Edit Exclude Entry</h3>
-              <p className="text-xs text-slate-400 mt-0.5 font-mono">{String(item.number)}</p>
+              <p className="text-xs text-slate-400 mt-0.5 font-mono">{formatPhoneUS(item.number)}</p>
             </div>
           </div>
           <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
@@ -88,7 +89,7 @@ export function EditExcludeModal({ item, onClose, onSaved }: Props) {
           <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
             <MinusCircle size={13} className="text-slate-400 flex-shrink-0" />
             <span className="text-xs text-slate-400 mr-auto">Phone Number</span>
-            <span className="text-sm font-mono font-medium text-slate-700">{String(item.number)}</span>
+            <span className="text-sm font-mono font-medium text-slate-700">{formatPhoneUS(item.number)}</span>
           </div>
 
           {/* First & Last Name */}

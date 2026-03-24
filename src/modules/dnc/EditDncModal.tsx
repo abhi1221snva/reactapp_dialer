@@ -4,6 +4,7 @@ import { X, Save, PhoneOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dncService } from '../../services/dnc.service'
 import { useAuthStore } from '../../stores/auth.store'
+import { formatPhoneUS } from '../../utils/format'
 
 export interface DncItem {
   number: string | number
@@ -21,7 +22,8 @@ interface Props {
 
 interface ExtItem {
   id: number
-  name: string
+  first_name: string
+  last_name: string
   extension: string
   [key: string]: unknown
 }
@@ -66,7 +68,7 @@ export function EditDncModal({ item, onClose, onSaved }: Props) {
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 text-sm leading-tight">Edit DNC Entry</h3>
-              <p className="text-xs text-slate-400 mt-0.5 font-mono">{String(item.number)}</p>
+              <p className="text-xs text-slate-400 mt-0.5 font-mono">{formatPhoneUS(item.number)}</p>
             </div>
           </div>
           <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
@@ -80,7 +82,7 @@ export function EditDncModal({ item, onClose, onSaved }: Props) {
           <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
             <PhoneOff size={13} className="text-slate-400 flex-shrink-0" />
             <span className="text-xs text-slate-400 mr-auto">Phone Number</span>
-            <span className="text-sm font-mono font-medium text-slate-700">{String(item.number)}</span>
+            <span className="text-sm font-mono font-medium text-slate-700">{formatPhoneUS(item.number)}</span>
           </div>
 
           {/* Extension */}
@@ -96,7 +98,7 @@ export function EditDncModal({ item, onClose, onSaved }: Props) {
               <option value="">None</option>
               {extensions.map(ext => (
                 <option key={ext.id} value={String(ext.extension)}>
-                  {ext.name} ({ext.extension})
+                  {ext.first_name} {ext.last_name} ({ext.extension})
                 </option>
               ))}
             </select>

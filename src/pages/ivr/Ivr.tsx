@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, Trash2, PhoneCall, Music, Search, X,
-  Mic, Upload, Volume2, Hash, ArrowRight, AlertCircle,
-  CheckCircle2, Loader2, Play, Square, Info, ChevronDown,
+  Plus, Pencil, Trash2, PhoneCall, Music, X,
+  Mic, Upload, Volume2, AlertCircle,
+  CheckCircle2, Loader2, Play, Square,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ivrService } from '../../services/ivr.service'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { cn } from '../../utils/cn'
+import { ServerDataTable } from '../../components/ui/ServerDataTable'
+import type { Column } from '../../components/ui/ServerDataTable'
+import { useServerTable } from '../../hooks/useServerTable'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,21 +60,50 @@ interface AudioMessage {
 
 const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']
 
-const DEST_TYPE_META: Record<string, { label: string; color: string; bg: string; ring: string }> = {
-  '0': { label: 'Extension', color: 'text-indigo-700',  bg: 'bg-indigo-50',  ring: 'ring-indigo-200'  },
-  '1': { label: 'Queue',     color: 'text-emerald-700', bg: 'bg-emerald-50', ring: 'ring-emerald-200' },
-  '2': { label: 'Voicemail', color: 'text-amber-700',   bg: 'bg-amber-50',   ring: 'ring-amber-200'   },
-  '3': { label: 'IVR',       color: 'text-blue-700',    bg: 'bg-blue-50',    ring: 'ring-blue-200'    },
-  '4': { label: 'Hangup',    color: 'text-red-700',     bg: 'bg-red-50',     ring: 'ring-red-200'     },
-  '5': { label: 'External',  color: 'text-purple-700',  bg: 'bg-purple-50',  ring: 'ring-purple-200'  },
+const DEST_TYPE_META: Record<string, { label: string; color: string; bg: string }> = {
+  '0': { label: 'Extension', color: 'text-indigo-700',  bg: 'bg-indigo-50'  },
+  '1': { label: 'Queue',     color: 'text-emerald-700', bg: 'bg-emerald-50' },
+  '2': { label: 'Voicemail', color: 'text-amber-700',   bg: 'bg-amber-50'   },
+  '3': { label: 'IVR',       color: 'text-blue-700',    bg: 'bg-blue-50'    },
+  '4': { label: 'Hangup',    color: 'text-red-700',     bg: 'bg-red-50'     },
+  '5': { label: 'External',  color: 'text-purple-700',  bg: 'bg-purple-50'  },
 }
 
 const LANGUAGES = [
+  { value: 'ar',    label: 'Arabic' },
+  { value: 'zh',    label: 'Chinese (Mandarin)' },
+  { value: 'zh-TW', label: 'Chinese (Traditional)' },
+  { value: 'da',    label: 'Danish' },
+  { value: 'nl',    label: 'Dutch' },
   { value: 'en',    label: 'English' },
+  { value: 'en-AU', label: 'English (Australian)' },
+  { value: 'en-GB', label: 'English (British)' },
+  { value: 'en-IN', label: 'English (Indian)' },
   { value: 'en-US', label: 'English (US)' },
-  { value: 'es',    label: 'Spanish' },
+  { value: 'fi',    label: 'Finnish' },
   { value: 'fr',    label: 'French' },
+  { value: 'fr-CA', label: 'French (Canadian)' },
   { value: 'de',    label: 'German' },
+  { value: 'el',    label: 'Greek' },
+  { value: 'hi',    label: 'Hindi' },
+  { value: 'id',    label: 'Indonesian' },
+  { value: 'it',    label: 'Italian' },
+  { value: 'ja',    label: 'Japanese' },
+  { value: 'ko',    label: 'Korean' },
+  { value: 'ms',    label: 'Malay' },
+  { value: 'nb',    label: 'Norwegian' },
+  { value: 'pl',    label: 'Polish' },
+  { value: 'pt',    label: 'Portuguese' },
+  { value: 'pt-BR', label: 'Portuguese (Brazilian)' },
+  { value: 'ro',    label: 'Romanian' },
+  { value: 'ru',    label: 'Russian' },
+  { value: 'es',    label: 'Spanish' },
+  { value: 'es-MX', label: 'Spanish (Mexican)' },
+  { value: 'es-US', label: 'Spanish (US)' },
+  { value: 'sv',    label: 'Swedish' },
+  { value: 'tr',    label: 'Turkish' },
+  { value: 'uk',    label: 'Ukrainian' },
+  { value: 'cy',    label: 'Welsh' },
 ]
 
 const PROMPT_LABEL: Record<string, string> = { '0': 'Upload', '1': 'TTS', '2': 'Record' }
@@ -85,27 +117,6 @@ function extractList<T>(res: unknown): T[] {
   const nested = (payload as { data?: unknown })?.data
   if (Array.isArray(nested)) return nested as T[]
   return []
-}
-
-// ── Info Box ──────────────────────────────────────────────────────────────────
-
-function InfoBox({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50/60 overflow-hidden">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-left">
-        <Info size={14} className="text-indigo-500 flex-shrink-0" />
-        <span className="text-sm font-semibold text-indigo-700 flex-1">{title}</span>
-        <ChevronDown size={14} className={cn('text-indigo-400 transition-transform', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div className="px-4 pb-3 pt-0.5 text-xs text-indigo-900/80 leading-relaxed border-t border-indigo-100">
-          {children}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Audio Player (fetches with auth, creates blob URL) ────────────────────────
@@ -122,7 +133,6 @@ function AudioPlayer({ annId }: { annId: string }) {
       setPlaying(false)
       return
     }
-    // Reuse already-loaded audio
     if (audioRef.current?.src) {
       audioRef.current.currentTime = 0
       audioRef.current.play()
@@ -161,7 +171,7 @@ function AudioPlayer({ annId }: { annId: string }) {
 
   return (
     <button type="button" onClick={toggle}
-      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold transition-colors">
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-semibold transition-colors">
       {loading
         ? <Loader2 size={12} className="animate-spin" />
         : playing ? <Square size={12} /> : <Play size={12} />}
@@ -197,7 +207,7 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
       setTime(0)
       timerRef.current = setInterval(() => setTime(t => t + 1), 1000)
     } catch {
-      toast.error('Microphone access denied. Please allow microphone access in your browser settings.')
+      toast.error('Microphone access denied.')
     }
   }
 
@@ -235,7 +245,7 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
   )
 }
 
-// ── Audio Form (create / edit modal content) ───────────────────────────────────
+// ── Audio Form (shared modal body for Audio Messages) ──────────────────────────
 
 function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose: () => void }) {
   const qc = useQueryClient()
@@ -265,20 +275,16 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
     } else {
       setForm({ ivr_desc: '', language: 'en', voice_name: '', speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium', ann_id: '' })
     }
-    setAudioFile(null)
-    setRecordedBlob(null)
-    setPreviewUrl(null)
+    setAudioFile(null); setRecordedBlob(null); setPreviewUrl(null)
   }, [editing])
 
-  // Clean up object URLs on unmount
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
   const handleFileSelect = (file: File) => {
     if (!file.name.match(/\.(mp3|wav|ogg|webm|m4a|mp4)$/i)) {
-      toast.error('Please upload a valid audio file (MP3, WAV, OGG, WebM, M4A)')
-      return
+      toast.error('Please upload a valid audio file'); return
     }
     setAudioFile(file)
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -299,7 +305,6 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
     setSaving(true)
     try {
       let annId = form.ann_id
-      // Upload file / recording first
       if (form.prompt_option !== '1' && (audioFile || recordedBlob)) {
         const fd = new FormData()
         if (audioFile) fd.append('audio', audioFile)
@@ -309,59 +314,45 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
       }
       const payload: Record<string, unknown> = { ...form, ann_id: annId }
       if (editing) payload.auto_id = editing.auto_id ?? editing.id
-      const fn = editing ? ivrService.updateAudio : ivrService.createAudio
-      await fn(payload)
+      await (editing ? ivrService.updateAudio : ivrService.createAudio)(payload)
       toast.success(editing ? 'Audio message updated' : 'Audio message created')
       qc.invalidateQueries({ queryKey: ['audio-messages'] })
       onClose()
     } catch {
       toast.error('Failed to save audio message')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
-
-  const typeOpts = [
-    { v: '1', l: 'Text to Speech', icon: <Volume2 size={14} /> },
-    { v: '0', l: 'Upload File',    icon: <Upload size={14} />  },
-    { v: '2', l: 'Record from Mic',icon: <Mic size={14} />    },
-  ]
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="label">Name <span className="text-red-500">*</span></label>
         <input className="input" value={form.ivr_desc}
-          onChange={e => set('ivr_desc', e.target.value)}
-          placeholder="e.g. Main Greeting, After-Hours Message" />
+          onChange={e => set('ivr_desc', e.target.value)} placeholder="e.g. Main Greeting" />
       </div>
 
-      {/* Type selector */}
       <div>
         <label className="label">Audio Type</label>
         <div className="grid grid-cols-3 gap-2">
-          {typeOpts.map(({ v, l, icon }) => (
+          {([['1', 'Text to Speech', <Volume2 key="v" size={14} />], ['0', 'Upload File', <Upload key="u" size={14} />], ['2', 'Record from Mic', <Mic key="m" size={14} />]] as [string, string, React.ReactNode][]).map(([v, l, icon]) => (
             <button key={v} type="button" onClick={() => set('prompt_option', v)}
-              className={cn(
-                'flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-all',
+              className={cn('flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-all',
                 form.prompt_option === v
                   ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-300'
-                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
-              )}>
+                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50')}>
               {icon}{l}
             </button>
           ))}
         </div>
       </div>
 
-      {/* TTS settings */}
       {form.prompt_option === '1' && (
         <>
           <div>
             <label className="label">Greeting Message</label>
             <textarea className="input min-h-[80px] resize-none" value={form.speech_text}
               onChange={e => set('speech_text', e.target.value)}
-              placeholder="Welcome to our company! Press 1 for Sales, press 2 for Support…" />
+              placeholder="Welcome to our company! Press 1 for Sales…" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -393,51 +384,35 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
         </>
       )}
 
-      {/* File Upload */}
       {form.prompt_option === '0' && (
         <div>
           <label className="label">Audio File</label>
           <div
-            className={cn(
-              'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
-              dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50/50'
-            )}
+            className={cn('border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
+              dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300')}
             onClick={() => fileRef.current?.click()}
             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={e => {
-              e.preventDefault(); setDragOver(false)
-              const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f)
-            }}>
-            <input ref={fileRef} type="file" accept=".mp3,.wav,.ogg,.webm,.m4a,.mp4"
-              className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f) }} />
+            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f) }}>
+            <input ref={fileRef} type="file" accept=".mp3,.wav,.ogg,.webm,.m4a,.mp4" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f) }} />
             {audioFile ? (
-              <div className="space-y-2">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto">
-                  <Music size={18} className="text-emerald-600" />
-                </div>
+              <div className="space-y-1">
+                <Music size={20} className="text-emerald-500 mx-auto" />
                 <p className="text-sm font-semibold text-slate-700">{audioFile.name}</p>
-                <p className="text-xs text-slate-400">{(audioFile.size / 1024).toFixed(0)} KB — click to change</p>
+                <p className="text-xs text-slate-400">{(audioFile.size / 1024).toFixed(0)} KB</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center mx-auto">
-                  <Upload size={18} className="text-slate-400" />
-                </div>
-                <p className="text-sm font-semibold text-slate-600">Drop audio file here or click to browse</p>
-                <p className="text-xs text-slate-400">MP3, WAV, OGG, WebM, M4A · Max 20 MB</p>
-                {editing?.ann_id && (
-                  <p className="text-xs text-indigo-500 mt-1">
-                    Current: {editing.ann_id.split('/').pop()} — drop new file to replace
-                  </p>
-                )}
+              <div className="space-y-1">
+                <Upload size={20} className="text-slate-300 mx-auto" />
+                <p className="text-sm font-semibold text-slate-600">Drop file or click to browse</p>
+                <p className="text-xs text-slate-400">MP3, WAV, OGG, WebM · Max 20 MB</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Browser Recording */}
       {form.prompt_option === '2' && (
         <div>
           <label className="label">Record from Microphone</label>
@@ -446,13 +421,12 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
           </div>
           {recordedBlob && (
             <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1">
-              <CheckCircle2 size={12} /> Recording ready — save to upload it
+              <CheckCircle2 size={12} /> Recording ready
             </p>
           )}
         </div>
       )}
 
-      {/* Preview player */}
       {previewUrl && (
         <div>
           <label className="label">Preview</label>
@@ -474,14 +448,9 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
 
 function AudioMessagesTab() {
   const qc = useQueryClient()
-  const [search, setSearch] = useState('')
+  const table = useServerTable()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<AudioMessage | null>(null)
-
-  const { data: raw, isLoading } = useQuery({
-    queryKey: ['audio-messages'],
-    queryFn: () => ivrService.listAudio({ page: 1, limit: 200, search: '', filters: {} }),
-  })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ivrService.deleteAudio(id),
@@ -489,133 +458,107 @@ function AudioMessagesTab() {
     onError: () => toast.error('Failed to delete'),
   })
 
-  const messages = extractList<AudioMessage>(raw)
-  const filtered = messages.filter(m =>
-    !search || (m.ivr_desc ?? '').toLowerCase().includes(search.toLowerCase())
-  )
-
   const typeColors: Record<string, string> = {
     '0': 'bg-blue-50 text-blue-700',
     '1': 'bg-purple-50 text-purple-700',
     '2': 'bg-rose-50 text-rose-700',
   }
 
+  const columns: Column<AudioMessage>[] = [
+    {
+      key: 'ivr_desc',
+      header: 'Name',
+      render: (msg) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+            <Music size={13} className="text-purple-600" />
+          </div>
+          <span className="text-sm font-semibold text-slate-800">{msg.ivr_desc}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'prompt_option',
+      header: 'Type',
+      render: (msg) => {
+        const pOpt = String(msg.prompt_option ?? '1')
+        return (
+          <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', typeColors[pOpt] ?? typeColors['1'])}>
+            {PROMPT_LABEL[pOpt] ?? 'TTS'}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'language',
+      header: 'Language',
+      render: (msg) => <span className="text-xs text-slate-500">{String(msg.language || '—')}</span>,
+    },
+    {
+      key: 'ann_id',
+      header: 'Preview',
+      render: (msg) => {
+        const annId = String(msg.ann_id ?? '')
+        return annId.includes('/')
+          ? <AudioPlayer annId={annId} />
+          : <span className="text-xs text-slate-300">—</span>
+      },
+    },
+    {
+      key: '_actions',
+      header: '',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      render: (msg) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <button onClick={() => { setEditing(msg); setShowModal(true) }}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={async () => {
+              if (await confirmDelete(msg.ivr_desc))
+                deleteMutation.mutate(msg.auto_id ?? msg.id ?? 0)
+            }}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <InfoBox title="What are Audio Messages?">
-        <div className="pt-1.5 space-y-1">
-          <p>Audio Messages are the voice prompts callers hear when they reach your IVR. Three ways to create them:</p>
-          <ul className="list-disc list-inside mt-1 space-y-0.5">
-            <li><strong>Text to Speech (TTS)</strong> — type your message, the system reads it aloud automatically.</li>
-            <li><strong>Upload File</strong> — upload a pre-recorded MP3, WAV, or similar audio file.</li>
-            <li><strong>Record from Mic</strong> — record directly from your browser microphone right now.</li>
-          </ul>
-          <p className="mt-1">Once created, reference the Audio Message in your IVR settings via its Announcement ID.</p>
-        </div>
-      </InfoBox>
+      <ServerDataTable<AudioMessage>
+        queryKey={['audio-messages']}
+        queryFn={(params) => ivrService.listAudio(params)}
+        dataExtractor={(res: unknown) => {
+          const r = res as { data?: { data?: { data?: AudioMessage[] } } }
+          return r?.data?.data?.data ?? []
+        }}
+        totalExtractor={(res: unknown) => {
+          const r = res as { data?: { data?: { total?: number } } }
+          return r?.data?.data?.total ?? 0
+        }}
+        columns={columns}
+        keyField="id"
+        search={table.search}
+        onSearchChange={table.setSearch}
+        searchPlaceholder="Search audio messages…"
+        page={table.page}
+        limit={table.limit}
+        onPageChange={table.setPage}
+        headerActions={
+          <button onClick={() => { setEditing(null); setShowModal(true) }}
+            className="btn-primary flex items-center gap-1.5 text-sm">
+            <Plus size={14} /> New Audio Message
+          </button>
+        }
+        emptyText="No audio messages yet"
+        emptyIcon={<Music size={28} />}
+      />
 
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input className="input pl-9 text-sm" placeholder="Search audio messages…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <button onClick={() => { setEditing(null); setShowModal(true) }}
-          className="btn-primary flex items-center gap-1.5 text-sm">
-          <Plus size={14} /> New Audio Message
-        </button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={28} className="animate-spin text-indigo-400" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
-            <Music size={26} className="text-slate-300" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-slate-600">
-              {search ? 'No messages match your search' : 'No audio messages yet'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              {search ? 'Try a different search term' : 'Create your first audio message to use as an IVR greeting'}
-            </p>
-          </div>
-          {!search && (
-            <button onClick={() => { setEditing(null); setShowModal(true) }} className="btn-primary text-sm">
-              <Plus size={14} /> Create Audio Message
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/70">
-                {['Name', 'Type', 'Language', 'Preview / Text', 'Actions'].map((h, i) => (
-                  <th key={h} className={cn('px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider',
-                    i === 4 ? 'text-right' : 'text-left')}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((msg, i) => {
-                const pOpt = String(msg.prompt_option ?? '1')
-                const hasFile = msg.ann_id && msg.ann_id.includes('/') && pOpt !== '1'
-                return (
-                  <tr key={msg.auto_id ?? msg.id ?? i}
-                    className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                          <Music size={13} className="text-purple-600" />
-                        </div>
-                        <span className="text-sm font-semibold text-slate-800">{msg.ivr_desc}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', typeColors[pOpt] ?? typeColors['1'])}>
-                        {PROMPT_LABEL[pOpt] ?? 'TTS'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-slate-500">{msg.language || '—'}</td>
-                    <td className="px-4 py-3.5">
-                      {hasFile
-                        ? <AudioPlayer annId={msg.ann_id!} />
-                        : msg.speech_text
-                          ? <span className="text-xs text-slate-400 italic line-clamp-1 max-w-[220px]">
-                              &ldquo;{msg.speech_text}&rdquo;
-                            </span>
-                          : <span className="text-xs text-slate-300">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => { setEditing(msg); setShowModal(true) }}
-                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (await confirmDelete(msg.ivr_desc))
-                              deleteMutation.mutate(msg.auto_id ?? msg.id ?? 0)
-                          }}
-                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
@@ -624,12 +567,10 @@ function AudioMessagesTab() {
                 <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center">
                   <Music size={14} className="text-purple-600" />
                 </div>
-                <p className="text-sm font-bold text-slate-900">
-                  {editing ? 'Edit Audio Message' : 'New Audio Message'}
-                </p>
+                <p className="text-sm font-bold text-slate-900">{editing ? 'Edit Audio Message' : 'New Audio Message'}</p>
               </div>
               <button onClick={() => setShowModal(false)}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
                 <X size={15} />
               </button>
             </div>
@@ -643,188 +584,228 @@ function AudioMessagesTab() {
   )
 }
 
-// ── Key Config Drawer ──────────────────────────────────────────────────────────
+// ── IVR Menu – Destination helpers ────────────────────────────────────────────
 
-function KeyConfigDrawer({
-  dtmf, ivrId, item, destTypes, onSave, onClose, onDelete,
+interface ExtensionItem { extension: string; first_name?: string; last_name?: string; [key: string]: unknown }
+interface RingGroupItem { id: number; title: string; [key: string]: unknown }
+
+function DestinationSelect({
+  destType, value, onChange, allIvrs, ivrId,
 }: {
-  dtmf: string; ivrId: string; item: IvrMenuItem | null
-  destTypes: { id: number; name: string }[]
-  onSave: () => void; onClose: () => void; onDelete: () => void
+  destType: string; value: string; onChange: (v: string) => void
+  allIvrs: Ivr[]; ivrId: string
 }) {
-  const [form, setForm] = useState({ dtmf_title: '', dest_type: '0', dest: '' })
-  const qc = useQueryClient()
+  const { data: extRaw } = useQuery({
+    queryKey: ['client-extensions'],
+    queryFn: () => ivrService.getClientExtensions(),
+    enabled: destType === '0' || destType === '2',
+  })
+  const { data: rgRaw } = useQuery({
+    queryKey: ['ring-groups'],
+    queryFn: () => ivrService.getRingGroups(),
+    enabled: destType === '1',
+  })
 
-  useEffect(() => {
-    setForm(item
-      ? { dtmf_title: item.dtmf_title ?? '', dest_type: String(item.dest_type), dest: item.dest }
-      : { dtmf_title: '', dest_type: '0', dest: '' }
+  const extensions: ExtensionItem[] = (() => {
+    const body = (extRaw as { data?: unknown })?.data
+    const payload = (body as { data?: unknown })?.data
+    if (Array.isArray(payload)) return payload as ExtensionItem[]
+    if (Array.isArray(body)) return body as ExtensionItem[]
+    return []
+  })()
+  const ringGroups: RingGroupItem[] = extractList<RingGroupItem>(rgRaw)
+
+  if (destType === '4') {
+    return <p className="text-xs text-slate-400 italic mt-1">No destination required for Hangup</p>
+  }
+  if (destType === '5') {
+    const formatUS = (raw: string) => {
+      const d = raw.replace(/\D/g, '').slice(0, 10)
+      if (d.length <= 3) return d
+      if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
+      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+    }
+    const digits = value.replace(/\D/g, '').slice(0, 10)
+    return (
+      <div className="space-y-1">
+        <input
+          className="input"
+          value={value}
+          onChange={e => onChange(formatUS(e.target.value))}
+          placeholder="(555) 555-5555"
+          maxLength={14}
+        />
+        <p className={cn(
+          'text-xs',
+          digits.length === 10 ? 'text-emerald-600' : 'text-slate-400'
+        )}>
+          {digits.length}/10 digits{digits.length === 10 ? ' ✓' : ''}
+        </p>
+      </div>
     )
-  }, [item, dtmf])
+  }
+  if (destType === '0' || destType === '2') {
+    return (
+      <select className="input" value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">— Select Extension —</option>
+        {extensions.map(ext => (
+          <option key={ext.extension} value={ext.extension}>
+            {ext.extension}{ext.first_name || ext.last_name
+              ? ` — ${[ext.first_name, ext.last_name].filter(Boolean).join(' ')}` : ''}
+          </option>
+        ))}
+      </select>
+    )
+  }
+  if (destType === '1') {
+    return (
+      <select className="input" value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">— Select Queue —</option>
+        {ringGroups.map(rg => (
+          <option key={rg.id} value={String(rg.id)}>{rg.title}</option>
+        ))}
+      </select>
+    )
+  }
+  if (destType === '3') {
+    return (
+      <select className="input" value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">— Select IVR —</option>
+        {allIvrs.filter(iv => iv.ivr_id !== ivrId).map(iv => (
+          <option key={iv.ivr_id} value={iv.ivr_id}>{iv.ivr_desc} ({iv.ivr_id})</option>
+        ))}
+      </select>
+    )
+  }
+  return null
+}
+
+// ── IVR Menu Modal (Add / Edit) ───────────────────────────────────────────────
+
+function IvrMenuModal({
+  ivrId, ivrNumId, item, usedDtmf, allIvrs, onClose,
+}: {
+  ivrId: string
+  ivrNumId: number                  // integer PK of the ivr row (needed by edit-ivr-menu)
+  item: IvrMenuItem | null          // null = add mode
+  usedDtmf: string[]                // DTMF keys already configured
+  allIvrs: Ivr[]
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    dtmf: item?.dtmf ?? '',
+    dtmf_title: item?.dtmf_title ?? '',
+    dest_type: item ? String(item.dest_type) : '0',
+    dest: item?.dest ?? '',
+  })
+
+  const isEditing = !!item
+  const availableKeys = KEYPAD_KEYS.filter(k => !usedDtmf.includes(k) || k === item?.dtmf)
 
   const saveMutation = useMutation({
-    mutationFn: () => item
-      ? ivrService.editMenu({ auto_id: item.ivr_m_id ?? item.id, ...form, ivr_id: ivrId })
-      : ivrService.addMenu({ parameter: [{ dtmf, ...form, ivr_id: ivrId }] }),
+    mutationFn: () => isEditing
+      ? ivrService.editMenu({
+          parameter: {
+            ivr: ivrNumId,
+            dtmf:       [form.dtmf],
+            dtmf_title: [form.dtmf_title],
+            dest_type:  [form.dest_type],
+            dest:       [form.dest],
+            ivr_menu_id: [item!.ivr_m_id ?? item!.id ?? 0],
+          },
+        })
+      : ivrService.addMenu({ parameter: [{ ...form, ivr_id: ivrId }] }),
     onSuccess: () => {
-      toast.success(item ? 'Route updated' : 'Route added')
+      toast.success(isEditing ? 'Route updated' : 'Route added')
       qc.invalidateQueries({ queryKey: ['ivr-menu', ivrId] })
-      onSave()
+      onClose()
     },
     onError: () => toast.error('Failed to save route'),
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: () => ivrService.deleteMenu(item?.ivr_m_id ?? item?.id ?? 0),
-    onSuccess: () => {
-      toast.success('Route removed')
-      qc.invalidateQueries({ queryKey: ['ivr-menu', ivrId] })
-      onDelete()
-    },
-    onError: () => toast.error('Failed to remove route'),
-  })
-
-  const keyLabel = dtmf === '*' ? '★' : dtmf === '#' ? '＃' : dtmf
-  const destMeta = DEST_TYPE_META[form.dest_type]
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.dtmf) { toast.error('Please select a DTMF key'); return }
+    if (form.dest_type !== '4' && !form.dest) { toast.error('Destination is required'); return }
+    if (form.dest_type === '5' && form.dest.replace(/\D/g, '').length !== 10) {
+      toast.error('External number must be exactly 10 digits'); return
+    }
+    saveMutation.mutate()
+  }
 
   return (
-    <div className="mt-4 border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-            {keyLabel}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-800">Configure Key {keyLabel}</p>
-            <p className="text-xs text-slate-500">Set where pressing {keyLabel} routes callers</p>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <p className="text-sm font-bold text-slate-900">
+            {isEditing ? `Edit Route — Key ${form.dtmf}` : 'Add IVR Menu Route'}
+          </p>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
+            <X size={15} />
+          </button>
         </div>
-        <button type="button" onClick={onClose}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/80 transition-colors">
-          <X size={15} />
-        </button>
-      </div>
-
-      <div className="p-5">
-        <div className="grid grid-cols-3 gap-4">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {/* DTMF Key */}
           <div>
-            <label className="label text-xs">Key Label</label>
-            <input className="input text-sm" value={form.dtmf_title}
-              onChange={e => setForm(p => ({ ...p, dtmf_title: e.target.value }))}
-              placeholder="e.g. Sales" />
+            <label className="label">DTMF Key <span className="text-red-500">*</span></label>
+            {isEditing ? (
+              <div className="input bg-slate-50 text-slate-600 font-mono">{form.dtmf}</div>
+            ) : (
+              <select className="input" value={form.dtmf}
+                onChange={e => setForm(p => ({ ...p, dtmf: e.target.value }))}>
+                <option value="">— Select key —</option>
+                {availableKeys.map(k => (
+                  <option key={k} value={k}>
+                    {k === '*' ? '* (Star)' : k === '#' ? '# (Hash)' : `${k}`}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
+
+          {/* DTMF Title / Label */}
           <div>
-            <label className="label text-xs">Route Type</label>
-            <select className="input text-sm" value={form.dest_type}
-              onChange={e => setForm(p => ({ ...p, dest_type: e.target.value }))}>
-              {destTypes.length > 0
-                ? destTypes.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)
-                : Object.entries(DEST_TYPE_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)
-              }
+            <label className="label">DTMF Title</label>
+            <input className="input" value={form.dtmf_title}
+              onChange={e => setForm(p => ({ ...p, dtmf_title: e.target.value }))}
+              placeholder="e.g. Sales, Support, Operator" />
+          </div>
+
+          {/* Destination Type */}
+          <div>
+            <label className="label">Destination Type <span className="text-red-500">*</span></label>
+            <select className="input" value={form.dest_type}
+              onChange={e => setForm(p => ({ ...p, dest_type: e.target.value, dest: '' }))}>
+              {Object.entries(DEST_TYPE_META).map(([v, m]) => (
+                <option key={v} value={v}>{m.label}</option>
+              ))}
             </select>
           </div>
-          <div>
-            <label className="label text-xs">Destination</label>
-            <input className="input text-sm" value={form.dest}
-              onChange={e => setForm(p => ({ ...p, dest: e.target.value }))}
-              placeholder={form.dest_type === '4' ? 'N/A' : 'Ext / Queue ID…'} />
-          </div>
-        </div>
 
-        {/* Route preview */}
-        {destMeta && (
-          <div className={cn('flex items-center gap-2 px-3 py-2 rounded-xl mt-4 text-xs', destMeta.bg)}>
-            <span className={cn('w-6 h-6 rounded-full flex items-center justify-center font-bold ring-1', destMeta.ring, destMeta.color)}>
-              {keyLabel}
-            </span>
-            <ArrowRight size={12} className={destMeta.color} />
-            <span className={cn('font-semibold', destMeta.color)}>{destMeta.label}</span>
-            {form.dest && <span className={cn('font-mono opacity-80', destMeta.color)}>{form.dest}</span>}
-            {form.dtmf_title && <span className={cn('opacity-60', destMeta.color)}>({form.dtmf_title})</span>}
-          </div>
-        )}
+          {/* Destination (dynamic) */}
+          {form.dest_type !== '4' && (
+            <div>
+              <label className="label">Destination <span className="text-red-500">*</span></label>
+              <DestinationSelect
+                destType={form.dest_type}
+                value={form.dest}
+                onChange={v => setForm(p => ({ ...p, dest: v }))}
+                allIvrs={allIvrs}
+                ivrId={ivrId}
+              />
+            </div>
+          )}
 
-        <div className="flex items-center justify-between mt-4">
-          <div>
-            {item && (
-              <button type="button"
-                onClick={async () => { if (await confirmDelete(`route for key ${dtmf}`)) deleteMutation.mutate() }}
-                disabled={deleteMutation.isPending}
-                className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 font-medium transition-colors">
-                <Trash2 size={13} /> Remove Route
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-              Cancel
-            </button>
-            <button type="button"
-              disabled={(form.dest_type !== '4' && !form.dest) || saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
-              className="btn-primary text-sm px-5 py-2">
-              {saveMutation.isPending ? <><Loader2 size={13} className="animate-spin" />Saving…</> : 'Save Route'}
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
+            <button type="submit" disabled={saveMutation.isPending} className="btn-primary flex items-center gap-1.5">
+              {saveMutation.isPending ? <><Loader2 size={13} className="animate-spin" />Saving…</> : isEditing ? 'Save Changes' : 'Add Route'}
             </button>
           </div>
-        </div>
+        </form>
       </div>
-    </div>
-  )
-}
-
-// ── Visual Keypad ──────────────────────────────────────────────────────────────
-
-function VisualKeypad({
-  menuItems, onKeySelect, activeKey,
-}: { menuItems: IvrMenuItem[]; onKeySelect: (k: string) => void; activeKey: string | null }) {
-  const byDtmf: Record<string, IvrMenuItem> = {}
-  menuItems.forEach(m => { byDtmf[m.dtmf] = m })
-
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      {KEYPAD_KEYS.map(key => {
-        const item = byDtmf[key]
-        const meta = item ? (DEST_TYPE_META[item.dest_type] ?? DEST_TYPE_META['0']) : null
-        const isActive = activeKey === key
-        const kd = key === '*' ? '★' : key === '#' ? '＃' : key
-
-        return (
-          <button key={key} onClick={() => onKeySelect(key)}
-            className={cn(
-              'group relative rounded-2xl border-2 text-left transition-all duration-200 focus:outline-none',
-              isActive
-                ? 'border-indigo-500 ring-4 ring-indigo-100 shadow-lg scale-[1.02]'
-                : item
-                  ? cn('border-transparent ring-2', meta!.ring, 'hover:scale-[1.02] hover:shadow-md')
-                  : 'border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 hover:scale-[1.02]'
-            )}>
-            {item && meta ? (
-              <div className={cn('p-3 rounded-2xl h-full', meta.bg)}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={cn('text-lg font-bold leading-none', meta.color)}>{kd}</span>
-                  <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/70', meta.color)}>
-                    {meta.label}
-                  </span>
-                </div>
-                <p className="text-xs font-semibold text-slate-800 truncate leading-tight">
-                  {item.dtmf_title || '(no label)'}
-                </p>
-                <p className="text-xs text-slate-500 font-mono truncate mt-0.5">{item.dest}</p>
-                <ArrowRight size={10} className={cn('mt-1 opacity-60', meta.color)} />
-              </div>
-            ) : (
-              <div className="p-3 flex flex-col items-center justify-center h-[88px] gap-1.5">
-                <span className="text-xl font-bold text-slate-300 group-hover:text-indigo-400 transition-colors leading-none">{kd}</span>
-                <div className="w-5 h-5 rounded-full border-2 border-dashed border-slate-200 group-hover:border-indigo-400 flex items-center justify-center transition-colors">
-                  <Plus size={10} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
-                </div>
-                <span className="text-[10px] text-slate-300 group-hover:text-indigo-400 transition-colors">Add route</span>
-              </div>
-            )}
-          </button>
-        )
-      })}
     </div>
   )
 }
@@ -832,132 +813,187 @@ function VisualKeypad({
 // ── IVR Menu Tab ───────────────────────────────────────────────────────────────
 
 function IvrMenuTab() {
-  const [selectedIvrId, setSelectedIvrId] = useState('')
-  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const qc = useQueryClient()
+  // Use numeric id as select value to avoid string/type-mismatch with ivr_id
+  const [selectedNumId, setSelectedNumId] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState<IvrMenuItem | null>(null)
 
   const { data: ivrRaw, isLoading: ivrLoading } = useQuery({
     queryKey: ['ivr-list', 'all'],
     queryFn: () => ivrService.list({ page: 1, limit: 200, search: '', filters: {} }),
   })
 
-  const { data: menuRaw, isLoading: menuLoading } = useQuery({
-    queryKey: ['ivr-menu', selectedIvrId],
-    queryFn: () => ivrService.getMenu(selectedIvrId),
-    enabled: !!selectedIvrId,
-  })
-
-  const { data: destRaw } = useQuery({
-    queryKey: ['dest-types'],
-    queryFn: () => ivrService.getDestTypes(),
-  })
-
   const allIvrs = extractList<Ivr>(ivrRaw)
-  const menuItems = extractList<IvrMenuItem>(menuRaw)
-  const destTypes = extractList<{ id: number; name: string }>(destRaw)
-  const byDtmf: Record<string, IvrMenuItem> = {}
-  menuItems.forEach(m => { byDtmf[m.dtmf] = m })
+  const selectedIvr = allIvrs.find(iv => String(iv.id ?? iv.auto_id) === selectedNumId)
+  const menuQueryKey = selectedIvr?.ivr_id ?? ''
 
-  const selectedIvr = allIvrs.find(iv => iv.ivr_id === selectedIvrId)
+  const { data: menuRaw, isLoading: menuLoading } = useQuery({
+    queryKey: ['ivr-menu', menuQueryKey],
+    queryFn: () => ivrService.getMenu(selectedIvr!.ivr_id),
+    enabled: !!selectedIvr,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => ivrService.deleteMenu(id),
+    onSuccess: () => {
+      toast.success('Route removed')
+      qc.invalidateQueries({ queryKey: ['ivr-menu', menuQueryKey] })
+    },
+    onError: () => toast.error('Failed to remove route'),
+  })
+
+  const menuItems = extractList<IvrMenuItem>(menuRaw)
+  const usedDtmf = menuItems.map(m => m.dtmf)
+
+  const dtmfLabel = (key: string) => key === '*' ? '★ Star' : key === '#' ? '# Hash' : key
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <InfoBox title="What is the IVR Menu (Key Routing)?">
-        <div className="pt-1.5 space-y-1">
-          <p>The IVR Menu tells your phone system what to do when a caller presses a key (DTMF input).</p>
-          <p className="mt-1">Example: <em>"Press 1 for Sales, press 2 for Support, press 0 for the operator"</em></p>
-          <p className="mt-1">Each key (0–9, *, #) can route to: an Extension, Queue, Voicemail, another IVR, or hang up.</p>
-          <p className="mt-1"><strong>How to use:</strong> Select an IVR below, then click any key tile to assign a routing rule.</p>
-        </div>
-      </InfoBox>
-
       {/* IVR Selector */}
-      <div className="mb-6">
-        <label className="label">Select IVR to Configure</label>
-        {ivrLoading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Loader2 size={14} className="animate-spin" /> Loading IVRs…
-          </div>
-        ) : allIvrs.length === 0 ? (
+      <div className="mb-5 flex items-end gap-3 flex-wrap">
+        <div className="flex-1 max-w-sm">
+          <label className="label">Select IVR</label>
+          {ivrLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-400 h-9">
+              <Loader2 size={14} className="animate-spin" /> Loading…
+            </div>
+          ) : (
+            <select className="input" value={selectedNumId}
+              onChange={e => { setSelectedNumId(e.target.value); setEditingItem(null) }}>
+              <option value="">— Choose an IVR —</option>
+              {allIvrs.map(ivr => {
+                const numId = String(ivr.id ?? ivr.auto_id ?? ivr.ivr_id)
+                return (
+                  <option key={numId} value={numId}>
+                    {ivr.ivr_desc} ({ivr.ivr_id})
+                  </option>
+                )
+              })}
+            </select>
+          )}
+        </div>
+        {selectedIvr && (
+          <button onClick={() => { setEditingItem(null); setShowModal(true) }}
+            disabled={usedDtmf.length >= KEYPAD_KEYS.length}
+            className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50">
+            <Plus size={14} /> Add IVR Menu
+          </button>
+        )}
+      </div>
+
+      {!selectedIvr ? (
+        allIvrs.length === 0 && !ivrLoading ? (
           <div className="flex items-center gap-2.5 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
             <AlertCircle size={16} className="flex-shrink-0" />
             No IVRs found. Go to the <strong className="mx-1">IVR</strong> tab to create one first.
           </div>
         ) : (
-          <select className="input max-w-md" value={selectedIvrId}
-            onChange={e => { setSelectedIvrId(e.target.value); setActiveKey(null) }}>
-            <option value="">— Choose an IVR —</option>
-            {allIvrs.map(ivr => (
-              <option key={ivr.ivr_id} value={ivr.ivr_id}>
-                {ivr.ivr_desc} ({ivr.ivr_id})
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      {/* Keypad designer */}
-      {selectedIvr ? (
-        <>
-          {/* IVR info strip */}
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 mb-5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
-              <PhoneCall size={14} className="text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-slate-900">{selectedIvr.ivr_desc}</p>
-              <div className="flex items-center gap-3 mt-0.5">
-                <span className="text-xs font-mono text-indigo-600">{selectedIvr.ivr_id}</span>
-                <span className={cn('flex items-center gap-1 text-xs font-medium',
-                  menuItems.length > 0 ? 'text-emerald-600' : 'text-slate-400')}>
-                  {menuItems.length > 0 ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                  {menuItems.length} key{menuItems.length !== 1 ? 's' : ''} configured
-                </span>
-              </div>
-            </div>
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+            <PhoneCall size={32} className="opacity-30" />
+            <p className="text-sm font-medium">Select an IVR above to manage its menu routes</p>
+          </div>
+        )
+      ) : menuLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 size={24} className="animate-spin text-indigo-400" />
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Table header bar */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
+            <span className="text-xs font-medium text-slate-500">
+              {menuItems.length} route{menuItems.length !== 1 ? 's' : ''} configured
+              {' '}· {KEYPAD_KEYS.length - usedDtmf.length} key{KEYPAD_KEYS.length - usedDtmf.length !== 1 ? 's' : ''} available
+            </span>
           </div>
 
-          {/* Legend */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {Object.entries(DEST_TYPE_META).map(([, m]) => (
-              <span key={m.label} className={cn('flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full', m.bg, m.color)}>
-                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
-                {m.label}
-              </span>
-            ))}
-          </div>
-
-          {menuLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 size={24} className="animate-spin text-indigo-400" />
+          {menuItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+              <PhoneCall size={28} className="opacity-30" />
+              <p className="text-sm font-medium text-slate-500">No routes configured yet</p>
+              <p className="text-xs text-slate-400">Click "Add IVR Menu" to configure your first key route</p>
             </div>
           ) : (
-            <VisualKeypad
-              menuItems={menuItems}
-              onKeySelect={key => setActiveKey(p => p === key ? null : key)}
-              activeKey={activeKey}
-            />
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  {['DTMF', 'DTMF Title', 'Destination Type', 'Destination', 'Actions'].map((h, i) => (
+                    <th key={h} className={cn(
+                      'px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider',
+                      i === 4 ? 'text-right' : 'text-left'
+                    )}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {menuItems
+                  .slice()
+                  .sort((a, b) => {
+                    const order = ['1','2','3','4','5','6','7','8','9','*','0','#']
+                    return order.indexOf(a.dtmf) - order.indexOf(b.dtmf)
+                  })
+                  .map((menuItem, i) => {
+                    const meta = DEST_TYPE_META[String(menuItem.dest_type)] ?? DEST_TYPE_META['0']
+                    return (
+                      <tr key={menuItem.ivr_m_id ?? menuItem.id ?? i}
+                        className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3.5">
+                          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                            {dtmfLabel(menuItem.dtmf).split(' ')[0]}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="text-sm text-slate-700 font-medium">
+                            {menuItem.dtmf_title || <span className="text-slate-300 italic">No label</span>}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', meta.bg, meta.color)}>
+                            {meta.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="text-sm font-mono text-slate-600">
+                            {menuItem.dest || <span className="text-slate-300 italic">—</span>}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => { setEditingItem(menuItem); setShowModal(true) }}
+                              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (await confirmDelete(`key ${menuItem.dtmf} route`))
+                                  deleteMutation.mutate(menuItem.ivr_m_id ?? menuItem.id ?? 0)
+                              }}
+                              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
           )}
-
-          {activeKey && (
-            <KeyConfigDrawer
-              dtmf={activeKey}
-              ivrId={selectedIvr.ivr_id}
-              item={byDtmf[activeKey] ?? null}
-              destTypes={destTypes}
-              onSave={() => setActiveKey(null)}
-              onClose={() => setActiveKey(null)}
-              onDelete={() => setActiveKey(null)}
-            />
-          )}
-        </>
-      ) : !ivrLoading && allIvrs.length > 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-white border-2 border-dashed border-slate-200 flex items-center justify-center">
-            <Hash size={26} className="text-slate-300" />
-          </div>
-          <p className="text-sm font-semibold text-slate-500">Select an IVR above to configure its keys</p>
         </div>
-      ) : null}
+      )}
+
+      {showModal && selectedIvr && (
+        <IvrMenuModal
+          ivrId={selectedIvr.ivr_id}
+          ivrNumId={Number(selectedNumId)}
+          item={editingItem}
+          usedDtmf={usedDtmf}
+          allIvrs={allIvrs}
+          onClose={() => { setShowModal(false); setEditingItem(null) }}
+        />
+      )}
     </div>
   )
 }
@@ -970,6 +1006,12 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
     ivr_id: '', ann_id: '', ivr_desc: '', language: 'en',
     voice_name: '', speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium',
   })
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (ivr) {
@@ -987,30 +1029,56 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
     } else {
       setForm({ ivr_id: '', ann_id: '', ivr_desc: '', language: 'en', voice_name: '', speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium' })
     }
+    setAudioFile(null); setRecordedBlob(null); setPreviewUrl(null)
   }, [ivr])
 
-  const mutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      ivr?.auto_id || ivr?.id ? ivrService.update(data) : ivrService.create(data),
-    onSuccess: () => {
-      toast.success(ivr?.auto_id || ivr?.id ? 'IVR updated' : 'IVR created')
-      qc.invalidateQueries({ queryKey: ['ivr-list', 'all'] })
-      onClose()
-    },
-    onError: () => toast.error('Failed to save IVR'),
-  })
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
   const isEditing = !!(ivr?.auto_id || ivr?.id)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFileSelect = (file: File) => {
+    if (!file.name.match(/\.(mp3|wav|ogg|webm|m4a|mp4)$/i)) {
+      toast.error('Please upload a valid audio file'); return
+    }
+    setAudioFile(file)
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(URL.createObjectURL(file))
+    setRecordedBlob(null)
+  }
+
+  const handleRecorded = (blob: Blob, url: string) => {
+    setRecordedBlob(blob)
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(url)
+    setAudioFile(null)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.ivr_id.trim() || !form.ivr_desc.trim()) {
       toast.error('IVR ID and name are required'); return
     }
-    const payload: Record<string, unknown> = { ...form }
-    if (isEditing) payload.auto_id = ivr!.auto_id ?? ivr!.id
-    mutation.mutate(payload)
+    setSaving(true)
+    try {
+      let annId = form.ann_id
+      if (form.prompt_option !== '1' && (audioFile || recordedBlob)) {
+        const fd = new FormData()
+        if (audioFile) fd.append('audio', audioFile)
+        else if (recordedBlob) fd.append('audio', recordedBlob, 'recording.webm')
+        const res = await ivrService.uploadAudio(fd)
+        annId = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? annId
+      }
+      const payload: Record<string, unknown> = { ...form, ann_id: annId }
+      if (isEditing) payload.auto_id = ivr!.auto_id ?? ivr!.id
+      if (isEditing) await ivrService.update(payload)
+      else await ivrService.create(payload)
+      toast.success(isEditing ? 'IVR updated' : 'IVR created')
+      qc.invalidateQueries({ queryKey: ['ivr-list'] })
+      onClose()
+    } catch {
+      toast.error('Failed to save IVR')
+    } finally { setSaving(false) }
   }
 
   return (
@@ -1033,13 +1101,13 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
       <div>
         <label className="label">Greeting Type</label>
         <div className="grid grid-cols-3 gap-2">
-          {[['1', 'Text to Speech', <Volume2 size={14} />], ['0', 'Upload File', <Upload size={14} />], ['2', 'Record', <Mic size={14} />]].map(([v, l, icon]) => (
-            <button key={String(v)} type="button" onClick={() => set('prompt_option', String(v))}
+          {([['1', 'Text to Speech', <Volume2 key="v" size={14} />], ['0', 'Upload File', <Upload key="u" size={14} />], ['2', 'Record from Mic', <Mic key="m" size={14} />]] as [string, string, React.ReactNode][]).map(([v, l, icon]) => (
+            <button key={v} type="button" onClick={() => set('prompt_option', v)}
               className={cn('flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-all',
-                form.prompt_option === String(v)
+                form.prompt_option === v
                   ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-300'
                   : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50')}>
-              {icon as React.ReactNode}{l as string}
+              {icon}{l}
             </button>
           ))}
         </div>
@@ -1051,7 +1119,7 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
             <label className="label">Greeting Message</label>
             <textarea className="input min-h-[72px] resize-none" value={form.speech_text}
               onChange={e => set('speech_text', e.target.value)}
-              placeholder="Welcome to Acme Corp! Press 1 for Sales, press 2 for Support, press 0 for the operator." />
+              placeholder="Welcome to Acme Corp! Press 1 for Sales, press 2 for Support…" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1083,22 +1151,61 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
         </>
       )}
 
-      {(form.prompt_option === '0' || form.prompt_option === '2') && (
+      {form.prompt_option === '0' && (
         <div>
-          <label className="label">Announcement ID</label>
-          <input className="input" value={form.ann_id}
-            onChange={e => set('ann_id', e.target.value)}
-            placeholder="Reference an Audio Message ann_id or file path" />
-          <p className="text-xs text-slate-400 mt-1">
-            Create your audio file in the <strong>Audio Messages</strong> tab, then paste its file path here.
-          </p>
+          <label className="label">Audio File</label>
+          <div
+            className={cn('border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
+              dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300')}
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f) }}>
+            <input ref={fileRef} type="file" accept=".mp3,.wav,.ogg,.webm,.m4a,.mp4" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f) }} />
+            {audioFile ? (
+              <div className="space-y-1">
+                <Music size={20} className="text-emerald-500 mx-auto" />
+                <p className="text-sm font-semibold text-slate-700">{audioFile.name}</p>
+                <p className="text-xs text-slate-400">{(audioFile.size / 1024).toFixed(0)} KB</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Upload size={20} className="text-slate-300 mx-auto" />
+                <p className="text-sm font-semibold text-slate-600">Drop file or click to browse</p>
+                <p className="text-xs text-slate-400">MP3, WAV, OGG, WebM · Max 20 MB</p>
+                {ivr?.ann_id && <p className="text-xs text-indigo-500 mt-1">Current: {String(ivr.ann_id).split('/').pop()}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {form.prompt_option === '2' && (
+        <div>
+          <label className="label">Record from Microphone</label>
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+            <AudioRecorder onRecorded={handleRecorded} />
+          </div>
+          {recordedBlob && (
+            <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1">
+              <CheckCircle2 size={12} /> Recording ready
+            </p>
+          )}
+        </div>
+      )}
+
+      {previewUrl && (
+        <div>
+          <label className="label">Preview</label>
+          <audio controls src={previewUrl} className="w-full h-10 rounded-lg" />
         </div>
       )}
 
       <div className="flex justify-end gap-3 pt-2">
         <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-        <button type="submit" disabled={mutation.isPending} className="btn-primary flex items-center gap-1.5">
-          {mutation.isPending ? <><Loader2 size={13} className="animate-spin" />Saving…</> : isEditing ? 'Save Changes' : 'Create IVR'}
+        <button type="submit" disabled={saving} className="btn-primary flex items-center gap-1.5">
+          {saving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : isEditing ? 'Save Changes' : 'Create IVR'}
         </button>
       </div>
     </form>
@@ -1109,25 +1216,13 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
 
 function IvrTab() {
   const qc = useQueryClient()
-  const [search, setSearch] = useState('')
+  const table = useServerTable()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Ivr | null>(null)
 
-  const { data: raw, isLoading } = useQuery({
-    queryKey: ['ivr-list', 'all'],
-    queryFn: () => ivrService.list({ page: 1, limit: 200, search: '', filters: {} }),
-  })
-
-  const allIvrs = extractList<Ivr>(raw)
-  const filtered = allIvrs.filter(iv =>
-    !search ||
-    iv.ivr_id.toLowerCase().includes(search.toLowerCase()) ||
-    iv.ivr_desc.toLowerCase().includes(search.toLowerCase())
-  )
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ivrService.delete(id),
-    onSuccess: () => { toast.success('IVR deleted'); qc.invalidateQueries({ queryKey: ['ivr-list', 'all'] }) },
+    onSuccess: () => { toast.success('IVR deleted'); qc.invalidateQueries({ queryKey: ['ivr-list'] }) },
     onError: () => toast.error('Failed to delete IVR'),
   })
 
@@ -1137,117 +1232,106 @@ function IvrTab() {
     '2': 'bg-rose-50 text-rose-700',
   }
 
+  const columns: Column<Ivr>[] = [
+    {
+      key: 'ivr_desc',
+      header: 'IVR Name',
+      render: (ivr) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+            <PhoneCall size={13} className="text-indigo-600" />
+          </div>
+          <span className="text-sm font-semibold text-slate-800">{ivr.ivr_desc}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'ivr_id',
+      header: 'IVR ID',
+      render: (ivr) => (
+        <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+          {ivr.ivr_id}
+        </span>
+      ),
+    },
+    {
+      key: 'prompt_option',
+      header: 'Greeting',
+      render: (ivr) => {
+        const pOpt = String(ivr.prompt_option ?? '1')
+        return (
+          <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', greetingColors[pOpt] ?? greetingColors['1'])}>
+            {PROMPT_LABEL[pOpt] ?? 'TTS'}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'ann_id',
+      header: 'Preview',
+      render: (ivr) => {
+        const annId = String(ivr.ann_id ?? '')
+        return annId.includes('/')
+          ? <AudioPlayer annId={annId} />
+          : <span className="text-xs text-slate-300">—</span>
+      },
+    },
+    {
+      key: '_actions',
+      header: '',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      render: (ivr) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <button onClick={() => { setEditing(ivr); setShowModal(true) }}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={async () => {
+              if (await confirmDelete(ivr.ivr_desc))
+                deleteMutation.mutate(ivr.auto_id ?? ivr.id ?? 0)
+            }}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <InfoBox title="What is an IVR (Interactive Voice Response)?">
-        <div className="pt-1.5 space-y-1">
-          <p>An IVR is an automated phone menu. Callers hear a greeting and can press keys to navigate to different departments.</p>
-          <p className="mt-1">Example: <em>"Welcome to Acme Corp! Press 1 for Sales, press 2 for Support…"</em></p>
-          <p className="mt-1"><strong>Quick start:</strong></p>
-          <ol className="list-decimal list-inside mt-0.5 space-y-0.5">
-            <li>Create an IVR here (name + greeting)</li>
-            <li>Go to <strong>IVR Menu</strong> to assign what each key press does</li>
-            <li>Assign the IVR to a phone number (DID) in DID Management</li>
-          </ol>
-        </div>
-      </InfoBox>
+      <ServerDataTable<Ivr>
+        queryKey={['ivr-list']}
+        queryFn={(params) => ivrService.list(params)}
+        dataExtractor={(res: unknown) => {
+          // IVR API returns: {success, total_rows, data: [...]} directly
+          const r = res as { data?: { data?: Ivr[]; total_rows?: number } }
+          return r?.data?.data ?? []
+        }}
+        totalExtractor={(res: unknown) => {
+          const r = res as { data?: { total_rows?: number } }
+          return r?.data?.total_rows ?? 0
+        }}
+        columns={columns}
+        keyField="ivr_id"
+        search={table.search}
+        onSearchChange={table.setSearch}
+        searchPlaceholder="Search IVRs…"
+        page={table.page}
+        limit={table.limit}
+        onPageChange={table.setPage}
+        headerActions={
+          <button onClick={() => { setEditing(null); setShowModal(true) }}
+            className="btn-primary flex items-center gap-1.5 text-sm">
+            <Plus size={14} /> New IVR
+          </button>
+        }
+        emptyText="No IVRs yet — create your first IVR to build an automated phone menu"
+        emptyIcon={<PhoneCall size={28} />}
+      />
 
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input className="input pl-9 text-sm" placeholder="Search IVRs…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <button onClick={() => { setEditing(null); setShowModal(true) }}
-          className="btn-primary flex items-center gap-1.5 text-sm">
-          <Plus size={14} /> New IVR
-        </button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={28} className="animate-spin text-indigo-400" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
-            <PhoneCall size={26} className="text-slate-300" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-slate-600">
-              {search ? 'No IVRs match your search' : 'No IVRs yet'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              {search ? 'Try a different search term' : 'Create your first IVR to build an automated phone menu'}
-            </p>
-          </div>
-          {!search && (
-            <button onClick={() => { setEditing(null); setShowModal(true) }} className="btn-primary text-sm">
-              <Plus size={14} /> Create IVR
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/70">
-                {['IVR Name', 'IVR ID', 'Greeting', 'Language', 'Actions'].map((h, i) => (
-                  <th key={h} className={cn('px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider',
-                    i === 4 ? 'text-right' : 'text-left')}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(ivr => {
-                const pOpt = String(ivr.prompt_option ?? '1')
-                return (
-                  <tr key={ivr.ivr_id}
-                    className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                          <PhoneCall size={13} className="text-indigo-600" />
-                        </div>
-                        <span className="text-sm font-semibold text-slate-800">{ivr.ivr_desc}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                        {ivr.ivr_id}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', greetingColors[pOpt] ?? greetingColors['1'])}>
-                        {PROMPT_LABEL[pOpt] ?? 'TTS'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-slate-500">{String(ivr.language || '—')}</td>
-                    <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => { setEditing(ivr); setShowModal(true) }}
-                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (await confirmDelete(ivr.ivr_desc))
-                              deleteMutation.mutate(ivr.auto_id ?? ivr.id ?? 0)
-                          }}
-                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
@@ -1256,12 +1340,10 @@ function IvrTab() {
                 <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center">
                   <PhoneCall size={14} className="text-indigo-600" />
                 </div>
-                <p className="text-sm font-bold text-slate-900">
-                  {editing ? 'Edit IVR' : 'New IVR'}
-                </p>
+                <p className="text-sm font-bold text-slate-900">{editing ? 'Edit IVR' : 'New IVR'}</p>
               </div>
               <button onClick={() => setShowModal(false)}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
                 <X size={15} />
               </button>
             </div>
@@ -1281,7 +1363,7 @@ type MainTab = 'ivr' | 'menu' | 'audio'
 
 const TABS: { key: MainTab; label: string; icon: React.ReactNode }[] = [
   { key: 'ivr',   label: 'IVR',           icon: <PhoneCall size={14} /> },
-  { key: 'menu',  label: 'IVR Menu',       icon: <Hash size={14} />      },
+  { key: 'menu',  label: 'IVR Menu',       icon: <Music size={14} />     },
   { key: 'audio', label: 'Audio Messages', icon: <Music size={14} />     },
 ]
 
@@ -1290,7 +1372,6 @@ export function Ivr() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      {/* Header */}
       <div className="flex-shrink-0 px-6 py-4 bg-white border-b border-slate-200">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -1299,15 +1380,12 @@ export function Ivr() {
               Build phone menus, configure key routing, and manage voice prompts
             </p>
           </div>
-          {/* Tab bar */}
           <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={cn(
                   'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                  tab === t.key
-                    ? 'bg-white text-indigo-700 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                  tab === t.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 )}>
                 {t.icon}{t.label}
               </button>
@@ -1316,7 +1394,6 @@ export function Ivr() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-hidden bg-slate-50 flex flex-col">
         {tab === 'ivr'   && <IvrTab />}
         {tab === 'menu'  && <IvrMenuTab />}

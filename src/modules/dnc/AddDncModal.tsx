@@ -4,6 +4,7 @@ import { X, Save, PhoneOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dncService } from '../../services/dnc.service'
 import { useAuthStore } from '../../stores/auth.store'
+import { formatPartialPhoneUS } from '../../utils/format'
 
 interface Props {
   onClose: () => void
@@ -12,7 +13,8 @@ interface Props {
 
 interface ExtItem {
   id: number
-  name: string
+  first_name: string
+  last_name: string
   extension: string
   [key: string]: unknown
 }
@@ -80,10 +82,9 @@ export function AddDncModal({ onClose, onSaved }: Props) {
             <input
               ref={inputRef}
               className="input font-mono"
-              placeholder="e.g. 9876543210"
-              value={rawDigits}
-              inputMode="numeric"
-              maxLength={10}
+              placeholder="+1 (XXX) XXX-XXXX"
+              value={formatPartialPhoneUS(rawDigits)}
+              inputMode="tel"
               onChange={e => setRawDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
               onKeyDown={e => { if (e.key === 'Enter' && isValid) mutation.mutate() }}
             />
@@ -107,7 +108,7 @@ export function AddDncModal({ onClose, onSaved }: Props) {
               <option value="">None</option>
               {extensions.map(ext => (
                 <option key={ext.id} value={String(ext.extension)}>
-                  {ext.name} ({ext.extension})
+                  {ext.first_name} {ext.last_name} ({ext.extension})
                 </option>
               ))}
             </select>

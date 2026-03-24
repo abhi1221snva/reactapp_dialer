@@ -424,8 +424,8 @@ export function EditCampaign() {
       voip_configuration_id: c.voip_configuration_id != null ? String(c.voip_configuration_id) : '',
       call_transfer: Number(c.call_transfer ?? 0),
       time_based_calling: Number(c.time_based_calling ?? 0),
-      call_time_start: c.call_time_start ?? '08:00',
-      call_time_end: c.call_time_end ?? '20:00',
+      call_time_start: c.call_time_start ? c.call_time_start.substring(0, 5) : '08:00',
+      call_time_end: c.call_time_end ? c.call_time_end.substring(0, 5) : '20:00',
       email: Number(c.email ?? 0),
       sms: Number(c.sms ?? 0),
       send_crm: Number(c.send_crm ?? 0),
@@ -461,6 +461,11 @@ export function EditCampaign() {
         redirect_to_dropdown: data.redirect_to_dropdown ? Number(data.redirect_to_dropdown) : undefined,
         audio_message_amd: data.audio_message_amd ? Number(data.audio_message_amd) : undefined,
         voice_message_amd: data.voice_message_amd ? Number(data.voice_message_amd) : undefined,
+        // exclude empty string — backend validates as numeric
+        custom_caller_id: data.custom_caller_id || undefined,
+        // truncate HH:MM:SS → HH:MM — backend validates as date_format:H:i
+        call_time_start: data.call_time_start ? data.call_time_start.substring(0, 5) : undefined,
+        call_time_end: data.call_time_end ? data.call_time_end.substring(0, 5) : undefined,
       }
       return campaignService.update(payload)
     },

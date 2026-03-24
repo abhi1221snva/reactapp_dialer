@@ -40,7 +40,7 @@ export const campaignService = {
 
   // Dropdown data for campaign form
   getExtensions: () => api.get('/extension'),
-  getDids: () => api.get('/did'),
+  getDids: () => api.post('/did', {}),
   getIvrList: () => api.post('/ivr', { start: 0, limit: 500 }),
   getRingGroups: () => api.post('/ring-group', { start: 0, limit: 500 }),
   getVoiceTemplates: () => api.get('/voice-templete'),

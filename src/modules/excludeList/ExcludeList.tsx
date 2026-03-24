@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { excludeListService } from '../../services/excludeList.service'
 import { useServerTable } from '../../hooks/useServerTable'
-import { formatDateTime } from '../../utils/format'
+import { formatDateTime, formatPhoneUS } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { AddExcludeModal } from './AddExcludeModal'
@@ -56,7 +56,7 @@ export function ExcludeList() {
           <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
             <MinusCircle size={13} className="text-orange-500" />
           </div>
-          <span className="text-sm font-medium text-slate-900 font-mono">{String(row.number)}</span>
+          <span className="text-sm font-medium text-slate-900 font-mono">{formatPhoneUS(row.number)}</span>
         </div>
       ),
     },

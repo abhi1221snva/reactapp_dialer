@@ -4,6 +4,7 @@ import { X, Save, MinusCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { excludeListService } from '../../services/excludeList.service'
 import { campaignService } from '../../services/campaign.service'
+import { formatPartialPhoneUS } from '../../utils/format'
 
 interface Props {
   onClose: () => void
@@ -88,10 +89,9 @@ export function AddExcludeModal({ onClose, onSaved }: Props) {
             <input
               ref={inputRef}
               className="input font-mono"
-              placeholder="e.g. 9876543210"
-              value={rawDigits}
-              inputMode="numeric"
-              maxLength={10}
+              placeholder="+1 (XXX) XXX-XXXX"
+              value={formatPartialPhoneUS(rawDigits)}
+              inputMode="tel"
               onChange={e => setRawDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
               onKeyDown={e => { if (e.key === 'Enter' && isValid) mutation.mutate() }}
             />

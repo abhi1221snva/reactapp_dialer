@@ -150,8 +150,9 @@ function FormField({ f, value, onChange, error }: {
 }
 
 // ─── Signature pad ────────────────────────────────────────────────────────────
-function SigPad({ token, existingUrl, onSaved }: {
+function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
   token: string; existingUrl: string | null; onSaved: (url: string) => void
+  field?: 'signature_image' | 'owner_2_signature_image'
 }) {
   const ref    = useRef<HTMLCanvasElement>(null)
   const last   = useRef<{ x: number; y: number } | null>(null)
@@ -209,7 +210,7 @@ function SigPad({ token, existingUrl, onSaved }: {
     if (!hasLines) { setErr('Please draw your signature first.'); return }
     setSaving(true); setErr('')
     try {
-      const r = await publicAppService.saveSignature(token, ref.current!.toDataURL('image/png'))
+      const r = await publicAppService.saveSignature(token, ref.current!.toDataURL('image/png'), field)
       onSaved(r.data.signature_url); setMode('view')
     } catch (e: unknown) {
       setErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to save.')
@@ -509,10 +510,14 @@ export function MerchantPage() {
   const qc            = useQueryClient()
 
 
+  // Ref for the scrollable form card (used by scrollToFirstError)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
   // Wizard state
   const [step, setStep]           = useState(0)
   const [finished, setFinished]   = useState(false)
   const [sigUrl, setSigUrl]       = useState<string | null>(null)
+  const [sigUrl2, setSigUrl2]     = useState<string | null>(null)
   const [hasOwner2, setHasOwner2] = useState(false)
   // Per-section local edits: sectionIdx → { fieldKey: value }
   const [edits, setEdits]         = useState<Record<number, Record<string, string>>>({})
@@ -529,8 +534,9 @@ export function MerchantPage() {
   })
 
   useEffect(() => {
-    if (data?.lead?.signature_url !== undefined) setSigUrl(data.lead.signature_url)
-  }, [data?.lead?.signature_url])
+    if (data?.lead?.signature_url   !== undefined) setSigUrl(data.lead.signature_url)
+    if (data?.lead?.signature_url_2 !== undefined) setSigUrl2(data.lead.signature_url_2)
+  }, [data?.lead?.signature_url, data?.lead?.signature_url_2])
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['merchantPortal', leadToken] })
 
@@ -704,59 +710,15 @@ export function MerchantPage() {
     }
   }
 
-  // ── Inline field-level validation (same rules as ApplyPage) ─────────────
-  const runSectionValidation = (sec: PublicFormSection, vals: Record<string, string>): Record<string, string> => {
-    const errors: Record<string, string> = {}
-    console.error('[MerchantPage] runSectionValidation — section:', sec.title,
-      '| fields:', sec.fields.map(f => `${f.key}(${f.type} req=${f.required})`),
-      '| values:', vals,
-    )
-    for (const f of sec.fields) {
-      const raw = (vals[f.key] ?? '').trim()
-      const isEmpty = raw === ''
-      if (f.required && isEmpty) { errors[f.key] = `${f.label} is required`; continue }
-      if (isEmpty) continue
-      const t = f.type?.toLowerCase() ?? ''
-      if (t === 'email' || f.key.toLowerCase().includes('email')) {
-        if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(raw))
-          errors[f.key] = `${f.label} must be a valid email address`
-        continue
-      }
-      if (t === 'tel' || t === 'phone' || t === 'phone_number' || t === 'mobile'
-          || f.key.toLowerCase().includes('phone') || f.key.toLowerCase().includes('mobile')) {
-        const digits = raw.replace(/\D/g, '')
-        if (digits.length < 10 || digits.length > 15)
-          errors[f.key] = `${f.label} must be 10–15 digits (no letters)`
-        continue
-      }
-      if (t === 'number' || t === 'numeric' || t === 'integer') {
-        if (isNaN(Number(raw))) errors[f.key] = `${f.label} must be a numeric value`
-        continue
-      }
-      if (t === 'percentage') {
-        const n = Number(raw)
-        if (isNaN(n)) { errors[f.key] = `${f.label} must be a number`; continue }
-        if (n < 0 || n > 100) errors[f.key] = `${f.label} must be between 0 and 100`
-        continue
-      }
-      if (t === 'date') {
-        if (isNaN(Date.parse(raw))) errors[f.key] = `${f.label} must be a valid date`
-        continue
-      }
-    }
-    console.error('[MerchantPage] runSectionValidation result:', errors)
-    return errors
-  }
-
   // ── Navigate next ─────────────────────────────────────────────────────────
   const handleNext = async () => {
     setSaveErr('')
     if (curInfo.type === 'section' && curSec) {
       const vals = getVals(curSecIdx, curSec)
-      const errs = runSectionValidation(curSec, vals)
+      const errs = validateSection(curSec.fields, vals)
       if (Object.keys(errs).length) {
         setFErrors(errs)
-        scrollToFirstError(Object.keys(errs))
+        scrollToFirstError(Object.keys(errs), scrollRef.current)
         return    // HARD STOP — do NOT save, do NOT advance
       }
       setSaving(true)
@@ -779,8 +741,8 @@ export function MerchantPage() {
     if (target > step) {
       if (curInfo.type === 'section' && curSec) {
         const vals = getVals(curSecIdx, curSec)
-        const errs = runSectionValidation(curSec, vals)
-        if (Object.keys(errs).length) { setFErrors(errs); scrollToFirstError(Object.keys(errs)); return }
+        const errs = validateSection(curSec.fields, vals)
+        if (Object.keys(errs).length) { setFErrors(errs); scrollToFirstError(Object.keys(errs), scrollRef.current); return }
       }
     } else {
       setFErrors({})
@@ -938,7 +900,7 @@ export function MerchantPage() {
           <div key={step} className="step-enter" style={{ flex: 1, padding: '16px 28px', overflow: 'hidden' }}>
             {curInfo.type === 'section' && curSec ? (
               /* ── Form step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(fieldErrors).length || saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
+              <div ref={scrollRef} style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(fieldErrors).length || saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 {Object.keys(fieldErrors).length > 0 && (
                   <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />
@@ -986,14 +948,40 @@ export function MerchantPage() {
                 )}
               </div>
             ) : curInfo.type === 'sig' ? (
-              /* ── Signature step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${hasSig ? C.successBdr : C.border}`, height: '100%', padding: '24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
-                <div style={{ maxWidth: 600, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <ShieldCheck size={15} style={{ flexShrink: 0 }} />
+              /* ── Dual Signature step ── */
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${hasSig ? C.successBdr : C.border}`, height: '100%', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 0, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+
+                {/* ── Signature 1: Applicant ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#7c3aed18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Edit3 size={13} color="#7c3aed" />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Applicant Signature</span>
+                    <span style={{ fontSize: 11, color: C.error }}>*</span>
+                    {sigUrl && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
+                  </div>
+                  <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                     By signing, you certify that all information provided is accurate and complete.
                   </div>
-                  <SigPad token={leadToken!} existingUrl={sigUrl} onSaved={url => { setSigUrl(url); refresh() }} />
+                  <SigPad token={leadToken!} existingUrl={sigUrl} onSaved={url => { setSigUrl(url); refresh() }} field="signature_image" />
+                </div>
+
+                {/* ── Divider ── */}
+                <div style={{ borderTop: `1px dashed ${C.border}`, margin: '4px 0 20px' }} />
+
+                {/* ── Signature 2: Co-Applicant ── */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#0891b218', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Edit3 size={13} color="#0891b2" />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Co-Applicant Signature</span>
+                    <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
+                    {sigUrl2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
+                  </div>
+                  <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(url); refresh() }} field="owner_2_signature_image" />
                 </div>
               </div>
             ) : (
