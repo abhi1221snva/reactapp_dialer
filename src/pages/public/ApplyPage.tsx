@@ -11,7 +11,7 @@ import {
   publicAppService, extractPdfFilename,
   PublicFormSection, PublicFormField, PublicCompany, SubmitResult,
 } from '../../services/publicApp.service'
-import { validateSection, scrollToFirstError } from '../../utils/publicFormValidation'
+import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
 
 // ─── Design tokens (identical to MerchantPage) ────────────────────────────────
 const C = {
@@ -92,6 +92,7 @@ function FormField({ f, value, onChange, error }: {
   }
   const fb = { onFocus: () => setFocused(true), onBlur: () => setFocused(false) }
   const ph: Record<string, string> = { email: 'name@example.com', tel: '(555) 000-0000', number: '0' }
+  const dbAttrs = f.validation_rules?.length ? rulestoHtmlAttrs(f.validation_rules) : {}
 
   const input = (() => {
     if (f.type === 'select') {
@@ -112,10 +113,21 @@ function FormField({ f, value, onChange, error }: {
       <textarea rows={2} value={value} onChange={e => onChange(f.key, e.target.value)} {...fb}
         style={{ ...base, resize: 'none', lineHeight: 1.5 }} />
     )
-    if (f.type === 'ssn') return (
+    const isSSN = f.type === 'ssn' || /\bssn\b/i.test(f.key)
+    if (isSSN) return (
       <div style={{ position: 'relative' }}>
-        <input type={show ? 'text' : 'password'} value={value} maxLength={11}
-          placeholder="XXX-XX-XXXX" onChange={e => onChange(f.key, e.target.value)} {...fb}
+        <input type={show ? 'text' : 'password'} value={value}
+          {...dbAttrs}
+          maxLength={11}
+          placeholder="XXX-XX-XXXX"
+          onChange={e => {
+            const digits = e.target.value.replace(/\D/g, '').slice(0, 9)
+            let fmt = digits
+            if (digits.length > 5) fmt = `${digits.slice(0,3)}-${digits.slice(3,5)}-${digits.slice(5)}`
+            else if (digits.length > 3) fmt = `${digits.slice(0,3)}-${digits.slice(3)}`
+            onChange(f.key, fmt)
+          }}
+          {...fb}
           style={{ ...base, paddingRight: 38 }} />
         <button type="button" onClick={() => setShow(x => !x)}
           style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 2, display: 'flex' }}>
@@ -125,7 +137,7 @@ function FormField({ f, value, onChange, error }: {
     )
     const t = ({ tel: 'tel', email: 'email', date: 'date', number: 'number' } as Record<string, string>)[f.type] ?? 'text'
     return <input type={t} value={value} onChange={e => onChange(f.key, e.target.value)}
-      {...fb} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
+      {...fb} {...dbAttrs} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
   })()
 
   return (
@@ -492,100 +504,11 @@ export function ApplyPage() {
     if (errs[k]) setErrs(e => { const n = { ...e }; delete n[k]; return n })
   }
 
-  // ── Core validation — runs inline, handles all field_type variants ──────────
+  // ── Core validation — uses DB validation_rules when present, type fallback otherwise ──
   const runValidation = (): Record<string, string> => {
     const sec = sections[step]
-    // Log exact state so we can diagnose issues in the console
-    console.error('[ApplyPage] runValidation — step:', step,
-      '| sections.length:', sections.length,
-      '| section:', sec?.title ?? 'NONE',
-      '| fields:', sec?.fields?.map(f => `${f.key}(${f.type} req=${f.required})`),
-      '| form:', form,
-    )
-
-    if (!sec || !sec.fields || sec.fields.length === 0) {
-      console.error('[ApplyPage] WARNING: section has no fields — allowing navigation')
-      return {}
-    }
-
-    const errors: Record<string, string> = {}
-
-    for (const f of sec.fields) {
-      const raw = (form[f.key] ?? '').trim()
-      const isEmpty = raw === ''
-
-      // ── Required ──────────────────────────────────────────────────────────
-      if (f.required && isEmpty) {
-        errors[f.key] = `${f.label} is required`
-        continue
-      }
-      if (isEmpty) continue   // optional + empty → skip type check
-
-      // ── Type checks (handle all possible variants from backend) ───────────
-      const t = f.type?.toLowerCase() ?? ''
-
-      // Email
-      if (t === 'email' || f.key.toLowerCase().includes('email')) {
-        if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(raw)) {
-          errors[f.key] = `${f.label} must be a valid email address`
-        }
-        continue
-      }
-
-      // Phone — covers: tel, phone, phone_number, mobile, cell
-      if (t === 'tel' || t === 'phone' || t === 'phone_number' || t === 'mobile'
-          || f.key.toLowerCase().includes('phone') || f.key.toLowerCase().includes('mobile')) {
-        const digits = raw.replace(/\D/g, '')
-        if (digits.length < 10 || digits.length > 15) {
-          errors[f.key] = `${f.label} must be 10–15 digits (no letters)`
-        }
-        continue
-      }
-
-      // Number
-      if (t === 'number' || t === 'numeric' || t === 'integer') {
-        if (isNaN(Number(raw))) {
-          errors[f.key] = `${f.label} must be a numeric value`
-        }
-        continue
-      }
-
-      // Percentage
-      if (t === 'percentage') {
-        const n = Number(raw)
-        if (isNaN(n)) { errors[f.key] = `${f.label} must be a number`; continue }
-        if (n < 0 || n > 100) { errors[f.key] = `${f.label} must be between 0 and 100`; continue }
-        continue
-      }
-
-      // Date
-      if (t === 'date') {
-        if (isNaN(Date.parse(raw))) {
-          errors[f.key] = `${f.label} must be a valid date`
-        }
-        continue
-      }
-
-      // Text / Textarea length limit
-      if (t === 'text' || t === 'textarea' || t === 'text_area') {
-        const limit = (t === 'text') ? 255 : 500
-        if (raw.length > limit) {
-          errors[f.key] = `${f.label} must not exceed ${limit} characters`
-        }
-        continue
-      }
-
-      // Select / Dropdown — validate against allowed options
-      if ((t === 'select' || t === 'dropdown' || t === 'select_option') && f.options?.length) {
-        if (!f.options.includes(raw)) {
-          errors[f.key] = `${f.label} must be a valid option`
-        }
-        continue
-      }
-    }
-
-    console.error('[ApplyPage] runValidation result:', errors)
-    return errors
+    if (!sec || !sec.fields || sec.fields.length === 0) return {}
+    return validateSection(sec.fields, form)
   }
 
   const validate = (): boolean => {
@@ -646,8 +569,22 @@ export function ApplyPage() {
       }
       setResult(out)
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } } }
-      setSubErr(err?.response?.data?.message || 'Submission failed. Please try again.')
+      const resp = (e as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })?.response?.data
+      if (resp?.errors && Object.keys(resp.errors).length > 0) {
+        // Flatten server field errors: { field_key: "first message" }
+        const flat: Record<string, string> = {}
+        Object.entries(resp.errors).forEach(([k, msgs]) => { flat[k] = Array.isArray(msgs) ? msgs[0] : String(msgs) })
+        setErrs(flat)
+        // Find the first section that contains an errored field and navigate to it
+        const errorKeys = Object.keys(flat)
+        const targetStep = sections.findIndex(sec =>
+          sec.fields.some((f: PublicFormField) => errorKeys.includes(f.key))
+        )
+        if (targetStep >= 0) setStep(targetStep)
+        setSubErr(resp.message || 'Please correct the highlighted fields.')
+      } else {
+        setSubErr(resp?.message || 'Submission failed. Please try again.')
+      }
     } finally { setSub(false) }
   }
 

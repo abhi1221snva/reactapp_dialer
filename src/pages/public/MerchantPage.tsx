@@ -12,7 +12,7 @@ import {
   PublicFormSection, PublicFormField,
   MerchantDocument, PublicDocumentType,
 } from '../../services/publicApp.service'
-import { validateSection, scrollToFirstError } from '../../utils/publicFormValidation'
+import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
@@ -103,6 +103,7 @@ function FormField({ f, value, onChange, error }: {
   const fb = { onFocus: () => setFocused(true), onBlur: () => setFocused(false) }
 
   const ph: Record<string, string> = { email: 'name@example.com', tel: '(555) 000-0000', number: '0' }
+  const dbAttrs = f.validation_rules?.length ? rulestoHtmlAttrs(f.validation_rules) : {}
 
   const input = (() => {
     if (f.type === 'select') return (
@@ -118,10 +119,21 @@ function FormField({ f, value, onChange, error }: {
       <textarea rows={2} value={value} onChange={e => onChange(f.key, e.target.value)} {...fb}
         style={{ ...base, resize: 'none', lineHeight: 1.5 }} />
     )
-    if (f.type === 'ssn') return (
+    const isSSN = f.type === 'ssn' || /\bssn\b/i.test(f.key)
+    if (isSSN) return (
       <div style={{ position: 'relative' }}>
-        <input type={show ? 'text' : 'password'} value={value} maxLength={11}
-          placeholder="XXX-XX-XXXX" onChange={e => onChange(f.key, e.target.value)} {...fb}
+        <input type={show ? 'text' : 'password'} value={value}
+          {...dbAttrs}
+          maxLength={11}
+          placeholder="XXX-XX-XXXX"
+          onChange={e => {
+            const digits = e.target.value.replace(/\D/g, '').slice(0, 9)
+            let fmt = digits
+            if (digits.length > 5) fmt = `${digits.slice(0,3)}-${digits.slice(3,5)}-${digits.slice(5)}`
+            else if (digits.length > 3) fmt = `${digits.slice(0,3)}-${digits.slice(3)}`
+            onChange(f.key, fmt)
+          }}
+          {...fb}
           style={{ ...base, paddingRight: 38 }} />
         <button type="button" onClick={() => setShow(x => !x)}
           style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 2, display: 'flex' }}>
@@ -131,7 +143,7 @@ function FormField({ f, value, onChange, error }: {
     )
     const t = { tel: 'tel', email: 'email', date: 'date', number: 'number' }[f.type] ?? 'text'
     return <input type={t} value={value} onChange={e => onChange(f.key, e.target.value)}
-      {...fb} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
+      {...fb} {...dbAttrs} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
   })()
 
   return (
@@ -726,7 +738,15 @@ export function MerchantPage() {
         await publicAppService.updateMerchant(leadToken!, vals)
         refresh(); setStep(s => s + 1); setFErrors({})
       } catch (e: unknown) {
-        setSaveErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Save failed.')
+        const resp = (e as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })?.response?.data
+        if (resp?.errors && Object.keys(resp.errors).length > 0) {
+          const flat: Record<string, string> = {}
+          Object.entries(resp.errors).forEach(([k, msgs]) => { flat[k] = Array.isArray(msgs) ? msgs[0] : String(msgs) })
+          setFErrors(flat)
+          scrollToFirstError(Object.keys(flat), scrollRef.current)
+        } else {
+          setSaveErr(resp?.message || 'Save failed.')
+        }
       } finally { setSaving(false) }
     } else {
       setStep(s => Math.min(s + 1, TOTAL - 1))

@@ -127,7 +127,7 @@
   .table-wrapper { @apply overflow-hidden rounded-2xl border border-slate-200 bg-white; }
   .table         { @apply w-full text-sm border-collapse; }
   .table thead   { @apply border-b border-slate-200; background: rgba(248,250,252,0.80); }
-  .table th      { @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap; }
+  .table th      { @apply px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap; }
   .table td      { @apply px-4 py-3 border-b border-slate-100; }
   .table tbody tr:last-child td { @apply border-b-0; }
   .table tbody tr { transition: background-color 0.12s ease; }

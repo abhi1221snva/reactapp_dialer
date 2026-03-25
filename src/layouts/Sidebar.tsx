@@ -221,7 +221,7 @@ const CRM_SECTIONS: NavSection[] = [
   {
     label: 'OVERVIEW',
     items: [
-      { to: '/crm/dashboard', label: 'CRM Dashboard', icon: PieChart, minLevel: 1 },
+      { to: '/crm/dashboard', label: 'Dashboard', icon: PieChart, minLevel: 1 },
     ],
   },
   {

@@ -6,7 +6,7 @@ import {
   Send, Plus, Search, Users, Hash, Paperclip, Smile,
   CheckCheck, Check, MoreVertical, X, Download, Image,
   FileText, MessagesSquare, Phone, Video, ChevronDown,
-  PhoneOff, Mic, MicOff, VideoOff,
+  PhoneOff, Mic, MicOff, VideoOff, UserPlus,
 } from 'lucide-react'
 import { chatService } from '../../services/chat.service'
 import { useAuthStore } from '../../stores/auth.store'
@@ -685,6 +685,155 @@ function CreateGroupModal({ members, onClose, onCreated }: CreateGroupModalProps
   )
 }
 
+// ─── AddMemberModal ───────────────────────────────────────────────────────────
+
+interface AddMemberModalProps {
+  conversationUuid: string
+  existingUserIds: Set<number>
+  members: SearchUser[]
+  onClose: () => void
+  onAdded: () => void
+}
+
+function AddMemberModal({ conversationUuid, existingUserIds, members, onClose, onAdded }: AddMemberModalProps) {
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [adding, setAdding] = useState(false)
+
+  const available = members.filter(
+    m => !existingUserIds.has(m.id) && m.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const toggle = (id: number) =>
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  const handleAdd = async () => {
+    if (selected.size < 1) return
+    setAdding(true)
+    try {
+      await chatService.addParticipants(conversationUuid, Array.from(selected))
+      toast.success(`${selected.size} member${selected.size > 1 ? 's' : ''} added`)
+      onAdded()
+      onClose()
+    } catch {
+      toast.error('Failed to add members')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Add Members</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Select people to add to this group</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-3 flex-1 overflow-hidden">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-600">Members</label>
+            {selected.size > 0 && (
+              <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                {selected.size} selected
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search members…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-indigo-300 text-slate-700 placeholder-slate-400"
+            />
+          </div>
+          <div className="overflow-y-auto max-h-64 flex flex-col gap-0.5 pr-0.5">
+            {available.length === 0 && (
+              <p className="text-xs text-slate-400 text-center py-6">
+                {members.filter(m => !existingUserIds.has(m.id)).length === 0
+                  ? 'All team members are already in this group'
+                  : 'No members found'}
+              </p>
+            )}
+            {available.map(m => {
+              const isChecked = selected.has(m.id)
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => toggle(m.id)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left w-full',
+                    isChecked ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                  )}
+                >
+                  <div className={cn(
+                    'w-4 h-4 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                    isChecked ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300',
+                  )}>
+                    {isChecked && (
+                      <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className={cn(
+                    'w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0',
+                    avatarBg(m.id),
+                  )}>
+                    {initials(m.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-sm font-medium truncate', isChecked ? 'text-indigo-700' : 'text-slate-700')}>
+                      {m.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">{m.email}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAdd}
+            disabled={selected.size < 1 || adding}
+            className="px-5 py-2 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+          >
+            {adding && <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+            {adding ? 'Adding…' : 'Add Members'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function TeamChat() {
@@ -701,6 +850,7 @@ export function TeamChat() {
   const [sidebarSearch, setSidebarSearch] = useState('')
   const [teamMembers, setTeamMembers] = useState<SearchUser[]>([])
   const [showCreateGroup, setShowCreateGroup] = useState(false)
+  const [showAddMember, setShowAddMember] = useState(false)
 
   // ── Input state ──
   const [input, setInput] = useState('')
@@ -1535,6 +1685,7 @@ export function TeamChat() {
               onlineStatus={onlineStatus}
               avatarBg={avatarBg}
               onCall={startCall}
+              onAddMember={selectedConv.type === 'group' ? () => setShowAddMember(true) : undefined}
             />
 
             {/* Messages area */}
@@ -1699,6 +1850,23 @@ export function TeamChat() {
         />
       )}
 
+      {/* ── Add member modal ── */}
+      {showAddMember && selectedConv && selectedConv.type === 'group' && (
+        <AddMemberModal
+          conversationUuid={selectedConv.uuid}
+          existingUserIds={new Set(selectedConv.participants.map(p => p.user_id))}
+          members={teamMembers}
+          onClose={() => setShowAddMember(false)}
+          onAdded={() => {
+            // Refresh conversations to get updated participant list
+            chatService.getConversations().then(res => {
+              const list = res.data?.data ?? []
+              setConversations(list)
+            }).catch(() => {})
+          }}
+        />
+      )}
+
       {/* ── Call overlays ── */}
       {callPhase === 'calling' && callSession && (
         <CallingOverlay session={callSession} onCancel={endCurrentCall} />
@@ -1799,9 +1967,10 @@ interface ChatHeaderProps {
   onlineStatus: Map<number, string>
   avatarBg: (seed: number) => string
   onCall?: (type: 'audio' | 'video') => void
+  onAddMember?: () => void
 }
 
-const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus, avatarBg, onCall }: ChatHeaderProps) {
+const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus, avatarBg, onCall, onAddMember }: ChatHeaderProps) {
   const [showMembers, setShowMembers] = useState(false)
   const otherParticipant = conv.type === 'direct'
     ? conv.participants.find(p => p.user_id !== currentUserId)
@@ -1893,6 +2062,17 @@ const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus,
                       </div>
                     </div>
                   ))}
+                  {onAddMember && (
+                    <div className="px-2 pt-1 mt-1 border-t border-slate-100">
+                      <button
+                        onClick={() => { setShowMembers(false); onAddMember() }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 transition-colors font-medium"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Add member
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

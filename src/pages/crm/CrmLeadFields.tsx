@@ -26,6 +26,7 @@ const FIELD_TYPES = [
   { value: 'dropdown',     label: 'Dropdown' },
   { value: 'radio',        label: 'Radio' },
   { value: 'checkbox',     label: 'Checkbox' },
+  { value: 'ssn',          label: 'SSN' },
 ]
 
 // ── Structured sections ────────────────────────────────────────────────────────
@@ -201,6 +202,116 @@ function buildOptionsArray(lines: string): string[] {
   return lines.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
+// ── Validation Rule Row ────────────────────────────────────────────────────────
+function RuleRow({
+  rule, index, onChange, onRemove,
+}: {
+  rule: ValidationRule
+  index: number
+  onChange: (idx: number, updated: ValidationRule) => void
+  onRemove: (idx: number) => void
+}) {
+  const def = RULE_DEF_MAP[rule.rule]
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg border border-slate-200 bg-white group hover:border-indigo-200">
+      <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md min-w-[90px]">
+        {def?.label ?? rule.rule}
+      </span>
+      {def?.hasValue && (
+        <input
+          className="input h-7 text-xs w-24 flex-shrink-0 py-0"
+          type={def.valueType === 'number' ? 'number' : 'text'}
+          placeholder={def.valueLabel ?? 'value'}
+          value={rule.value ?? ''}
+          onChange={e => {
+            const v = def.valueType === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value
+            onChange(index, { ...rule, value: v as string | number })
+          }}
+        />
+      )}
+      {def?.hasValue2 && (
+        <input
+          className="input h-7 text-xs w-20 flex-shrink-0 py-0"
+          type="number"
+          placeholder={def.value2Label ?? 'max'}
+          value={rule.value2 ?? ''}
+          onChange={e => {
+            const v = e.target.value === '' ? '' : Number(e.target.value)
+            onChange(index, { ...rule, value2: v as string | number })
+          }}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => onRemove(index)}
+        className="ml-auto p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+        title="Remove rule"
+      >
+        <X size={13} />
+      </button>
+    </div>
+  )
+}
+
+// ── Add Rule Dropdown ──────────────────────────────────────────────────────────
+function AddRuleDropdown({ existing, onAdd }: {
+  existing: ValidationRule[]
+  onAdd: (rule: ValidationRule) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const existingRules = new Set(existing.map(r => r.rule))
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 border border-indigo-200 hover:border-indigo-400 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-3 py-1.5 transition-colors"
+      >
+        <Plus size={12} /> Add Rule <ChevronDown size={11} className={cn('transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[180px] max-h-56 overflow-y-auto">
+          {RULE_DEFINITIONS.map(def => {
+            const disabled = existingRules.has(def.value)
+            return (
+              <button
+                key={def.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  onAdd({ rule: def.value })
+                  setOpen(false)
+                }}
+                className={cn(
+                  'w-full text-left px-3.5 py-1.5 text-xs transition-colors',
+                  disabled
+                    ? 'text-slate-300 cursor-not-allowed'
+                    : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-700',
+                )}
+              >
+                {def.label}
+                {disabled && <span className="ml-1 text-[10px] text-slate-300">(added)</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Field Modal ───────────────────────────────────────────────────────────────
 interface FieldModalProps {
   editing?: CrmLabel | null
@@ -208,30 +319,93 @@ interface FieldModalProps {
   onSaved: () => void
 }
 
+function parseValidationRules(raw?: ValidationRule[] | null): ValidationRule[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw
+  return []
+}
+
 function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
   const qc = useQueryClient()
   const isEdit = !!editing
 
   const [form, setForm] = useState<FieldFormState>(EMPTY_FORM)
+  const [isSuggesting, setIsSuggesting] = useState(false)
+  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Keep a ref to the latest form so timer callbacks always read fresh state
+  const formRef = useRef(form)
+  formRef.current = form
 
   useEffect(() => {
     if (editing) {
+      const parsed = parseValidationRules(editing.validation_rules)
       setForm({
-        label_name:  editing.label_name,
-        field_type:  editing.field_type,
-        section:     editing.section || 'owner',
-        placeholder: editing.placeholder ?? '',
-        required:    editing.required === true || (editing.required as unknown) == 1,
-        status:      editing.status === true || (editing.status as unknown) == 1,
-        values:      parseValuesToLines(editing.options),
+        label_name:       editing.label_name,
+        field_type:       editing.field_type,
+        section:          editing.section || 'owner',
+        placeholder:      editing.placeholder ?? '',
+        required:         editing.required === true || (editing.required as unknown) == 1,
+        status:           editing.status === true || (editing.status as unknown) == 1,
+        values:           parseValuesToLines(editing.options),
+        validation_rules: parsed,
       })
+      // Auto-suggest for existing fields that have no rules yet
+      if (parsed.length === 0 && editing.label_name.trim()) {
+        runSuggest(editing.label_name, editing.field_type, false)
+      }
     } else {
       setForm(EMPTY_FORM)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing])
 
   const set = <K extends keyof FieldFormState>(k: K, v: FieldFormState[K]) =>
     setForm(f => ({ ...f, [k]: v }))
+
+  /** Core suggest logic — reads label/type args directly (no stale closure) */
+  const runSuggest = async (labelName: string, fieldType: string, overwrite: boolean) => {
+    if (!labelName.trim()) return
+    const fieldKey = labelName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+    try {
+      setIsSuggesting(true)
+      const res = await crmService.suggestValidation({ field_key: fieldKey, label_name: labelName, field_type: fieldType })
+      const suggested: ValidationRule[] = res.data?.data ?? []
+      if (suggested.length === 0) return
+      setForm(f => ({
+        ...f,
+        validation_rules: (overwrite || f.validation_rules.length === 0) ? suggested : f.validation_rules,
+      }))
+      if (overwrite) toast.success(`${suggested.length} validation rule${suggested.length !== 1 ? 's' : ''} suggested`)
+    } catch (err) {
+      console.error('Validation suggest error:', err)
+      if (overwrite) toast.error('Could not fetch suggestions')
+    } finally {
+      setIsSuggesting(false)
+    }
+  }
+
+  // Debounced auto-suggest on label name change (300ms)
+  const handleLabelChange = (value: string) => {
+    set('label_name', value)
+    if (suggestTimer.current) clearTimeout(suggestTimer.current)
+    suggestTimer.current = setTimeout(() => {
+      runSuggest(value, formRef.current.field_type, false)
+    }, 300)
+  }
+
+  // Manual "Auto-suggest" button — always overwrites
+  const triggerSuggest = () => runSuggest(form.label_name, form.field_type, true)
+
+  const updateRule = (idx: number, updated: ValidationRule) =>
+    setForm(f => {
+      const arr = [...f.validation_rules]; arr[idx] = updated; return { ...f, validation_rules: arr }
+    })
+
+  const removeRule = (idx: number) =>
+    setForm(f => ({ ...f, validation_rules: f.validation_rules.filter((_, i) => i !== idx) }))
+
+  const addRule = (rule: ValidationRule) =>
+    setForm(f => ({ ...f, validation_rules: [...f.validation_rules, rule] }))
 
   const hasOptions = ['dropdown', 'radio'].includes(form.field_type)
 
@@ -239,12 +413,13 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
     mutationFn: () => {
       const optionsArr = hasOptions ? buildOptionsArray(form.values) : []
       const payload = {
-        label_name:  form.label_name.trim(),
-        field_type:  form.field_type,
-        section:     form.section || 'owner',
-        placeholder: form.placeholder.trim() || undefined,
-        required:    form.required,
-        options:     optionsArr.length > 0 ? JSON.stringify(optionsArr) : undefined,
+        label_name:       form.label_name.trim(),
+        field_type:       form.field_type,
+        section:          form.section || 'owner',
+        placeholder:      form.placeholder.trim() || undefined,
+        required:         form.required,
+        options:          optionsArr.length > 0 ? JSON.stringify(optionsArr) : undefined,
+        validation_rules: form.validation_rules.length > 0 ? form.validation_rules : undefined,
         ...(isEdit && { status: form.status }),
       }
       return isEdit
@@ -271,7 +446,7 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
       style={{ background: 'rgba(15,23,42,0.5)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
         <div className="h-1 bg-indigo-600" />
 
         {/* Header */}
@@ -297,7 +472,7 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-4 max-h-[76vh] overflow-y-auto">
 
           {/* Field Name */}
           <div>
@@ -306,9 +481,60 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
               autoFocus
               className="input w-full"
               value={form.label_name}
-              onChange={e => set('label_name', e.target.value)}
+              onChange={e => handleLabelChange(e.target.value)}
               placeholder="e.g. Business Revenue"
             />
+          </div>
+
+          {/* ── Validation Rules ───────────────────────────────────────────── */}
+          <div className="rounded-xl border border-indigo-200 overflow-hidden">
+            {/* Section header */}
+            <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50/80 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={14} className="text-indigo-500" />
+                <span className="text-xs font-semibold text-slate-700">Validation Rules</span>
+                {form.validation_rules.length > 0 && (
+                  <span className="text-[10px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-1.5 py-0.5">
+                    {form.validation_rules.length}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={triggerSuggest}
+                disabled={isSuggesting || !form.label_name.trim()}
+                className="flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700 border border-amber-200 hover:border-amber-400 bg-amber-50 hover:bg-amber-100 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-40"
+                title="Auto-suggest rules based on field name"
+              >
+                {isSuggesting
+                  ? <Loader2 size={11} className="animate-spin" />
+                  : <Sparkles size={11} />
+                }
+                Auto-suggest
+              </button>
+            </div>
+
+            {/* Rules list */}
+            <div className="px-3 py-3 space-y-1.5">
+              {form.validation_rules.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-3">
+                  No rules set — type a field name to auto-suggest, or add manually
+                </p>
+              ) : (
+                form.validation_rules.map((rule, idx) => (
+                  <RuleRow
+                    key={`${rule.rule}-${idx}`}
+                    rule={rule}
+                    index={idx}
+                    onChange={updateRule}
+                    onRemove={removeRule}
+                  />
+                ))
+              )}
+              <div className="pt-1">
+                <AddRuleDropdown existing={form.validation_rules} onAdd={addRule} />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -337,7 +563,6 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
                 {STRUCTURED_SECTIONS.map(s => (
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
-                {/* Show legacy section if editing a field that has one */}
                 {isEdit && editing?.section && !STRUCTURED_SECTIONS.find(s => s.value === editing.section) && (
                   <option value={editing.section}>{humanizeSection(editing.section)}</option>
                 )}
@@ -793,6 +1018,7 @@ export function CrmLeadFields() {
                 <th>Field Name</th>
                 <th className="hidden md:table-cell">Type</th>
                 <th className="hidden lg:table-cell">Section</th>
+                <th className="hidden xl:table-cell">Validation</th>
                 <th className="hidden sm:table-cell">Required</th>
                 <th>Status</th>
                 <th className="w-px whitespace-nowrap !text-right">Action</th>
@@ -801,13 +1027,13 @@ export function CrmLeadFields() {
             <tbody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <tr key={i}>{Array.from({ length: 7 }).map((_, j) => (
+                  <tr key={i}>{Array.from({ length: 8 }).map((_, j) => (
                     <td key={j}><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 0 ? 24 : '60%' }} /></td>
                   ))}</tr>
                 ))
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                       <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
                         <Settings2 size={22} className="text-slate-300 opacity-60" />
@@ -856,6 +1082,16 @@ export function CrmLeadFields() {
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
                         {humanizeSection(f.section)}
                       </span>
+                    </td>
+                    <td className="hidden xl:table-cell">
+                      {f.validation_rules && Array.isArray(f.validation_rules) && f.validation_rules.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                          <ShieldCheck size={10} />
+                          {f.validation_rules.length} rule{f.validation_rules.length !== 1 ? 's' : ''}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="hidden sm:table-cell">
                       {(f.required === true || (f.required as unknown) == 1) ? (

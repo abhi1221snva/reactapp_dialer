@@ -53,6 +53,10 @@ export const chatService = {
       { name, participant_ids: participantIds }
     ),
 
+  /** Add participants to an existing group conversation */
+  addParticipants: (uuid: string, participantIds: number[]) =>
+    api.post(`/team-chat/conversations/${uuid}/participants`, { participant_ids: participantIds }),
+
   /** Search users in the organisation */
   searchUsers: (q: string) =>
     api.get<{ success: boolean; data: SearchUser[] }>(

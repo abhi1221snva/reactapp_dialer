@@ -89,11 +89,14 @@ export function AddExcludeModal({ onClose, onSaved }: Props) {
             <input
               ref={inputRef}
               className="input font-mono"
-              placeholder="+1 (XXX) XXX-XXXX"
+              placeholder="(XXX) XXX-XXXX"
               value={formatPartialPhoneUS(rawDigits)}
               inputMode="tel"
               onChange={e => setRawDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              onKeyDown={e => { if (e.key === 'Enter' && isValid) mutation.mutate() }}
+              onKeyDown={e => {
+                if (e.key === 'Backspace') { e.preventDefault(); setRawDigits(prev => prev.slice(0, -1)); return }
+                if (e.key === 'Enter' && isValid) mutation.mutate()
+              }}
             />
             {rawDigits.length > 0 && rawDigits.length < 10 && (
               <p className="text-xs text-amber-500 mt-1">

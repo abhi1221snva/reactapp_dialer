@@ -852,7 +852,13 @@ function LendersPanel({ leadId }: { leadId: number }) {
   })
 
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
-  const subList       = submissions ?? []
+  // Deduplicate by lender_id — keep the latest submission per lender
+  const subList = Object.values(
+    (submissions ?? []).reduce<Record<number, LenderSubmission>>((acc, s) => {
+      if (!acc[s.lender_id] || s.id > acc[s.lender_id].id) acc[s.lender_id] = s
+      return acc
+    }, {})
+  )
   const docs          = leadDocs ?? []
 
   // Compute preview template + filled HTML at component scope so the mutation can use them

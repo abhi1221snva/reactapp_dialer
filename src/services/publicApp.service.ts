@@ -12,6 +12,12 @@ export interface PublicCompany {
   company_phone?: string
 }
 
+export interface FieldValidationRule {
+  rule: string
+  value?: number | string
+  value2?: number | string
+}
+
 export interface PublicFormField {
   key: string
   label: string
@@ -20,6 +26,7 @@ export interface PublicFormField {
   placeholder?: string
   options?: string[]
   column?: string
+  validation_rules?: FieldValidationRule[]
 }
 
 export interface PublicFormSection {

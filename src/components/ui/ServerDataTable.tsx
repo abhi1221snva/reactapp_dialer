@@ -273,7 +273,7 @@ export function ServerDataTable<T extends Record<string, unknown>>({
           <thead>
             <tr>
               {columns.map(col => (
-                <th key={col.key} className={col.headerClassName}>{col.header}</th>
+                <th key={col.key} className={cn('text-left', col.headerClassName)}>{col.header}</th>
               ))}
             </tr>
           </thead>

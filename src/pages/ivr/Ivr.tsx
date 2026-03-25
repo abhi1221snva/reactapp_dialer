@@ -70,41 +70,255 @@ const DEST_TYPE_META: Record<string, { label: string; color: string; bg: string 
 }
 
 const LANGUAGES = [
-  { value: 'ar',    label: 'Arabic' },
-  { value: 'zh',    label: 'Chinese (Mandarin)' },
-  { value: 'zh-TW', label: 'Chinese (Traditional)' },
-  { value: 'da',    label: 'Danish' },
-  { value: 'nl',    label: 'Dutch' },
-  { value: 'en',    label: 'English' },
-  { value: 'en-AU', label: 'English (Australian)' },
-  { value: 'en-GB', label: 'English (British)' },
-  { value: 'en-IN', label: 'English (Indian)' },
-  { value: 'en-US', label: 'English (US)' },
-  { value: 'fi',    label: 'Finnish' },
-  { value: 'fr',    label: 'French' },
-  { value: 'fr-CA', label: 'French (Canadian)' },
-  { value: 'de',    label: 'German' },
-  { value: 'el',    label: 'Greek' },
-  { value: 'hi',    label: 'Hindi' },
-  { value: 'id',    label: 'Indonesian' },
-  { value: 'it',    label: 'Italian' },
-  { value: 'ja',    label: 'Japanese' },
-  { value: 'ko',    label: 'Korean' },
-  { value: 'ms',    label: 'Malay' },
-  { value: 'nb',    label: 'Norwegian' },
-  { value: 'pl',    label: 'Polish' },
-  { value: 'pt',    label: 'Portuguese' },
-  { value: 'pt-BR', label: 'Portuguese (Brazilian)' },
-  { value: 'ro',    label: 'Romanian' },
-  { value: 'ru',    label: 'Russian' },
-  { value: 'es',    label: 'Spanish' },
-  { value: 'es-MX', label: 'Spanish (Mexican)' },
-  { value: 'es-US', label: 'Spanish (US)' },
-  { value: 'sv',    label: 'Swedish' },
-  { value: 'tr',    label: 'Turkish' },
-  { value: 'uk',    label: 'Ukrainian' },
-  { value: 'cy',    label: 'Welsh' },
+  { value: 'ar-XA', label: 'Arabic' },
+  { value: 'zh-CN', label: 'Chinese (Mandarin, China)' },
+  { value: 'zh-TW', label: 'Chinese (Traditional, Taiwan)' },
+  { value: 'da-DK', label: 'Danish (Denmark)' },
+  { value: 'nl-NL', label: 'Dutch (Netherlands)' },
+  { value: 'en-AU', label: 'English (Australia)' },
+  { value: 'en-IN', label: 'English (India)' },
+  { value: 'en-GB', label: 'English (United Kingdom)' },
+  { value: 'en-US', label: 'English (United States)' },
+  { value: 'fi-FI', label: 'Finnish (Finland)' },
+  { value: 'fr-CA', label: 'French (Canada)' },
+  { value: 'fr-FR', label: 'French (France)' },
+  { value: 'de-DE', label: 'German (Germany)' },
+  { value: 'el-GR', label: 'Greek (Greece)' },
+  { value: 'hi-IN', label: 'Hindi (India)' },
+  { value: 'id-ID', label: 'Indonesian (Indonesia)' },
+  { value: 'it-IT', label: 'Italian (Italy)' },
+  { value: 'ja-JP', label: 'Japanese (Japan)' },
+  { value: 'ko-KR', label: 'Korean (South Korea)' },
+  { value: 'ms-MY', label: 'Malay (Malaysia)' },
+  { value: 'nb-NO', label: 'Norwegian (Norway)' },
+  { value: 'pl-PL', label: 'Polish (Poland)' },
+  { value: 'pt-BR', label: 'Portuguese (Brazil)' },
+  { value: 'pt-PT', label: 'Portuguese (Portugal)' },
+  { value: 'ro-RO', label: 'Romanian (Romania)' },
+  { value: 'ru-RU', label: 'Russian (Russia)' },
+  { value: 'es-ES', label: 'Spanish (Spain)' },
+  { value: 'es-MX', label: 'Spanish (Mexico)' },
+  { value: 'es-US', label: 'Spanish (United States)' },
+  { value: 'sv-SE', label: 'Swedish (Sweden)' },
+  { value: 'tr-TR', label: 'Turkish (Turkey)' },
+  { value: 'uk-UA', label: 'Ukrainian (Ukraine)' },
+  { value: 'cy-GB', label: 'Welsh (United Kingdom)' },
 ]
+
+// Migrate old short language codes (stored in DB) to full BCP-47 codes
+const LANG_MIGRATE: Record<string, string> = {
+  'ar': 'ar-XA', 'zh': 'zh-CN', 'da': 'da-DK', 'nl': 'nl-NL', 'en': 'en-US',
+  'fi': 'fi-FI', 'fr': 'fr-FR', 'de': 'de-DE', 'el': 'el-GR', 'hi': 'hi-IN',
+  'id': 'id-ID', 'it': 'it-IT', 'ja': 'ja-JP', 'ko': 'ko-KR', 'ms': 'ms-MY',
+  'nb': 'nb-NO', 'pl': 'pl-PL', 'pt': 'pt-BR', 'ro': 'ro-RO', 'ru': 'ru-RU',
+  'es': 'es-ES', 'sv': 'sv-SE', 'tr': 'tr-TR', 'uk': 'uk-UA', 'cy': 'cy-GB',
+}
+const normalizeLang = (l: string) => LANG_MIGRATE[l] ?? l
+
+type VoiceEntry = { value: string; label: string; gender: 'FEMALE' | 'MALE' }
+
+// Language → voice list (Google TTS naming; maps to OpenAI nova/onyx by gender)
+const VOICES_BY_LANG: Record<string, VoiceEntry[]> = {
+  'ar-XA': [
+    { value: 'ar-XA-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'ar-XA-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'ar-XA-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'ar-XA-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'zh-CN': [
+    { value: 'cmn-CN-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'cmn-CN-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'cmn-CN-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'cmn-CN-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'zh-TW': [
+    { value: 'cmn-TW-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'cmn-TW-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'cmn-TW-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+  ],
+  'da-DK': [
+    { value: 'da-DK-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'da-DK-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'da-DK-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+    { value: 'da-DK-Wavenet-E', label: 'Wavenet-E · Male',   gender: 'MALE'   },
+  ],
+  'nl-NL': [
+    { value: 'nl-NL-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'nl-NL-Wavenet-D', label: 'Wavenet-D · Female', gender: 'FEMALE' },
+    { value: 'nl-NL-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'nl-NL-Wavenet-C', label: 'Wavenet-C · Male',   gender: 'MALE'   },
+  ],
+  'en-AU': [
+    { value: 'en-AU-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'en-AU-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'en-AU-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'en-AU-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'en-IN': [
+    { value: 'en-IN-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'en-IN-Neural2-D', label: 'Neural2-D · Female', gender: 'FEMALE' },
+    { value: 'en-IN-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'en-IN-Neural2-C', label: 'Neural2-C · Male',   gender: 'MALE'   },
+  ],
+  'en-GB': [
+    { value: 'en-GB-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'en-GB-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'en-GB-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'en-GB-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'en-US': [
+    { value: 'en-US-Neural2-F', label: 'Neural2-F · Female', gender: 'FEMALE' },
+    { value: 'en-US-Neural2-H', label: 'Neural2-H · Female', gender: 'FEMALE' },
+    { value: 'en-US-Neural2-C', label: 'Neural2-C · Male',   gender: 'MALE'   },
+    { value: 'en-US-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'fi-FI': [
+    { value: 'fi-FI-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+  ],
+  'fr-CA': [
+    { value: 'fr-CA-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'fr-CA-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'fr-CA-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'fr-CA-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'fr-FR': [
+    { value: 'fr-FR-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'fr-FR-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'fr-FR-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'fr-FR-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'de-DE': [
+    { value: 'de-DE-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'de-DE-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'de-DE-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'de-DE-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'el-GR': [
+    { value: 'el-GR-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+  ],
+  'hi-IN': [
+    { value: 'hi-IN-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'hi-IN-Neural2-D', label: 'Neural2-D · Female', gender: 'FEMALE' },
+    { value: 'hi-IN-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'hi-IN-Neural2-C', label: 'Neural2-C · Male',   gender: 'MALE'   },
+  ],
+  'id-ID': [
+    { value: 'id-ID-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'id-ID-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'id-ID-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'id-ID-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'it-IT': [
+    { value: 'it-IT-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'it-IT-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'it-IT-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'it-IT-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'ja-JP': [
+    { value: 'ja-JP-Neural2-B', label: 'Neural2-B · Female', gender: 'FEMALE' },
+    { value: 'ja-JP-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'ja-JP-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'ko-KR': [
+    { value: 'ko-KR-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'ko-KR-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'ko-KR-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'ko-KR-Neural2-D', label: 'Neural2-D · Male',   gender: 'MALE'   },
+  ],
+  'ms-MY': [
+    { value: 'ms-MY-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'ms-MY-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'ms-MY-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'ms-MY-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'nb-NO': [
+    { value: 'nb-NO-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'nb-NO-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'nb-NO-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'nb-NO-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'pl-PL': [
+    { value: 'pl-PL-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'pl-PL-Wavenet-D', label: 'Wavenet-D · Female', gender: 'FEMALE' },
+    { value: 'pl-PL-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'pl-PL-Wavenet-C', label: 'Wavenet-C · Male',   gender: 'MALE'   },
+  ],
+  'pt-BR': [
+    { value: 'pt-BR-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'pt-BR-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'pt-BR-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+  ],
+  'pt-PT': [
+    { value: 'pt-PT-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'pt-PT-Wavenet-D', label: 'Wavenet-D · Female', gender: 'FEMALE' },
+    { value: 'pt-PT-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'pt-PT-Wavenet-C', label: 'Wavenet-C · Male',   gender: 'MALE'   },
+  ],
+  'ro-RO': [
+    { value: 'ro-RO-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+  ],
+  'ru-RU': [
+    { value: 'ru-RU-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'ru-RU-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'ru-RU-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'ru-RU-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'es-ES': [
+    { value: 'es-ES-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'es-ES-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'es-ES-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+    { value: 'es-ES-Neural2-F', label: 'Neural2-F · Male',   gender: 'MALE'   },
+  ],
+  'es-MX': [
+    { value: 'es-US-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'es-US-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'es-US-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+  ],
+  'es-US': [
+    { value: 'es-US-Neural2-A', label: 'Neural2-A · Female', gender: 'FEMALE' },
+    { value: 'es-US-Neural2-C', label: 'Neural2-C · Female', gender: 'FEMALE' },
+    { value: 'es-US-Neural2-B', label: 'Neural2-B · Male',   gender: 'MALE'   },
+  ],
+  'sv-SE': [
+    { value: 'sv-SE-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'sv-SE-Wavenet-D', label: 'Wavenet-D · Female', gender: 'FEMALE' },
+    { value: 'sv-SE-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'sv-SE-Wavenet-E', label: 'Wavenet-E · Male',   gender: 'MALE'   },
+  ],
+  'tr-TR': [
+    { value: 'tr-TR-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: 'tr-TR-Wavenet-C', label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: 'tr-TR-Wavenet-B', label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: 'tr-TR-Wavenet-D', label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ],
+  'uk-UA': [
+    { value: 'uk-UA-Wavenet-A', label: 'Wavenet-A · Female', gender: 'FEMALE' },
+  ],
+  'cy-GB': [
+    { value: 'cy-GB-Standard-A', label: 'Standard-A · Female', gender: 'FEMALE' },
+  ],
+}
+
+function getVoicesForLang(lang: string): VoiceEntry[] {
+  const voices = VOICES_BY_LANG[lang]
+  if (voices?.length) return voices
+  // Generic fallback for any unlisted language
+  return [
+    { value: `${lang}-Wavenet-A`, label: 'Wavenet-A · Female', gender: 'FEMALE' },
+    { value: `${lang}-Wavenet-C`, label: 'Wavenet-C · Female', gender: 'FEMALE' },
+    { value: `${lang}-Wavenet-B`, label: 'Wavenet-B · Male',   gender: 'MALE'   },
+    { value: `${lang}-Wavenet-D`, label: 'Wavenet-D · Male',   gender: 'MALE'   },
+  ]
+}
+
+function resolveVoice(voiceName: string, lang: string): string {
+  const voices = getVoicesForLang(lang)
+  if (voices.find(v => v.value === voiceName)) return voiceName
+  const upper = voiceName.toUpperCase()
+  if (upper === 'MALE')   return voices.find(v => v.gender === 'MALE')?.value   ?? voices[0]?.value ?? ''
+  if (upper === 'FEMALE') return voices.find(v => v.gender === 'FEMALE')?.value ?? voices[0]?.value ?? ''
+  return voices[0]?.value ?? ''
+}
 
 const PROMPT_LABEL: Record<string, string> = { '0': 'Upload', '1': 'TTS', '2': 'Record' }
 
@@ -247,25 +461,30 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
 
 // ── Audio Form (shared modal body for Audio Messages) ──────────────────────────
 
+const DEFAULT_LANG = 'en-US'
+const DEFAULT_VOICE = getVoicesForLang(DEFAULT_LANG)[0]?.value ?? ''
+
 function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose: () => void }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
-    ivr_desc: '', language: 'en', voice_name: '', speech_text: '',
+    ivr_desc: '', language: DEFAULT_LANG, voice_name: DEFAULT_VOICE, speech_text: '',
     prompt_option: '1', speed: 'medium', pitch: 'medium', ann_id: '',
   })
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [ttsPreviewLoading, setTtsPreviewLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (editing) {
+      const lang = normalizeLang(String(editing.language ?? DEFAULT_LANG))
       setForm({
         ivr_desc:      editing.ivr_desc ?? '',
-        language:      String(editing.language ?? 'en'),
-        voice_name:    String(editing.voice_name ?? ''),
+        language:      lang,
+        voice_name:    resolveVoice(String(editing.voice_name ?? ''), lang),
         speech_text:   String(editing.speech_text ?? ''),
         prompt_option: String(editing.prompt_option ?? '1'),
         speed:         String(editing.speed ?? 'medium'),
@@ -273,7 +492,7 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
         ann_id:        String(editing.ann_id ?? ''),
       })
     } else {
-      setForm({ ivr_desc: '', language: 'en', voice_name: '', speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium', ann_id: '' })
+      setForm({ ivr_desc: '', language: DEFAULT_LANG, voice_name: DEFAULT_VOICE, speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium', ann_id: '' })
     }
     setAudioFile(null); setRecordedBlob(null); setPreviewUrl(null)
   }, [editing])
@@ -281,6 +500,11 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
+
+  const handleLangChange = (lang: string) => {
+    const voices = getVoicesForLang(lang)
+    setForm(p => ({ ...p, language: lang, voice_name: voices[0]?.value ?? p.voice_name }))
+  }
 
   const handleFileSelect = (file: File) => {
     if (!file.name.match(/\.(mp3|wav|ogg|webm|m4a|mp4)$/i)) {
@@ -299,13 +523,55 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
     setAudioFile(null)
   }
 
+  const handlePreviewTts = async () => {
+    if (!form.speech_text.trim()) { toast.error('Enter speech text first'); return }
+    setTtsPreviewLoading(true)
+    try {
+      const voices = getVoicesForLang(form.language)
+      const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
+      const res = await ivrService.generateTts({
+        speech_text: form.speech_text,
+        language: form.language,
+        voice_name: form.voice_name,
+        voice_gender: voiceGender,
+        speed: form.speed,
+        pitch: form.pitch,
+      })
+      const relPath = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? ''
+      if (relPath) {
+        const parts = relPath.split('/')
+        const blobRes = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
+        const blob = new Blob([blobRes.data as BlobPart], {
+          type: (blobRes.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+        })
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        setPreviewUrl(URL.createObjectURL(blob))
+      }
+    } catch { toast.error('Failed to generate TTS preview') }
+    finally { setTtsPreviewLoading(false) }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.ivr_desc.trim()) { toast.error('Name is required'); return }
     setSaving(true)
     try {
       let annId = form.ann_id
-      if (form.prompt_option !== '1' && (audioFile || recordedBlob)) {
+      if (form.prompt_option === '1' && form.speech_text.trim()) {
+        try {
+          const voices = getVoicesForLang(form.language)
+          const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
+          const res = await ivrService.generateTts({
+            speech_text: form.speech_text,
+            language: form.language,
+            voice_name: form.voice_name,
+            voice_gender: voiceGender,
+            speed: form.speed,
+            pitch: form.pitch,
+          })
+          annId = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? annId
+        } catch { /* TTS generation failed — save metadata only */ }
+      } else if (form.prompt_option !== '1' && (audioFile || recordedBlob)) {
         const fd = new FormData()
         if (audioFile) fd.append('audio', audioFile)
         else if (recordedBlob) fd.append('audio', recordedBlob, 'recording.webm')
@@ -322,6 +588,8 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
       toast.error('Failed to save audio message')
     } finally { setSaving(false) }
   }
+
+  const voiceOptions = getVoicesForLang(form.language)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -357,29 +625,39 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Language</label>
-              <select className="input" value={form.language} onChange={e => set('language', e.target.value)}>
+              <select className="input" value={form.language} onChange={e => handleLangChange(e.target.value)}>
                 {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Voice</label>
-              <input className="input" value={form.voice_name}
-                onChange={e => set('voice_name', e.target.value)} placeholder="e.g. Joanna" />
+              <select className="input" value={form.voice_name} onChange={e => set('voice_name', e.target.value)}>
+                {voiceOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Speed</label>
               <select className="input" value={form.speed} onChange={e => set('speed', e.target.value)}>
-                {['slow', 'medium', 'fast'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+                {['slow', 'medium', 'fast'].map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Pitch</label>
               <select className="input" value={form.pitch} onChange={e => set('pitch', e.target.value)}>
-                {['low', 'medium', 'high'].map(p => <option key={p} value={p} className="capitalize">{p}</option>)}
+                {['low', 'medium', 'high'].map(p => <option key={p} value={p} className="capitalize">{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
               </select>
             </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="button" onClick={handlePreviewTts}
+              disabled={!form.speech_text.trim() || ttsPreviewLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors disabled:opacity-50 bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100">
+              {ttsPreviewLoading
+                ? <><Loader2 size={12} className="animate-spin" />Generating…</>
+                : <><Play size={12} />Preview TTS</>}
+            </button>
           </div>
         </>
       )}
@@ -506,7 +784,7 @@ function AudioMessagesTab() {
     },
     {
       key: '_actions',
-      header: '',
+      header: 'Action',
       headerClassName: 'text-right',
       className: 'text-right',
       render: (msg) => (
@@ -529,7 +807,7 @@ function AudioMessagesTab() {
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto py-4">
       <ServerDataTable<AudioMessage>
         queryKey={['audio-messages']}
         queryFn={(params) => ivrService.listAudio(params)}
@@ -843,13 +1121,13 @@ function IvrMenuTab() {
     onError: () => toast.error('Failed to remove route'),
   })
 
-  const menuItems = extractList<IvrMenuItem>(menuRaw)
+  const menuItems = extractList<IvrMenuItem>(menuRaw).filter(m => m.dtmf != null)
   const usedDtmf = menuItems.map(m => m.dtmf)
 
-  const dtmfLabel = (key: string) => key === '*' ? '★ Star' : key === '#' ? '# Hash' : key
+  const dtmfLabel = (key: string | null) => !key ? '' : key === '*' ? '★ Star' : key === '#' ? '# Hash' : key
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto py-4">
       {/* IVR Selector */}
       <div className="mb-5 flex items-end gap-3 flex-wrap">
         <div className="flex-1 max-w-sm">
@@ -930,8 +1208,9 @@ function IvrMenuTab() {
                 {menuItems
                   .slice()
                   .sort((a, b) => {
-                    const order = ['1','2','3','4','5','6','7','8','9','*','0','#']
-                    return order.indexOf(a.dtmf) - order.indexOf(b.dtmf)
+                    const aId = Number(a.ivr_m_id ?? a.id ?? 0)
+                    const bId = Number(b.ivr_m_id ?? b.id ?? 0)
+                    return bId - aId   // newest first
                   })
                   .map((menuItem, i) => {
                     const meta = DEST_TYPE_META[String(menuItem.dest_type)] ?? DEST_TYPE_META['0']
@@ -987,7 +1266,7 @@ function IvrMenuTab() {
       {showModal && selectedIvr && (
         <IvrMenuModal
           ivrId={selectedIvr.ivr_id}
-          ivrNumId={Number(selectedNumId)}
+          ivrNumId={Number(selectedIvr.id ?? selectedIvr.auto_id ?? 0)}
           item={editingItem}
           usedDtmf={usedDtmf}
           allIvrs={allIvrs}
@@ -1003,31 +1282,33 @@ function IvrMenuTab() {
 function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () => void }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
-    ivr_id: '', ann_id: '', ivr_desc: '', language: 'en',
-    voice_name: '', speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium',
+    ivr_id: '', ann_id: '', ivr_desc: '', language: DEFAULT_LANG,
+    voice_name: DEFAULT_VOICE, speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium',
   })
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [ttsPreviewLoading, setTtsPreviewLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (ivr) {
+      const lang = normalizeLang(String(ivr.language ?? DEFAULT_LANG))
       setForm({
         ivr_id:        String(ivr.ivr_id ?? ''),
         ann_id:        String(ivr.ann_id ?? ''),
         ivr_desc:      String(ivr.ivr_desc ?? ''),
-        language:      String(ivr.language ?? 'en'),
-        voice_name:    String(ivr.voice_name ?? ''),
+        language:      lang,
+        voice_name:    resolveVoice(String(ivr.voice_name ?? ''), lang),
         speech_text:   String(ivr.speech_text ?? ''),
         prompt_option: String(ivr.prompt_option ?? '1'),
         speed:         String(ivr.speed ?? 'medium'),
         pitch:         String(ivr.pitch ?? 'medium'),
       })
     } else {
-      setForm({ ivr_id: '', ann_id: '', ivr_desc: '', language: 'en', voice_name: '', speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium' })
+      setForm({ ivr_id: '', ann_id: '', ivr_desc: '', language: DEFAULT_LANG, voice_name: DEFAULT_VOICE, speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium' })
     }
     setAudioFile(null); setRecordedBlob(null); setPreviewUrl(null)
   }, [ivr])
@@ -1036,6 +1317,11 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
   const isEditing = !!(ivr?.auto_id || ivr?.id)
+
+  const handleLangChange = (lang: string) => {
+    const voices = getVoicesForLang(lang)
+    setForm(p => ({ ...p, language: lang, voice_name: voices[0]?.value ?? p.voice_name }))
+  }
 
   const handleFileSelect = (file: File) => {
     if (!file.name.match(/\.(mp3|wav|ogg|webm|m4a|mp4)$/i)) {
@@ -1054,15 +1340,63 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
     setAudioFile(null)
   }
 
+  const handlePreviewTts = async () => {
+    if (!form.speech_text.trim()) { toast.error('Enter speech text first'); return }
+    setTtsPreviewLoading(true)
+    try {
+      const voices = getVoicesForLang(form.language)
+      const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
+      const res = await ivrService.generateTts({
+        speech_text: form.speech_text,
+        language: form.language,
+        voice_name: form.voice_name,
+        voice_gender: voiceGender,
+        speed: form.speed,
+        pitch: form.pitch,
+      })
+      const relPath = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? ''
+      if (relPath) {
+        const parts = relPath.split('/')
+        const blobRes = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
+        const blob = new Blob([blobRes.data as BlobPart], {
+          type: (blobRes.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+        })
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        setPreviewUrl(URL.createObjectURL(blob))
+      }
+    } catch { toast.error('Failed to generate TTS preview') }
+    finally { setTtsPreviewLoading(false) }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.ivr_id.trim() || !form.ivr_desc.trim()) {
-      toast.error('IVR ID and name are required'); return
+    if (!form.ivr_desc.trim()) {
+      toast.error('Display name is required'); return
+    }
+    // Auto-generate ivr_id from display name when creating
+    if (!isEditing && !form.ivr_id.trim()) {
+      const slug = form.ivr_desc.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+      const suffix = Math.random().toString(36).slice(2, 6)
+      form.ivr_id = `${slug}_${suffix}`
     }
     setSaving(true)
     try {
       let annId = form.ann_id
-      if (form.prompt_option !== '1' && (audioFile || recordedBlob)) {
+      if (form.prompt_option === '1' && form.speech_text.trim()) {
+        try {
+          const voices = getVoicesForLang(form.language)
+          const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
+          const res = await ivrService.generateTts({
+            speech_text: form.speech_text,
+            language: form.language,
+            voice_name: form.voice_name,
+            voice_gender: voiceGender,
+            speed: form.speed,
+            pitch: form.pitch,
+          })
+          annId = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? annId
+        } catch { /* TTS generation failed — save metadata only */ }
+      } else if (form.prompt_option !== '1' && (audioFile || recordedBlob)) {
         const fd = new FormData()
         if (audioFile) fd.append('audio', audioFile)
         else if (recordedBlob) fd.append('audio', recordedBlob, 'recording.webm')
@@ -1081,21 +1415,14 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
     } finally { setSaving(false) }
   }
 
+  const voiceOptions = getVoicesForLang(form.language)
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">IVR ID <span className="text-red-500">*</span></label>
-          <input className="input" value={form.ivr_id}
-            onChange={e => set('ivr_id', e.target.value)}
-            placeholder="e.g. ivr_main" disabled={isEditing} />
-          {!isEditing && <p className="text-xs text-slate-400 mt-1">Unique identifier — no spaces</p>}
-        </div>
-        <div>
-          <label className="label">Display Name <span className="text-red-500">*</span></label>
-          <input className="input" value={form.ivr_desc}
-            onChange={e => set('ivr_desc', e.target.value)} placeholder="Main Sales IVR" />
-        </div>
+      <div>
+        <label className="label">Display Name <span className="text-red-500">*</span></label>
+        <input className="input" value={form.ivr_desc}
+          onChange={e => set('ivr_desc', e.target.value)} placeholder="Main Sales IVR" />
       </div>
 
       <div>
@@ -1124,29 +1451,39 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Language</label>
-              <select className="input" value={form.language} onChange={e => set('language', e.target.value)}>
+              <select className="input" value={form.language} onChange={e => handleLangChange(e.target.value)}>
                 {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Voice</label>
-              <input className="input" value={form.voice_name}
-                onChange={e => set('voice_name', e.target.value)} placeholder="e.g. Joanna" />
+              <select className="input" value={form.voice_name} onChange={e => set('voice_name', e.target.value)}>
+                {voiceOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Speed</label>
               <select className="input" value={form.speed} onChange={e => set('speed', e.target.value)}>
-                {['slow', 'medium', 'fast'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+                {['slow', 'medium', 'fast'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Pitch</label>
               <select className="input" value={form.pitch} onChange={e => set('pitch', e.target.value)}>
-                {['low', 'medium', 'high'].map(p => <option key={p} value={p} className="capitalize">{p}</option>)}
+                {['low', 'medium', 'high'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
               </select>
             </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="button" onClick={handlePreviewTts}
+              disabled={!form.speech_text.trim() || ttsPreviewLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors disabled:opacity-50 bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100">
+              {ttsPreviewLoading
+                ? <><Loader2 size={12} className="animate-spin" />Generating…</>
+                : <><Play size={12} />Preview TTS</>}
+            </button>
           </div>
         </>
       )}
@@ -1246,15 +1583,6 @@ function IvrTab() {
       ),
     },
     {
-      key: 'ivr_id',
-      header: 'IVR ID',
-      render: (ivr) => (
-        <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-          {ivr.ivr_id}
-        </span>
-      ),
-    },
-    {
       key: 'prompt_option',
       header: 'Greeting',
       render: (ivr) => {
@@ -1278,7 +1606,7 @@ function IvrTab() {
     },
     {
       key: '_actions',
-      header: '',
+      header: 'Action',
       headerClassName: 'text-right',
       className: 'text-right',
       render: (ivr) => (
@@ -1301,7 +1629,7 @@ function IvrTab() {
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto py-4">
       <ServerDataTable<Ivr>
         queryKey={['ivr-list']}
         queryFn={(params) => ivrService.list(params)}

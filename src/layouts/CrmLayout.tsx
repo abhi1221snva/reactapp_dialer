@@ -3,7 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 
 // ── Route → Page title ────────────────────────────────────────────────────────
 const CRM_TITLES: Record<string, string> = {
-  '/crm/dashboard':       'CRM Dashboard',
+  '/crm/dashboard':       'Dashboard',
   '/crm/pipeline':        'Pipeline Board',
   '/crm/leads':           'Leads',
   '/crm/leads/create':    'Add Lead',

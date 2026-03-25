@@ -41,6 +41,16 @@ export const ivrService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
+  // Generate TTS audio and save to tenant storage; returns { relative_path, filename }
+  generateTts: (data: {
+    speech_text: string
+    language: string
+    voice_name?: string
+    voice_gender?: string
+    speed?: string
+    pitch?: string
+  }) => api.post('/generate-tts', data),
+
   // Fetch stored audio file as Blob for in-browser playback
   fetchAudioBlob: (subdir: string, filename: string) =>
     api.get(`/crm/tenant-file/${subdir}/${encodeURIComponent(filename)}`, {
