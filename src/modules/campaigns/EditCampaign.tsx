@@ -10,6 +10,66 @@ import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
 import { userService } from '../../services/user.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { useAuthStore } from '../../stores/auth.store'
+
+// ─────────────────────────────────────────────
+//  Week Schedule Types
+// ─────────────────────────────────────────────
+type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+type DaySchedule = { enabled: boolean; start: string; end: string }
+type WeekSchedule = Record<DayKey, DaySchedule>
+const ALL_DAYS: DayKey[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
+const DEFAULT_WEEK_SCHEDULE: WeekSchedule = {
+  monday:    { enabled: true,  start: '09:00', end: '17:00' },
+  tuesday:   { enabled: true,  start: '09:00', end: '17:00' },
+  wednesday: { enabled: true,  start: '09:00', end: '17:00' },
+  thursday:  { enabled: true,  start: '09:00', end: '17:00' },
+  friday:    { enabled: true,  start: '09:00', end: '17:00' },
+  saturday:  { enabled: false, start: '09:00', end: '17:00' },
+  sunday:    { enabled: false, start: '09:00', end: '17:00' },
+}
+
+function WeekScheduleGrid({ schedule, onChange }: { schedule: WeekSchedule; onChange: (s: WeekSchedule) => void }) {
+  const update = (day: DayKey, field: keyof DaySchedule, value: boolean | string) =>
+    onChange({ ...schedule, [day]: { ...schedule[day], [field]: value } })
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-slate-50 border-b border-slate-100">
+            <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Day</th>
+            <th className="px-3 py-2 text-center text-xs font-semibold text-slate-500">On</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Start</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">End</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ALL_DAYS.map(day => (
+            <tr key={day} className={`border-b border-slate-100 last:border-0 transition-opacity ${!schedule[day].enabled ? 'opacity-40' : ''}`}>
+              <td className="px-3 py-2 font-medium text-slate-700 capitalize text-xs">{day}</td>
+              <td className="px-3 py-2 text-center">
+                <input type="checkbox" checked={schedule[day].enabled}
+                  onChange={e => update(day, 'enabled', e.target.checked)}
+                  className="rounded accent-indigo-600 cursor-pointer" />
+              </td>
+              <td className="px-3 py-1.5">
+                <input type="time" value={schedule[day].start} disabled={!schedule[day].enabled}
+                  onChange={e => update(day, 'start', e.target.value)}
+                  className="input text-xs py-1 w-full disabled:cursor-not-allowed" />
+              </td>
+              <td className="px-3 py-1.5">
+                <input type="time" value={schedule[day].end} disabled={!schedule[day].enabled}
+                  onChange={e => update(day, 'end', e.target.value)}
+                  className="input text-xs py-1 w-full disabled:cursor-not-allowed" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 // ─────────────────────────────────────────────
 //  Zod Schema
@@ -37,6 +97,7 @@ const editCampaignSchema = z
     time_based_calling: z.number().int().default(0),
     call_time_start: z.string().optional().nullable(),
     call_time_end: z.string().optional().nullable(),
+    timezone: z.string().max(64).optional().default('America/New_York'),
     email: z.number().int().default(0),
     sms: z.number().int().default(0),
     send_crm: z.number().int().default(0),
@@ -76,7 +137,7 @@ interface CampaignApiData {
   caller_id?: string; custom_caller_id?: number | string | null
   country_code?: number | string | null; voip_configuration_id?: number | string | null
   call_transfer?: number | string; time_based_calling?: number | string
-  call_time_start?: string | null; call_time_end?: string | null
+  call_time_start?: string | null; call_time_end?: string | null; timezone?: string | null
   email?: number | string; sms?: number | string; send_crm?: number | string
   send_report?: number | string; call_metric?: string | number; api?: number | string
   amd?: string | number; amd_drop_action?: number | null
@@ -303,6 +364,10 @@ export function EditCampaign() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const campaignId = Number(id)
+  const clientId = useAuthStore(s => s.user?.parent_id)
+  const [scheduleMode, setScheduleMode] = useState<'simple' | 'per_day'>('simple')
+  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE)
+  const [existingTimerId, setExistingTimerId] = useState<number | null>(null)
 
   const {
     register, handleSubmit, control, watch, setValue, reset,
@@ -315,7 +380,7 @@ export function EditCampaign() {
       group_id: '', call_ratio: '', duration: '', automated_duration: '',
       hopper_mode: 1, max_lead_temp: 100, min_lead_temp: 500, percentage_inc_dec: '',
       caller_id: 'area_code', custom_caller_id: '', country_code: '', voip_configuration_id: '',
-      call_transfer: 0, time_based_calling: 0, call_time_start: '08:00', call_time_end: '20:00',
+      call_transfer: 0, time_based_calling: 0, call_time_start: '08:00', call_time_end: '20:00', timezone: 'America/New_York',
       email: 0, sms: 0, send_crm: 0, send_report: 0, call_metric: '0', api: 1,
       amd: '0', amd_drop_action: null, audio_message_amd: null, voice_message_amd: null,
       redirect_to: '', redirect_to_dropdown: null,
@@ -352,7 +417,7 @@ export function EditCampaign() {
     enabled: Boolean(campaignId),
   })
 
-  const { data: groupsData } = useQuery({ queryKey: ['extension-groups'], queryFn: () => userService.getGroups() })
+  const { data: groupsData } = useQuery({ queryKey: ['extension-groups', clientId], queryFn: () => userService.getGroups() })
   const groups: Array<{ id: number; group_name?: string; title?: string }> =
     (groupsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; group_name?: string; title?: string }> ?? []
 
@@ -371,15 +436,15 @@ export function EditCampaign() {
   const countries: Array<{ phonecode: string; name: string }> =
     ((countriesData as { data?: { data?: unknown[] } })?.data?.data ?? (countriesData as { data?: unknown[] })?.data ?? []) as Array<{ phonecode: string; name: string }>
 
-  const { data: extensionsData } = useQuery({ queryKey: ['extensions-all'], queryFn: () => campaignService.getExtensions() })
+  const { data: extensionsData } = useQuery({ queryKey: ['extensions-all', clientId], queryFn: () => campaignService.getExtensions() })
   const extensions: Array<{ id: number; first_name?: string; last_name?: string; extension?: string }> =
     ((extensionsData as { data?: { data?: unknown[] } })?.data?.data ?? (extensionsData as { data?: unknown[] })?.data ?? []) as Array<{ id: number; first_name?: string; last_name?: string; extension?: string }>
 
-  const { data: ivrData } = useQuery({ queryKey: ['ivr-list'], queryFn: () => campaignService.getIvrList() })
+  const { data: ivrData } = useQuery({ queryKey: ['ivr-list', clientId], queryFn: () => campaignService.getIvrList() })
   const ivrList: Array<{ ivr_id: string; ivr_desc: string }> =
     ((ivrData as { data?: { data?: unknown[] } })?.data?.data ?? (ivrData as { data?: unknown[] })?.data ?? []) as Array<{ ivr_id: string; ivr_desc: string }>
 
-  const { data: ringGroupData } = useQuery({ queryKey: ['ring-groups'], queryFn: () => campaignService.getRingGroups() })
+  const { data: ringGroupData } = useQuery({ queryKey: ['ring-groups', clientId], queryFn: () => campaignService.getRingGroups() })
   const ringGroups: Array<{ id: number; title: string; description?: string }> =
     ((ringGroupData as { data?: { data?: unknown[] } })?.data?.data ?? (ringGroupData as { data?: unknown[] })?.data ?? []) as Array<{ id: number; title: string; description?: string }>
 
@@ -426,6 +491,7 @@ export function EditCampaign() {
       time_based_calling: Number(c.time_based_calling ?? 0),
       call_time_start: c.call_time_start ? c.call_time_start.substring(0, 5) : '08:00',
       call_time_end: c.call_time_end ? c.call_time_end.substring(0, 5) : '20:00',
+      timezone: (c.timezone as string) || 'America/New_York',
       email: Number(c.email ?? 0),
       sms: Number(c.sms ?? 0),
       send_crm: Number(c.send_crm ?? 0),
@@ -443,11 +509,45 @@ export function EditCampaign() {
       no_agent_dropdown_action: c.no_agent_dropdown_action != null ? String(c.no_agent_dropdown_action) : null,
       disposition_id: existingDispositionIds,
     })
+
+    // Load existing per-day schedule if campaign has call_schedule_id
+    const schedId = (c as Record<string, unknown>).call_schedule_id
+    if (schedId) {
+      setExistingTimerId(Number(schedId))
+      setScheduleMode('per_day')
+      campaignService.getCallTimer(Number(schedId)).then((res: unknown) => {
+        const wp = (res as { data?: { data?: { week_plan?: Record<string, { start: string; end: string }> } } })?.data?.data?.week_plan
+        if (wp && typeof wp === 'object') {
+          const merged = { ...DEFAULT_WEEK_SCHEDULE }
+          ALL_DAYS.forEach(day => {
+            if (wp[day]) merged[day] = { enabled: true, start: wp[day].start, end: wp[day].end }
+            else merged[day] = { ...merged[day], enabled: false }
+          })
+          setWeekSchedule(merged)
+        }
+      }).catch(() => {/* ignore */})
+    }
   }, [campaignData, campaignId, reset])
 
   // Mutation
   const updateMutation = useMutation({
-    mutationFn: (data: EditCampaignFormValues) => {
+    mutationFn: async (data: EditCampaignFormValues) => {
+      let callScheduleId: number | undefined
+
+      if (Number(data.time_based_calling) === 1 && scheduleMode === 'per_day') {
+        const weekPlan: Record<string, { start: string; end: string }> = {}
+        ALL_DAYS.forEach(day => {
+          if (weekSchedule[day].enabled) weekPlan[day] = { start: weekSchedule[day].start, end: weekSchedule[day].end }
+        })
+        if (existingTimerId) {
+          await campaignService.updateCallTimer(existingTimerId, { week_plan: weekPlan })
+          callScheduleId = existingTimerId
+        } else {
+          const timerRes = await campaignService.createCallTimer({ title: `${data.title} Schedule`, week_plan: weekPlan })
+          callScheduleId = (timerRes as { data?: { data?: { id?: number } } })?.data?.data?.id
+        }
+      }
+
       const payload: Record<string, unknown> = {
         ...data,
         group_id: data.group_id ? Number(data.group_id) : 0,
@@ -466,6 +566,7 @@ export function EditCampaign() {
         // truncate HH:MM:SS → HH:MM — backend validates as date_format:H:i
         call_time_start: data.call_time_start ? data.call_time_start.substring(0, 5) : undefined,
         call_time_end: data.call_time_end ? data.call_time_end.substring(0, 5) : undefined,
+        ...(callScheduleId ? { call_schedule_id: callScheduleId } : {}),
       }
       return campaignService.update(payload)
     },
@@ -632,19 +733,50 @@ export function EditCampaign() {
                 </select>
               </div>
 
-              {timeBasedCalling === 1 && (
-                <div className="grid grid-cols-2 gap-2">
+              {Number(timeBasedCalling) === 1 && (
+                <>
+                  {/* Schedule Mode selector */}
                   <div className="form-group">
-                    <label className="label text-xs">Start Time <span className="text-red-500">*</span></label>
-                    <input type="time" {...register('call_time_start')} className={`input text-sm py-2 ${errors.call_time_start ? 'border-red-400' : ''}`} />
-                    <FieldError message={errors.call_time_start?.message} />
+                    <label className="label text-xs">Schedule Type</label>
+                    <select value={scheduleMode} onChange={e => setScheduleMode(e.target.value as 'simple' | 'per_day')} className="input text-sm py-2">
+                      <option value="simple">Simple — same time every day</option>
+                      <option value="per_day">Per Day — different times per day</option>
+                    </select>
                   </div>
+
+                  {scheduleMode === 'simple' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="form-group">
+                        <label className="label text-xs">Start Time <span className="text-red-500">*</span></label>
+                        <input type="time" {...register('call_time_start')} className={`input text-sm py-2 ${errors.call_time_start ? 'border-red-400' : ''}`} />
+                        <FieldError message={errors.call_time_start?.message} />
+                      </div>
+                      <div className="form-group">
+                        <label className="label text-xs">End Time <span className="text-red-500">*</span></label>
+                        <input type="time" {...register('call_time_end')} className={`input text-sm py-2 ${errors.call_time_end ? 'border-red-400' : ''}`} />
+                        <FieldError message={errors.call_time_end?.message} />
+                      </div>
+                    </div>
+                  )}
+
+                  {scheduleMode === 'per_day' && (
+                    <WeekScheduleGrid schedule={weekSchedule} onChange={setWeekSchedule} />
+                  )}
+
                   <div className="form-group">
-                    <label className="label text-xs">End Time <span className="text-red-500">*</span></label>
-                    <input type="time" {...register('call_time_end')} className={`input text-sm py-2 ${errors.call_time_end ? 'border-red-400' : ''}`} />
-                    <FieldError message={errors.call_time_end?.message} />
+                    <label className="label text-xs">Timezone</label>
+                    <select {...register('timezone')} className="input text-sm py-2">
+                      <option value="America/New_York">America/New_York (ET)</option>
+                      <option value="America/Chicago">America/Chicago (CT)</option>
+                      <option value="America/Denver">America/Denver (MT)</option>
+                      <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
+                      <option value="America/Phoenix">America/Phoenix (AZ)</option>
+                      <option value="America/Anchorage">America/Anchorage (AK)</option>
+                      <option value="Pacific/Honolulu">Pacific/Honolulu (HI)</option>
+                      <option value="UTC">UTC</option>
+                    </select>
                   </div>
-                </div>
+                </>
               )}
 
               <div className="form-group">

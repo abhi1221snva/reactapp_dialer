@@ -389,6 +389,14 @@ export function WebPhone() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Auto-connect when SIP credentials are ready — so the user doesn't have to manually click
+  useEffect(() => {
+    if (sipConfig?.isConfigured && phoneStateRef.current === 'idle') {
+      sipEnableRef.current()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sipConfig?.isConfigured])
+
   if (!user || !sipConfig) return null
 
   // Server address missing in user profile — show a clear card instead of

@@ -39,7 +39,7 @@ interface CampaignDetail {
   caller_id?: string; custom_caller_id?: number | string | null
   country_code?: number | string | null
   call_transfer?: number | string; time_based_calling?: number | string
-  call_time_start?: string | null; call_time_end?: string | null
+  call_time_start?: string | null; call_time_end?: string | null; timezone?: string | null
   email?: number | string; sms?: number | string; send_crm?: number | string
   send_report?: number | string; call_metric?: string | number; api?: number | string
   amd?: string | number
@@ -234,6 +234,9 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
                 </div>
                 <div className="px-4 py-1">
                   <DetailRow label="Call Times" value={callTimeDisplay} />
+                  {Number(d.time_based_calling) === 1 && (
+                    <DetailRow label="Timezone" value={d.timezone || 'America/New_York'} />
+                  )}
                   <DetailRow label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
                   <DetailRow label="Call Transfer" value={Number(d.call_transfer) === 1 ? 'Yes' : 'No'} />
                   <DetailRow label="AMD" value={String(d.amd) === '1' ? 'Enabled' : 'Disabled'} />

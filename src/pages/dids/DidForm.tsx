@@ -259,6 +259,15 @@ function Toggle({ checked, onChange, label, description, icon: Icon, accent = 'i
   )
 }
 
+// ─── US phone formatter ───────────────────────────────────────────────────────
+
+function formatUSPhone(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 10)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+}
+
 // ─── Routing target selector ──────────────────────────────────────────────────
 
 type ExtItem  = { id: number; extension: string; first_name?: string; last_name?: string }
@@ -363,18 +372,25 @@ function RoutingTarget({
     </div>
   )
 
-  if (destType === 'external') return (
-    <div className="form-group">
-      <label className="label">Forward To Number <span className="text-red-500">*</span></label>
-      <input
-        className="input font-mono"
-        value={forward_number}
-        onChange={e => onChange('forward_number', e.target.value)}
-        placeholder="+1XXXXXXXXXX"
-      />
-      <p className="text-[11px] text-slate-400 mt-1.5">Enter the full number including country code</p>
-    </div>
-  )
+  if (destType === 'external') {
+    const digits = forward_number.replace(/\D/g, '')
+    return (
+      <div className="form-group">
+        <label className="label">Forward To Number <span className="text-red-500">*</span></label>
+        <input
+          className="input font-mono"
+          value={forward_number}
+          onChange={e => onChange('forward_number', formatUSPhone(e.target.value))}
+          placeholder="(XXX) XXX-XXXX"
+          maxLength={14}
+          inputMode="numeric"
+        />
+        <p className={cn('text-[11px] mt-1.5', digits.length === 10 ? 'text-emerald-600' : 'text-slate-400')}>
+          {digits.length}/10 digits{digits.length === 10 ? ' ✓' : ' · US format (XXX) XXX-XXXX'}
+        </p>
+      </div>
+    )
+  }
 
   return null
 }
@@ -679,7 +695,14 @@ export function DidForm() {
       if (form.dest_type === 'ivr'       && !form.ivr_id)               { toast.error('Please select an IVR.'); return }
       if (form.dest_type === 'queue'     && !form.ingroup)              { toast.error('Please select a ring group / queue.'); return }
       if (form.dest_type === 'voicemail' && !form.voicemail_id)         { toast.error('Please select an extension for voicemail.'); return }
-      if (form.dest_type === 'external'  && !form.forward_number.trim()){ toast.error('Please enter the external forward number.'); return }
+      if (form.dest_type === 'external') {
+        if (!form.forward_number.trim()) { toast.error('Please enter the external forward number.'); return }
+        if (form.forward_number.replace(/\D/g, '').length !== 10) { toast.error('External number must be exactly 10 digits.'); return }
+      }
+    }
+    if (Boolean(form.call_time_holiday) && form.dest_type_ooh === 'external') {
+      if (!form.forward_number_ooh.trim()) { toast.error('Please enter the out-of-hours external forward number.'); return }
+      if (form.forward_number_ooh.replace(/\D/g, '').length !== 10) { toast.error('Out-of-hours external number must be exactly 10 digits.'); return }
     }
     const screeningActive = Boolean(form.call_screening_status) && Boolean(form.call_time_holiday)
     if (screeningActive) {

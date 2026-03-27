@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { userService } from '../../services/user.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { useAuthStore } from '../../stores/auth.store'
 
 const DIAL_MODES = [
   { value: 'preview_and_dial', label: 'Preview & Dial' },
@@ -38,6 +39,7 @@ export function CampaignForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isEdit = Boolean(id)
+  const clientId = useAuthStore(s => s.user?.parent_id)
   const [form, setForm] = useState(DEFAULT_FORM)
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
@@ -47,7 +49,7 @@ export function CampaignForm() {
   })
 
   const { data: groupsData } = useQuery({
-    queryKey: ['extension-groups'],
+    queryKey: ['extension-groups', clientId],
     queryFn: () => userService.getGroups(),
   })
 

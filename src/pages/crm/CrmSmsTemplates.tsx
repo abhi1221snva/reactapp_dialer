@@ -465,6 +465,7 @@ export function CrmSmsTemplates() {
         ...r,
         sms_template_name: r.template_name ?? r.sms_template_name ?? '',
         sms_template:      r.template_html  ?? r.sms_template      ?? '',
+        status: Number(r.status) as 0 | 1,
       })) as SmsTemplate[]
     },
     staleTime: 0,

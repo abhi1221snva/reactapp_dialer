@@ -48,4 +48,14 @@ export const campaignService = {
   getPrompts: () => api.get('/prompts'),
   getCountryCodes: () => api.post('/country-list', {}),
   getVoipConfigs: () => api.get('/voip-configurations'),
+
+  // Call Timers (day-wise schedule)
+  createCallTimer: (data: { title: string; week_plan: Record<string, { start: string; end: string }> }) =>
+    api.post('/call-timers', data),
+
+  updateCallTimer: (id: number, data: { title?: string; week_plan?: Record<string, { start: string; end: string }> }) =>
+    api.post(`/call-timers/${id}`, data),
+
+  getCallTimer: (id: number) =>
+    api.get(`/call-timers/${id}`),
 }

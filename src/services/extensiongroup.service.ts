@@ -13,7 +13,7 @@ export const extensiongroupService = {
   getById: (id: number) => api.get(`/extension-group/${id}`),
   create: (data: Record<string, unknown>) => api.put('/extension-group', data),
   update: (id: number, data: Record<string, unknown>) =>
-    api.patch('/extension-group-update', { group_id: id, ...data }),
+    api.post('/extension-group-update', { group_id: id, ...data }),
   delete: (id: number) =>
     api.delete(`/extension-group/${id}`),
   updateStatus: (id: number, status: boolean) =>

@@ -140,8 +140,9 @@ interface RuleDef {
   valueType?: 'number' | 'text'
 }
 
+// NOTE: 'required' is intentionally excluded — required status is controlled by
+// the dedicated "Required field" toggle + "Apply To" scope, not inline rules.
 const RULE_DEFINITIONS: RuleDef[] = [
-  { value: 'required',       label: 'Required',          hasValue: false },
   { value: 'nullable',       label: 'Nullable',          hasValue: false },
   { value: 'numeric',        label: 'Numeric',           hasValue: false },
   { value: 'integer',        label: 'Integer',           hasValue: false },
@@ -167,15 +168,24 @@ const RULE_DEF_MAP: Record<string, RuleDef> = Object.fromEntries(
   RULE_DEFINITIONS.map(r => [r.value, r])
 )
 
+// ── Apply To Options ──────────────────────────────────────────────────────────
+const APPLY_TO_OPTIONS = [
+  { value: '',          label: 'All Forms',      desc: 'Shown on affiliate, merchant, and system forms' },
+  { value: 'affiliate', label: 'Affiliate Only', desc: 'Shown only on the affiliate apply form' },
+  { value: 'merchant',  label: 'Merchant Only',  desc: 'Shown only on the merchant portal form' },
+  { value: 'both',      label: 'Both',           desc: 'Shown on both affiliate and merchant forms' },
+]
+
 // ── Field Form State ───────────────────────────────────────────────────────────
 interface FieldFormState {
   label_name:       string
   field_type:       string
   section:          string
   placeholder:      string
-  required:         boolean
+  required_in:      string[]  // per-context required: [] | ['system'] | ['affiliate'] | ['merchant'] | combinations
+  apply_to:         string    // '' | 'affiliate' | 'merchant' | 'both'
   status:           boolean
-  values:           string  // one option per line, for dropdown/radio
+  values:           string    // one option per line, for dropdown/radio
   validation_rules: ValidationRule[]
 }
 
@@ -184,7 +194,8 @@ const EMPTY_FORM: FieldFormState = {
   field_type:       'text',
   section:          'owner',
   placeholder:      '',
-  required:         false,
+  required_in:      [],
+  apply_to:         '',
   status:           true,
   values:           '',
   validation_rules: [],
@@ -339,12 +350,34 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
   useEffect(() => {
     if (editing) {
       const parsed = parseValidationRules(editing.validation_rules)
+      // Resolve required_in: use stored array if present, else derive from legacy required bool
+      const storedRequiredIn = editing.required_in
+      let resolvedRequiredIn: string[]
+      if (Array.isArray(storedRequiredIn) && storedRequiredIn.length > 0) {
+        resolvedRequiredIn = storedRequiredIn as string[]
+      } else if (typeof (storedRequiredIn as unknown) === 'string' && (storedRequiredIn as unknown as string).trim() !== '') {
+        // Backend returns required_in as a raw JSON string from the DB
+        try {
+          const parsed = JSON.parse(storedRequiredIn as unknown as string)
+          resolvedRequiredIn = Array.isArray(parsed) ? parsed : []
+        } catch {
+          resolvedRequiredIn = []
+        }
+      } else if (storedRequiredIn === null || storedRequiredIn === undefined) {
+        // Legacy fallback: if required=true and no required_in, treat as "all contexts"
+        const legacyRequired = editing.required === true || (editing.required as unknown) == 1
+        resolvedRequiredIn = legacyRequired ? ['system', 'affiliate', 'merchant'] : []
+      } else {
+        resolvedRequiredIn = []
+      }
+
       setForm({
         label_name:       editing.label_name,
         field_type:       editing.field_type,
         section:          editing.section || 'owner',
         placeholder:      editing.placeholder ?? '',
-        required:         editing.required === true || (editing.required as unknown) == 1,
+        required_in:      resolvedRequiredIn,
+        apply_to:         editing.apply_to ?? '',
         status:           editing.status === true || (editing.status as unknown) == 1,
         values:           parseValuesToLines(editing.options),
         validation_rules: parsed,
@@ -417,7 +450,8 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
         field_type:       form.field_type,
         section:          form.section || 'owner',
         placeholder:      form.placeholder.trim() || undefined,
-        required:         form.required,
+        required_in:      form.required_in,
+        apply_to:         (form.apply_to || null) as 'affiliate' | 'merchant' | 'both' | null,
         options:          optionsArr.length > 0 ? JSON.stringify(optionsArr) : undefined,
         validation_rules: form.validation_rules.length > 0 ? form.validation_rules : undefined,
         ...(isEdit && { status: form.status }),
@@ -531,9 +565,7 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
                   />
                 ))
               )}
-              <div className="pt-1">
-                <AddRuleDropdown existing={form.validation_rules} onAdd={addRule} />
-              </div>
+              {/* Add Rule button removed — use Auto-suggest to populate rules */}
             </div>
           </div>
 
@@ -570,6 +602,23 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
             </div>
           </div>
 
+          {/* Apply To */}
+          <div>
+            <label className="label">
+              Apply To
+              <span className="text-slate-400 font-normal ml-1">(form visibility &amp; required scope)</span>
+            </label>
+            <select
+              className="input w-full"
+              value={form.apply_to}
+              onChange={e => set('apply_to', e.target.value)}
+            >
+              {APPLY_TO_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Placeholder */}
           <div>
             <label className="label">
@@ -598,15 +647,34 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
             </div>
           )}
 
+          {/* Required In */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60">
+            <div className="px-3.5 pt-3 pb-2.5">
+              <p className="text-sm font-medium text-slate-700">Required In</p>
+              <p className="text-xs text-slate-400 mt-0.5">Select which forms must have this field filled in</p>
+            </div>
+            <div className="flex items-center gap-5 px-3.5 pb-3">
+              {([ ['system', 'System (CRM)'], ['affiliate', 'Affiliate'], ['merchant', 'Merchant'] ] as [string, string][]).map(([ctx, lbl]) => (
+                <label key={ctx} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.required_in.includes(ctx)}
+                    onChange={e => {
+                      const next = e.target.checked
+                        ? [...form.required_in, ctx]
+                        : form.required_in.filter(k => k !== ctx)
+                      set('required_in', next)
+                    }}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                  />
+                  <span className="text-xs font-medium text-slate-700">{lbl}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Toggles */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between py-2.5 px-3.5 rounded-xl border border-slate-200 bg-slate-50/60">
-              <div>
-                <p className="text-sm font-medium text-slate-700">Required field</p>
-                <p className="text-xs text-slate-400">Agent must fill this before saving</p>
-              </div>
-              <Toggle enabled={form.required} onToggle={() => set('required', !form.required)} />
-            </div>
             {isEdit && (
               <div className="flex items-center justify-between py-2.5 px-3.5 rounded-xl border border-slate-200 bg-slate-50/60">
                 <div>
@@ -1020,6 +1088,7 @@ export function CrmLeadFields() {
                 <th className="hidden lg:table-cell">Section</th>
                 <th className="hidden xl:table-cell">Validation</th>
                 <th className="hidden sm:table-cell">Required</th>
+                <th className="hidden lg:table-cell">Apply To</th>
                 <th>Status</th>
                 <th className="w-px whitespace-nowrap !text-right">Action</th>
               </tr>
@@ -1027,13 +1096,13 @@ export function CrmLeadFields() {
             <tbody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <tr key={i}>{Array.from({ length: 8 }).map((_, j) => (
+                  <tr key={i}>{Array.from({ length: 9 }).map((_, j) => (
                     <td key={j}><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 0 ? 24 : '60%' }} /></td>
                   ))}</tr>
                 ))
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                       <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
                         <Settings2 size={22} className="text-slate-300 opacity-60" />
@@ -1084,22 +1153,67 @@ export function CrmLeadFields() {
                       </span>
                     </td>
                     <td className="hidden xl:table-cell">
-                      {f.validation_rules && Array.isArray(f.validation_rules) && f.validation_rules.length > 0 ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                          <ShieldCheck size={10} />
-                          {f.validation_rules.length} rule{f.validation_rules.length !== 1 ? 's' : ''}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-300">—</span>
-                      )}
+                      {(() => {
+                        let vr = f.validation_rules
+                        if (typeof (vr as unknown) === 'string' && (vr as unknown as string).trim() !== '') {
+                          try { vr = JSON.parse(vr as unknown as string) } catch { vr = [] }
+                        }
+                        return Array.isArray(vr) && vr.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            <ShieldCheck size={10} />
+                            {vr.length} rule{vr.length !== 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-300">—</span>
+                        )
+                      })()}
                     </td>
                     <td className="hidden sm:table-cell">
-                      {(f.required === true || (f.required as unknown) == 1) ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
-                          <Check size={11} /> Required
+                      {(() => {
+                        // required_in may come back from the API as a JSON string
+                        // (raw DB value) instead of a parsed array — normalise it first.
+                        let ri: string[] | null | undefined = f.required_in
+                        if (typeof (ri as unknown) === 'string' && (ri as unknown as string).trim() !== '') {
+                          try { ri = JSON.parse(ri as unknown as string) } catch { ri = [] }
+                        }
+
+                        if (Array.isArray(ri) && ri.length > 0) {
+                          const labels: Record<string, string> = { system: 'CRM', affiliate: 'Aff', merchant: 'Mer' }
+                          return (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+                              <Check size={11} /> {ri.map(k => labels[k] ?? k).join(', ')}
+                            </span>
+                          )
+                        }
+                        if (ri === null || ri === undefined) {
+                          // Legacy fallback: show based on required boolean
+                          return (f.required === true || (f.required as unknown) == 1) ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                              <Check size={11} /> All (legacy)
+                            </span>
+                          ) : <span className="text-xs text-slate-400">Optional</span>
+                        }
+                        return <span className="text-xs text-slate-400">Optional</span>
+                      })()}
+                    </td>
+                    <td className="hidden lg:table-cell">
+                      {f.apply_to === 'affiliate' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                          Affiliate
                         </span>
-                      ) : (
-                        <span className="text-xs text-slate-400">Optional</span>
+                      )}
+                      {f.apply_to === 'merchant' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                          Merchant
+                        </span>
+                      )}
+                      {f.apply_to === 'both' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Both
+                        </span>
+                      )}
+                      {!f.apply_to && (
+                        <span className="text-xs text-slate-400">All Forms</span>
                       )}
                     </td>
                     <td>

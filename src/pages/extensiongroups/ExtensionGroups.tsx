@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
 import { RowActions } from '../../components/ui/RowActions'
 import { extensiongroupService } from '../../services/extensiongroup.service'
+import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 
@@ -187,12 +188,13 @@ function ExtGroupFormModal({
   isOpen, onClose, editing,
 }: { isOpen: boolean; onClose: () => void; editing: ExtGroup | null }) {
   const qc = useQueryClient()
+  const clientId = useAuthStore(s => s.user?.parent_id)
   const [form, setForm] = useState(EMPTY_FORM)
 
   // All available extensions from the picker endpoint — used to validate pre-fill values
   // and to show the picker dropdown.
   const { data: extData } = useQuery({
-    queryKey: ['extensions-for-eg'],
+    queryKey: ['extensions-for-eg', clientId],
     queryFn: () => extensiongroupService.getExtensions(),
   })
   const extensions: Extension[] = (extData as { data?: { data?: Extension[] } })?.data?.data ?? []

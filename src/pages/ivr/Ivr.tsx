@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast'
 import { ivrService } from '../../services/ivr.service'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { ServerDataTable } from '../../components/ui/ServerDataTable'
 import type { Column } from '../../components/ui/ServerDataTable'
@@ -336,61 +337,40 @@ function extractList<T>(res: unknown): T[] {
 // ── Audio Player (fetches with auth, creates blob URL) ────────────────────────
 
 function AudioPlayer({ annId }: { annId: string }) {
-  const [loading, setLoading] = useState(false)
-  const [playing, setPlaying] = useState(false)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const blobUrlRef = useRef<string | null>(null)
 
-  const toggle = async () => {
-    if (playing) {
-      audioRef.current?.pause()
-      setPlaying(false)
-      return
-    }
-    if (audioRef.current?.src) {
-      audioRef.current.currentTime = 0
-      audioRef.current.play()
-      setPlaying(true)
-      return
-    }
-    setLoading(true)
-    try {
-      const parts = annId.split('/')
-      const subdir = parts[0]
-      const filename = parts.slice(1).join('/')
-      const res = await ivrService.fetchAudioBlob(subdir, filename)
-      const blob = new Blob([res.data as BlobPart], {
-        type: (res.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
-      })
-      const url = URL.createObjectURL(blob)
-      blobUrlRef.current = url
-      const audio = new Audio(url)
-      audioRef.current = audio
-      audio.onended = () => setPlaying(false)
-      await audio.play()
-      setPlaying(true)
-    } catch {
-      toast.error('Could not load audio file')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
+    let cancelled = false
+    const parts = annId.split('/')
+    ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
+      .then(res => {
+        if (cancelled) return
+        const blob = new Blob([res.data as BlobPart], {
+          type: (res.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+        })
+        const url = URL.createObjectURL(blob)
+        blobUrlRef.current = url
+        setBlobUrl(url)
+      })
+      .catch(() => {})
     return () => {
-      audioRef.current?.pause()
+      cancelled = true
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
     }
-  }, [])
+  }, [annId])
+
+  if (!blobUrl) {
+    return <Loader2 size={14} className="animate-spin text-slate-300" />
+  }
 
   return (
-    <button type="button" onClick={toggle}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-semibold transition-colors">
-      {loading
-        ? <Loader2 size={12} className="animate-spin" />
-        : playing ? <Square size={12} /> : <Play size={12} />}
-      {loading ? 'Loading…' : playing ? 'Stop' : 'Play'}
-    </button>
+    <audio
+      controls
+      src={blobUrl}
+      className="h-9 rounded-lg"
+      style={{ minWidth: 220 }}
+    />
   )
 }
 
@@ -708,11 +688,11 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
       {previewUrl && (
         <div>
           <label className="label">Preview</label>
-          <audio controls src={previewUrl} className="w-full h-10 rounded-lg" />
+          <audio controls src={previewUrl} className="w-full" />
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-2">
+      <div className="flex justify-end gap-3 pt-4 pb-1 border-t border-slate-100 mt-2">
         <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
         <button type="submit" disabled={saving} className="btn-primary flex items-center gap-1.5">
           {saving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : editing ? 'Save Changes' : 'Create'}
@@ -807,7 +787,7 @@ function AudioMessagesTab() {
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto py-4">
+    <div className="py-4">
       <ServerDataTable<AudioMessage>
         queryKey={['audio-messages']}
         queryFn={(params) => ivrService.listAudio(params)}
@@ -864,7 +844,7 @@ function AudioMessagesTab() {
 
 // ── IVR Menu – Destination helpers ────────────────────────────────────────────
 
-interface ExtensionItem { extension: string; first_name?: string; last_name?: string; [key: string]: unknown }
+interface ExtensionItem { extension: string; name?: string; first_name?: string; last_name?: string; [key: string]: unknown }
 interface RingGroupItem { id: number; title: string; [key: string]: unknown }
 
 function DestinationSelect({
@@ -873,13 +853,14 @@ function DestinationSelect({
   destType: string; value: string; onChange: (v: string) => void
   allIvrs: Ivr[]; ivrId: string
 }) {
+  const clientId = useAuthStore(s => s.user?.parent_id)
   const { data: extRaw } = useQuery({
-    queryKey: ['client-extensions'],
+    queryKey: ['client-extensions', clientId],
     queryFn: () => ivrService.getClientExtensions(),
     enabled: destType === '0' || destType === '2',
   })
   const { data: rgRaw } = useQuery({
-    queryKey: ['ring-groups'],
+    queryKey: ['ring-groups', clientId],
     queryFn: () => ivrService.getRingGroups(),
     enabled: destType === '1',
   })
@@ -928,8 +909,9 @@ function DestinationSelect({
         <option value="">— Select Extension —</option>
         {extensions.map(ext => (
           <option key={ext.extension} value={ext.extension}>
-            {ext.extension}{ext.first_name || ext.last_name
-              ? ` — ${[ext.first_name, ext.last_name].filter(Boolean).join(' ')}` : ''}
+            {ext.name?.trim()
+              ? `${ext.name.trim()} — ${ext.extension}`
+              : ext.extension}
           </option>
         ))}
       </select>
@@ -1092,13 +1074,14 @@ function IvrMenuModal({
 
 function IvrMenuTab() {
   const qc = useQueryClient()
+  const clientId = useAuthStore(s => s.user?.parent_id)
   // Use numeric id as select value to avoid string/type-mismatch with ivr_id
   const [selectedNumId, setSelectedNumId] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState<IvrMenuItem | null>(null)
 
   const { data: ivrRaw, isLoading: ivrLoading } = useQuery({
-    queryKey: ['ivr-list', 'all'],
+    queryKey: ['ivr-list', 'all', clientId],
     queryFn: () => ivrService.list({ page: 1, limit: 200, search: '', filters: {} }),
   })
 
@@ -1127,7 +1110,7 @@ function IvrMenuTab() {
   const dtmfLabel = (key: string | null) => !key ? '' : key === '*' ? '★ Star' : key === '#' ? '# Hash' : key
 
   return (
-    <div className="flex-1 overflow-y-auto py-4">
+    <div className="py-4">
       {/* IVR Selector */}
       <div className="mb-5 flex items-end gap-3 flex-wrap">
         <div className="flex-1 max-w-sm">
@@ -1279,7 +1262,10 @@ function IvrMenuTab() {
 
 // ── IVR Form Modal ─────────────────────────────────────────────────────────────
 
-function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () => void }) {
+function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
+  ivr: Partial<Ivr> | null; onClose: () => void
+  formId?: string; onSavingChange?: (s: boolean) => void
+}) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
     ivr_id: '', ann_id: '', ivr_desc: '', language: DEFAULT_LANG,
@@ -1412,13 +1398,13 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
       onClose()
     } catch {
       toast.error('Failed to save IVR')
-    } finally { setSaving(false) }
+    } finally { setSaving(false); onSavingChange?.(false) }
   }
 
   const voiceOptions = getVoicesForLang(form.language)
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="label">Display Name <span className="text-red-500">*</span></label>
         <input className="input" value={form.ivr_desc}
@@ -1535,16 +1521,10 @@ function IvrFormModal({ ivr, onClose }: { ivr: Partial<Ivr> | null; onClose: () 
       {previewUrl && (
         <div>
           <label className="label">Preview</label>
-          <audio controls src={previewUrl} className="w-full h-10 rounded-lg" />
+          <audio controls src={previewUrl} className="w-full" />
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-2">
-        <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-        <button type="submit" disabled={saving} className="btn-primary flex items-center gap-1.5">
-          {saving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : isEditing ? 'Save Changes' : 'Create IVR'}
-        </button>
-      </div>
     </form>
   )
 }
@@ -1556,6 +1536,7 @@ function IvrTab() {
   const table = useServerTable()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Ivr | null>(null)
+  const [ivrSaving, setIvrSaving] = useState(false)
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ivrService.delete(id),
@@ -1629,7 +1610,7 @@ function IvrTab() {
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto py-4">
+    <div className="py-4">
       <ServerDataTable<Ivr>
         queryKey={['ivr-list']}
         queryFn={(params) => ivrService.list(params)}
@@ -1676,7 +1657,13 @@ function IvrTab() {
               </button>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-5">
-              <IvrFormModal ivr={editing} onClose={() => setShowModal(false)} />
+              <IvrFormModal ivr={editing} onClose={() => setShowModal(false)} formId="ivr-form" onSavingChange={setIvrSaving} />
+            </div>
+            <div className="flex justify-end gap-3 px-6 pt-4 pb-4 border-t border-slate-100 flex-shrink-0">
+              <button type="button" onClick={() => setShowModal(false)} className="btn-outline">Cancel</button>
+              <button type="submit" form="ivr-form" disabled={ivrSaving} className="btn-primary flex items-center gap-1.5">
+                {ivrSaving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : editing ? 'Save Changes' : 'Create IVR'}
+              </button>
             </div>
           </div>
         </div>
@@ -1699,7 +1686,7 @@ export function Ivr() {
   const [tab, setTab] = useState<MainTab>('ivr')
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex flex-col">
       <div className="flex-shrink-0 px-6 py-4 bg-white border-b border-slate-200">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -1722,7 +1709,7 @@ export function Ivr() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden bg-slate-50 flex flex-col">
+      <div className="bg-slate-50">
         {tab === 'ivr'   && <IvrTab />}
         {tab === 'menu'  && <IvrMenuTab />}
         {tab === 'audio' && <AudioMessagesTab />}

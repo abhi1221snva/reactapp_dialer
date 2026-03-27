@@ -232,6 +232,8 @@ export const crmService = {
     section?: string
     placeholder?: string
     required?: boolean
+    apply_to?: 'affiliate' | 'merchant' | 'both' | null
+    required_in?: string[] | null
     options?: string
     validation_rules?: unknown[]
   }) => api.post('/crm/lead-fields', data),
@@ -278,7 +280,7 @@ export const crmService = {
     api.post('/crm-change-label-status', data),
 
   updateCrmLabelOrder: (ids: number[]) =>
-    api.post('/crm-label/updateDisplayOrder', { ids }),
+    api.post('/crm/lead-fields/reorder', { ids }),
 
   // ── Email Templates ─────────────────────────────────────────────────────────
   getEmailTemplates: (params?: { type?: string }) =>
@@ -376,6 +378,40 @@ export const crmService = {
 
   getLenderApiCredentials: (id: number) =>
     api.get(`/crm-lender-apis/${id}`),
+
+  // ── Lender API Configs (new scalable system) ─────────────────────────────────
+  getLenderApiConfigs: (params?: { lender_id?: number; status?: boolean }) =>
+    api.get('/crm/lender-api-configs', { params }),
+
+  getLenderApiConfig: (id: number) =>
+    api.get(`/crm/lender-api-configs/${id}`),
+
+  createLenderApiConfig: (data: Record<string, unknown>) =>
+    api.post('/crm/lender-api-configs', data),
+
+  updateLenderApiConfig: (id: number, data: Record<string, unknown>) =>
+    api.put(`/crm/lender-api-configs/${id}`, data),
+
+  deleteLenderApiConfig: (id: number) =>
+    api.delete(`/crm/lender-api-configs/${id}`),
+
+  toggleLenderApiConfig: (id: number) =>
+    api.patch(`/crm/lender-api-configs/${id}/toggle`),
+
+  testLenderApiConfig: (id: number, sampleData: Record<string, unknown>) =>
+    api.post(`/crm/lender-api-configs/${id}/test`, { sample_data: sampleData }),
+
+  getLenderApiLogs: (params?: {
+    lender_id?: number; lead_id?: number; crm_lender_api_id?: number;
+    status?: string; date_from?: string; date_to?: string; page?: number; per_page?: number
+  }) =>
+    api.get('/crm/lender-api-logs', { params }),
+
+  getLenderApiLogDetail: (id: number) =>
+    api.get(`/crm/lender-api-logs/${id}`),
+
+  dispatchLenderApi: (leadId: number, lenderId: number) =>
+    api.post(`/crm/lead/${leadId}/dispatch-lender-api`, { lender_id: lenderId }),
 
   // ── Send Lead to Lender (legacy) ─────────────────────────────────────────────
   getLeadLenderHistory: (leadId: number) =>

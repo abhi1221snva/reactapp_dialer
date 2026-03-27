@@ -63,7 +63,15 @@ export function Dialer() {
     queryKey: ['agent-campaigns'],
     queryFn: () => dialerService.getAgentCampaigns(),
   })
-  const campaigns: Campaign[] = campaignsData?.data?.data || []
+  const campaigns: Campaign[] = (campaignsData?.data?.data || []).map((c: Record<string, unknown>) => ({
+    ...c,
+    campaign_name: (c.campaign_name ?? c.title ?? '') as string,
+    status:        (c.campaign_status ?? (Number(c.status) === 1 ? 'active' : 'inactive')) as 'active' | 'inactive',
+    dial_method:   (c.dial_method ?? 'predictive') as Campaign['dial_method'],
+    dial_ratio:    Number(c.dial_ratio ?? c.call_ratio ?? 1),
+    total_leads:   c.total_leads !== undefined ? Number(c.total_leads) : undefined,
+    called_leads:  c.called_leads !== undefined ? Number(c.called_leads) : undefined,
+  }))
 
   // ── Timer helpers ────────────────────────────────────────────────────────────
   const stopTimer = () => {

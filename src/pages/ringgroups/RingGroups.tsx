@@ -6,6 +6,7 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { Modal } from '../../components/ui/Modal'
 import { RowActions } from '../../components/ui/RowActions'
 import { ringgroupService } from '../../services/ringgroup.service'
+import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 
@@ -171,6 +172,7 @@ function RingGroupFormModal({
   isOpen, onClose, editing,
 }: { isOpen: boolean; onClose: () => void; editing: RingGroup | null }) {
   const qc = useQueryClient()
+  const clientId = useAuthStore(s => s.user?.parent_id)
   const [form, setForm] = useState(EMPTY_FORM)
 
   // Tracks whether form.extension has been set for the current modal open.
@@ -178,7 +180,7 @@ function RingGroupFormModal({
   const extInitializedRef = useRef(false)
 
   const { data: extData } = useQuery({
-    queryKey: ['extensions-for-rg'],
+    queryKey: ['extensions-for-rg', clientId],
     queryFn: () => ringgroupService.getExtensions(),
   })
   const extensions: Extension[] = (extData as { data?: { data?: Extension[] } })?.data?.data ?? []

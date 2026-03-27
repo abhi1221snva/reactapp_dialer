@@ -40,6 +40,8 @@ import { CrmEmailTemplates } from './pages/crm/CrmEmailTemplates'
 import { CrmSmsTemplates } from './pages/crm/CrmSmsTemplates'
 import { CrmLenders } from './pages/crm/CrmLenders'
 import { CrmLenderForm } from './pages/crm/CrmLenderForm'
+import { CrmLenderApis } from './pages/crm/CrmLenderApis'
+import { CrmLenderApiLogs } from './pages/crm/CrmLenderApiLogs'
 import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
 import { CrmAutomations } from './pages/crm/CrmAutomations'
 import { CrmSmsInbox } from './pages/crm/CrmSmsInbox'
@@ -168,6 +170,8 @@ export default function App() {
           <Route path="/crm/lenders" element={<CrmLenders />} />
           <Route path="/crm/lenders/create" element={<CrmLenderForm />} />
           <Route path="/crm/lenders/:id/edit" element={<CrmLenderForm />} />
+          <Route path="/crm/lender-api-configs" element={<CrmLenderApis />} />
+          <Route path="/crm/lender-api-logs" element={<CrmLenderApiLogs />} />
           <Route path="/crm/automations" element={<CrmAutomations />} />
           <Route path="/crm/sms-inbox" element={<CrmSmsInbox />} />
           <Route path="/crm/document-types"  element={<CrmDocumentTypes />} />

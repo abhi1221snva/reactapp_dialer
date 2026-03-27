@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { dncService } from '../../services/dnc.service'
+import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime, formatPhoneUS } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
@@ -25,13 +26,14 @@ export function DncList() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
+  const clientId = useAuthStore(s => s.user?.parent_id)
 
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<DncItem | null>(null)
   const [showUpload, setShowUpload] = useState(false)
 
   const { data: extRes } = useQuery({
-    queryKey: ['extensions'],
+    queryKey: ['extensions', clientId],
     queryFn: () => dncService.getExtensions(),
     staleTime: 5 * 60_000,
   })

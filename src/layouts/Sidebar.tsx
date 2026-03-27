@@ -28,6 +28,8 @@ const ADMIN_ALLOWED_ROUTES = new Set([
   '/crm/email-templates',
   '/crm/sms-templates',
   '/crm/lenders',
+  '/crm/lender-api-configs',
+  '/crm/lender-api-logs',
   '/crm/affiliate-links',
   '/crm/company-settings',
   '/crm/sms-inbox',
@@ -264,7 +266,9 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'PARTNERS',
     minLevel: LEVELS.MANAGER,
     items: [
-      { to: '/crm/lenders', label: 'Lenders', icon: Building2, minLevel: LEVELS.MANAGER },
+      { to: '/crm/lenders',          label: 'Lenders',         icon: Building2,  minLevel: LEVELS.MANAGER },
+      { to: '/crm/lender-api-configs', label: 'Lender APIs',   icon: Zap,        minLevel: LEVELS.MANAGER },
+      { to: '/crm/lender-api-logs',  label: 'API Call Logs',   icon: Activity,   minLevel: LEVELS.MANAGER },
     ],
   },
   {

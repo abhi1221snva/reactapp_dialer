@@ -60,6 +60,15 @@ export interface CrmLabel {
   conditions?: FieldCondition[] | null
   validation_rules?: ValidationRule[] | null
   required: boolean
+  /** Controls which public forms this field appears on and is required in.
+   *  null     → no restriction (shown on all forms)
+   *  affiliate → affiliate apply form only
+   *  merchant  → merchant portal form only
+   *  both      → both affiliate and merchant forms
+   *  The internal CRM (system) form always shows all fields regardless. */
+  apply_to?: 'affiliate' | 'merchant' | 'both' | null
+  /** Per-context required config. null → fall back to legacy `required` boolean. */
+  required_in?: string[] | null
   display_order: number
   status: boolean
   created_at?: string

@@ -793,11 +793,16 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
 // ── Lenders Panel ──────────────────────────────────────────────────────────────
 /** Replace [[field_key]] placeholders with actual lead values. */
 function fillPlaceholders(html: string, lead: Record<string, unknown>): string {
-  return html.replace(/\[\[(\w+)\]\]/g, (match, key: string) => {
+  const resolve = (match: string, key: string) => {
     const val = lead[key]
     return val !== null && val !== undefined && val !== '' ? String(val) : match
-  })
+  }
+  return html
+    .replace(/\[\[(\w+)\]\]/g, resolve)
+    .replace(/\{\{(\w+)\}\}/g, resolve)
 }
+
+interface LenderApiCfg { id: number; crm_lender_id: number; lender_name?: string; api_name: string; status: boolean | number }
 
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
@@ -809,6 +814,12 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const [uploadingDocs, setUploadingDocs] = useState(false)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // API dispatch state
+  const [apiLenderId, setApiLenderId]     = useState<number | ''>('')
+  const [waitingForLog, setWaitingForLog] = useState(false)
+  const [preDispatchMaxId, setPreDispatchMaxId] = useState(0)
+  const [waitStartedAt, setWaitStartedAt] = useState(0)
 
   // Re-use cached lead data (already fetched by parent — no extra request)
   const { data: leadData } = useQuery({
@@ -851,7 +862,100 @@ function LendersPanel({ leadId }: { leadId: number }) {
     },
   })
 
+  const { data: apiConfigs } = useQuery({
+    queryKey: ['lender-api-configs'],
+    queryFn: async () => {
+      const res = await crmService.getLenderApiConfigs()
+      return (res.data?.data ?? []) as LenderApiCfg[]
+    },
+    staleTime: 60_000,
+  })
+
+  interface ApiLog {
+    id: number; crm_lender_api_id: number; lender_id: number; lead_id: number
+    request_url: string; request_method: string; response_code: number | null
+    response_body: string | null; status: string; error_message: string | null
+    duration_ms: number; attempt: number; created_at: string; api_name?: string; lender_name?: string
+  }
+
+  const { data: apiLogs, isLoading: apiLogsLoading } = useQuery({
+    queryKey: ['lead-api-logs', leadId],
+    queryFn: async () => {
+      const res = await crmService.getLenderApiLogs({ lead_id: leadId, per_page: 50 })
+      return (res.data?.data?.data ?? res.data?.data ?? []) as ApiLog[]
+    },
+    refetchInterval: waitingForLog ? 2_000 : 15_000,
+  })
+
+  // Stop polling if result arrived or 90s elapsed
+  useEffect(() => {
+    if (!waitingForLog) return
+    const newLog = (apiLogs ?? []).find(l => l.id > preDispatchMaxId)
+    if (newLog) { setWaitingForLog(false); return }
+    if (Date.now() - waitStartedAt > 90_000) setWaitingForLog(false)
+  }, [apiLogs, waitingForLog, preDispatchMaxId, waitStartedAt])
+
+  const pendingLog = waitingForLog
+    ? (apiLogs ?? []).find(l => l.id > preDispatchMaxId) ?? null
+    : null
+
+  const dispatchMutation = useMutation({
+    mutationFn: () => crmService.dispatchLenderApi(leadId, Number(apiLenderId)),
+    onSuccess: () => {
+      const maxId = Math.max(0, ...(apiLogs ?? []).map(l => l.id))
+      setPreDispatchMaxId(maxId)
+      setWaitStartedAt(Date.now())
+      setWaitingForLog(true)
+      setApiLenderId('')
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg ?? 'Failed to dispatch API call')
+    },
+  })
+
+  function describeApiError(log: ApiLog): { title: string; details: string[] } {
+    if (log.status === 'timeout') return {
+      title: 'Connection timed out',
+      details: ['The lender server did not respond within the timeout window.', 'Possible causes: server is temporarily down, rate-limited, or blocking this IP.'],
+    }
+    const code = log.response_code
+    const body = log.response_body ?? ''
+    let parsed: Record<string, unknown> | null = null
+    try { if (body) parsed = JSON.parse(body) } catch { /* ignore */ }
+    const errorMsgs = (parsed as { errorMessages?: string[] } | null)?.errorMessages
+
+    if (code === 400) {
+      if (!body) return {
+        title: 'Request rejected — no details returned (HTTP 400)',
+        details: [
+          'The lender server returned an empty error response.',
+          'Most likely causes:',
+          '  • This server\'s IP (54.81.130.120) is not whitelisted by the lender',
+          '  • API credentials are expired or invalid',
+          '  • Required configuration is missing (base_url, endpoint_path)',
+        ],
+      }
+      if (errorMsgs?.length) return {
+        title: 'Validation errors from lender (HTTP 400)',
+        details: errorMsgs.map(m => `• ${m}`),
+      }
+      return { title: `Bad request (HTTP 400)`, details: [body.slice(0, 300)] }
+    }
+    if (code === 401) return { title: 'Authentication failed (HTTP 401)', details: ['API credentials are invalid or expired. Update the API key / token in Lender API Configs.'] }
+    if (code === 403) return { title: 'Access forbidden (HTTP 403)', details: ['This server\'s IP may not be whitelisted by the lender. Contact your lender account manager.'] }
+    if (code === 404) return { title: 'Endpoint not found (HTTP 404)', details: ['The API URL is incorrect. Check base_url and endpoint_path in Lender API Configs.'] }
+    if (code && code >= 500) return { title: `Lender server error (HTTP ${code})`, details: ['The lender\'s server encountered an internal error. Try again later.'] }
+    if (log.error_message) return { title: 'Request failed', details: [log.error_message] }
+    return { title: `HTTP ${code ?? 'unknown'}`, details: [body.slice(0, 300)] }
+  }
+
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
+  // Lenders that have at least one active API config
+  const activeApiConfigs = (apiConfigs ?? []).filter(c => c.status === true || c.status === 1)
+  const apiLenders = (lendersData ?? []).filter(l =>
+    activeApiConfigs.some(c => c.crm_lender_id === l.id)
+  )
   // Deduplicate by lender_id — keep the latest submission per lender
   const subList = Object.values(
     (submissions ?? []).reduce<Record<number, LenderSubmission>>((acc, s) => {
@@ -1178,6 +1282,94 @@ function LendersPanel({ leadId }: { leadId: number }) {
         )
       })()}
 
+      {/* ── API Dispatch ── */}
+      <div className="border border-indigo-100 rounded-xl bg-indigo-50/40 p-3 space-y-2">
+        <p className="text-[11px] font-semibold text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
+          <Zap size={11} /> Submit via Lender API
+        </p>
+        {activeApiConfigs.length === 0 ? (
+          <p className="text-xs text-slate-400">
+            No active API configs. Set them up at{' '}
+            <a href="/crm/lender-api-configs" className="text-indigo-500 hover:underline" target="_blank" rel="noreferrer">
+              Lender API Configs
+            </a>.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <select
+                className="input flex-1 text-sm h-8"
+                value={apiLenderId}
+                onChange={e => setApiLenderId(e.target.value === '' ? '' : Number(e.target.value))}
+                disabled={waitingForLog}
+              >
+                <option value="">Select lender…</option>
+                {apiLenders.length > 0
+                  ? apiLenders.map(l => (
+                      <option key={l.id} value={l.id}>{l.lender_name}</option>
+                    ))
+                  : activeApiConfigs.map(c => (
+                      <option key={c.crm_lender_id} value={c.crm_lender_id}>
+                        {c.lender_name ?? c.api_name}
+                      </option>
+                    ))
+                }
+              </select>
+              <button
+                onClick={() => dispatchMutation.mutate()}
+                disabled={!apiLenderId || dispatchMutation.isPending || waitingForLog}
+                className="btn-primary flex items-center gap-1.5 h-8 px-3 text-xs disabled:opacity-50 flex-shrink-0"
+              >
+                {dispatchMutation.isPending
+                  ? <><Loader2 size={11} className="animate-spin" /> Queuing…</>
+                  : <><Zap size={11} /> Send via API</>
+                }
+              </button>
+            </div>
+
+            {/* Live result feedback */}
+            {waitingForLog && !pendingLog && (
+              <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
+                <Loader2 size={13} className="animate-spin text-indigo-500 flex-shrink-0" />
+                <span className="text-xs text-indigo-700">Submitting to lender — waiting for response…</span>
+              </div>
+            )}
+
+            {/* Result appeared */}
+            {pendingLog && (() => {
+              const isSuccess = pendingLog.status === 'success'
+              if (isSuccess) {
+                let parsed: Record<string, unknown> | null = null
+                try { if (pendingLog.response_body) parsed = JSON.parse(pendingLog.response_body) } catch { /* ignore */ }
+                const appNum = (parsed as { applicationNumber?: string } | null)?.applicationNumber
+                const bizId  = (parsed as { businessID?: string } | null)?.businessID
+                return (
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 space-y-0.5">
+                    <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Application submitted successfully
+                    </p>
+                    {appNum && <p className="text-xs text-emerald-600">Application #: <span className="font-mono font-medium">{appNum}</span></p>}
+                    {bizId  && <p className="text-xs text-emerald-600">Business ID: <span className="font-mono font-medium">{bizId}</span></p>}
+                  </div>
+                )
+              }
+              const { title, details } = describeApiError(pendingLog)
+              return (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 space-y-1">
+                  <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> {title}
+                  </p>
+                  {details.map((d, i) => (
+                    <p key={i} className="text-xs text-red-600 whitespace-pre-wrap">{d}</p>
+                  ))}
+                  <p className="text-[10px] text-red-400 mt-1">Full log saved — see API Call History below</p>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+      </div>
+
       {/* ── Submission History ── */}
       <div>
         <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
@@ -1193,6 +1385,81 @@ function LendersPanel({ leadId }: { leadId: number }) {
             {subList.map(s => (
               <SubmissionRow key={s.id} sub={s} leadId={leadId} />
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── API Call History ── */}
+      <div>
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
+          API Call History {(apiLogs ?? []).length > 0 && <span className="font-normal">({(apiLogs ?? []).length})</span>}
+        </p>
+
+        {apiLogsLoading ? (
+          <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
+        ) : (apiLogs ?? []).length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-6">No API calls yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {(apiLogs ?? []).map(log => {
+              const isSuccess = log.status === 'success'
+              const isTimeout = log.status === 'timeout'
+              const statusCfg = isSuccess
+                ? { bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Success' }
+                : isTimeout
+                ? { bg: 'bg-amber-50 border-amber-200',   text: 'text-amber-700',   dot: 'bg-amber-400',   label: 'Timeout' }
+                : { bg: 'bg-red-50 border-red-200',       text: 'text-red-700',     dot: 'bg-red-500',     label: log.status === 'error' ? 'Error' : `HTTP ${log.response_code ?? '?'}` }
+
+              let parsedResponse: Record<string, unknown> | null = null
+              try { if (log.response_body) parsedResponse = JSON.parse(log.response_body) } catch { /* ignore */ }
+              const businessId = (parsedResponse as { businessID?: string } | null)?.businessID
+              const appNumber  = (parsedResponse as { applicationNumber?: string } | null)?.applicationNumber
+              const errInfo    = !isSuccess ? describeApiError(log) : null
+
+              return (
+                <div key={log.id} className={`rounded-lg border p-3 ${statusCfg.bg}`}>
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
+                        {statusCfg.label}
+                      </span>
+                      <span className="text-xs font-medium text-slate-600 truncate">
+                        {log.lender_name ?? log.api_name ?? `API #${log.crm_lender_api_id}`}
+                      </span>
+                      {log.attempt > 1 && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                          Attempt {log.attempt}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex-shrink-0 text-right">
+                      <div>{new Date(log.created_at).toLocaleString()}</div>
+                      <div>{log.duration_ms}ms</div>
+                    </div>
+                  </div>
+
+                  {/* Success details */}
+                  {isSuccess && (appNumber || businessId) && (
+                    <div className="mt-2 text-xs text-emerald-700 space-y-0.5">
+                      {appNumber && <p><span className="font-medium">Application #:</span> <span className="font-mono">{appNumber}</span></p>}
+                      {businessId && <p><span className="font-medium">Business ID:</span> <span className="font-mono">{businessId}</span></p>}
+                    </div>
+                  )}
+
+                  {/* Error details */}
+                  {errInfo && (
+                    <div className="mt-2 space-y-1">
+                      <p className={`text-xs font-semibold ${statusCfg.text}`}>{errInfo.title}</p>
+                      {errInfo.details.map((d, i) => (
+                        <p key={i} className={`text-xs ${statusCfg.text} opacity-80 whitespace-pre-wrap`}>{d}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -2148,7 +2415,9 @@ function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultT
     queryKey: ['sms-sender-numbers'],
     queryFn: async () => {
       const res = await crmService.getSmsSenderNumbers()
-      return (res.data?.data ?? res.data?.numbers ?? res.data ?? []) as { phone_number: string; friendly_name?: string }[]
+      // API returns { success, message, data: { numbers: [...] } }
+      const arr = res.data?.data?.numbers ?? res.data?.numbers ?? res.data?.data ?? []
+      return (Array.isArray(arr) ? arr : []) as { phone_number: string; friendly_name?: string }[]
     },
     staleTime: 60 * 1000,
   })
@@ -2156,10 +2425,24 @@ function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultT
   const { data: templates } = useQuery({
     queryKey: ['sms-templates'],
     queryFn: async () => {
-      const res = await crmService.getSmsTemplates()
-      return (res.data?.data ?? res.data ?? []) as SmsTemplate[]
+      const res  = await crmService.getSmsTemplates()
+      const rows = (res.data?.data ?? res.data ?? []) as Record<string, unknown>[]
+      // Normalise field names: backend returns template_name/template_html
+      return rows.map(r => ({
+        ...r,
+        sms_template_name: r.template_name ?? r.sms_template_name ?? '',
+        sms_template:      r.template_html  ?? r.sms_template      ?? '',
+        status: Number(r.status) as 0 | 1,
+      })) as SmsTemplate[]
     },
     staleTime: 60 * 1000,
+  })
+
+  // Reuse cached lead data for client-side merge tag preview
+  const { data: leadData } = useQuery({
+    queryKey: ['crm-lead', leadId],
+    queryFn: async () => (r => (r.data?.data ?? r.data) as CrmLead)(await leadService.getById(leadId)),
+    staleTime: 5 * 60 * 1000,
   })
 
   // Auto-select first sender number
@@ -2173,7 +2456,13 @@ function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultT
     setSelectedTpl(tplId)
     if (tplId === '') { setBody(''); return }
     const tpl = (templates ?? []).find(t => t.id === tplId)
-    if (tpl) setBody(tpl.sms_template)
+    if (tpl) {
+      // Apply client-side merge tag substitution for instant preview
+      const resolved = leadData
+        ? fillPlaceholders(tpl.sms_template, leadData as Record<string, unknown>)
+        : tpl.sms_template
+      setBody(resolved)
+    }
   }
 
   const send = useMutation({
