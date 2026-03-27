@@ -261,6 +261,48 @@ export interface UpdateSubmissionResponsePayload {
   response_note?: string
 }
 
+// ─── Lender API Error Handling ────────────────────────────────────────────────
+
+/** fix_type values returned by the backend ErrorParserService */
+export type LenderFixType =
+  | 'state_code'
+  | 'phone'
+  | 'zip'
+  | 'required'
+  | 'email'
+  | 'date'
+  | 'ein'
+  | 'numeric'
+  | 'length'
+  | 'unknown'
+
+/** A single parsed error from the backend ErrorParserService */
+export interface ParsedApiError {
+  field:       string      // dot-notation path, e.g. "owners.0.homeAddress.state"
+  raw_message: string      // original message string from the lender
+  message:     string      // user-friendly rewrite
+  fix_type:    LenderFixType
+  expected:    string      // e.g. "2-letter US state code (e.g. NY, CA)"
+  path_parts:  string[]    // exploded path segments
+}
+
+/** ParsedApiError enriched with current value + auto-fix metadata */
+export interface FixSuggestion extends ParsedApiError {
+  crm_key:        string        // CRM EAV field_key to update
+  current_value:  string | null // current value from the lead record
+  auto_fix_value: string | null // suggested corrected value (e.g. "CA")
+  can_auto_fix:   boolean       // true → backend has a deterministic conversion
+  suggestion:     string        // plain-English suggestion (e.g. 'Convert "California" → "CA"')
+}
+
+/** Payload for POST /crm/lead/{id}/apply-lender-fix */
+export interface ApplyLenderFixPayload {
+  field_key:  string
+  new_value:  string
+  lender_id?: number
+  resubmit?:  boolean
+}
+
 // ─── Automation Rule ─────────────────────────────────────────────────────────
 
 export type AutomationTrigger =

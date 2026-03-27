@@ -413,6 +413,9 @@ export const crmService = {
   dispatchLenderApi: (leadId: number, lenderId: number) =>
     api.post(`/crm/lead/${leadId}/dispatch-lender-api`, { lender_id: lenderId }),
 
+  applyLenderFix: (leadId: number, data: import('../types/crm.types').ApplyLenderFixPayload) =>
+    api.post(`/crm/lead/${leadId}/apply-lender-fix`, data),
+
   // ── Send Lead to Lender (legacy) ─────────────────────────────────────────────
   getLeadLenderHistory: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/lender-submissions`),
