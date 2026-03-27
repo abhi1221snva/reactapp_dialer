@@ -1070,10 +1070,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // API dispatch state
-  const [apiLenderId, setApiLenderId]     = useState<number | ''>('')
-  const [waitingForLog, setWaitingForLog] = useState(false)
-  const [preDispatchMaxId, setPreDispatchMaxId] = useState(0)
-  const [waitStartedAt, setWaitStartedAt] = useState(0)
+  const [apiLenderId, setApiLenderId] = useState<number | ''>('')
+  const [dispatched, setDispatched]   = useState(false)
 
   // Re-use cached lead data (already fetched by parent — no extra request)
   const { data: leadData } = useQuery({
@@ -1134,33 +1132,25 @@ function LendersPanel({ leadId }: { leadId: number }) {
       const res = await crmService.getLenderApiLogs({ lead_id: leadId, per_page: 50 })
       return (res.data?.data?.data ?? res.data?.data ?? []) as ApiLog[]
     },
-    refetchInterval: waitingForLog ? 2_000 : 15_000,
+    refetchInterval: 15_000,
   })
-
-  // Stop polling if result arrived or 90s elapsed
-  useEffect(() => {
-    if (!waitingForLog) return
-    const newLog = (apiLogs ?? []).find(l => l.id > preDispatchMaxId)
-    if (newLog) { setWaitingForLog(false); return }
-    if (Date.now() - waitStartedAt > 90_000) setWaitingForLog(false)
-  }, [apiLogs, waitingForLog, preDispatchMaxId, waitStartedAt])
-
-  const pendingLog = waitingForLog
-    ? (apiLogs ?? []).find(l => l.id > preDispatchMaxId) ?? null
-    : null
 
   const dispatchMutation = useMutation({
     mutationFn: () => crmService.dispatchLenderApi(leadId, Number(apiLenderId)),
     onSuccess: () => {
-      const maxId = Math.max(0, ...(apiLogs ?? []).map(l => l.id))
-      setPreDispatchMaxId(maxId)
-      setWaitStartedAt(Date.now())
-      setWaitingForLog(true)
+      toast.success('Submitted to lender API — check API Call History for results')
+      setDispatched(true)
       setApiLenderId('')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast.error(msg ?? 'Failed to dispatch API call')
+      const res = (err as { response?: { data?: { message?: string; missing_fields?: string[] } } })?.response
+      const msg  = res?.data?.message
+      const missing = res?.data?.missing_fields
+      if (missing?.length) {
+        toast.error(`Missing required fields: ${missing.slice(0, 5).join(', ')}`)
+      } else {
+        toast.error(msg ?? 'Failed to submit to lender API')
+      }
     },
   })
 
@@ -1550,8 +1540,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
               <select
                 className="input flex-1 text-sm h-8"
                 value={apiLenderId}
-                onChange={e => setApiLenderId(e.target.value === '' ? '' : Number(e.target.value))}
-                disabled={waitingForLog}
+                onChange={e => { setApiLenderId(e.target.value === '' ? '' : Number(e.target.value)); setDispatched(false) }}
               >
                 <option value="">Select lender…</option>
                 {apiLenders.length > 0
@@ -1567,66 +1556,23 @@ function LendersPanel({ leadId }: { leadId: number }) {
               </select>
               <button
                 onClick={() => dispatchMutation.mutate()}
-                disabled={!apiLenderId || dispatchMutation.isPending || waitingForLog}
+                disabled={!apiLenderId || dispatchMutation.isPending}
                 className="btn-primary flex items-center gap-1.5 h-8 px-3 text-xs disabled:opacity-50 flex-shrink-0"
               >
                 {dispatchMutation.isPending
-                  ? <><Loader2 size={11} className="animate-spin" /> Queuing…</>
+                  ? <><Loader2 size={11} className="animate-spin" /> Sending…</>
                   : <><Zap size={11} /> Send via API</>
                 }
               </button>
             </div>
 
-            {/* Live result feedback */}
-            {waitingForLog && !pendingLog && (
-              <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
-                <Loader2 size={13} className="animate-spin text-indigo-500 flex-shrink-0" />
-                <span className="text-xs text-indigo-700">Submitting to lender — waiting for response…</span>
+            {/* Immediate queued confirmation */}
+            {dispatched && !apiLenderId && (
+              <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block flex-shrink-0" />
+                <span className="text-xs text-emerald-700">Submitted to lender API queue. Results will appear in API Call History below.</span>
               </div>
             )}
-
-            {/* Result appeared */}
-            {pendingLog && (() => {
-              const isSuccess = pendingLog.status === 'success'
-              if (isSuccess) {
-                let parsed: Record<string, unknown> | null = null
-                try { if (pendingLog.response_body) parsed = JSON.parse(pendingLog.response_body) } catch { /* ignore */ }
-                const appNum = (parsed as { applicationNumber?: string } | null)?.applicationNumber
-                const bizId  = (parsed as { businessID?: string } | null)?.businessID
-                return (
-                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 space-y-0.5">
-                    <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Application submitted successfully
-                    </p>
-                    {appNum && <p className="text-xs text-emerald-600">Application #: <span className="font-mono font-medium">{appNum}</span></p>}
-                    {bizId  && <p className="text-xs text-emerald-600">Business ID: <span className="font-mono font-medium">{bizId}</span></p>}
-                  </div>
-                )
-              }
-
-              // ── Structured error display ──────────────────────────────────
-              const { title, details } = describeApiError(pendingLog)
-              const hasFixes = (Array.isArray(pendingLog.fix_suggestions) ? pendingLog.fix_suggestions
-                : Array.isArray(pendingLog.error_json) ? pendingLog.error_json : []).length > 0
-              return (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
-                  <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block flex-shrink-0" /> {title}
-                  </p>
-                  {hasFixes ? (
-                    <LenderErrorList
-                      log={pendingLog}
-                      onFix={err => setFixModal({ log: pendingLog, error: err })}
-                    />
-                  ) : (
-                    details.map((d, i) => (
-                      <p key={i} className="text-xs text-red-600 whitespace-pre-wrap">{d}</p>
-                    ))
-                  )}
-                  <p className="text-[10px] text-red-400">Full log saved — see API Call History below</p>
-                </div>
-              )
-            })()}
           </div>
         )}
       </div>
@@ -1659,10 +1605,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
           onClose={() => setFixModal(null)}
           onFixed={() => {
             setFixModal(null)
-            // Refresh logs after fix so history reflects the resubmit
-            setPreDispatchMaxId(Math.max(0, ...(apiLogs ?? []).map(l => l.id)))
-            setWaitStartedAt(Date.now())
-            setWaitingForLog(true)
+            qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
           }}
         />
       )}
