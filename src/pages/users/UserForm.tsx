@@ -88,26 +88,26 @@ const DID_DEST_LABEL: Record<number, string> = {
 }
 
 const COUNTRY_CODES = [
-  { code: '+1',   label: 'US/Canada' },
-  { code: '+44',  label: 'UK' },
-  { code: '+61',  label: 'Australia' },
-  { code: '+33',  label: 'France' },
-  { code: '+49',  label: 'Germany' },
-  { code: '+91',  label: 'India' },
-  { code: '+81',  label: 'Japan' },
-  { code: '+86',  label: 'China' },
-  { code: '+55',  label: 'Brazil' },
-  { code: '+52',  label: 'Mexico' },
-  { code: '+34',  label: 'Spain' },
-  { code: '+39',  label: 'Italy' },
-  { code: '+7',   label: 'Russia' },
-  { code: '+971', label: 'UAE' },
-  { code: '+966', label: 'Saudi Arabia' },
-  { code: '+92',  label: 'Pakistan' },
-  { code: '+27',  label: 'South Africa' },
-  { code: '+63',  label: 'Philippines' },
-  { code: '+60',  label: 'Malaysia' },
-  { code: '+65',  label: 'Singapore' },
+  { code: '+1',   short: 'US',  label: '+1 United States / Canada' },
+  { code: '+44',  short: 'UK',  label: '+44 United Kingdom' },
+  { code: '+61',  short: 'AU',  label: '+61 Australia' },
+  { code: '+33',  short: 'FR',  label: '+33 France' },
+  { code: '+49',  short: 'DE',  label: '+49 Germany' },
+  { code: '+91',  short: 'IN',  label: '+91 India' },
+  { code: '+81',  short: 'JP',  label: '+81 Japan' },
+  { code: '+86',  short: 'CN',  label: '+86 China' },
+  { code: '+55',  short: 'BR',  label: '+55 Brazil' },
+  { code: '+52',  short: 'MX',  label: '+52 Mexico' },
+  { code: '+34',  short: 'ES',  label: '+34 Spain' },
+  { code: '+39',  short: 'IT',  label: '+39 Italy' },
+  { code: '+7',   short: 'RU',  label: '+7 Russia' },
+  { code: '+971', short: 'UAE', label: '+971 United Arab Emirates' },
+  { code: '+966', short: 'SA',  label: '+966 Saudi Arabia' },
+  { code: '+92',  short: 'PK',  label: '+92 Pakistan' },
+  { code: '+27',  short: 'ZA',  label: '+27 South Africa' },
+  { code: '+63',  short: 'PH',  label: '+63 Philippines' },
+  { code: '+60',  short: 'MY',  label: '+60 Malaysia' },
+  { code: '+65',  short: 'SG',  label: '+65 Singapore' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -206,6 +206,7 @@ function ToggleChip({ label, on, onToggle }: { label: string; on: boolean; onTog
     </button>
   )
 }
+
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -528,7 +529,6 @@ export function UserForm() {
                 />
               </Field>
             </div>
-
             <Field label="Email Address" required error={errors.email}>
               <input
                 type="email"
@@ -538,16 +538,15 @@ export function UserForm() {
                 placeholder="user@company.com"
               />
             </Field>
-
             <Field label="Phone Number" required hint="10-digit US format" error={errors.mobile}>
               <div className="flex gap-2">
                 <select
-                  className="input flex-shrink-0 w-24"
+                  className="input flex-shrink-0 w-28"
                   value={form.country_code}
                   onChange={e => set('country_code', e.target.value)}
                 >
                   {COUNTRY_CODES.map(c => (
-                    <option key={c.code} value={c.code}>{c.code}</option>
+                    <option key={c.code} value={c.code}>{c.code} {c.short}</option>
                   ))}
                 </select>
                 <input
@@ -567,8 +566,6 @@ export function UserForm() {
         <div className="card">
           <CSectionHeader icon={<KeyRound size={13} />} title="Account Setup" />
           <div className="space-y-3">
-
-            {/* Extension */}
             <Field
               label="Extension"
               hint={isEdit ? 'Cannot be changed after creation' : 'Auto-generated 4-digit'}
@@ -593,8 +590,6 @@ export function UserForm() {
                 )}
               </div>
             </Field>
-
-            {/* Password */}
             {isEdit ? (
               <Field label="New Password" hint="Leave blank to keep current" error={errors.password}>
                 <div className="flex gap-2">
@@ -624,35 +619,18 @@ export function UserForm() {
                     value={form.password}
                     readOnly
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="btn-ghost p-2 rounded-lg border border-slate-200 hover:bg-slate-100"
-                    title={showPassword ? 'Hide' : 'Show'}
-                  >
+                  <button type="button" onClick={() => setShowPassword(v => !v)} className="btn-ghost p-2 rounded-lg border border-slate-200 hover:bg-slate-100" title={showPassword ? 'Hide' : 'Show'}>
                     {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(form.password)}
-                    className="btn-ghost p-2 rounded-lg border border-slate-200 hover:bg-slate-100"
-                    title="Copy password"
-                  >
+                  <button type="button" onClick={() => copyToClipboard(form.password)} className="btn-ghost p-2 rounded-lg border border-slate-200 hover:bg-slate-100" title="Copy password">
                     <Copy size={14} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => set('password', genPassword())}
-                    className="btn-ghost p-2 rounded-lg border border-slate-200 hover:bg-slate-100"
-                    title="Regenerate"
-                  >
+                  <button type="button" onClick={() => set('password', genPassword())} className="btn-ghost p-2 rounded-lg border border-slate-200 hover:bg-slate-100" title="Regenerate">
                     <RefreshCw size={14} />
                   </button>
                 </div>
               </Field>
             )}
-
-            {/* Asterisk Server */}
             {servers.length > 0 && (
               <Field label="Asterisk Server" required={!isEdit} error={errors.asterisk_server_id}>
                 <select
@@ -676,61 +654,18 @@ export function UserForm() {
         <div className="card">
           <CSectionHeader icon={<Shield size={13} />} title="Role & System" />
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Access Level">
-                <select
-                  className="input"
-                  value={form.user_level}
-                  onChange={e => set('user_level', Number(e.target.value))}
-                >
-                  <option value={1}>Agent</option>
-                  <option value={5}>Manager</option>
-                  <option value={7}>Admin</option>
-                  <option value={10}>Super Admin</option>
-                </select>
-              </Field>
-              <Field label="Status">
-                <select
-                  className="input"
-                  value={form.status}
-                  onChange={e => set('status', Number(e.target.value))}
-                >
-                  <option value={1}>Active</option>
-                  <option value={0}>Inactive</option>
-                </select>
-              </Field>
-            </div>
-
             <Field label="Extension Type">
-              <select
-                className="input"
-                value={form.extension_type}
-                onChange={e => set('extension_type', e.target.value)}
-              >
-                {EXTENSION_TYPES.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
+              <select className="input" value={form.extension_type} onChange={e => set('extension_type', e.target.value)}>
+                {EXTENSION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </Field>
-
             <Field label="Dialer Mode">
-              <select
-                className="input"
-                value={form.dialer_mode}
-                onChange={e => set('dialer_mode', e.target.value)}
-              >
-                {DIALER_MODES.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
+              <select className="input" value={form.dialer_mode} onChange={e => set('dialer_mode', e.target.value)}>
+                {DIALER_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </Field>
-
             <Field label="Timezone">
-              <select
-                className="input"
-                value={form.timezone}
-                onChange={e => set('timezone', e.target.value)}
-              >
+              <select className="input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
                 {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
               </select>
             </Field>
@@ -745,22 +680,18 @@ export function UserForm() {
         <div className="card">
           <CSectionHeader icon={<PhoneForwarded size={13} />} title="Features & Call Routing" />
           <div className="space-y-4">
-
-            {/* Toggle Grid — 2 columns, compact chips */}
             <div className="grid grid-cols-2 gap-2">
-              <ToggleChip label="Follow Me"      on={form.follow_me === 1}              onToggle={() => toggle('follow_me')} />
-              <ToggleChip label="Call Forward"   on={form.call_forward === 1}           onToggle={() => toggle('call_forward')} />
-              <ToggleChip label="Twinning"       on={form.twinning === 1}               onToggle={() => toggle('twinning')} />
-              <ToggleChip label="Voicemail"      on={form.voicemail === 1}              onToggle={() => toggle('voicemail')} />
+              <ToggleChip label="Follow Me"      on={form.follow_me === 1}               onToggle={() => toggle('follow_me')} />
+              <ToggleChip label="Call Forward"   on={form.call_forward === 1}            onToggle={() => toggle('call_forward')} />
+              <ToggleChip label="Twinning"       on={form.twinning === 1}                onToggle={() => toggle('twinning')} />
+              <ToggleChip label="Voicemail"      on={form.voicemail === 1}               onToggle={() => toggle('voicemail')} />
               <ToggleChip label="VM → Email"     on={form.voicemail_send_to_email === 1} onToggle={() => toggle('voicemail_send_to_email')} />
-              <ToggleChip label="IP Filtering"   on={form.ip_filtering === 1}           onToggle={() => toggle('ip_filtering')} />
-              <ToggleChip label="Enable 2FA"     on={form.enable_2fa === 1}             onToggle={() => toggle('enable_2fa')} />
-              <ToggleChip label="Mobile App"     on={form.app_status === 1}             onToggle={() => toggle('app_status')} />
-              <ToggleChip label="SMS → Email"    on={form.receive_sms_on_email === 1}   onToggle={() => toggle('receive_sms_on_email')} />
-              <ToggleChip label="SMS → Phone"    on={form.receive_sms_on_mobile === 1}  onToggle={() => toggle('receive_sms_on_mobile')} />
+              <ToggleChip label="IP Filtering"   on={form.ip_filtering === 1}            onToggle={() => toggle('ip_filtering')} />
+              <ToggleChip label="Enable 2FA"     on={form.enable_2fa === 1}              onToggle={() => toggle('enable_2fa')} />
+              <ToggleChip label="Mobile App"     on={form.app_status === 1}              onToggle={() => toggle('app_status')} />
+              <ToggleChip label="SMS → Email"    on={form.receive_sms_on_email === 1}    onToggle={() => toggle('receive_sms_on_email')} />
+              <ToggleChip label="SMS → Phone"    on={form.receive_sms_on_mobile === 1}   onToggle={() => toggle('receive_sms_on_mobile')} />
             </div>
-
-            {/* Redirect destination info banner */}
             {redirectActive && (
               <div className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-xs border',
@@ -775,8 +706,31 @@ export function UserForm() {
                 }
               </div>
             )}
-
-            {/* No Answer Redirect */}
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <Field label="CLI Setting">
+                <select className="input" value={form.cli_setting} onChange={e => set('cli_setting', Number(e.target.value))}>
+                  {CLI_SETTINGS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </Field>
+              {form.cli_setting === 1 && (
+                <Field label="Custom CLI" hint="Select a DID to display as caller ID">
+                  <select className="input" value={form.cli} onChange={e => set('cli', e.target.value)}>
+                    <option value="">— Select DID —</option>
+                    {dids.map(d => {
+                      const raw = d as Record<string, unknown>
+                      const destLabel = DID_DEST_LABEL[Number(raw.dest_type)] ?? 'Other'
+                      const cnam = (raw.cnam as string) || ''
+                      const number = d.cli || `DID #${d.id}`
+                      return (
+                        <option key={d.id} value={d.cli ?? ''}>
+                          {`${number}${cnam ? ` - ${cnam}` : ''} - ${destLabel}`}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </Field>
+              )}
+            </div>
             <div className="pt-2 border-t border-slate-100">
               <label className="flex items-start gap-2.5 cursor-pointer select-none">
                 <input
@@ -803,47 +757,8 @@ export function UserForm() {
                     placeholder="(555) 555-5555"
                     maxLength={14}
                   />
-                  {errors.no_answer_phone && (
-                    <p className="text-xs text-red-500">{errors.no_answer_phone}</p>
-                  )}
+                  {errors.no_answer_phone && <p className="text-xs text-red-500">{errors.no_answer_phone}</p>}
                 </div>
-              )}
-            </div>
-
-            {/* CLI Settings */}
-            <div className="pt-2 border-t border-slate-100 space-y-3">
-              <Field label="CLI Setting">
-                <select
-                  className="input"
-                  value={form.cli_setting}
-                  onChange={e => set('cli_setting', Number(e.target.value))}
-                >
-                  {CLI_SETTINGS.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              </Field>
-              {form.cli_setting === 1 && (
-                <Field label="Custom CLI" hint="Select a DID to display as caller ID">
-                  <select
-                    className="input"
-                    value={form.cli}
-                    onChange={e => set('cli', e.target.value)}
-                  >
-                    <option value="">— Select DID —</option>
-                    {dids.map(d => {
-                      const raw = d as Record<string, unknown>
-                      const destLabel = DID_DEST_LABEL[Number(raw.dest_type)] ?? 'Other'
-                      const cnam = (raw.cnam as string) || ''
-                      const number = d.cli || `DID #${d.id}`
-                      return (
-                        <option key={d.id} value={d.cli ?? ''}>
-                          {`${number}${cnam ? ` - ${cnam}` : ''} - ${destLabel}`}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </Field>
               )}
             </div>
           </div>
@@ -852,8 +767,6 @@ export function UserForm() {
         {/* Card 5: Voicemail PIN + Agent Groups */}
         <div className="card">
           <div className="space-y-4">
-
-            {/* VM PIN */}
             <div>
               <CSectionHeader icon={<Voicemail size={13} />} title="Voicemail PIN" />
               <Field label="VM PIN" hint="4–6 digit PIN for accessing voicemail">
@@ -877,37 +790,23 @@ export function UserForm() {
                 </div>
               </Field>
             </div>
-
-            {/* Agent Groups */}
             {groups.length > 0 && (
               <div className="border-t border-slate-100 pt-4">
                 <CSectionHeader icon={<Users size={13} />} title="Agent Groups" />
-                <p className="text-xs text-slate-400 mb-3 -mt-1">Assign this user to one or more groups</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {groups.map(g => {
-                    const checked = form.group_id.includes(g.id)
-                    const label = g.title || g.group_name || `Group ${g.id}`
-                    return (
-                      <label
-                        key={g.id}
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all',
-                          checked
-                            ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-                            : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleGroup(g.id)}
-                          className="rounded accent-indigo-600 w-3.5 h-3.5 flex-shrink-0"
-                        />
-                        <span className="text-xs font-medium leading-tight">{label}</span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <Field label="Agent Group" hint="Assign this user to a group">
+                  <select
+                    className="input"
+                    value={form.group_id[0] ?? ''}
+                    onChange={e => set('group_id', e.target.value ? [Number(e.target.value)] : [])}
+                  >
+                    <option value="">— No Group —</option>
+                    {groups.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.title || g.group_name || `Group ${g.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </div>
             )}
           </div>

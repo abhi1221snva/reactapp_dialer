@@ -952,10 +952,11 @@ function ErrorFixModal({ leadId, lenderId, error, onClose, onFixed }: FixModalPr
           <button
             disabled={!canSave || applyMutation.isPending}
             onClick={() => applyMutation.mutate({
-              field_key:  error.crm_key || error.field,
-              new_value:  valueToSave,
-              lender_id:  lenderId,
-              resubmit:   true,
+              field_key:    error.crm_key || error.field,
+              new_value:    valueToSave,
+              lender_field: error.field,
+              lender_id:    lenderId,
+              resubmit:     true,
             })}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
           >
@@ -967,8 +968,9 @@ function ErrorFixModal({ leadId, lenderId, error, onClose, onFixed }: FixModalPr
           <button
             disabled={!canSave || applyMutation.isPending}
             onClick={() => applyMutation.mutate({
-              field_key: error.crm_key || error.field,
-              new_value: valueToSave,
+              field_key:    error.crm_key || error.field,
+              new_value:    valueToSave,
+              lender_field: error.field,
             })}
             className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-white disabled:opacity-50 transition-colors"
           >
@@ -991,7 +993,8 @@ function LenderErrorList({
   log:    ApiLog
   onFix:  (err: FixSuggestion) => void
 }) {
-  const suggestions = log.fix_suggestions ?? log.error_json ?? []
+  const suggestions: FixSuggestion[] = Array.isArray(log.fix_suggestions) ? log.fix_suggestions
+    : Array.isArray(log.error_json) ? log.error_json : []
 
   if (suggestions.length === 0) {
     // Fallback: no structured data — show raw error_message
@@ -1603,7 +1606,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
 
               // ── Structured error display ──────────────────────────────────
               const { title, details } = describeApiError(pendingLog)
-              const hasFixes = (pendingLog.fix_suggestions ?? pendingLog.error_json ?? []).length > 0
+              const hasFixes = (Array.isArray(pendingLog.fix_suggestions) ? pendingLog.fix_suggestions
+                : Array.isArray(pendingLog.error_json) ? pendingLog.error_json : []).length > 0
               return (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
                   <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
@@ -1688,7 +1692,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
               try { if (log.response_body) parsedResponse = JSON.parse(log.response_body) } catch { /* ignore */ }
               const businessId = (parsedResponse as { businessID?: string } | null)?.businessID
               const appNumber  = (parsedResponse as { applicationNumber?: string } | null)?.applicationNumber
-              const hasFixes   = !isSuccess && (log.fix_suggestions ?? log.error_json ?? []).length > 0
+              const hasFixes   = !isSuccess && (Array.isArray(log.fix_suggestions) ? log.fix_suggestions
+                : Array.isArray(log.error_json) ? log.error_json : []).length > 0
               const errInfo    = !isSuccess && !hasFixes ? describeApiError(log) : null
 
               return (
@@ -1709,7 +1714,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
                         </span>
                       )}
                       {/* Fixable badge */}
-                      {log.is_fixable && !isSuccess && (
+                      {!!log.is_fixable && !isSuccess && (
                         <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                           <Wrench size={8} /> Fixable
                         </span>

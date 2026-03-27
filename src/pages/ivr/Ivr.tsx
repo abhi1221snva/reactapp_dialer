@@ -379,6 +379,7 @@ function AudioPlayer({ annId }: { annId: string }) {
 function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) => void }) {
   const [recording, setRecording] = useState(false)
   const [time, setTime] = useState(0)
+  const [micDenied, setMicDenied] = useState(false)
   const mrRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -386,6 +387,7 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
   const start = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      setMicDenied(false)
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
       const mr = new MediaRecorder(stream, { mimeType })
       chunksRef.current = []
@@ -400,8 +402,28 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
       setRecording(true)
       setTime(0)
       timerRef.current = setInterval(() => setTime(t => t + 1), 1000)
-    } catch {
-      toast.error('Microphone access denied.')
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMicDenied(true)
+      } else {
+        toast.error('Could not access microphone.')
+      }
+    }
+  }
+
+  const enableMic = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(t => t.stop())
+      setMicDenied(false)
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        toast.error('Microphone access was denied.')
+      } else {
+        toast.error('Could not access microphone.')
+      }
     }
   }
 
@@ -418,6 +440,18 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
 
   return (
     <div className="flex flex-col items-center gap-4 py-8">
+      {micDenied && (
+        <div className="w-full flex flex-col items-center gap-2 mb-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <p className="text-xs text-amber-700 font-medium text-center">Microphone access is blocked.</p>
+          <button
+            type="button"
+            onClick={enableMic}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"
+          >
+            <Mic size={13} /> Enable Microphone
+          </button>
+        </div>
+      )}
       <button type="button" onClick={recording ? stop : start}
         className={cn(
           'w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg',

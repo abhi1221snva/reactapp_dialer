@@ -297,10 +297,11 @@ export interface FixSuggestion extends ParsedApiError {
 
 /** Payload for POST /crm/lead/{id}/apply-lender-fix */
 export interface ApplyLenderFixPayload {
-  field_key:  string
-  new_value:  string
-  lender_id?: number
-  resubmit?:  boolean
+  field_key:    string
+  new_value:    string
+  lender_field?: string  // original lender dot-path (e.g. "owners.0.homeAddress.state") for payload_mapping reverse-lookup
+  lender_id?:  number
+  resubmit?:   boolean
 }
 
 // ─── Automation Rule ─────────────────────────────────────────────────────────
