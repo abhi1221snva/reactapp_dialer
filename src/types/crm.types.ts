@@ -236,6 +236,7 @@ export interface LenderSubmission {
   lender_email?: string
   application_pdf?: string
   submission_status: LenderSubmissionStatus
+  submission_type?: 'normal' | 'api'
   response_status: LenderResponseStatus
   notes?: string
   response_note?: string
@@ -253,6 +254,7 @@ export interface SubmitApplicationPayload {
   document_ids?: number[]
   email_subject?: string
   email_html?: string
+  submission_type?: 'normal' | 'api'
 }
 
 export interface UpdateSubmissionResponsePayload {

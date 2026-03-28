@@ -111,6 +111,10 @@ function initials(name: string) {
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
 }
 
+function toTitleCase(s: string) {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 // ── KPI Bar ────────────────────────────────────────────────────────────────────
 function KpiBar({
   leadId,
@@ -708,9 +712,20 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
       {/* Summary row */}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-slate-800 truncate">
-            {sub.lender_name ?? `Lender #${sub.lender_id}`}
-          </p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-xs font-semibold text-slate-800 truncate">
+              {sub.lender_name ?? `Lender #${sub.lender_id}`}
+            </p>
+            {sub.submission_type === 'api' ? (
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex-shrink-0">
+                <Zap size={8} /> API
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-600 border border-sky-200 flex-shrink-0">
+                <Mail size={8} /> Email
+              </span>
+            )}
+          </div>
           {sub.submitted_at && (
             <p className="text-[10px] text-slate-400 tabular-nums">
               {new Date(sub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
@@ -1061,17 +1076,16 @@ function LenderErrorList({
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
 
-  const [showForm, setShowForm]         = useState(false)
-  const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set())
-  const [notes, setNotes]               = useState('')
-  const [templateId, setTemplateId]     = useState<number | ''>('')
-  const [uploadingDocs, setUploadingDocs] = useState(false)
+  const [showForm, setShowForm]             = useState(false)
+  const [submissionType, setSubmissionType] = useState<'normal' | 'api'>('normal')
+  const [showDropdown, setShowDropdown]     = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [selectedIds, setSelectedIds]       = useState<Set<number>>(new Set())
+  const [notes, setNotes]                   = useState('')
+  const [templateId, setTemplateId]         = useState<number | ''>('')
+  const [uploadingDocs, setUploadingDocs]   = useState(false)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // API dispatch state
-  const [apiLenderId, setApiLenderId] = useState<number | ''>('')
-  const [dispatched, setDispatched]   = useState(false)
 
   // Re-use cached lead data (already fetched by parent — no extra request)
   const { data: leadData } = useQuery({
@@ -1135,25 +1149,6 @@ function LendersPanel({ leadId }: { leadId: number }) {
     refetchInterval: 15_000,
   })
 
-  const dispatchMutation = useMutation({
-    mutationFn: () => crmService.dispatchLenderApi(leadId, Number(apiLenderId)),
-    onSuccess: () => {
-      toast.success('Submitted to lender API — check API Call History for results')
-      setDispatched(true)
-      setApiLenderId('')
-    },
-    onError: (err: unknown) => {
-      const res = (err as { response?: { data?: { message?: string; missing_fields?: string[] } } })?.response
-      const msg  = res?.data?.message
-      const missing = res?.data?.missing_fields
-      if (missing?.length) {
-        toast.error(`Missing required fields: ${missing.slice(0, 5).join(', ')}`)
-      } else {
-        toast.error(msg ?? 'Failed to submit to lender API')
-      }
-    },
-  })
-
   function describeApiError(log: ApiLog): { title: string; details: string[] } {
     if (log.status === 'timeout') return {
       title: 'Connection timed out',
@@ -1191,11 +1186,6 @@ function LendersPanel({ leadId }: { leadId: number }) {
   }
 
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
-  // Lenders that have at least one active API config
-  const activeApiConfigs = (apiConfigs ?? []).filter(c => c.status === true || c.status === 1)
-  const apiLenders = (lendersData ?? []).filter(l =>
-    activeApiConfigs.some(c => c.crm_lender_id === l.id)
-  )
   // Deduplicate by lender_id — keep the latest submission per lender
   const subList = Object.values(
     (submissions ?? []).reduce<Record<number, LenderSubmission>>((acc, s) => {
@@ -1223,7 +1213,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
     setSelectedDocIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
-  const openForm = () => {
+  const openForm = (type: 'normal' | 'api' = 'normal') => {
+    setSubmissionType(type)
     setShowForm(true)
     // Pre-select only docs that have a file on disk (attachable=true / file_path set)
     setSelectedDocIds(new Set((leadDocs ?? []).filter(d => d.attachable !== false && d.file_path).map(d => d.id)))
@@ -1233,6 +1224,18 @@ function LendersPanel({ leadId }: { leadId: number }) {
     setShowForm(false); setSelectedIds(new Set()); setNotes('')
     setTemplateId(''); setSelectedDocIds(new Set())
   }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!showDropdown) return
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showDropdown])
 
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -1254,24 +1257,45 @@ function LendersPanel({ leadId }: { leadId: number }) {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  // Only include doc IDs where the file actually exists on the server
+  const attachableDocIds = Array.from(selectedDocIds).filter(id => {
+    const doc = docs.find(d => d.id === id)
+    return doc && doc.attachable !== false && !!doc.file_path
+  })
+
   const submitMutation = useMutation({
-    mutationFn: () => crmService.submitApplication(leadId, {
-      lender_ids:   Array.from(selectedIds),
-      notes:        notes || undefined,
-      document_ids: selectedDocIds.size ? Array.from(selectedDocIds) : undefined,
-      // Pass rendered template HTML + subject when a template is selected
-      email_html:    previewHtml || undefined,
-      email_subject: previewTemplate?.subject || undefined,
-    }),
+    mutationFn: () => {
+      if (submissionType === 'api' && selectedIds.size === 0) {
+        return Promise.reject(new Error('Select at least one lender'))
+      }
+      return crmService.submitApplication(leadId, {
+        lender_ids:      Array.from(selectedIds),
+        notes:           notes || undefined,
+        document_ids:    attachableDocIds.length ? attachableDocIds : undefined,
+        submission_type: submissionType,
+        // Email fields only relevant for normal submission
+        email_html:      submissionType === 'normal' ? (previewHtml || undefined) : undefined,
+        email_subject:   submissionType === 'normal' ? (previewTemplate?.subject || undefined) : undefined,
+      })
+    },
     onSuccess: (res) => {
       const { submitted = [], failed = [] } = res.data?.data ?? {}
-      if (submitted.length) toast.success(`Sent to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
-      if (failed.length)    toast.error(`Failed for ${failed.length} lender${failed.length !== 1 ? 's' : ''}`)
+      const typeLabel = submissionType === 'api' ? 'API' : 'email'
+      if (submitted.length) toast.success(`Sent via ${typeLabel} to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
+      if (failed.length)    toast.error(`Failed for ${failed.length} lender${failed.length !== 1 ? 's' : ''} — check API configs`)
       closeForm()
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      if (submissionType === 'api') {
+        qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+      }
     },
-    onError: () => toast.error('Submission failed'),
+    onError: (err: unknown) => {
+      const msg = (err as Error)?.message
+        ?? (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Submission failed'
+      toast.error(msg)
+    },
   })
 
   return (
@@ -1279,19 +1303,69 @@ function LendersPanel({ leadId }: { leadId: number }) {
 
       {/* ── Submit Form ── */}
       {!showForm ? (
-        <button onClick={openForm} className="btn-primary w-full justify-center gap-2">
-          <Send size={13} /> Submit to Lenders
-        </button>
+        <div className="relative" ref={dropdownRef}>
+          <div className="flex items-stretch">
+            <button
+              onClick={() => openForm('normal')}
+              className="btn-primary flex-1 justify-center gap-2 rounded-r-none"
+            >
+              <Send size={13} /> Submit to Lenders
+            </button>
+            <div className="w-px bg-indigo-700/40 self-stretch flex-shrink-0" />
+            <button
+              onClick={() => setShowDropdown(d => !d)}
+              className="btn-primary px-2.5 rounded-l-none flex-shrink-0"
+              title="Choose submission type"
+            >
+              <ChevronDown size={12} />
+            </button>
+          </div>
+
+          {showDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-20 overflow-hidden">
+              <button
+                onClick={() => { openForm('normal'); setShowDropdown(false) }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+              >
+                <div className="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+                  <Mail size={13} className="text-sky-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Submit Normally</p>
+                  <p className="text-[11px] text-slate-400">Send via email to lender(s)</p>
+                </div>
+              </button>
+              <div className="border-t border-slate-100 mx-3" />
+              <button
+                onClick={() => { openForm('api'); setShowDropdown(false) }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+              >
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                  <Zap size={13} className="text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Submit via API</p>
+                  <p className="text-[11px] text-slate-400">Use lender API integration</p>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       ) : (() => {
         return (
           <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
-              <span className="text-sm font-semibold text-slate-700">Submit Application</span>
+              <span className="text-sm font-semibold text-slate-700">
+                {submissionType === 'api'
+                  ? <span className="flex items-center gap-1.5"><Zap size={13} className="text-indigo-500" /> Submit via API</span>
+                  : <span className="flex items-center gap-1.5"><Mail size={13} className="text-sky-500" /> Submit Normally</span>
+                }
+              </span>
               <button onClick={closeForm} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
             </div>
 
-            {/* two-col when preview active */}
-            <div className={previewTemplate ? 'flex divide-x divide-slate-100' : ''}>
+            {/* two-col when email preview active */}
+            <div className={submissionType === 'normal' && previewTemplate ? 'flex divide-x divide-slate-100' : ''}>
 
               {/* ── Form fields ── */}
               <div className={previewTemplate ? 'w-72 flex-shrink-0 p-4 space-y-3' : 'p-4 space-y-3'}>
@@ -1332,20 +1406,35 @@ function LendersPanel({ leadId }: { leadId: number }) {
                   )}
                 </div>
 
-                {/* Email Template */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Email Template</label>
-                  <select
-                    className="input w-full text-sm"
-                    value={templateId}
-                    onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
-                  >
-                    <option value="">— Default —</option>
-                    {(emailTemplates ?? []).map(t => (
-                      <option key={t.id} value={t.id}>{t.template_name}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* Email Template — shown only for email/normal submission */}
+                {submissionType === 'normal' && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Email Template</label>
+                    <select
+                      className="input w-full text-sm"
+                      value={templateId}
+                      onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
+                    >
+                      <option value="">— Default —</option>
+                      {(emailTemplates ?? []).map(t => (
+                        <option key={t.id} value={t.id}>{t.template_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* API mode notice */}
+                {submissionType === 'api' && (
+                  <div className="flex items-start gap-2.5 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5">
+                    <Zap size={13} className="text-indigo-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-700">API Submission Mode</p>
+                      <p className="text-[11px] text-indigo-600 mt-0.5 leading-relaxed">
+                        Lead data and selected documents are sent via the lender's API. Only lenders with an active API config will be processed — others will be skipped.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Documents */}
                 <div>
@@ -1379,13 +1468,13 @@ function LendersPanel({ leadId }: { leadId: number }) {
                     <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
                   </div>
                   {docs.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No documents yet.</p>
+                    <p className="text-xs text-slate-400 italic">No documents yet — click Upload to add files.</p>
                   ) : (
                     <div className="space-y-1 max-h-32 overflow-y-auto">
                       {docs.map(d => {
-                        const on = selectedDocIds.has(d.id)
+                        const on        = selectedDocIds.has(d.id)
                         const canAttach = d.attachable !== false && !!d.file_path
-                        const docLabel = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
+                        const docLabel  = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
                         return (
                           <label key={d.id} title={!canAttach ? 'File not on server — re-upload to attach' : undefined}
                             className={`flex items-center gap-2 py-1 px-2 rounded border select-none text-xs border-slate-200 ${canAttach ? 'cursor-pointer text-slate-700 hover:border-emerald-200' : 'cursor-not-allowed text-slate-400 opacity-60'}`}
@@ -1394,11 +1483,26 @@ function LendersPanel({ leadId }: { leadId: number }) {
                             <input type="checkbox" checked={on} disabled={!canAttach} onChange={() => canAttach && toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
                             <FileText size={10} className="flex-shrink-0 text-slate-400" />
                             <span className="truncate">{docLabel}</span>
-                            {!canAttach && <span className="ml-auto text-[9px] text-amber-500 flex-shrink-0">re-upload</span>}
+                            {!canAttach && (
+                              <button
+                                type="button"
+                                onClick={e => { e.preventDefault(); fileInputRef.current?.click() }}
+                                className="ml-auto text-[9px] text-amber-500 hover:text-amber-700 flex-shrink-0 underline"
+                              >
+                                re-upload
+                              </button>
+                            )}
                           </label>
                         )
                       })}
                     </div>
+                  )}
+                  {/* Warn if selected docs have non-attachable items */}
+                  {selectedDocIds.size > 0 && attachableDocIds.length < selectedDocIds.size && (
+                    <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
+                      <AlertTriangle size={10} className="flex-shrink-0" />
+                      {selectedDocIds.size - attachableDocIds.length} file(s) need re-upload and will be skipped.
+                    </p>
                   )}
                 </div>
 
@@ -1410,7 +1514,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
                     rows={2}
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
-                    placeholder="Additional notes for the lender…"
+                    placeholder={submissionType === 'api' ? 'Internal note for this submission…' : 'Additional notes for the lender…'}
                   />
                 </div>
 
@@ -1422,15 +1526,17 @@ function LendersPanel({ leadId }: { leadId: number }) {
                   >
                     {submitMutation.isPending
                       ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
-                      : <><Send size={13} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                      : submissionType === 'api'
+                        ? <><Zap size={13} /> Send via API to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                        : <><Send size={13} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
                     }
                   </button>
                   <button onClick={closeForm} className="btn-outline px-3">Cancel</button>
                 </div>
               </div>
 
-              {/* ── Email preview panel ── */}
-              {previewTemplate && (
+              {/* ── Email preview panel (normal submission only) ── */}
+              {submissionType === 'normal' && previewTemplate && (
                 <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
                   {/* macOS-style window chrome */}
@@ -1521,61 +1627,6 @@ function LendersPanel({ leadId }: { leadId: number }) {
           </div>
         )
       })()}
-
-      {/* ── API Dispatch ── */}
-      <div className="border border-indigo-100 rounded-xl bg-indigo-50/40 p-3 space-y-2">
-        <p className="text-[11px] font-semibold text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
-          <Zap size={11} /> Submit via Lender API
-        </p>
-        {activeApiConfigs.length === 0 ? (
-          <p className="text-xs text-slate-400">
-            No active API configs. Set them up at{' '}
-            <a href="/crm/lender-api-configs" className="text-indigo-500 hover:underline" target="_blank" rel="noreferrer">
-              Lender API Configs
-            </a>.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <select
-                className="input flex-1 text-sm h-8"
-                value={apiLenderId}
-                onChange={e => { setApiLenderId(e.target.value === '' ? '' : Number(e.target.value)); setDispatched(false) }}
-              >
-                <option value="">Select lender…</option>
-                {apiLenders.length > 0
-                  ? apiLenders.map(l => (
-                      <option key={l.id} value={l.id}>{l.lender_name}</option>
-                    ))
-                  : activeApiConfigs.map(c => (
-                      <option key={c.crm_lender_id} value={c.crm_lender_id}>
-                        {c.lender_name ?? c.api_name}
-                      </option>
-                    ))
-                }
-              </select>
-              <button
-                onClick={() => dispatchMutation.mutate()}
-                disabled={!apiLenderId || dispatchMutation.isPending}
-                className="btn-primary flex items-center gap-1.5 h-8 px-3 text-xs disabled:opacity-50 flex-shrink-0"
-              >
-                {dispatchMutation.isPending
-                  ? <><Loader2 size={11} className="animate-spin" /> Sending…</>
-                  : <><Zap size={11} /> Send via API</>
-                }
-              </button>
-            </div>
-
-            {/* Immediate queued confirmation */}
-            {dispatched && !apiLenderId && (
-              <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block flex-shrink-0" />
-                <span className="text-xs text-emerald-700">Submitted to lender API queue. Results will appear in API Call History below.</span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* ── Submission History ── */}
       <div>
@@ -2145,6 +2196,7 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
 
   function renderDisplayValue() {
     if (!value) return <span className="text-slate-300 text-xs">—</span>
+    if (resolvedType === 'tel') return formatPhoneNumber(value)
     if (resolvedType === 'date') {
       try { return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
       catch { return value }
@@ -2154,9 +2206,9 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
 
   return (
     <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group">
-      <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
+      <span className="text-xs text-slate-500 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
       {readOnly ? (
-        <span className="text-sm text-slate-800 flex-1 truncate leading-tight">{renderDisplayValue()}</span>
+        <span className="text-sm font-medium text-slate-800 flex-1 truncate leading-tight">{renderDisplayValue()}</span>
       ) : editing ? (
         <div className="flex items-center gap-1 flex-1 min-w-0">
           {resolvedType === 'textarea' ? (
@@ -2176,7 +2228,7 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
         </div>
       ) : (
         <button onClick={startEdit} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">
-          <span className="text-sm text-slate-800 flex-1 truncate leading-tight">
+          <span className="text-sm font-medium text-slate-800 flex-1 truncate leading-tight">
             {renderDisplayValue()}
           </span>
           <Pencil size={10} className="text-slate-200 group-hover:text-emerald-400 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100" />
@@ -3058,19 +3110,19 @@ export function CrmLeadDetail() {
           {(lead.company_name || lead.phone_number || lead.email) && (
             <div className="flex items-center gap-3 pl-1">
               {lead.company_name && (
-                <span className="flex items-center gap-1 text-xs text-slate-500 truncate max-w-[180px]">
-                  <Briefcase size={10} className="flex-shrink-0 text-slate-400" />
+                <span className="flex items-center gap-1 text-xs font-semibold text-slate-700 truncate max-w-[180px]">
+                  <Briefcase size={10} className="flex-shrink-0 text-slate-500" />
                   {String(lead.company_name)}
                 </span>
               )}
               {lead.phone_number && (
-                <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-600 transition-colors whitespace-nowrap">
+                <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-emerald-600 transition-colors whitespace-nowrap">
                   <Phone size={10} className="flex-shrink-0" />
                   {formatPhoneNumber(String(lead.phone_number))}
                 </a>
               )}
               {lead.email && (
-                <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-xs text-slate-400 hover:text-sky-600 transition-colors truncate max-w-[220px]">
+                <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-sky-600 transition-colors truncate max-w-[220px]">
                   <Mail size={10} className="flex-shrink-0" />
                   {String(lead.email)}
                 </a>
@@ -3084,7 +3136,7 @@ export function CrmLeadDetail() {
         <div className="border-t border-slate-100">
           <div className="max-w-[1800px] mx-auto px-5 py-2 flex items-center gap-5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             {[
-              { label: 'Lead type',   value: lead.lead_type ? String(lead.lead_type) : null },
+              { label: 'Lead type',   value: lead.lead_type ? toTitleCase(String(lead.lead_type)) : null },
               { label: 'Assigned to', value: (lead.assigned_name as string | undefined) || null },
               { label: 'Loan amount', value: loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` : null },
               { label: 'Created',     value: lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null },
