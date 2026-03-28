@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Save, User, Phone, Shield, KeyRound,
   PhoneForwarded, Voicemail, Users,
   RefreshCw, Eye, EyeOff, Copy, PhoneIncoming,
+  Mail, Smartphone,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { userService } from '../../services/user.service'
@@ -179,7 +180,7 @@ function Field({ label, required, hint, error, children }: {
   )
 }
 
-/** Compact toggle chip — fits 2-per-row in a grid, replaces full-width ToggleRow */
+/** Toggle chip button */
 function ToggleChip({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -193,20 +194,108 @@ function ToggleChip({ label, on, onToggle }: { label: string; on: boolean; onTog
       )}
     >
       <span className="leading-tight">{label}</span>
-      {/* Mini toggle indicator */}
-      <div className={cn(
-        'relative flex-shrink-0 h-4 w-7 rounded-full transition-colors duration-200',
-        on ? 'bg-indigo-500' : 'bg-slate-300'
-      )}>
-        <div className={cn(
-          'absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all duration-200',
-          on ? 'left-3.5' : 'left-0.5'
-        )} />
+      <div className={cn('relative flex-shrink-0 h-4 w-7 rounded-full transition-colors duration-200', on ? 'bg-indigo-500' : 'bg-slate-300')}>
+        <div className={cn('absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all duration-200', on ? 'left-3.5' : 'left-0.5')} />
       </div>
     </button>
   )
 }
 
+
+// ---------------------------------------------------------------------------
+// Group Multi-Select
+// ---------------------------------------------------------------------------
+function GroupMultiSelect({
+  selected, onChange, groups,
+}: {
+  selected: number[]
+  onChange: (ids: number[]) => void
+  groups: Array<{ id: number; title?: string; group_name?: string }>
+}) {
+  const [q, setQ] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() =>
+    groups.filter(g => (g.title || g.group_name || '').toLowerCase().includes(q.toLowerCase())),
+    [groups, q]
+  )
+
+  const labelOf = (g: { id: number; title?: string; group_name?: string }) =>
+    g.title || g.group_name || `Group ${g.id}`
+
+  const toggle = (id: number) =>
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        onClick={() => setIsOpen(o => !o)}
+        className="input cursor-pointer flex flex-wrap items-center gap-1.5 min-h-[38px]"
+      >
+        {selected.length === 0 ? (
+          <span className="text-slate-400 text-sm flex-1">— No Group —</span>
+        ) : (
+          selected.map(id => {
+            const g = groups.find(x => x.id === id)
+            return (
+              <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
+                {g ? labelOf(g) : `Group ${id}`}
+                <button type="button" onClick={e => { e.stopPropagation(); toggle(id) }} className="hover:text-indigo-900">
+                  <svg viewBox="0 0 10 10" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg>
+                </button>
+              </span>
+            )
+          })
+        )}
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+          className={cn('ml-auto flex-shrink-0 w-3.5 h-3.5 text-slate-400 transition-transform', isOpen ? 'rotate-180' : '')}>
+          <path d="M6 8l4 4 4-4"/>
+        </svg>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-20 w-full top-full mt-1 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-lg">
+          <div className="p-2 border-b border-slate-100">
+            <input className="input text-sm py-1.5" placeholder="Search groups…"
+              value={q} onChange={e => setQ(e.target.value)} />
+          </div>
+          <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+            {filtered.length === 0
+              ? <p className="px-4 py-3 text-sm text-slate-400">No groups found</p>
+              : filtered.map(g => {
+                const checked = selected.includes(g.id)
+                return (
+                  <button key={g.id} type="button" onClick={() => toggle(g.id)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left">
+                    <div className={cn(
+                      'w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition-colors',
+                      checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                    )}>
+                      {checked && (
+                        <svg viewBox="0 0 10 10" className="w-2.5 h-2.5" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 5l2.5 2.5L8 2"/>
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-sm text-slate-700">{labelOf(g)}</span>
+                  </button>
+                )
+              })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -487,20 +576,18 @@ export function UserForm() {
   return (
     <div className="w-full space-y-4">
 
-      {/* ── Page Header with inline actions ── */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/users')} className="btn-ghost p-1.5 rounded-lg">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-tight">
-              {isEdit ? 'Edit User' : 'Add New User'}
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {isEdit ? `Editing user #${id}` : 'Fill in the details to create a new team member'}
-            </p>
-          </div>
+      {/* ── Page Header ── */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => navigate('/users')} className="btn-ghost p-1.5 rounded-lg">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 leading-tight">
+            {isEdit ? 'Edit User' : 'Add New User'}
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {isEdit ? `Editing user #${id}` : 'Fill in the details to create a new team member'}
+          </p>
         </div>
       </div>
 
@@ -540,15 +627,28 @@ export function UserForm() {
             </Field>
             <Field label="Phone Number" required hint="10-digit US format" error={errors.mobile}>
               <div className="flex gap-2">
-                <select
-                  className="input flex-shrink-0 w-28"
-                  value={form.country_code}
-                  onChange={e => set('country_code', e.target.value)}
-                >
-                  {COUNTRY_CODES.map(c => (
-                    <option key={c.code} value={c.code}>{c.code} {c.short}</option>
-                  ))}
-                </select>
+                <div className="relative flex-shrink-0 w-28">
+                  <select
+                    value={form.country_code}
+                    onChange={e => set('country_code', e.target.value)}
+                    className="input w-full cursor-pointer appearance-none"
+                    style={{
+                      color: 'transparent',
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: 'right 0.5rem center',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: '1.5em 1.5em',
+                      paddingRight: '2.5rem',
+                    }}
+                  >
+                    {COUNTRY_CODES.map(c => (
+                      <option key={c.code} value={c.code} style={{ color: '#0f172a' }}>{c.label}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-0 flex items-center px-3.5 pointer-events-none pr-8 text-sm text-slate-900 whitespace-nowrap overflow-hidden">
+                    {(() => { const c = COUNTRY_CODES.find(x => x.code === form.country_code); return c ? `${c.code} ${c.short}` : form.country_code })()}
+                  </div>
+                </div>
                 <input
                   type="tel"
                   className={cn(inputCls('mobile'), 'flex-1')}
@@ -689,21 +789,16 @@ export function UserForm() {
               <ToggleChip label="IP Filtering"   on={form.ip_filtering === 1}            onToggle={() => toggle('ip_filtering')} />
               <ToggleChip label="Enable 2FA"     on={form.enable_2fa === 1}              onToggle={() => toggle('enable_2fa')} />
               <ToggleChip label="Mobile App"     on={form.app_status === 1}              onToggle={() => toggle('app_status')} />
-              <ToggleChip label="SMS → Email"    on={form.receive_sms_on_email === 1}    onToggle={() => toggle('receive_sms_on_email')} />
-              <ToggleChip label="SMS → Phone"    on={form.receive_sms_on_mobile === 1}   onToggle={() => toggle('receive_sms_on_mobile')} />
             </div>
             {redirectActive && (
               <div className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-xs border',
-                form.mobile
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                  : 'bg-amber-50 border-amber-200 text-amber-700'
+                form.mobile ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-amber-50 border-amber-200 text-amber-700'
               )}>
                 <Phone size={12} className="flex-shrink-0" />
                 {form.mobile
                   ? <span>Redirect destination: <span className="font-semibold">{form.mobile}</span></span>
-                  : <span>Enter a phone number above to use as redirect destination</span>
-                }
+                  : <span>Enter a phone number above to use as redirect destination</span>}
               </div>
             )}
             <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -722,9 +817,7 @@ export function UserForm() {
                       const cnam = (raw.cnam as string) || ''
                       const number = d.cli || `DID #${d.id}`
                       return (
-                        <option key={d.id} value={d.cli ?? ''}>
-                          {`${number}${cnam ? ` - ${cnam}` : ''} - ${destLabel}`}
-                        </option>
+                        <option key={d.id} value={d.cli ?? ''}>{`${number}${cnam ? ` - ${cnam}` : ''} - ${destLabel}`}</option>
                       )
                     })}
                   </select>
@@ -793,28 +886,88 @@ export function UserForm() {
             {groups.length > 0 && (
               <div className="border-t border-slate-100 pt-4">
                 <CSectionHeader icon={<Users size={13} />} title="Agent Groups" />
-                <Field label="Agent Group" hint="Assign this user to a group">
-                  <select
-                    className="input"
-                    value={form.group_id[0] ?? ''}
-                    onChange={e => set('group_id', e.target.value ? [Number(e.target.value)] : [])}
-                  >
-                    <option value="">— No Group —</option>
-                    {groups.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {g.title || g.group_name || `Group ${g.id}`}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Agent Group" hint="Assign this user to one or more groups">
+                  <GroupMultiSelect
+                    selected={form.group_id}
+                    onChange={ids => set('group_id', ids)}
+                    groups={groups}
+                  />
                 </Field>
               </div>
             )}
+
+            {/* Forward Incoming SMS To */}
+            <div className="border-t border-slate-100 pt-4">
+              <CSectionHeader icon={<Mail size={13} />} title="Forward Incoming SMS To" />
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggle('receive_sms_on_email')}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all',
+                    form.receive_sms_on_email === 1
+                      ? 'bg-indigo-50 border-indigo-300'
+                      : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                  )}
+                >
+                  <div className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                    form.receive_sms_on_email === 1 ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                  )}>
+                    <Mail size={15} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-xs font-semibold leading-tight', form.receive_sms_on_email === 1 ? 'text-indigo-700' : 'text-slate-700')}>Email</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">Forward to email</p>
+                  </div>
+                  <div className={cn(
+                    'h-4 w-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                    form.receive_sms_on_email === 1 ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
+                  )}>
+                    {form.receive_sms_on_email === 1 && (
+                      <svg viewBox="0 0 12 12" className="w-2.5 h-2.5"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                    )}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggle('receive_sms_on_mobile')}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all',
+                    form.receive_sms_on_mobile === 1
+                      ? 'bg-indigo-50 border-indigo-300'
+                      : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                  )}
+                >
+                  <div className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                    form.receive_sms_on_mobile === 1 ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                  )}>
+                    <Smartphone size={15} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-xs font-semibold leading-tight', form.receive_sms_on_mobile === 1 ? 'text-indigo-700' : 'text-slate-700')}>SMS</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">Forward to mobile</p>
+                  </div>
+                  <div className={cn(
+                    'h-4 w-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                    form.receive_sms_on_mobile === 1 ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
+                  )}>
+                    {form.receive_sms_on_mobile === 1 && (
+                      <svg viewBox="0 0 12 12" className="w-2.5 h-2.5"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                    )}
+                  </div>
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
 
       {/* ── Bottom Actions ── */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 pb-4">
         <button
           onClick={() => navigate('/users')}
           className="btn-outline flex-1"

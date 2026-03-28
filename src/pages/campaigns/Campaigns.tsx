@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Play, Pause, Copy, Trash2, Pencil, Radio, Eye, Clock,
+  Plus, Copy, Trash2, Pencil, Radio, Eye, Clock,
   LayoutList, X, Phone, Globe, Tag, Settings2, Users, ToggleRight, ToggleLeft,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -438,9 +438,16 @@ export function Campaigns() {
     {
       key: 'status', header: 'Status',
       render: (row) => (
-        <Badge variant={isActive(row.status) ? 'green' : 'gray'}>
-          {isActive(row.status) ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={() => toggleMutation.mutate({ id: row.id, status: row.status ?? 0 })}
+          disabled={toggleMutation.isPending}
+          title={isActive(row.status) ? 'Click to deactivate' : 'Click to activate'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={isActive(row.status) ? 'green' : 'gray'}>
+            {isActive(row.status) ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {
@@ -454,13 +461,6 @@ export function Campaigns() {
             icon: <Eye size={13} />,
             variant: 'view',
             onClick: () => navigate(`/campaigns/${row.id}`),
-          },
-          {
-            label: isActive(row.status) ? 'Pause Campaign' : 'Activate Campaign',
-            icon: isActive(row.status) ? <Pause size={13} /> : <Play size={13} />,
-            variant: isActive(row.status) ? 'warning' : 'success',
-            onClick: () => toggleMutation.mutate({ id: row.id, status: row.status ?? 0 }),
-            disabled: toggleMutation.isPending,
           },
           {
             label: 'Edit Campaign',

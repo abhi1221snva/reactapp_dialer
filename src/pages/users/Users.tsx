@@ -308,6 +308,16 @@ export function Users() {
   const table = useServerTable({ defaultLimit: 15 })
   const [viewUser, setViewUser] = useState<Agent | null>(null)
 
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: number }) =>
+      userService.toggleStatus(id, status === 1 ? 0 : 1),
+    onSuccess: () => {
+      toast.success('Status updated')
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: () => toast.error('Failed to update status'),
+  })
+
   const deleteMutation = useMutation({
     // POST /edit-extension with is_deleted=1 — soft-delete by primary DB id.
     // No easify_user_uuid needed; works for all users.
@@ -374,9 +384,16 @@ export function Users() {
     {
       key: 'status', header: 'Status',
       render: (row) => (
-        <Badge variant={row.status === 1 ? 'green' : 'gray'}>
-          {row.status === 1 ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={() => toggleMutation.mutate({ id: row.id, status: row.status ?? 0 })}
+          disabled={toggleMutation.isPending}
+          title={row.status === 1 ? 'Click to deactivate' : 'Click to activate'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={row.status === 1 ? 'green' : 'gray'}>
+            {row.status === 1 ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {

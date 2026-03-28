@@ -380,31 +380,42 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
   const [recording, setRecording] = useState(false)
   const [time, setTime] = useState(0)
   const [micDenied, setMicDenied] = useState(false)
+  const [micPending, setMicPending] = useState(false)
   const mrRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const start = async () => {
+  // Shared: acquire mic stream and immediately begin recording
+  const startWithStream = (stream: MediaStream) => {
+    setMicDenied(false)
+    setMicPending(false)
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+    const mr = new MediaRecorder(stream, { mimeType })
+    chunksRef.current = []
+    mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+    mr.onstop = () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(chunksRef.current, { type: mimeType })
+      onRecorded(blob, URL.createObjectURL(blob))
+    }
+    mr.start(100)
+    mrRef.current = mr
+    setRecording(true)
+    setTime(0)
+    timerRef.current = setInterval(() => setTime(t => t + 1), 1000)
+  }
+
+  // Single getUserMedia entry point — always fires on button click, never pre-blocked
+  const requestMicAndRecord = async () => {
+    setMicPending(true)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      setMicDenied(false)
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
-      const mr = new MediaRecorder(stream, { mimeType })
-      chunksRef.current = []
-      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      mr.onstop = () => {
-        stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(chunksRef.current, { type: mimeType })
-        onRecorded(blob, URL.createObjectURL(blob))
-      }
-      mr.start(100)
-      mrRef.current = mr
-      setRecording(true)
-      setTime(0)
-      timerRef.current = setInterval(() => setTime(t => t + 1), 1000)
+      startWithStream(stream)
     } catch (err: unknown) {
+      setMicPending(false)
       const name = err instanceof Error ? err.name : ''
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        // Show inline denied UI — no toast, keep button for retry after settings change
         setMicDenied(true)
       } else {
         toast.error('Could not access microphone.')
@@ -412,20 +423,11 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
     }
   }
 
-  const enableMic = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach(t => t.stop())
-      setMicDenied(false)
-    } catch (err: unknown) {
-      const name = err instanceof Error ? err.name : ''
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        toast.error('Microphone access was denied.')
-      } else {
-        toast.error('Could not access microphone.')
-      }
-    }
-  }
+  // Big mic button
+  const start = () => requestMicAndRecord()
+
+  // "Enable Microphone" retry button — same path, always re-attempts getUserMedia
+  const enableMic = () => requestMicAndRecord()
 
   const stop = () => {
     mrRef.current?.stop()
@@ -440,15 +442,25 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
 
   return (
     <div className="flex flex-col items-center gap-4 py-8">
+      {micPending && !micDenied && (
+        <div className="w-full px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-center">
+          <p className="text-xs text-blue-700 font-medium">
+            Click the microphone icon near the browser URL bar and allow access.
+          </p>
+        </div>
+      )}
       {micDenied && (
         <div className="w-full flex flex-col items-center gap-2 mb-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
           <p className="text-xs text-amber-700 font-medium text-center">Microphone access is blocked.</p>
+          <p className="text-[11px] text-amber-600 text-center leading-relaxed">
+            Click the <strong>🔒 lock icon</strong> in your address bar → <strong>Site settings</strong> → set <strong>Microphone</strong> to <strong>Allow</strong>, then click retry.
+          </p>
           <button
             type="button"
             onClick={enableMic}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"
           >
-            <Mic size={13} /> Enable Microphone
+            <Mic size={13} /> Retry
           </button>
         </div>
       )}

@@ -53,6 +53,10 @@ export const userService = {
   update: (data: Record<string, unknown>) =>
     api.post('/edit-extension', data),
 
+  // POST /edit-extension with status — toggles user active/inactive.
+  toggleStatus: (id: number, status: 0 | 1) =>
+    api.post('/edit-extension', { extension_id: id, status }),
+
   // POST /edit-extension with is_deleted=1 — comprehensive soft-delete:
   //   masks email, cleans up user_extensions / extension_group_map /
   //   permissions / user_packages, sets is_deleted=1 in users table.

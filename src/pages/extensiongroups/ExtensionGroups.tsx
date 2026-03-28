@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Layers, X, Check, ToggleLeft, ToggleRight, ChevronDown, Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, X, Check, ChevronDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -28,6 +28,8 @@ interface Extension {
   ext?: string
   name?: string
   full_name?: string
+  first_name?: string
+  last_name?: string
   [key: string]: unknown
 }
 
@@ -57,45 +59,33 @@ function parseExtensionField(raw: unknown): string[] {
 }
 
 // ──────────── Extension Cell ────────────
-function ExtensionCell({ groupId, rowData }: { groupId: number; rowData: ExtGroup }) {
-  const listExts = useMemo(() => {
-    const raw =
-      rowData.extension_name  ??
-      rowData.extensions      ??
-      rowData.extension_list  ??
-      rowData.extension       ??
-      rowData.ext             ?? ''
-    return parseExtensionField(raw)
-  }, [rowData])
-
+function ExtensionCell({ groupId }: { groupId: number }) {
   const { data: mapData } = useQuery({
     queryKey: ['ext-group-map', groupId],
     queryFn: () => extensiongroupService.getExtensionsForGroup(groupId),
     staleTime: 60_000,
-    enabled: listExts.length === 0,
     retry: 1,
   })
 
-  const exts = useMemo(() => {
-    if (listExts.length > 0) return listExts
+  const names = useMemo(() => {
     const rawData = (mapData as { data?: { data?: unknown } })?.data?.data
     const items: Array<Record<string, unknown>> = Array.isArray(rawData) ? rawData : []
     return items
-      .map(item =>
-        String(item.extension ?? item.ext ?? item.extension_number ?? '')
-          .replace(/^SIP\//i, '').trim()
-      )
+      .map(item => {
+        const fullName = [item.first_name, item.last_name].filter(Boolean).join(' ').trim()
+        return fullName || String(item.extension ?? item.ext ?? '').replace(/^SIP\//i, '').trim()
+      })
       .filter(Boolean)
-  }, [listExts, mapData])
+  }, [mapData])
 
-  if (exts.length === 0) return <span className="text-slate-400 text-sm">—</span>
+  if (names.length === 0) return <span className="text-slate-400 text-sm">—</span>
   return (
     <div className="flex flex-wrap gap-1">
-      {exts.slice(0, 4).map((e, i) => (
-        <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700 font-mono">{e}</span>
+      {names.slice(0, 4).map((name, i) => (
+        <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700">{name}</span>
       ))}
-      {exts.length > 4 && (
-        <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">+{exts.length - 4}</span>
+      {names.length > 4 && (
+        <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">+{names.length - 4}</span>
       )}
     </div>
   )
@@ -121,14 +111,30 @@ function ExtensionPicker({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  // Map extension number → display name for chip labels
+  const extNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    extensions.forEach(e => {
+      const val = String(e.extension ?? e.ext ?? e.id)
+      const name = [e.first_name, e.last_name, e.full_name, e.name].filter(Boolean).join(' ')
+      if (val) map.set(val, name)
+    })
+    return map
+  }, [extensions])
+
   const filtered = extensions.filter(e => {
     const val = String(e.extension ?? e.ext ?? '')
-    const name = String(e.full_name ?? e.name ?? '')
+    const name = [e.first_name, e.last_name, e.full_name, e.name].filter(Boolean).join(' ')
     return `${val} ${name}`.toLowerCase().includes(q.toLowerCase())
   })
 
   const toggle = (val: string) =>
     onChange(selected.includes(val) ? selected.filter(s => s !== val) : [...selected, val])
+
+  const formatChip = (val: string) => {
+    const name = extNameMap.get(val)
+    return name || val
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -141,7 +147,7 @@ function ExtensionPicker({
         ) : (
           selected.map(s => (
             <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
-              {s}
+              {formatChip(s)}
               <button type="button" onClick={(e) => { e.stopPropagation(); toggle(s) }}>
                 <X size={10} />
               </button>
@@ -162,8 +168,9 @@ function ExtensionPicker({
               ? <p className="px-4 py-3 text-sm text-slate-400">No extensions found</p>
               : filtered.map(e => {
                 const val = String(e.extension ?? e.ext ?? e.id)
-                const label = e.full_name ?? e.name ?? ''
+                const label = [e.first_name, e.last_name, e.full_name, e.name].filter(Boolean).join(' ')
                 const checked = selected.includes(val)
+                const displayLabel = label || val
                 return (
                   <button key={e.id} type="button" onClick={() => toggle(val)}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left">
@@ -171,8 +178,7 @@ function ExtensionPicker({
                       checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
                       {checked && <Check size={10} className="text-white" />}
                     </div>
-                    <span className="text-sm font-mono text-indigo-600 font-medium">{val}</span>
-                    {label && <span className="text-sm text-slate-500 truncate">{label}</span>}
+                    <span className="text-sm text-slate-700">{displayLabel}</span>
                   </button>
                 )
               })}
@@ -414,14 +420,21 @@ export function ExtensionGroups() {
     },
     {
       key: 'extensions', header: 'Extension',
-      render: (row) => <ExtensionCell groupId={row.id} rowData={row} />,
+      render: (row) => <ExtensionCell groupId={row.id} />,
     },
     {
       key: 'status', header: 'Status',
       render: (row) => (
-        <Badge variant={isActive(row) ? 'green' : 'gray'}>
-          {isActive(row) ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={() => toggleMutation.mutate({ id: row.id, status: !!isActive(row) })}
+          disabled={toggleMutation.isPending}
+          title={isActive(row) ? 'Click to deactivate' : 'Click to activate'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={isActive(row) ? 'green' : 'gray'}>
+            {isActive(row) ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {
@@ -430,13 +443,6 @@ export function ExtensionGroups() {
       className: 'w-px whitespace-nowrap',
       render: (row) => (
         <RowActions actions={[
-          {
-            label: isActive(row) ? 'Deactivate' : 'Activate',
-            icon: isActive(row) ? <ToggleLeft size={13} /> : <ToggleRight size={13} />,
-            variant: isActive(row) ? 'warning' : 'success',
-            onClick: () => toggleMutation.mutate({ id: row.id, status: !!isActive(row) }),
-            disabled: toggleMutation.isPending,
-          },
           {
             label: 'Edit',
             icon: <Pencil size={13} />,

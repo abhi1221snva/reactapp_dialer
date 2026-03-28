@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { showConfirm } from '../../utils/confirmDelete'
 import {
-  Plus, Pencil, Trash2, UserCheck, UserX, KeyRound,
+  Plus, Pencil, Trash2, KeyRound,
   Eye, EyeOff, CheckCircle2, XCircle, Mail, Phone,
   Shield, Users,
 } from 'lucide-react'
@@ -41,10 +41,27 @@ function agentInitials(a: Agent) {
 const BG_COLORS = ['bg-indigo-500','bg-violet-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500']
 function avatarBg(id: number) { return BG_COLORS[id % BG_COLORS.length] }
 
-function StatusBadge({ status }: { status: number }) {
+function StatusBadge({ status, onClick, disabled }: { status: number; onClick?: () => void; disabled?: boolean }) {
+  const clickable = !!onClick
   return status === 1
-    ? <span className="badge badge-green flex items-center gap-1"><CheckCircle2 size={11} /> Active</span>
-    : <span className="badge badge-red flex items-center gap-1"><XCircle size={11} /> Inactive</span>
+    ? (
+      <span
+        onClick={!disabled ? onClick : undefined}
+        className={`badge badge-green flex items-center gap-1 ${clickable ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+        title={clickable ? 'Click to deactivate' : undefined}
+      >
+        <CheckCircle2 size={11} /> Active
+      </span>
+    )
+    : (
+      <span
+        onClick={!disabled ? onClick : undefined}
+        className={`badge badge-red flex items-center gap-1 ${clickable ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+        title={clickable ? 'Click to activate' : undefined}
+      >
+        <XCircle size={11} /> Inactive
+      </span>
+    )
 }
 
 function Spinner({ small = false }: { small?: boolean }) {
@@ -412,7 +429,13 @@ export function Agents() {
     },
     {
       key: 'status', header: 'Status',
-      render: (a) => <StatusBadge status={a.status} />,
+      render: (a) => (
+        <StatusBadge
+          status={a.status}
+          onClick={() => toggleMutation.mutate(a)}
+          disabled={toggleMutation.isPending}
+        />
+      ),
     },
     {
       key: 'created_at', header: 'Joined',
@@ -439,13 +462,6 @@ export function Agents() {
             icon: <KeyRound size={13} />,
             variant: 'default',
             onClick: () => setResetAgent(a),
-          },
-          {
-            label: a.status === 1 ? 'Deactivate' : 'Activate',
-            icon: a.status === 1 ? <UserX size={13} /> : <UserCheck size={13} />,
-            variant: a.status === 1 ? 'warning' : 'success',
-            onClick: () => toggleMutation.mutate(a),
-            disabled: toggleMutation.isPending,
           },
           {
             label: 'Remove',
