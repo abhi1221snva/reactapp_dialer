@@ -2,14 +2,15 @@ import { useState, useRef, useEffect } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   LayoutList, Zap, Send, MessageSquare, AlertCircle,
-  Pin, ChevronDown, Loader2, FileText,
+  Pin, ChevronDown, Loader2, FileText, X,
+  CheckCircle2, XCircle, Clock, Code2,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { ActivityItem } from './ActivityItem'
 import { cn } from '../../utils/cn'
-import type { ActivityTimelineResponse, ActivityType } from '../../types/crm.types'
+import type { ActivityTimelineResponse, ActivityType, LeadActivity } from '../../types/crm.types'
 
 // ─── Filter pills config ───────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ const FILTER_OPTIONS = [
   { value: 'status_change', label: 'Status' },
   { value: 'document_uploaded', label: 'Docs' },
   { value: 'lender_submitted',  label: 'Lender' },
+  { value: 'lender_api_result', label: 'API Results' },
   { value: 'lender_response',   label: 'Responses' },
   { value: 'system',            label: 'System' },
 ] as const
@@ -33,6 +35,7 @@ type TabKey =
   | 'all'
   | 'system'
   | 'lender_submitted'
+  | 'lender_api_result'
   | 'note_added'
   | 'lender_response'
   | 'call_made'
@@ -122,7 +125,8 @@ function EmptyState({ filter }: { filter: FilterValue }) {
   const messages: Partial<Record<FilterValue, { icon: React.ReactNode; title: string; sub: string }>> = {
     all:              { icon: <FileText size={32} className="text-slate-300" />,               title: 'No activity yet',          sub: 'Actions on this lead will appear here.' },
     system:           { icon: <Zap size={32} className="text-slate-300" />,                    title: 'No system events',         sub: 'Automated events will show up here.' },
-    lender_submitted: { icon: <Send size={32} className="text-orange-200" />,                  title: 'No lender submissions',    sub: 'Submit to a lender from the Lenders panel.' },
+    lender_submitted:  { icon: <Send size={32} className="text-orange-200" />,                  title: 'No lender submissions',    sub: 'Submit to a lender from the Lenders panel.' },
+    lender_api_result: { icon: <Send size={32} className="text-emerald-200" />,                 title: 'No API results yet',        sub: 'API submission results will appear here.' },
     note_added:       { icon: <MessageSquare size={32} className="text-emerald-200" />,        title: 'No notes yet',             sub: 'Write a note above to get started.' },
     lender_response:  { icon: <AlertCircle size={32} className="text-red-200" />,              title: 'No lender responses',      sub: 'Lender responses will appear here.' },
     call_made:        { icon: <LayoutList size={32} className="text-blue-200" />,              title: 'No calls logged',          sub: 'Call activity will appear here.' },
@@ -298,11 +302,210 @@ function ComposeArea({ onSave, isSaving }: ComposeAreaProps) {
 }
 
 
+// ─── API Detail Modal ──────────────────────────────────────────────────────────
+
+function ApiDetailModal({ activity, onClose }: { activity: LeadActivity; onClose: () => void }) {
+  const meta = (activity.meta ?? {}) as Record<string, unknown>
+
+  const lenderName   = (meta.lender_name  as string  | undefined) ?? 'Lender'
+  const isSuccess    = meta.success as boolean | undefined
+  const responseCode = meta.response_code as number | undefined
+  const durationMs   = meta.duration_ms   as number | undefined
+  const attempts     = meta.attempts      as number | undefined
+  const responseBody = meta.response_body as string | undefined
+  const validErrors  = meta.validation_errors as string[] | undefined
+  const docUpload    = meta.doc_upload    as { uploaded: number; failed: number; total: number } | undefined
+
+  // Pretty-print response body if it's JSON
+  let formattedResponse: string | null = null
+  if (responseBody) {
+    try {
+      formattedResponse = JSON.stringify(JSON.parse(responseBody), null, 2)
+    } catch {
+      formattedResponse = responseBody
+    }
+  }
+
+  const [tab, setTab] = useState<'response' | 'summary'>(formattedResponse ? 'response' : 'summary')
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.55)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[85vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
+              isSuccess === true  ? 'bg-emerald-50' :
+              isSuccess === false ? 'bg-red-50'     : 'bg-amber-50'
+            )}>
+              {isSuccess === true  ? <CheckCircle2 size={16} className="text-emerald-600" /> :
+               isSuccess === false ? <XCircle      size={16} className="text-red-600"     /> :
+                                     <AlertCircle  size={16} className="text-amber-600"   />}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">{lenderName}</h3>
+              <p className="text-[11px] text-slate-400">
+                {isSuccess === true  ? 'Application submitted successfully' :
+                 isSuccess === false ? 'API submission failed'              : 'Validation error — not submitted'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Tab toggle */}
+            {formattedResponse && (
+              <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+                {(['response', 'summary'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all capitalize',
+                      tab === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    {t === 'response' ? 'API Response' : 'Summary'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={onClose} className="action-btn"><X size={14} /></button>
+          </div>
+        </div>
+
+        {/* Info strip */}
+        <div className="flex items-center gap-3 px-5 py-2.5 border-b border-slate-100 bg-slate-50/80 flex-shrink-0 flex-wrap">
+          {responseCode != null && (
+            <span className={cn(
+              'text-[11px] font-bold px-2 py-1 rounded-lg',
+              isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+            )}>
+              HTTP {responseCode}
+            </span>
+          )}
+          {durationMs != null && (
+            <span className="flex items-center gap-1 text-[11px] text-slate-500">
+              <Clock size={10} /> {durationMs}ms
+            </span>
+          )}
+          {attempts != null && attempts > 1 && (
+            <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">
+              {attempts} attempt{attempts > 1 ? 's' : ''}
+            </span>
+          )}
+          {docUpload && (docUpload.uploaded > 0 || docUpload.failed > 0) && (
+            <span className="text-[11px] text-slate-500">
+              Docs: {docUpload.uploaded} sent{docUpload.failed > 0 ? `, ${docUpload.failed} failed` : ''}
+            </span>
+          )}
+          <span className="text-[11px] text-slate-400 ml-auto tabular-nums">
+            {new Date(activity.created_at).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+              hour: 'numeric', minute: '2-digit',
+            })}
+          </span>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5">
+
+          {/* Summary tab */}
+          {tab === 'summary' && (
+            <div className="space-y-4">
+              {validErrors && validErrors.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+                    Validation Errors
+                  </p>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-2">
+                    {validErrors.map((e, i) => (
+                      <p key={i} className="text-sm text-amber-800 flex items-start gap-2">
+                        <AlertCircle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        {e}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Activity Details</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-3">
+                    <span className="text-[11px] text-slate-400 w-28 flex-shrink-0">Lender</span>
+                    <span className="text-[12px] text-slate-800 font-medium">{lenderName}</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-[11px] text-slate-400 w-28 flex-shrink-0">Result</span>
+                    <span className={cn('text-[12px] font-semibold',
+                      isSuccess ? 'text-emerald-700' : 'text-red-700'
+                    )}>
+                      {isSuccess ? 'Success' : 'Failed'}
+                    </span>
+                  </div>
+                  {responseCode != null && (
+                    <div className="flex items-start gap-3">
+                      <span className="text-[11px] text-slate-400 w-28 flex-shrink-0">HTTP Status</span>
+                      <span className="text-[12px] text-slate-800">{responseCode}</span>
+                    </div>
+                  )}
+                  {durationMs != null && (
+                    <div className="flex items-start gap-3">
+                      <span className="text-[11px] text-slate-400 w-28 flex-shrink-0">Duration</span>
+                      <span className="text-[12px] text-slate-800">{durationMs}ms</span>
+                    </div>
+                  )}
+                  {attempts != null && (
+                    <div className="flex items-start gap-3">
+                      <span className="text-[11px] text-slate-400 w-28 flex-shrink-0">Attempts</span>
+                      <span className="text-[12px] text-slate-800">{attempts}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {!formattedResponse && !validErrors?.length && (
+                <p className="text-sm text-slate-400 text-center py-6">No additional details available.</p>
+              )}
+            </div>
+          )}
+
+          {/* Response tab */}
+          {tab === 'response' && formattedResponse && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">API Response Body</p>
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(formattedResponse!) }}
+                  className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1"
+                >
+                  <Code2 size={10} /> Copy
+                </button>
+              </div>
+              <div className="bg-slate-900 rounded-xl p-4 overflow-x-auto">
+                <pre className="text-[11px] text-emerald-300 font-mono whitespace-pre leading-relaxed">
+                  {formattedResponse}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ActivityTimeline({ leadId, onAddActivity }: Props) {
   const qc = useQueryClient()
-  const [activeFilter, setActiveFilter] = useState<FilterValue>('all')
+  const [activeFilter, setActiveFilter]       = useState<FilterValue>('all')
+  const [detailActivity, setDetailActivity]   = useState<LeadActivity | null>(null)
 
   const typeParam = activeFilter === 'all' ? undefined : (activeFilter as TabKey)
 
@@ -370,6 +573,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
           <ActivityItem
             activity={activity}
             onPin={id => pinMutation.mutate(id)}
+            onViewDetails={setDetailActivity}
             isLast={idx === unpinnedItems.length - 1 && !hasNextPage}
           />
         </div>
@@ -378,6 +582,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
   }
 
   return (
+    <>
     <div className="flex flex-col gap-3">
 
       {/* ── Compose area ── */}
@@ -452,6 +657,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
                       key={activity.id}
                       activity={activity}
                       onPin={id => pinMutation.mutate(id)}
+                      onViewDetails={setDetailActivity}
                       isLast={idx === pinnedItems.length - 1 && unpinnedItems.length === 0}
                     />
                   ))}
@@ -507,5 +713,14 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
       </div>
 
     </div>
+
+    {/* ── API detail modal ── */}
+    {detailActivity && (
+      <ApiDetailModal
+        activity={detailActivity}
+        onClose={() => setDetailActivity(null)}
+      />
+    )}
+  </>
   )
 }
