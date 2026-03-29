@@ -10,7 +10,8 @@ import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { ActivityItem } from './ActivityItem'
 import { cn } from '../../utils/cn'
-import type { ActivityTimelineResponse, ActivityType, LeadActivity } from '../../types/crm.types'
+import type { ActivityTimelineResponse, ActivityType, LeadActivity, FixSuggestion } from '../../types/crm.types'
+import { ErrorFixModal } from './LenderApiFixModal'
 
 // ─── Filter pills config ───────────────────────────────────────────────────────
 
@@ -506,6 +507,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
   const qc = useQueryClient()
   const [activeFilter, setActiveFilter]       = useState<FilterValue>('all')
   const [detailActivity, setDetailActivity]   = useState<LeadActivity | null>(null)
+  const [fixModal, setFixModal]               = useState<{ activity: LeadActivity; error: FixSuggestion } | null>(null)
 
   const typeParam = activeFilter === 'all' ? undefined : (activeFilter as TabKey)
 
@@ -574,6 +576,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
             activity={activity}
             onPin={id => pinMutation.mutate(id)}
             onViewDetails={setDetailActivity}
+            onFix={(act, err) => setFixModal({ activity: act, error: err })}
             isLast={idx === unpinnedItems.length - 1 && !hasNextPage}
           />
         </div>
@@ -658,6 +661,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
                       activity={activity}
                       onPin={id => pinMutation.mutate(id)}
                       onViewDetails={setDetailActivity}
+                      onFix={(act, err) => setFixModal({ activity: act, error: err })}
                       isLast={idx === pinnedItems.length - 1 && unpinnedItems.length === 0}
                     />
                   ))}
@@ -719,6 +723,20 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
       <ApiDetailModal
         activity={detailActivity}
         onClose={() => setDetailActivity(null)}
+      />
+    )}
+
+    {/* ── Fix modal ── */}
+    {fixModal && (
+      <ErrorFixModal
+        leadId={leadId}
+        lenderId={(fixModal.activity.meta as Record<string, unknown>)?.lender_id as number ?? 0}
+        error={fixModal.error}
+        onClose={() => setFixModal(null)}
+        onFixed={() => {
+          setFixModal(null)
+          qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+        }}
       />
     )}
   </>

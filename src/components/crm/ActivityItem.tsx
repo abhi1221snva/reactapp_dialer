@@ -1,11 +1,12 @@
 import {
   MessageSquare, Phone, Mail, ArrowRightLeft, FileText,
   CheckSquare, Send, AlertCircle, Pin, User, Globe, Zap,
-  ArrowRight, Code2, CheckCircle2, XCircle,
+  ArrowRight, Code2, CheckCircle2, XCircle, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import type { LeadActivity, ActivityType } from '../../types/crm.types'
+import type { LeadActivity, ActivityType, FixSuggestion } from '../../types/crm.types'
+import { LenderErrorList, describeApiError } from './LenderApiFixModal'
 
 // ─── Type config ──────────────────────────────────────────────────────────────
 
@@ -129,9 +130,10 @@ function avatarPalette(name: string) {
 interface RichContentProps {
   activity: LeadActivity
   onViewDetails?: () => void
+  onFix?: (error: FixSuggestion) => void
 }
 
-function RichContent({ activity, onViewDetails }: RichContentProps) {
+function RichContent({ activity, onViewDetails, onFix }: RichContentProps) {
   const meta = activity.meta as Record<string, unknown> | null | undefined
 
   // ── Lender API Result ──────────────────────────────────────────────────────
@@ -142,33 +144,89 @@ function RichContent({ activity, onViewDetails }: RichContentProps) {
     const attempts       = meta.attempts as number | undefined
     const validErrors    = meta.validation_errors as string[] | undefined
     const hasResponse    = !!meta.response_body
+    const docFilename    = meta.doc_filename as string | undefined
+    const isFixable      = meta.is_fixable as boolean | undefined
+    const fixSuggestions = (meta.fix_suggestions ?? []) as FixSuggestion[]
+    const apiStatus      = meta.api_status as string | undefined
+
+    // Parse success details from response_body
+    let parsedResponse: Record<string, unknown> | null = null
+    try { if (meta.response_body) parsedResponse = JSON.parse(meta.response_body as string) } catch { /* ignore */ }
+    const businessId = (parsedResponse as { businessID?: string } | null)?.businessID
+    const appNumber  = (parsedResponse as { applicationNumber?: string } | null)?.applicationNumber
+
+    // Determine if we have fix suggestions or need fallback error description
+    const hasFixes  = !isSuccess && fixSuggestions.length > 0
+    const errInfo   = !isSuccess && !hasFixes
+      ? describeApiError({
+          status:         apiStatus ?? ((!responseCode && isSuccess === false) ? 'timeout' : 'error'),
+          response_code:  responseCode ?? null,
+          response_body:  meta.response_body as string | null,
+        })
+      : null
+
+    const hasChips = responseCode != null || durationMs != null || (attempts != null && attempts > 1)
 
     return (
       <div className="mt-2 space-y-2">
-        {/* Info chips */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {responseCode != null && (
-            <span className={cn(
-              'inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded',
-              isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-            )}>
-              HTTP {responseCode}
-            </span>
-          )}
-          {durationMs != null && (
-            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
-              {durationMs}ms
-            </span>
-          )}
-          {attempts != null && attempts > 1 && (
-            <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
-              {attempts} attempts
-            </span>
-          )}
-        </div>
 
-        {/* Validation errors */}
-        {validErrors && validErrors.length > 0 && (
+        {/* Fixable badge */}
+        {isFixable && !isSuccess && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Wrench size={9} /> Fixable
+          </span>
+        )}
+
+        {/* Doc upload filename */}
+        {docFilename && (
+          <div className="flex items-center gap-1.5">
+            <FileText size={10} className="text-sky-500 flex-shrink-0" />
+            <span className="text-[11px] text-sky-700 font-medium">{docFilename}</span>
+          </div>
+        )}
+
+        {/* Info chips */}
+        {hasChips && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {responseCode != null && (
+              <span className={cn(
+                'inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded',
+                isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+              )}>
+                HTTP {responseCode}
+              </span>
+            )}
+            {durationMs != null && (
+              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                {durationMs}ms
+              </span>
+            )}
+            {attempts != null && attempts > 1 && (
+              <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                {attempts} attempts
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Success details: App # and Business ID */}
+        {isSuccess && (appNumber || businessId) && (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 space-y-1">
+            {appNumber  && <p className="text-[11px] text-emerald-800"><span className="font-medium">Application #:</span> <span className="font-mono">{appNumber}</span></p>}
+            {businessId && <p className="text-[11px] text-emerald-800"><span className="font-medium">Business ID:</span> <span className="font-mono">{businessId}</span></p>}
+          </div>
+        )}
+
+        {/* Structured error list with Fix Now buttons */}
+        {hasFixes && onFix && (
+          <LenderErrorList
+            suggestions={fixSuggestions}
+            onFix={onFix}
+          />
+        )}
+
+        {/* Fallback validation errors (old entries without fix_suggestions) */}
+        {!hasFixes && validErrors && validErrors.length > 0 && (
           <div className="bg-amber-50 border border-amber-100 rounded-lg p-2.5 space-y-1">
             <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">
               Validation Errors
@@ -178,6 +236,16 @@ function RichContent({ activity, onViewDetails }: RichContentProps) {
                 <AlertCircle size={10} className="text-amber-500 flex-shrink-0 mt-0.5" />
                 {e}
               </p>
+            ))}
+          </div>
+        )}
+
+        {/* Error description for non-fixable errors */}
+        {errInfo && (
+          <div className="bg-red-50 border border-red-100 rounded-lg p-2.5 space-y-1">
+            <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wide mb-1">{errInfo.title}</p>
+            {errInfo.details.map((d, i) => (
+              <p key={i} className="text-[11px] text-red-800 whitespace-pre-wrap">{d}</p>
             ))}
           </div>
         )}
@@ -249,10 +317,11 @@ interface Props {
   activity: LeadActivity
   onPin?: (id: number) => void
   onViewDetails?: (activity: LeadActivity) => void
+  onFix?: (activity: LeadActivity, error: FixSuggestion) => void
   isLast?: boolean
 }
 
-export function ActivityItem({ activity, onPin, onViewDetails, isLast }: Props) {
+export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: Props) {
   const meta = activity.meta as Record<string, unknown> | null | undefined
 
   // Resolve config, with overrides for lender API result based on success/failure
@@ -273,7 +342,15 @@ export function ActivityItem({ activity, onPin, onViewDetails, isLast }: Props) 
   const palette  = userName ? avatarPalette(userName) : null
 
   const hasRichContent = (
-    activity.activity_type === 'lender_api_result' ||
+    (activity.activity_type === 'lender_api_result' && meta &&
+      !!(
+        (meta as any)?.response_code != null ||
+        (meta as any)?.doc_filename ||
+        ((meta as any)?.validation_errors as string[] | undefined)?.length ||
+        ((meta as any)?.fix_suggestions as unknown[] | undefined)?.length ||
+        (meta as any)?.is_fixable
+      )
+    ) ||
     (activity.activity_type === 'document_uploaded' && (meta as any)?.files?.length > 0) ||
     (activity.activity_type === 'status_change' && (meta as any)?.from_status) ||
     (activity.activity_type === 'lender_submitted' && (meta as any)?.lender_name)
@@ -376,11 +453,8 @@ export function ActivityItem({ activity, onPin, onViewDetails, isLast }: Props) 
           {/* ── Type-specific rich content ── */}
           <RichContent
             activity={activity}
-            onViewDetails={
-              onViewDetails
-                ? () => onViewDetails(activity)
-                : undefined
-            }
+            onViewDetails={onViewDetails ? () => onViewDetails(activity) : undefined}
+            onFix={onFix ? (err) => onFix(activity, err) : undefined}
           />
 
           {/* ── Meta row: time + user avatar ── */}

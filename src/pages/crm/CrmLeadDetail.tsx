@@ -9,13 +9,14 @@ import {
   Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
   ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
-  Activity, Search, Wrench, RefreshCw, AlertTriangle,
+  Activity, Search, Wrench, RefreshCw, AlertTriangle, CheckCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
 import { ActivityTimeline } from '../../components/crm/ActivityTimeline'
+import { LenderErrorList, ErrorFixModal, describeApiError } from '../../components/crm/LenderApiFixModal'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { MerchantPortalSection } from '../../components/crm/MerchantPortalSection'
 import { OffersStipsTab } from '../../components/crm/OffersStipsTab'
@@ -55,17 +56,27 @@ const ALLOWED_MIMES = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/jpeg', 'image/png',
+  // Some browsers/OS report these for Office files
+  'application/zip', 'application/octet-stream', 'application/x-cfb',
 ])
+const ALLOWED_EXTS = new Set(['pdf','doc','docx','xls','xlsx','jpg','jpeg','png'])
 const ALLOWED_EXT  = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png'
 const MAX_FILE_MB  = 20
 const MAX_FILES    = 10
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+function getFileExt(name: string): string {
+  return (name.split('.').pop() ?? '').toLowerCase()
+}
+
 function validateFiles(files: File[]): { valid: File[]; errors: string[] } {
   const valid: File[] = []; const errors: string[] = []
   if (files.length > MAX_FILES) { errors.push(`Maximum ${MAX_FILES} files allowed.`); return { valid, errors } }
   for (const f of files) {
-    if (!ALLOWED_MIMES.has(f.type)) errors.push(`"${f.name}" — unsupported type.`)
+    const ext = getFileExt(f.name)
+    const mimeOk = ALLOWED_MIMES.has(f.type) || !f.type  // empty type = trust extension
+    const extOk  = ALLOWED_EXTS.has(ext)
+    if (!mimeOk && !extOk) errors.push(`"${f.name}" — unsupported type. Allowed: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.`)
     else if (f.size > MAX_FILE_MB * 1024 * 1024) errors.push(`"${f.name}" — exceeds ${MAX_FILE_MB} MB.`)
     else valid.push(f)
   }
@@ -346,12 +357,34 @@ function SidebarCard({
 }
 
 // ── Doc viewer modal ───────────────────────────────────────────────────────────
-function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => void }) {
+function DocViewerModal({ doc, leadId, onClose }: { doc: CrmDocument; leadId: number; onClose: () => void }) {
+  const [blobUrl, setBlobUrl]       = useState<string | null>(null)
+  const [viewLoading, setViewLoading] = useState(true)
+  const [viewError, setViewError]   = useState(false)
   const [downloading, setDownloading] = useState(false)
   const fileType = getFileType(doc.file_path)
 
+  // Fetch the document via the authenticated proxy endpoint → blob URL for iframe/img
+  useEffect(() => {
+    if (fileType === 'other') { setViewLoading(false); return }
+    let url: string | null = null
+    crmService.viewLeadDocument(leadId, doc.id)
+      .then(res => { url = URL.createObjectURL(res.data as Blob); setBlobUrl(url) })
+      .catch(() => setViewError(true))
+      .finally(() => setViewLoading(false))
+    return () => { if (url) URL.revokeObjectURL(url) }
+  }, [doc.id, leadId, fileType]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleDownload() {
-    setDownloading(true); await downloadFile(doc.file_path ?? '', doc.file_name); setDownloading(false)
+    setDownloading(true)
+    try {
+      const res = await crmService.downloadLeadDocument(leadId, doc.id)
+      const url = URL.createObjectURL(res.data as Blob)
+      const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { toast.error('Download failed') }
+    setDownloading(false)
   }
 
   return (
@@ -382,13 +415,25 @@ function DocViewerModal({ doc, onClose }: { doc: CrmDocument; onClose: () => voi
         </div>
       </div>
       <div className="flex-1 overflow-hidden flex items-center justify-center p-6">
-        {fileType === 'pdf' && (
-          <iframe src={doc.file_path ?? undefined} title={doc.file_name} className="w-full h-full rounded-xl" style={{ maxWidth: '960px', border: 'none', background: '#fff' }} />
+        {viewLoading && (
+          <Loader2 size={28} className="animate-spin text-white/60" />
         )}
-        {fileType === 'image' && (
-          <img src={doc.file_path ?? undefined} alt={doc.file_name} className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
+        {!viewLoading && viewError && (
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AlertCircle size={32} className="text-slate-400" />
+            <p className="text-slate-300 text-sm">Failed to load document preview.</p>
+            <button onClick={handleDownload} disabled={downloading} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
+              {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Download to view
+            </button>
+          </div>
         )}
-        {fileType === 'other' && (
+        {!viewLoading && !viewError && blobUrl && fileType === 'pdf' && (
+          <iframe src={blobUrl} title={doc.file_name} className="w-full h-full rounded-xl" style={{ maxWidth: '960px', border: 'none', background: '#fff' }} />
+        )}
+        {!viewLoading && !viewError && blobUrl && fileType === 'image' && (
+          <img src={blobUrl} alt={doc.file_name} className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
+        )}
+        {!viewLoading && fileType === 'other' && (
           <div className="flex flex-col items-center gap-4 text-center">
             <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center">
               <FileText size={40} className="text-slate-400" />
@@ -418,7 +463,10 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
 
   const { data: typeData } = useQuery({
     queryKey: ['document-types'],
-    queryFn: async () => (await crmService.getDocumentTypes()).data?.data ?? (await crmService.getDocumentTypes()).data ?? [] as DocumentType[],
+    queryFn: async () => {
+      const res = await crmService.getDocumentTypes()
+      return (res.data?.data ?? res.data ?? []) as DocumentType[]
+    },
     staleTime: 2 * 60 * 1000,
   })
 
@@ -449,7 +497,10 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
       qc.invalidateQueries({ queryKey: ['lead-documents', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
     },
-    onError: () => toast.error('Upload failed'),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg ? `Upload failed: ${msg}` : 'Upload failed — please try again.')
+    },
   })
 
   const deleteMutation = useMutation({
@@ -468,6 +519,10 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
   const canUpload = !!selectedTypeId && selectedFiles.length > 0
 
   return (
+    <>
+      {viewDoc && <DocViewerModal doc={viewDoc} leadId={leadId} onClose={() => setViewDoc(null)} />}
+      {showTypeManager && <CrmDocumentTypesManager onClose={() => setShowTypeManager(false)} />}
+
     <div className="flex gap-0 divide-x divide-slate-100 h-full">
 
       {/* ── Left: Document list ── */}
@@ -508,7 +563,21 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
                   </div>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                     <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
-                    <button onClick={() => doc.file_path && downloadFile(doc.file_path, doc.file_name)} disabled={!doc.file_path} className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Download"><Download size={13} /></button>
+                    <button
+                      disabled={!doc.file_path}
+                      className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30"
+                      title="Download"
+                      onClick={async () => {
+                        if (!doc.file_path) return
+                        try {
+                          const res = await crmService.downloadLeadDocument(leadId, doc.id)
+                          const url = URL.createObjectURL(res.data as Blob)
+                          const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
+                          document.body.appendChild(a); a.click(); document.body.removeChild(a)
+                          setTimeout(() => URL.revokeObjectURL(url), 1000)
+                        } catch { toast.error('Download failed') }
+                      }}
+                    ><Download size={13} /></button>
                     <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={13} /></button>
                   </div>
                 </div>
@@ -551,7 +620,9 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
             <Upload size={15} className="text-emerald-500" />
           </div>
           <span className="text-xs font-semibold text-slate-500">Choose files</span>
-          <span className="text-[10px] text-slate-400">PDF, DOC, XLS, JPG, PNG</span>
+          <span className="text-[10px] text-slate-400">
+            {selectedTypeId ? 'PDF, DOC, XLS, JPG, PNG' : 'Select a document type first'}
+          </span>
         </button>
         <input ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden" onChange={handleFileChange} />
 
@@ -594,6 +665,7 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
       </div>
 
     </div>
+    </>
   )
 }
 
@@ -648,6 +720,17 @@ const INLINE_STATUS_OPTIONS = [
   { value: 'declined',         label: 'Declined' },
   { value: 'needs_documents',  label: 'Missing Docs' },
 ] as const
+
+// Parse backend auto-submission notes: "[YYYY-MM-DD HH:mm] message" separated by "\n\n"
+function parseSubmissionNotes(raw: string): { ts: string; text: string }[] {
+  if (!raw.trim()) return []
+  return raw.split(/\n\n+/).map(entry => {
+    entry = entry.trim()
+    const m = entry.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\]\s*(.+)$/s)
+    if (m) return { ts: m[1], text: m[2].trim() }
+    return { ts: '', text: entry }
+  }).filter(e => e.text)
+}
 
 // Parse stored note log: entries separated by "\n---\n"
 function parseNoteLog(raw: string): { ts: string; text: string }[] {
@@ -793,14 +876,31 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
         </div>
       )}
 
-      {/* Submission notes (auto-tracked doc history) */}
-      {sub.notes && (
-        <div className="mt-2 px-3 pb-2">
-          <div className="bg-slate-50 rounded-lg border border-slate-100 p-2.5 text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
-            {sub.notes}
+      {/* Submission log — one entry per send event */}
+      {sub.notes && (() => {
+        const entries = parseSubmissionNotes(sub.notes)
+        if (!entries.length) return null
+        return (
+          <div className="border-t border-slate-100">
+            <div className="px-3 pt-2 pb-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+                Send Log ({entries.length})
+              </p>
+              <div className="space-y-1 max-h-28 overflow-y-auto">
+                {entries.map((e, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[11px]">
+                    <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-slate-300 mt-1" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-slate-700">{e.text}</span>
+                      {e.ts && <span className="text-slate-400 ml-1.5 tabular-nums">{e.ts}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -832,246 +932,7 @@ interface ApiLog {
   is_fixable:      boolean
 }
 
-// ── Error Fix Modal ────────────────────────────────────────────────────────────
-interface FixModalProps {
-  leadId:   number
-  lenderId: number
-  error:    FixSuggestion
-  onClose:  () => void
-  onFixed:  () => void  // called after successful save (with or without resubmit)
-}
-
-function ErrorFixModal({ leadId, lenderId, error, onClose, onFixed }: FixModalProps) {
-  const [editValue,  setEditValue]  = useState(error.current_value ?? '')
-  const [mode,       setMode]       = useState<'auto' | 'manual'>(
-    error.can_auto_fix ? 'auto' : 'manual'
-  )
-
-  const applyMutation = useMutation({
-    mutationFn: (payload: ApplyLenderFixPayload) => crmService.applyLenderFix(leadId, payload),
-    onSuccess: (_data, payload) => {
-      toast.success(payload.resubmit ? 'Fix saved — resubmitting to lender…' : 'Fix saved successfully')
-      onFixed()
-      onClose()
-    },
-    onError: () => toast.error('Failed to save fix'),
-  })
-
-  const valueToSave = mode === 'auto' ? (error.auto_fix_value ?? editValue) : editValue
-  const canSave     = valueToSave.trim() !== ''
-
-  const fieldLabel = error.field
-    ? error.field.split('.').filter(p => !/^\d+$/.test(p)).map(p =>
-        p.replace(/([A-Z])/g, ' $1').replace(/[_-]/g, ' ').trim()
-      ).join(' › ')
-    : error.crm_key || 'Field'
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-              <Wrench size={15} className="text-amber-600" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800 leading-tight">Fix Field</p>
-              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-[260px]">{error.field || error.crm_key}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-
-          {/* Error message */}
-          <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl p-3">
-            <AlertTriangle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-red-700 leading-relaxed">{error.message}</p>
-          </div>
-
-          {/* Expected format hint */}
-          <div>
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Expected Format</p>
-            <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">{error.expected}</p>
-          </div>
-
-          {/* Auto-fix block */}
-          {error.can_auto_fix && error.auto_fix_value && (
-            <div className="border border-emerald-200 rounded-xl bg-emerald-50 p-3.5">
-              <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                <Check size={11} /> Auto-Fix Available
-              </p>
-              <p className="text-xs text-emerald-800 mb-3">{error.suggestion}</p>
-
-              {mode === 'auto' ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-white border border-emerald-300 rounded-lg px-3 py-2 flex items-center justify-between">
-                    <span className="text-xs text-slate-500 font-mono">
-                      {error.current_value || <span className="italic text-slate-400">empty</span>}
-                    </span>
-                    <span className="text-slate-300 mx-2">→</span>
-                    <span className="text-xs font-bold text-emerald-700 font-mono">{error.auto_fix_value}</span>
-                  </div>
-                  <button
-                    onClick={() => setMode('manual')}
-                    className="text-[11px] text-slate-400 hover:text-slate-600 underline flex-shrink-0"
-                  >
-                    Edit manually
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setEditValue(error.auto_fix_value!); setMode('auto') }}
-                  className="text-[11px] text-emerald-700 hover:underline flex items-center gap-1"
-                >
-                  <Check size={10} /> Use auto-fix value ({error.auto_fix_value})
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Manual edit */}
-          {(!error.can_auto_fix || mode === 'manual') && (
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                {fieldLabel}
-              </label>
-              <input
-                type="text"
-                value={editValue}
-                onChange={e => setEditValue(e.target.value)}
-                placeholder={error.expected}
-                autoFocus
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400"
-              />
-              {error.current_value && (
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Current: <span className="font-mono">{error.current_value}</span>
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer actions */}
-        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex items-center gap-2">
-          <button
-            disabled={!canSave || applyMutation.isPending}
-            onClick={() => applyMutation.mutate({
-              field_key:    error.crm_key || error.field,
-              new_value:    valueToSave,
-              lender_field: error.field,
-              lender_id:    lenderId,
-              resubmit:     true,
-            })}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
-          >
-            {applyMutation.isPending
-              ? <><Loader2 size={12} className="animate-spin" /> Saving…</>
-              : <><RefreshCw size={12} /> Save &amp; Resubmit</>
-            }
-          </button>
-          <button
-            disabled={!canSave || applyMutation.isPending}
-            onClick={() => applyMutation.mutate({
-              field_key:    error.crm_key || error.field,
-              new_value:    valueToSave,
-              lender_field: error.field,
-            })}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-white disabled:opacity-50 transition-colors"
-          >
-            Save Only
-          </button>
-          <button onClick={onClose} className="px-3 py-2.5 text-xs text-slate-400 hover:text-slate-600">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Structured Error List ──────────────────────────────────────────────────────
-function LenderErrorList({
-  log,
-  onFix,
-}: {
-  log:    ApiLog
-  onFix:  (err: FixSuggestion) => void
-}) {
-  const suggestions: FixSuggestion[] = Array.isArray(log.fix_suggestions) ? log.fix_suggestions
-    : Array.isArray(log.error_json) ? log.error_json : []
-
-  if (suggestions.length === 0) {
-    // Fallback: no structured data — show raw error_message
-    const body = log.response_body ?? ''
-    let parsed: Record<string, unknown> | null = null
-    try { if (body) parsed = JSON.parse(body) } catch { /* ignore */ }
-    const rawMsgs = (parsed as { errorMessages?: string[] } | null)?.errorMessages ?? []
-    const fallback = rawMsgs.length ? rawMsgs : (log.error_message ? [log.error_message] : [])
-    return fallback.length ? (
-      <div className="mt-2 space-y-0.5">
-        {fallback.map((m, i) => (
-          <p key={i} className="text-xs text-red-700 opacity-90 whitespace-pre-wrap">• {m}</p>
-        ))}
-      </div>
-    ) : null
-  }
-
-  return (
-    <div className="mt-2 space-y-2">
-      {/* Count badge */}
-      <p className="text-[11px] font-semibold text-red-600 flex items-center gap-1.5">
-        <AlertTriangle size={11} className="flex-shrink-0" />
-        {suggestions.length} issue{suggestions.length !== 1 ? 's' : ''} found
-      </p>
-
-      {suggestions.map((err, i) => (
-        <div key={i} className="flex items-start gap-2.5 bg-white border border-red-200 rounded-lg px-3 py-2.5">
-          <div className="flex-1 min-w-0">
-            {/* Field path chip */}
-            {err.field && (
-              <span className="inline-flex items-center text-[10px] font-mono font-medium bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded mb-1">
-                {err.field}
-              </span>
-            )}
-            <p className="text-xs text-slate-700 leading-relaxed">{err.message}</p>
-            {err.can_auto_fix && err.suggestion && (
-              <p className="text-[11px] text-emerald-700 mt-0.5 flex items-center gap-1">
-                <Check size={9} className="flex-shrink-0" /> {err.suggestion}
-              </p>
-            )}
-            {!err.can_auto_fix && err.expected && (
-              <p className="text-[11px] text-slate-400 mt-0.5">{err.expected}</p>
-            )}
-          </div>
-          {err.fix_type !== 'unknown' && (
-            <button
-              onClick={() => onFix(err)}
-              className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                err.can_auto_fix
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-              }`}
-            >
-              <Wrench size={10} />
-              {err.can_auto_fix ? 'Auto-Fix' : 'Fix Now'}
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
+// ErrorFixModal, LenderErrorList, describeApiError imported from LenderApiFixModal.tsx
 
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
@@ -1146,41 +1007,6 @@ function LendersPanel({ leadId }: { leadId: number }) {
     refetchInterval: 15_000,
   })
 
-  function describeApiError(log: ApiLog): { title: string; details: string[] } {
-    if (log.status === 'timeout') return {
-      title: 'Connection timed out',
-      details: ['The lender server did not respond within the timeout window.', 'Possible causes: server is temporarily down, rate-limited, or blocking this IP.'],
-    }
-    const code = log.response_code
-    const body = log.response_body ?? ''
-    let parsed: Record<string, unknown> | null = null
-    try { if (body) parsed = JSON.parse(body) } catch { /* ignore */ }
-    const errorMsgs = (parsed as { errorMessages?: string[] } | null)?.errorMessages
-
-    if (code === 400) {
-      if (!body) return {
-        title: 'Request rejected — no details returned (HTTP 400)',
-        details: [
-          'The lender server returned an empty error response.',
-          'Most likely causes:',
-          '  • This server\'s IP (54.81.130.120) is not whitelisted by the lender',
-          '  • API credentials are expired or invalid',
-          '  • Required configuration is missing (base_url, endpoint_path)',
-        ],
-      }
-      if (errorMsgs?.length) return {
-        title: 'Validation errors from lender (HTTP 400)',
-        details: errorMsgs.map(m => `• ${m}`),
-      }
-      return { title: `Bad request (HTTP 400)`, details: [body.slice(0, 300)] }
-    }
-    if (code === 401) return { title: 'Authentication failed (HTTP 401)', details: ['API credentials are invalid or expired. Update the API key / token in Lender API Configs.'] }
-    if (code === 403) return { title: 'Access forbidden (HTTP 403)', details: ['This server\'s IP may not be whitelisted by the lender. Contact your lender account manager.'] }
-    if (code === 404) return { title: 'Endpoint not found (HTTP 404)', details: ['The API URL is incorrect. Check base_url and endpoint_path in Lender API Configs.'] }
-    if (code && code >= 500) return { title: `Lender server error (HTTP ${code})`, details: ['The lender\'s server encountered an internal error. Try again later.'] }
-    if (log.error_message) return { title: 'Request failed', details: [log.error_message] }
-    return { title: `HTTP ${code ?? 'unknown'}`, details: [body.slice(0, 300)] }
-  }
 
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
   // Deduplicate by lender_id — keep the latest submission per lender
@@ -1190,6 +1016,11 @@ function LendersPanel({ leadId }: { leadId: number }) {
       return acc
     }, {})
   )
+  // Map of lender_id → latest submission (for "already sent" indicators)
+  const submittedLenderMap = subList.reduce<Record<number, LenderSubmission>>((acc, s) => {
+    acc[s.lender_id] = s
+    return acc
+  }, {})
   const docs          = leadDocs ?? []
 
   // Compute preview template + filled HTML at component scope so the mutation can use them
@@ -1274,81 +1105,184 @@ function LendersPanel({ leadId }: { leadId: number }) {
   return (
     <div className="space-y-4">
 
-      {/* ── Submit Form ── */}
-      {!showForm ? (
-        <button onClick={openForm} className="btn-primary w-full justify-center gap-2">
-          <Send size={13} /> Submit to Lenders
-        </button>
-      ) : (() => {
-        return (
-          <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
-              <span className="text-sm font-semibold text-slate-700">Submit Application</span>
-              <button onClick={closeForm} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+      {/* ── Submit to Lenders button ── */}
+      <button
+        onClick={openForm}
+        className="btn-primary w-full justify-center gap-2 py-2.5"
+      >
+        <Send size={14} /> Submit to Lenders
+      </button>
+
+      {/* ── Submit Application Modal ── */}
+      {showForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)' }}
+          onClick={e => { if (e.target === e.currentTarget) closeForm() }}
+        >
+          <div
+            className={`w-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all ${previewTemplate ? 'max-w-4xl' : 'max-w-lg'}`}
+            style={{ maxHeight: '90vh' }}
+          >
+            {/* Gradient accent bar */}
+            <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
+
+            {/* Header */}
+            <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center gap-4 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 12px rgba(5,150,105,0.35)' }}>
+                <Send size={16} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-bold text-slate-900 leading-tight">Submit Application</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Choose lenders, attach documents and send</p>
+              </div>
+              <button
+                onClick={closeForm}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            {/* two-col when preview active */}
-            <div className={previewTemplate ? 'flex divide-x divide-slate-100' : ''}>
+            {/* Body */}
+            <div className={`flex-1 overflow-hidden flex ${previewTemplate ? 'flex-row' : 'flex-col'}`}>
 
-              {/* ── Form fields ── */}
-              <div className={previewTemplate ? 'w-72 flex-shrink-0 p-4 space-y-3' : 'p-4 space-y-3'}>
+              {/* ── Form fields column ── */}
+              <div className={`overflow-y-auto py-5 px-6 space-y-5 flex-shrink-0 ${previewTemplate ? 'w-[340px] border-r border-slate-100' : 'flex-1'}`}>
 
-                {/* Lenders */}
+                {/* ── Lenders section ── */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-medium text-slate-600">Lenders</label>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center">
+                        <Building2 size={11} className="text-emerald-600" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Select Lenders</span>
+                      {selectedIds.size > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white leading-none">
+                          {selectedIds.size}
+                        </span>
+                      )}
+                    </div>
                     {activeLenders.length > 0 && (
                       <button
                         onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
-                        className="text-[11px] text-emerald-600 hover:underline"
-                      >{selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}</button>
+                        className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+                      >
+                        {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
+                      </button>
                     )}
                   </div>
+
                   {activeLenders.length === 0 ? (
-                    <p className="text-xs text-slate-400">No active lenders configured.</p>
+                    <div className="flex flex-col items-center py-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                      <Building2 size={20} className="text-slate-300 mb-1.5" />
+                      <p className="text-xs font-medium text-slate-500">No active lenders configured</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Add lenders from the Lenders menu first</p>
+                    </div>
                   ) : (
-                    <div className="space-y-1 max-h-44 overflow-y-auto">
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
                       {activeLenders.map(l => {
                         const on = selectedIds.has(l.id)
+                        const prevSub = submittedLenderMap[l.id]
+                        const alreadySent = !!prevSub
                         return (
-                          <label key={l.id} className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg border cursor-pointer select-none transition-colors
-                            border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/40"
-                            style={on ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                          <label
+                            key={l.id}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                              on
+                                ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                                : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50'
+                            }`}
                           >
+                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                              on ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'
+                            }`}>
+                              {on && <Check size={10} className="text-white" strokeWidth={3} />}
+                            </div>
                             <input
                               type="checkbox"
                               checked={on}
                               onChange={() => toggleLender(l.id)}
-                              className="accent-emerald-600 w-3.5 h-3.5 flex-shrink-0"
+                              className="sr-only"
                             />
-                            <span className="text-xs text-slate-700 truncate">{l.lender_name}</span>
+                            <span className="text-sm font-medium text-slate-700 truncate flex-1">{l.lender_name}</span>
+                            {alreadySent && (
+                              <span
+                                title={`Previously sent on ${prevSub.submitted_at ? new Date(prevSub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : 'unknown date'}`}
+                                className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0"
+                              >
+                                <CheckCircle size={8} /> Sent
+                              </span>
+                            )}
                           </label>
                         )
                       })}
                     </div>
                   )}
+
+                  {/* Resubmit warning */}
+                  {(() => {
+                    const alreadySentSelected = Array.from(selectedIds).filter(id => !!submittedLenderMap[id])
+                    if (!alreadySentSelected.length) return null
+                    const names = alreadySentSelected.map(id => submittedLenderMap[id].lender_name ?? `Lender #${id}`).join(', ')
+                    return (
+                      <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-amber-700 leading-relaxed">
+                          <strong className="font-semibold">{names}</strong>{' '}
+                          {alreadySentSelected.length === 1 ? 'was' : 'were'} already submitted. This will resend the application.
+                        </p>
+                      </div>
+                    )
+                  })()}
                 </div>
 
-                {/* Email Template */}
+                <div className="border-t border-slate-100" />
+
+                {/* ── Email Template section ── */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Email Template</label>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-lg bg-sky-100 flex items-center justify-center">
+                      <Mail size={11} className="text-sky-600" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Email Template</span>
+                  </div>
                   <select
                     className="input w-full text-sm"
                     value={templateId}
                     onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
                   >
-                    <option value="">— Default —</option>
+                    <option value="">— Default template —</option>
                     {(emailTemplates ?? []).map(t => (
                       <option key={t.id} value={t.id}>{t.template_name}</option>
                     ))}
                   </select>
+                  {previewTemplate && (
+                    <p className="text-[11px] text-emerald-600 flex items-center gap-1 mt-1.5">
+                      <Eye size={10} /> Preview shown on the right
+                    </p>
+                  )}
                 </div>
 
-                {/* Documents */}
+                <div className="border-t border-slate-100" />
+
+                {/* ── Documents section ── */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-slate-600">Documents</label>
+                      <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
+                        <FileText size={11} className="text-violet-600" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Documents</span>
+                      {selectedDocIds.size > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500 text-white leading-none">
+                          {selectedDocIds.size}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
                       {docs.length > 0 && (() => {
                         const attachable = docs.filter(d => d.attachable !== false && !!d.file_path)
                         if (!attachable.length) return null
@@ -1357,100 +1291,110 @@ function LendersPanel({ leadId }: { leadId: number }) {
                           <button
                             type="button"
                             onClick={() => setSelectedDocIds(allSelected ? new Set() : new Set(attachable.map(d => d.id)))}
-                            className="text-[10px] text-slate-400 hover:text-emerald-600 underline"
+                            className="text-[11px] font-medium text-slate-500 hover:text-emerald-600 hover:underline"
                           >
                             {allSelected ? 'Deselect all' : 'Select all'}
                           </button>
                         )
                       })()}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingDocs}
+                        className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg transition-colors"
+                      >
+                        {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                        Upload
+                      </button>
+                      <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingDocs}
-                      className="text-[11px] text-emerald-600 hover:underline disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
-                      Upload
-                    </button>
-                    <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
                   </div>
+
                   {docs.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No documents yet — click Upload to add files.</p>
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                      <Upload size={12} className="text-slate-300" />
+                      <p className="text-xs text-slate-400">No documents yet — click Upload to add files</p>
+                    </div>
                   ) : (
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
                       {docs.map(d => {
-                        const on        = selectedDocIds.has(d.id)
+                        const on = selectedDocIds.has(d.id)
                         const canAttach = d.attachable !== false && !!d.file_path
-                        const docLabel  = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
+                        const docLabel = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
                         return (
-                          <label key={d.id} title={!canAttach ? 'File not on server — re-upload to attach' : undefined}
-                            className={`flex items-center gap-2 py-1 px-2 rounded border select-none text-xs border-slate-200 ${canAttach ? 'cursor-pointer text-slate-700 hover:border-emerald-200' : 'cursor-not-allowed text-slate-400 opacity-60'}`}
-                            style={on && canAttach ? { borderColor: '#6ee7b7', backgroundColor: 'rgb(240 253 244)' } : {}}
+                          <div
+                            key={d.id}
+                            title={!canAttach ? 'File not on server — re-upload to attach' : undefined}
+                            onClick={() => canAttach && toggleDoc(d.id)}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs select-none transition-all ${
+                              canAttach
+                                ? on
+                                  ? 'cursor-pointer border-violet-200 bg-violet-50'
+                                  : 'cursor-pointer border-slate-200 bg-white hover:border-violet-200 hover:bg-slate-50'
+                                : 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-50'
+                            }`}
                           >
-                            <input type="checkbox" checked={on} disabled={!canAttach} onChange={() => canAttach && toggleDoc(d.id)} className="accent-emerald-600 w-3 h-3 flex-shrink-0" />
-                            <FileText size={10} className="flex-shrink-0 text-slate-400" />
-                            <span className="truncate">{docLabel}</span>
+                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                              on && canAttach ? 'bg-violet-500 border-violet-500' : 'border-slate-300 bg-white'
+                            }`}>
+                              {on && canAttach && <Check size={9} className="text-white" strokeWidth={3} />}
+                            </div>
+                            <FileText size={11} className={`flex-shrink-0 ${on && canAttach ? 'text-violet-500' : 'text-slate-400'}`} />
+                            <span className={`truncate flex-1 ${on && canAttach ? 'text-slate-800 font-medium' : 'text-slate-600'}`}>{docLabel}</span>
                             {!canAttach && (
                               <button
                                 type="button"
-                                onClick={e => { e.preventDefault(); fileInputRef.current?.click() }}
-                                className="ml-auto text-[9px] text-amber-500 hover:text-amber-700 flex-shrink-0 underline"
+                                onClick={e => { e.stopPropagation(); fileInputRef.current?.click() }}
+                                className="ml-auto text-[10px] text-amber-500 hover:text-amber-700 flex-shrink-0 underline"
                               >
                                 re-upload
                               </button>
                             )}
-                          </label>
+                          </div>
                         )
                       })}
                     </div>
                   )}
-                  {/* Warn if selected docs have non-attachable items */}
+
                   {selectedDocIds.size > 0 && attachableDocIds.length < selectedDocIds.size && (
-                    <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
-                      <AlertTriangle size={10} className="flex-shrink-0" />
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600">
+                      <AlertTriangle size={11} className="flex-shrink-0" />
                       {selectedDocIds.size - attachableDocIds.length} file(s) need re-upload and will be skipped.
-                    </p>
+                    </div>
                   )}
                 </div>
 
-                {/* Note */}
+                <div className="border-t border-slate-100" />
+
+                {/* ── Notes section ── */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Note (optional)</label>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center">
+                      <MessageSquare size={11} className="text-slate-500" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Note</span>
+                    <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+                  </div>
                   <textarea
                     className="input w-full resize-none text-sm"
-                    rows={2}
+                    rows={3}
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                     placeholder="Additional notes for the lender…"
                   />
                 </div>
-
-                <div className="flex gap-2 pt-0.5">
-                  <button
-                    onClick={() => submitMutation.mutate()}
-                    disabled={selectedIds.size === 0 || submitMutation.isPending}
-                    className="btn-primary flex-1 justify-center disabled:opacity-50"
-                  >
-                    {submitMutation.isPending
-                      ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
-                      : <><Send size={13} /> Send to {selectedIds.size || '…'} Lender{selectedIds.size !== 1 ? 's' : ''}</>
-                    }
-                  </button>
-                  <button onClick={closeForm} className="btn-outline px-3">Cancel</button>
-                </div>
               </div>
 
               {/* ── Email preview panel ── */}
               {previewTemplate && (
-                <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+                <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-50">
 
-                  {/* macOS-style window chrome */}
+                  {/* macOS-style chrome bar */}
                   <div className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0" style={{ background: '#1e293b' }}>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-400 hover:bg-red-500 transition-colors cursor-default" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400 hover:bg-amber-500 transition-colors cursor-default" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 hover:bg-emerald-500 transition-colors cursor-default" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                     </div>
                     <div className="flex-1 flex items-center justify-center">
                       <div className="flex items-center gap-1.5 px-3 py-1 rounded-md text-slate-400 text-[11px]" style={{ background: '#334155' }}>
@@ -1458,81 +1402,93 @@ function LendersPanel({ leadId }: { leadId: number }) {
                         <span>Email Preview</span>
                       </div>
                     </div>
-                    <div className="w-[52px]" /> {/* balance spacer */}
+                    <div className="w-[52px]" />
                   </div>
 
-                  {/* Email reading pane */}
-                  <div className="flex-1 flex flex-col overflow-hidden bg-white">
-
-                    {/* Subject + meta header */}
-                    <div className="px-5 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
-                      <h3 className="text-sm font-bold text-slate-900 leading-snug mb-3 truncate">
-                        {previewTemplate.subject || previewTemplate.template_name}
-                      </h3>
-
-                      {/* Sender row */}
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-                          style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
-                          <Mail size={13} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-semibold text-slate-800">Submission Email</span>
-                            <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                            <span className="text-[11px] text-slate-500">to</span>
-                            {selectedIds.size > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
-                                <Building2 size={9} className="text-slate-500" />
-                                {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
-                            )}
-                          </div>
-                        </div>
+                  {/* Email meta header */}
+                  <div className="px-5 pt-4 pb-3 border-b border-slate-200 bg-white flex-shrink-0">
+                    <h3 className="text-sm font-bold text-slate-900 leading-snug mb-3 truncate">
+                      {previewTemplate.subject || previewTemplate.template_name}
+                    </h3>
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+                        style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
+                        <Mail size={13} />
                       </div>
-
-                      {/* Template badge + attachments hint */}
-                      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
-                          style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
-                          <Check size={9} />
-                          {previewTemplate.template_name}
-                        </span>
-                        {selectedDocIds.size > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
-                            <FileText size={9} />
-                            {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
-                          </span>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-800">Submission Email</span>
+                          <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          <span className="text-[11px] text-slate-500">to</span>
+                          {selectedIds.size > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                              <Building2 size={9} className="text-slate-500" />
+                              {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
+                        style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
+                        <Check size={9} /> {previewTemplate.template_name}
+                      </span>
+                      {selectedDocIds.size > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
+                          <FileText size={9} /> {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                    {/* Email body iframe */}
-                    <div className="flex-1 overflow-auto bg-slate-50" style={{ minHeight: 260 }}>
-                      <div className="p-3 h-full">
-                        <div className="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden h-full" style={{ minHeight: 240 }}>
-                          <iframe
-                            key={previewTemplate.id}
-                            srcDoc={previewHtml}
-                            className="w-full border-0 block"
-                            style={{ minHeight: 240, height: '100%' }}
-                            sandbox="allow-same-origin"
-                            title="Email body preview"
-                          />
-                        </div>
-                      </div>
+                  {/* Email iframe */}
+                  <div className="flex-1 overflow-auto p-3">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full" style={{ minHeight: 260 }}>
+                      <iframe
+                        key={previewTemplate.id}
+                        srcDoc={previewHtml}
+                        className="w-full border-0 block"
+                        style={{ minHeight: 260, height: '100%' }}
+                        sandbox="allow-same-origin"
+                        title="Email body preview"
+                      />
                     </div>
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center gap-3 flex-shrink-0">
+              <button
+                onClick={() => submitMutation.mutate()}
+                disabled={selectedIds.size === 0 || submitMutation.isPending}
+                className="btn-primary flex items-center gap-2 px-6 disabled:opacity-50"
+              >
+                {submitMutation.isPending ? (
+                  <><Loader2 size={14} className="animate-spin" /> Sending…</>
+                ) : (() => {
+                  const allResend = selectedIds.size > 0 && Array.from(selectedIds).every(id => !!submittedLenderMap[id])
+                  const count = selectedIds.size || '…'
+                  return <><Send size={14} /> {allResend ? 'Resend' : 'Send'} to {count} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                })()}
+              </button>
+              <button onClick={closeForm} className="btn-outline px-5">Cancel</button>
+              {attachableDocIds.length > 0 && (
+                <span className="ml-auto text-[11px] text-slate-400 flex items-center gap-1">
+                  <FileText size={11} /> {attachableDocIds.length} file{attachableDocIds.length !== 1 ? 's' : ''} attached
+                </span>
+              )}
+            </div>
+
           </div>
-        )
-      })()}
+        </div>
+      )}
 
       {/* ── Submission History ── */}
       <div>
@@ -1592,9 +1548,12 @@ function LendersPanel({ leadId }: { leadId: number }) {
               try { if (log.response_body) parsedResponse = JSON.parse(log.response_body) } catch { /* ignore */ }
               const businessId = (parsedResponse as { businessID?: string } | null)?.businessID
               const appNumber  = (parsedResponse as { applicationNumber?: string } | null)?.applicationNumber
-              const hasFixes   = !isSuccess && (Array.isArray(log.fix_suggestions) ? log.fix_suggestions
-                : Array.isArray(log.error_json) ? log.error_json : []).length > 0
-              const errInfo    = !isSuccess && !hasFixes ? describeApiError(log) : null
+              const logSuggestions: FixSuggestion[] = Array.isArray(log.fix_suggestions) ? log.fix_suggestions
+                : Array.isArray(log.error_json) ? log.error_json : []
+              const hasFixes   = !isSuccess && logSuggestions.length > 0
+              const errInfo    = !isSuccess && !hasFixes
+                ? describeApiError({ status: log.status, response_code: log.response_code, response_body: log.response_body, error_message: log.error_message })
+                : null
 
               return (
                 <div key={log.id} className={`rounded-lg border p-3 ${statusCfg.bg}`}>
@@ -1637,7 +1596,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
                   {/* Structured error list with Fix Now buttons */}
                   {hasFixes && (
                     <LenderErrorList
-                      log={log}
+                      suggestions={logSuggestions}
                       onFix={err => setFixModal({ log, error: err })}
                     />
                   )}
@@ -2849,7 +2808,7 @@ export function CrmLeadDetail() {
   const subBadgeCount = subsForBadge?.length ?? 0
 
   const updateStatus = useMutation({
-    mutationFn: (status: string) => crmService.bulkStatusChange({ lead_ids: [leadId], lead_status: status }),
+    mutationFn: (status: string) => leadService.update(leadId, { lead_status: status }),
     onSuccess: () => {
       toast.success('Status updated')
       setShowStatusDropdown(false)
@@ -3117,16 +3076,33 @@ export function CrmLeadDetail() {
                 <div className="px-6 py-5 h-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100 h-full">
 
-                    {/* ── Col 1: Custom Fields ── */}
+                    {/* ── Col 1: Contact + Custom Fields ── */}
                     <div className="pr-6 pb-5 md:pb-0">
+
+                      {/* Contact */}
                       <div className="flex items-center gap-1.5 mb-3">
-                        <Hash size={11} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Personal Information</span>
+                        <User size={11} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact</span>
                       </div>
-                      {extraOther.length > 0 ? extraOther.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
-                      )) : (
-                        <p className="text-xs text-slate-300 mt-1">No custom fields defined.</p>
+                      <PropertyRow fieldKey="first_name"   label="First name"  value={lead.first_name   as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="last_name"    label="Last name"   value={lead.last_name    as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="email"        label="Email"       value={lead.email        as string|undefined} type="email" leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="phone_number" label="Phone"       value={lead.phone_number as string|undefined} type="tel"   leadId={leadId} onUpdated={onLeadUpdated} />
+                      {extraContact.map(f => (
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      ))}
+
+                      {/* Custom (other-section) fields */}
+                      {extraOther.length > 0 && (
+                        <>
+                          <div className="flex items-center gap-1.5 mb-2 mt-4">
+                            <Hash size={11} className="text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Custom Fields</span>
+                          </div>
+                          {extraOther.map(f => (
+                            <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                          ))}
+                        </>
                       )}
                     </div>
 
@@ -3136,13 +3112,13 @@ export function CrmLeadDetail() {
                         <Briefcase size={11} className="text-slate-400" />
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business</span>
                       </div>
-                      <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
-                      <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
-                      <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
-                      <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
-                      <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string,unknown>)['zip'] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
+                      <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
+                      <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string,unknown>)['zip'] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
                       {extraBusiness.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} readOnly />
+                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
                       ))}
                     </div>
 
