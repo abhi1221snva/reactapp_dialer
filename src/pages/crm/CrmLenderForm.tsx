@@ -1,25 +1,111 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, X, Zap, ChevronDown } from 'lucide-react'
+import {
+  ArrowLeft, Loader2, X, Zap, ChevronDown, ChevronUp,
+  AlertCircle, CheckCircle2, Eye, EyeOff,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
-import type { Lender, LenderApiCredentials } from '../../types/crm.types'
+import type { Lender } from '../../types/crm.types'
+import { cn } from '../../utils/cn'
+
+// ─── API Config types ─────────────────────────────────────────────────────────
+
+interface LenderApiConfig {
+  id: number
+  crm_lender_id: number
+  api_name: string
+  auth_type: 'bearer' | 'basic' | 'api_key' | 'oauth2' | 'none'
+  auth_credentials?: Record<string, string>
+  base_url: string
+  endpoint_path?: string
+  request_method: 'GET' | 'POST' | 'PUT' | 'PATCH'
+  default_headers?: Record<string, string>
+  payload_mapping?: Record<string, string>
+  response_mapping?: Record<string, string>
+  retry_attempts: number
+  timeout_seconds: number
+  notes?: string
+  status: boolean
+  [key: string]: unknown
+}
+
+const AUTH_TYPES = [
+  { value: 'none',    label: 'None',    desc: 'No authentication' },
+  { value: 'bearer',  label: 'Bearer',  desc: 'Authorization: Bearer <token>' },
+  { value: 'basic',   label: 'Basic',   desc: 'HTTP Basic Auth (username + password)' },
+  { value: 'api_key', label: 'API Key', desc: 'Custom header or query param' },
+  { value: 'oauth2',  label: 'OAuth 2', desc: 'Client Credentials flow' },
+]
+
+const HTTP_METHODS = ['POST', 'GET', 'PUT', 'PATCH']
+
+const API_EMPTY_FORM = {
+  api_name: '',
+  auth_type: 'none' as LenderApiConfig['auth_type'],
+  base_url: '',
+  endpoint_path: '',
+  request_method: 'POST' as LenderApiConfig['request_method'],
+  retry_attempts: 3,
+  timeout_seconds: 30,
+  notes: '',
+  auth_credentials_str: '{}',
+  default_headers_str: '{\n  "Content-Type": "application/json",\n  "Accept": "application/json"\n}',
+  payload_mapping_str: '{}',
+  response_mapping_str: '{\n  "id_field": "data.id",\n  "status_field": "data.status"\n}',
+}
+
+type ApiFormState = typeof API_EMPTY_FORM
+
+// ─── JSON Editor ──────────────────────────────────────────────────────────────
+
+function JsonEditor({
+  label, hint, value, onChange,
+}: { label: string; hint?: string; value: string; onChange: (v: string) => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const handleChange = (v: string) => {
+    onChange(v)
+    try { JSON.parse(v); setError(null) } catch { setError('Invalid JSON') }
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="label mb-0">{label}</label>
+        {error && <span className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{error}</span>}
+        {!error && value.trim() !== '' && value.trim() !== '{}' && (
+          <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 size={11} />Valid JSON</span>
+        )}
+      </div>
+      {hint && <p className="text-[11px] text-slate-400 mb-1 whitespace-pre-line">{hint}</p>}
+      <textarea
+        className={cn('input w-full resize-y font-mono text-xs leading-relaxed', error ? 'border-red-300 focus:ring-red-400' : '')}
+        rows={5}
+        value={value}
+        onChange={e => handleChange(e.target.value)}
+        spellCheck={false}
+      />
+    </div>
+  )
+}
+
+function AuthCredentialHint({ authType }: { authType: string }) {
+  const examples: Record<string, string> = {
+    bearer:  '{\n  "token": "your-bearer-token"\n}',
+    basic:   '{\n  "username": "user",\n  "password": "pass"\n}',
+    api_key: '{\n  "key": "your-api-key",\n  "header_name": "X-Api-Key",\n  "in": "header"\n}',
+    oauth2:  '{\n  "token_url": "https://auth.example.com/token",\n  "client_id": "...",\n  "client_secret": "...",\n  "scope": "read write"\n}',
+    none:    '{}',
+  }
+  return (
+    <div className="mt-1 p-2 bg-slate-50 rounded-lg border border-slate-100 text-[11px] font-mono text-slate-500 whitespace-pre">
+      {examples[authType] ?? '{}'}
+    </div>
+  )
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const LENDER_API_TYPES = [
-  { value: 'ondeck',            label: 'OnDeck' },
-  { value: 'credibly',          label: 'Credibly' },
-  { value: 'cancapital',        label: 'CAN Capital' },
-  { value: 'lendini',           label: 'Lendini' },
-  { value: 'forward_financing', label: 'Forward Financing' },
-  { value: 'bitty_advance',     label: 'Bitty Advance' },
-  { value: 'fox_partner',       label: 'Fox Partner' },
-  { value: 'specialty',         label: 'Specialty' },
-  { value: 'biz2credit',        label: 'Biz2Credit' },
-]
 
 const US_STATES = [
   'Alabama','Alaska','American Samoa','Arizona','Arkansas',
@@ -62,6 +148,10 @@ function parseJsonArray(val: unknown): string[] {
 function parseCommaSep(val: unknown): string[] {
   if (!val || typeof val !== 'string') return []
   return val.split(',').map(s => s.trim()).filter(Boolean)
+}
+
+function parseJson(str: string): Record<string, unknown> {
+  try { return JSON.parse(str) } catch { return {} }
 }
 
 // ─── YesNo toggle ─────────────────────────────────────────────────────────────
@@ -181,9 +271,6 @@ interface FormState {
   prohibited_industry: string[]; restricted_industry_note: string
   guideline_state: string[]; restricted_state_note: string
   notes: string; guideline_file: string; api_status: string
-  lender_api_type: string; url: string; username: string; password: string
-  api_key: string; auth_url: string; partner_api_key: string
-  client_id: string; salesRepEmailAddress: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -199,8 +286,7 @@ const EMPTY_FORM: FormState = {
   prohibited_industry: [], restricted_industry_note: '',
   guideline_state: [], restricted_state_note: '',
   notes: '', guideline_file: '',
-  api_status: '0', lender_api_type: '', url: '', username: '', password: '',
-  api_key: '', auth_url: '', partner_api_key: '', client_id: '', salesRepEmailAddress: '',
+  api_status: '0',
 }
 
 function lenderToForm(lender: Lender): FormState {
@@ -251,9 +337,6 @@ function lenderToForm(lender: Lender): FormState {
     notes:                    lender.notes ?? '',
     guideline_file:           String(e.guideline_file ?? ''),
     api_status:               String(lender.api_status ?? '0'),
-    lender_api_type:          lender.lender_api_type ?? '',
-    url: '', username: '', password: '', api_key: '',
-    auth_url: '', partner_api_key: '', client_id: '', salesRepEmailAddress: '',
   }
 }
 
@@ -270,6 +353,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+// ─── Collapsible API sub-section ──────────────────────────────────────────────
+
+function ApiSection({
+  id, title, activeId, onToggle, children,
+}: { id: string; title: string; activeId: string | null; onToggle: (id: string) => void; children: React.ReactNode }) {
+  const open = activeId === id
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-slate-100 transition-colors text-left"
+      >
+        <span className="text-sm font-semibold text-slate-700">{title}</span>
+        {open ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
+      </button>
+      {open && <div className="p-4 space-y-4 border-t border-slate-100">{children}</div>}
+    </div>
+  )
+}
+
 // ─── CrmLenderForm page ───────────────────────────────────────────────────────
 
 export function CrmLenderForm() {
@@ -279,7 +383,7 @@ export function CrmLenderForm() {
   const { setDescription, setActions } = useCrmHeader()
   const isEdit = !!id
 
-  // Fetch lender when editing
+  // ── Lender data ──────────────────────────────────────────────────────────────
   const { data: lenderData, isLoading: loadingLender } = useQuery({
     queryKey: ['lender', id],
     queryFn: async () => {
@@ -293,7 +397,6 @@ export function CrmLenderForm() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [formReady, setFormReady] = useState(!isEdit)
 
-  // Populate form once lender data is loaded
   useEffect(() => {
     if (lenderData) {
       setForm(lenderToForm(lenderData))
@@ -301,60 +404,109 @@ export function CrmLenderForm() {
     }
   }, [lenderData])
 
-  // Fetch API credentials when editing with API enabled
-  const { data: apiCreds } = useQuery({
-    queryKey: ['lender-api-creds', id],
+  // ── API Config data ──────────────────────────────────────────────────────────
+  const [apiForm, setApiForm] = useState<ApiFormState>(API_EMPTY_FORM)
+  const [apiConfigId, setApiConfigId] = useState<number | null>(null)
+  const [apiSection, setApiSection] = useState<string | null>('basic')
+  const [showPass, setShowPass] = useState(false)
+
+  const { data: existingApiConfig } = useQuery({
+    queryKey: ['lender-api-config-for-lender', id],
     queryFn: async () => {
-      const res = await crmService.getLenderApiCredentials(Number(id))
-      return (res.data?.data ?? res.data) as LenderApiCredentials | null
+      const res = await crmService.getLenderApiConfigs({ lender_id: Number(id) })
+      const list = (res.data?.data ?? []) as LenderApiConfig[]
+      return list[0] ?? null
     },
-    enabled: isEdit && String(lenderData?.api_status) === '1',
+    enabled: isEdit,
   })
 
   useEffect(() => {
-    if (apiCreds) {
-      setForm(f => ({
-        ...f,
-        lender_api_type:      apiCreds.type ?? f.lender_api_type,
-        url:                  apiCreds.url ?? '',
-        username:             apiCreds.username ?? '',
-        password:             apiCreds.password ?? '',
-        api_key:              apiCreds.api_key ?? '',
-        auth_url:             apiCreds.auth_url ?? '',
-        partner_api_key:      apiCreds.partner_api_key ?? '',
-        client_id:            apiCreds.client_id ?? '',
-        salesRepEmailAddress: apiCreds.sales_rep_email ?? '',
-      }))
+    if (existingApiConfig) {
+      setApiConfigId(existingApiConfig.id)
+      setApiForm({
+        api_name:             existingApiConfig.api_name ?? '',
+        auth_type:            existingApiConfig.auth_type ?? 'none',
+        base_url:             existingApiConfig.base_url ?? '',
+        endpoint_path:        existingApiConfig.endpoint_path ?? '',
+        request_method:       existingApiConfig.request_method ?? 'POST',
+        retry_attempts:       existingApiConfig.retry_attempts ?? 3,
+        timeout_seconds:      existingApiConfig.timeout_seconds ?? 30,
+        notes:                existingApiConfig.notes ?? '',
+        auth_credentials_str: JSON.stringify(existingApiConfig.auth_credentials ?? {}, null, 2),
+        default_headers_str:  JSON.stringify(existingApiConfig.default_headers ?? { 'Content-Type': 'application/json' }, null, 2),
+        payload_mapping_str:  JSON.stringify(existingApiConfig.payload_mapping ?? {}, null, 2),
+        response_mapping_str: JSON.stringify(existingApiConfig.response_mapping ?? {}, null, 2),
+      })
     }
-  }, [apiCreds])
+  }, [existingApiConfig])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const set = (k: keyof FormState, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const setApi = <K extends keyof ApiFormState>(k: K, v: ApiFormState[K]) =>
+    setApiForm(f => ({ ...f, [k]: v }))
+
   const togglePos = (n: string) => {
     const pos = form.max_position
     set('max_position', pos.includes(n) ? pos.filter(p => p !== n) : [...pos, n])
   }
   const apiEnabled = form.api_status === '1'
 
+  const toggleApiSection = (sid: string) =>
+    setApiSection(prev => prev === sid ? null : sid)
+
+  // ── Save mutation ─────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload: Record<string, unknown> = {
+    mutationFn: async () => {
+      // Step 1: save lender
+      const lenderPayload: Record<string, unknown> = {
         ...form,
         prohibited_industry: form.prohibited_industry.join(','),
       }
-      return isEdit
-        ? crmService.updateLender(Number(id), payload)
-        : crmService.createLender(payload)
+      const lenderRes = isEdit
+        ? await crmService.updateLender(Number(id), lenderPayload)
+        : await crmService.createLender(lenderPayload)
+
+      // Resolve the saved lender's ID
+      const savedId: number = isEdit
+        ? Number(id)
+        : (lenderRes.data?.data?.id ?? lenderRes.data?.id ?? 0)
+
+      // Step 2: save API config if enabled and base_url provided
+      if (apiEnabled && savedId && apiForm.base_url.trim()) {
+        const apiPayload: Record<string, unknown> = {
+          crm_lender_id:    savedId,
+          api_name:         apiForm.api_name.trim() || form.lender_name,
+          auth_type:        apiForm.auth_type,
+          base_url:         apiForm.base_url.trim(),
+          endpoint_path:    apiForm.endpoint_path.trim(),
+          request_method:   apiForm.request_method,
+          retry_attempts:   Number(apiForm.retry_attempts),
+          timeout_seconds:  Number(apiForm.timeout_seconds),
+          notes:            apiForm.notes.trim() || undefined,
+          auth_credentials: parseJson(apiForm.auth_credentials_str),
+          default_headers:  parseJson(apiForm.default_headers_str),
+          payload_mapping:  parseJson(apiForm.payload_mapping_str),
+          response_mapping: parseJson(apiForm.response_mapping_str),
+        }
+        if (apiConfigId) {
+          await crmService.updateLenderApiConfig(apiConfigId, apiPayload)
+        } else {
+          await crmService.createLenderApiConfig(apiPayload)
+        }
+      }
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Lender updated' : 'Lender created')
       qc.invalidateQueries({ queryKey: ['lenders'] })
+      qc.invalidateQueries({ queryKey: ['lender-api-configs'] })
       navigate('/crm/lenders')
     },
     onError: () => toast.error('Failed to save lender'),
   })
 
-  // Header
+  const canSave = !!form.lender_name && !(apiEnabled && !apiForm.base_url.trim())
+
+  // ── Header ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const title = isEdit
       ? (lenderData ? `Edit: ${lenderData.lender_name}` : 'Edit Lender')
@@ -370,7 +522,7 @@ export function CrmLenderForm() {
         </button>
         <button
           onClick={() => saveMutation.mutate()}
-          disabled={!form.lender_name || (apiEnabled && !form.lender_api_type) || saveMutation.isPending}
+          disabled={!canSave || saveMutation.isPending}
           className="btn-primary flex items-center gap-2 disabled:opacity-50"
         >
           {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
@@ -380,7 +532,7 @@ export function CrmLenderForm() {
     )
     return () => { setDescription(undefined); setActions(undefined) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, lenderData, form.lender_name, form.lender_api_type, apiEnabled, saveMutation.isPending])
+  }, [isEdit, lenderData, canSave, saveMutation.isPending])
 
   if (isEdit && (loadingLender || !formReady)) {
     return (
@@ -393,7 +545,7 @@ export function CrmLenderForm() {
   return (
     <div className="pb-10 space-y-5">
 
-      {/* ── API Integration (full width) — shown at TOP ───────────────── */}
+      {/* ── API Integration ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center gap-2">
@@ -415,50 +567,159 @@ export function CrmLenderForm() {
             </button>
           </label>
         </div>
-        {apiEnabled && (
-          <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div className="col-span-2">
-              <label className="label">Lender API Type <span className="text-red-500">*</span></label>
-              <select className="input w-full" value={form.lender_api_type} onChange={e => set('lender_api_type', e.target.value)}>
-                <option value="">— Select integration —</option>
-                {LENDER_API_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="label">API Endpoint URL</label>
-              <input className="input w-full font-mono text-xs" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://api.lender.com/v1/" />
-            </div>
-            <div>
-              <label className="label">Username</label>
-              <input className="input w-full" value={form.username} onChange={e => set('username', e.target.value)} placeholder="API username" />
-            </div>
-            <div>
-              <label className="label">Password</label>
-              <input className="input w-full" type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="API password" />
-            </div>
-            <div>
-              <label className="label">API Key</label>
-              <input className="input w-full font-mono text-xs" value={form.api_key} onChange={e => set('api_key', e.target.value)} placeholder="API key or token" />
-            </div>
-            <div>
-              <label className="label">Partner API Key</label>
-              <input className="input w-full font-mono text-xs" value={form.partner_api_key} onChange={e => set('partner_api_key', e.target.value)} placeholder="Partner key (if required)" />
-            </div>
-            <div>
-              <label className="label">Auth URL</label>
-              <input className="input w-full font-mono text-xs" value={form.auth_url} onChange={e => set('auth_url', e.target.value)} placeholder="https://auth.lender.com/token" />
-            </div>
-            <div>
-              <label className="label">Client ID</label>
-              <input className="input w-full" value={form.client_id} onChange={e => set('client_id', e.target.value)} placeholder="OAuth client ID" />
-            </div>
-            <div>
-              <label className="label">Sales Rep Email</label>
-              <input className="input w-full" type="email" value={form.salesRepEmailAddress} onChange={e => set('salesRepEmailAddress', e.target.value)} placeholder="sales@lender.com" />
-            </div>
+
+        {apiEnabled ? (
+          <div className="p-5 space-y-3">
+
+            {/* 1 — Basic */}
+            <ApiSection id="basic" title="1 — Basic Information" activeId={apiSection} onToggle={toggleApiSection}>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="label">Config Name</label>
+                  <input
+                    className="input w-full"
+                    placeholder="e.g. OnDeck Production API"
+                    value={apiForm.api_name}
+                    onChange={e => setApi('api_name', e.target.value)}
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Leave blank to use lender name</p>
+                </div>
+                <div>
+                  <label className="label">Base URL <span className="text-red-500">*</span></label>
+                  <input
+                    className="input w-full font-mono text-xs"
+                    placeholder="https://api.lender.com/v1"
+                    value={apiForm.base_url}
+                    onChange={e => setApi('base_url', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label">Endpoint Path</label>
+                  <input
+                    className="input w-full font-mono text-xs"
+                    placeholder="applications"
+                    value={apiForm.endpoint_path}
+                    onChange={e => setApi('endpoint_path', e.target.value)}
+                  />
+                  {apiForm.base_url && (
+                    <p className="text-[11px] text-slate-400 mt-1 font-mono truncate">
+                      {apiForm.base_url.replace(/\/$/, '')}/{apiForm.endpoint_path.replace(/^\//, '')}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="label">HTTP Method</label>
+                  <select className="input w-full" value={apiForm.request_method} onChange={e => setApi('request_method', e.target.value as ApiFormState['request_method'])}>
+                    {HTTP_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3 col-span-2">
+                  <div>
+                    <label className="label">Retry Attempts</label>
+                    <input type="number" min={1} max={10} className="input w-full" value={apiForm.retry_attempts} onChange={e => setApi('retry_attempts', Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label">Timeout (seconds)</label>
+                    <input type="number" min={5} max={300} className="input w-full" value={apiForm.timeout_seconds} onChange={e => setApi('timeout_seconds', Number(e.target.value))} />
+                  </div>
+                </div>
+              </div>
+            </ApiSection>
+
+            {/* 2 — Auth */}
+            <ApiSection id="auth" title="2 — Authentication" activeId={apiSection} onToggle={toggleApiSection}>
+              <div>
+                <label className="label">Auth Type</label>
+                <div className="grid grid-cols-5 gap-2">
+                  {AUTH_TYPES.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setApi('auth_type', opt.value as ApiFormState['auth_type'])}
+                      className={cn(
+                        'text-center px-2 py-2 rounded-lg border text-xs font-medium transition-colors',
+                        apiForm.auth_type === opt.value
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                          : 'border-slate-200 text-slate-600 hover:border-indigo-300',
+                      )}
+                      title={opt.desc}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400 mt-1.5">
+                  {AUTH_TYPES.find(t => t.value === apiForm.auth_type)?.desc}
+                </p>
+              </div>
+              {apiForm.auth_type !== 'none' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="label mb-0">Auth Credentials (JSON)</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(p => !p)}
+                      className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                    >
+                      {showPass ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Show</>}
+                    </button>
+                  </div>
+                  {showPass ? (
+                    <JsonEditor
+                      label=""
+                      value={apiForm.auth_credentials_str}
+                      onChange={v => setApi('auth_credentials_str', v)}
+                    />
+                  ) : (
+                    <div className="input bg-slate-50 text-slate-400 text-xs cursor-pointer" onClick={() => setShowPass(true)}>
+                      ●●●●●●●●  (click to reveal)
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-400 mt-1">Expected format for <strong>{apiForm.auth_type}</strong>:</p>
+                  <AuthCredentialHint authType={apiForm.auth_type} />
+                </div>
+              )}
+            </ApiSection>
+
+            {/* 3 — Headers */}
+            <ApiSection id="headers" title="3 — Headers" activeId={apiSection} onToggle={toggleApiSection}>
+              <JsonEditor
+                label="Default Headers"
+                hint="JSON object — sent with every request."
+                value={apiForm.default_headers_str}
+                onChange={v => setApi('default_headers_str', v)}
+              />
+            </ApiSection>
+
+            {/* 4 — Payload Mapping */}
+            <ApiSection id="mapping" title="4 — Payload Mapping" activeId={apiSection} onToggle={toggleApiSection}>
+              <JsonEditor
+                label="Payload Mapping"
+                hint={'Map CRM field keys to the lender\'s JSON path.\nExample: { "business_name": "business.name", "owner_ssn": "owners.0.ssn" }'}
+                value={apiForm.payload_mapping_str}
+                onChange={v => setApi('payload_mapping_str', v)}
+              />
+              <JsonEditor
+                label="Response Mapping"
+                hint={'Extract fields from the API response.\nExample: { "id_field": "data.applicationId", "status_field": "data.status" }'}
+                value={apiForm.response_mapping_str}
+                onChange={v => setApi('response_mapping_str', v)}
+              />
+            </ApiSection>
+
+            {/* 5 — Notes */}
+            <ApiSection id="notes" title="5 — Notes" activeId={apiSection} onToggle={toggleApiSection}>
+              <textarea
+                className="input w-full resize-none"
+                rows={3}
+                placeholder="Internal notes about this API configuration…"
+                value={apiForm.notes}
+                onChange={e => setApi('notes', e.target.value)}
+              />
+            </ApiSection>
+
           </div>
-        )}
-        {!apiEnabled && (
+        ) : (
           <div className="px-5 py-3 flex items-center gap-2 text-xs text-slate-500">
             <span className="ri-mail-send-line text-base text-slate-400" />
             Applications will be delivered to the lender's email address(es) configured below.
@@ -721,13 +982,18 @@ export function CrmLenderForm() {
       <div className="flex items-center gap-3 pt-2">
         <button
           onClick={() => saveMutation.mutate()}
-          disabled={!form.lender_name || (apiEnabled && !form.lender_api_type) || saveMutation.isPending}
+          disabled={!canSave || saveMutation.isPending}
           className="btn-primary flex items-center gap-2 disabled:opacity-50"
         >
           {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
           {isEdit ? 'Save Changes' : 'Add Lender'}
         </button>
         <button onClick={() => navigate('/crm/lenders')} className="btn-outline">Cancel</button>
+        {apiEnabled && !apiForm.base_url.trim() && (
+          <p className="text-xs text-amber-600 flex items-center gap-1">
+            <AlertCircle size={12} /> Base URL is required when API is enabled
+          </p>
+        )}
       </div>
 
     </div>

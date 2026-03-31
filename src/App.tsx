@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthStore } from './stores/auth.store'
 import { usePusher } from './hooks/usePusher'
+import { usePresence } from './hooks/usePresence'
 
 // Layouts
 import { AuthLayout } from './layouts/AuthLayout'
@@ -52,6 +53,9 @@ import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
 import { EditCampaign } from './modules/campaigns/EditCampaign'
 import { AttachLeads } from './modules/campaigns/AttachLeads'
+import { EditCampaignLists } from './modules/campaigns/EditCampaignLists'
+import { EditCampaignReview } from './modules/campaigns/EditCampaignReview'
+import { AddCampaignReview } from './modules/campaigns/AddCampaignReview'
 import { Users } from './pages/users/Users'
 import { UserForm } from './pages/users/UserForm'
 import { Dids } from './pages/dids/Dids'
@@ -101,6 +105,10 @@ import { ShiftManagement } from './pages/workforce/ShiftManagement'
 import { CampaignStaffing } from './pages/workforce/CampaignStaffing'
 import { WorkforceReports } from './pages/workforce/WorkforceReports'
 import { WorkforceAnalytics } from './pages/workforce/WorkforceAnalytics'
+import { CrmAgentPerformance } from './pages/crm/CrmAgentPerformance'
+import { CrmCommissions } from './pages/crm/CrmCommissions'
+import { CrmRenewals } from './pages/crm/CrmRenewals'
+import { CrmIntegrations } from './pages/crm/CrmIntegrations'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -120,6 +128,7 @@ function LegacyMerchantRedirect() {
 
 function AppWithPusher() {
   usePusher()
+  usePresence()
   return <AppLayout />
 }
 
@@ -158,7 +167,7 @@ export default function App() {
           <Route path="/crm/leads" element={<CrmLeadsList />} />
           <Route path="/crm/leads/create" element={<CrmLeadCreate />} />
           <Route path="/crm/leads/:id/edit" element={<CrmLeadCreate />} />
-          <Route path="/crm/leads/:id" element={<CrmLeadDetail />} />
+          <Route path="/crm/leads/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadDetail /></ErrorBoundary>} />
           <Route path="/crm/affiliate-links"   element={<CrmAffiliateLinks />} />
           <Route path="/crm/company-settings"  element={<CrmCompanySettings />} />
           <Route path="/crm/approvals" element={<CrmApprovals />} />
@@ -176,13 +185,20 @@ export default function App() {
           <Route path="/crm/sms-inbox" element={<CrmSmsInbox />} />
           <Route path="/crm/document-types"  element={<CrmDocumentTypes />} />
           <Route path="/crm/email-settings" element={<CrmEmailSettings />} />
+          <Route path="/crm/agent-performance" element={<CrmAgentPerformance />} />
+          <Route path="/crm/commissions" element={<CrmCommissions />} />
+          <Route path="/crm/renewals" element={<CrmRenewals />} />
+          <Route path="/crm/integrations" element={<CrmIntegrations />} />
         </Route>
 
         {/* Campaigns */}
         <Route path="/campaigns" element={<Campaigns />} />
-        <Route path="/campaigns/create" element={<CreateCampaign />} />
-        <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
+        <Route path="/campaigns/create" element={<ErrorBoundary fallbackTitle="Campaign Error"><CreateCampaign /></ErrorBoundary>} />
+        <Route path="/campaigns/:id/edit" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaign /></ErrorBoundary>} />
         <Route path="/campaigns/:id/attach-leads" element={<AttachLeads />} />
+        <Route path="/campaigns/:id/add-review" element={<ErrorBoundary fallbackTitle="Campaign Error"><AddCampaignReview /></ErrorBoundary>} />
+        <Route path="/campaigns/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignLists /></ErrorBoundary>} />
+        <Route path="/campaigns/:id/review" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignReview /></ErrorBoundary>} />
         <Route path="/campaigns/:id" element={<CampaignDetail />} />
 
         {/* Users */}

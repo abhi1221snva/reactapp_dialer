@@ -105,11 +105,9 @@ function RuleModal({
         value:           Number(form.value),
         split_agent_pct: Number(form.split_agent_pct),
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const svc = crmService as any
       return isEdit
-        ? svc.updateCommissionRule(editing!.id, payload)
-        : svc.createCommissionRule(payload)
+        ? crmService.updateCommissionRule(editing!.id, payload)
+        : crmService.createCommissionRule(payload)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Rule updated' : 'Rule created')
@@ -232,9 +230,9 @@ function RulesTab() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['commission-rules'],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await (crmService as any).getCommissionRules()
-      return (res.data?.data ?? res.data) as CommissionRule[]
+      const res = await crmService.getCommissionRules()
+      const d = res.data?.data ?? res.data
+      return (d?.rules ?? d ?? []) as CommissionRule[]
     },
     staleTime: 30 * 1000,
   })
@@ -242,9 +240,7 @@ function RulesTab() {
   const rules: CommissionRule[] = Array.isArray(data) ? data : []
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (crmService as any).deleteCommissionRule(id),
+    mutationFn: (id: number) => crmService.deleteCommissionRule(id),
     onSuccess: () => {
       toast.success('Rule deleted')
       qc.invalidateQueries({ queryKey: ['commission-rules'] })
@@ -381,9 +377,9 @@ function LedgerTab() {
   const { data: summaryData } = useQuery({
     queryKey: ['commission-summary', period],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await (crmService as any).getCommissionSummary({ period })
-      return (res.data?.data ?? res.data) as CommissionSummary
+      const res = await crmService.getCommissionSummary(period)
+      const d = res.data?.data ?? res.data
+      return (d?.totals ?? d ?? { total_gross: 0, total_agent: 0, total_company: 0 }) as CommissionSummary
     },
     staleTime: 30 * 1000,
   })
@@ -393,9 +389,9 @@ function LedgerTab() {
   const { data: ledgerData, isLoading, isError } = useQuery({
     queryKey: ['commissions', statusFilter, period],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await (crmService as any).getCommissions({ status: statusFilter === 'all' ? undefined : statusFilter, period })
-      return (res.data?.data ?? res.data) as CommissionLedgerItem[]
+      const res = await crmService.getCommissions({ status: statusFilter === 'all' ? undefined : statusFilter })
+      const d = res.data?.data ?? res.data
+      return (d?.commissions ?? d ?? []) as CommissionLedgerItem[]
     },
     staleTime: 30 * 1000,
   })
@@ -403,9 +399,7 @@ function LedgerTab() {
   const items: CommissionLedgerItem[] = Array.isArray(ledgerData) ? ledgerData : []
 
   const markPaidMutation = useMutation({
-    mutationFn: (id: number) =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (crmService as any).markCommissionPaid(id),
+    mutationFn: (id: number) => crmService.markCommissionPaid(id),
     onSuccess: () => {
       toast.success('Commission marked as paid')
       qc.invalidateQueries({ queryKey: ['commissions'] })

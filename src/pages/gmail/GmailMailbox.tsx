@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { gmailService } from '../../services/gmail.service'
+import api from '../../api/axios'
 import { cn } from '../../utils/cn'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -542,6 +543,7 @@ export function GmailMailbox() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [checked, setChecked]         = useState<Set<string>>(new Set())
   const [selectAll, setSelectAll]     = useState(false)
+  const [connecting, setConnecting]   = useState(false)
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
 
@@ -720,6 +722,20 @@ export function GmailMailbox() {
   // ── Not connected ─────────────────────────────────────────────────────────
 
   if (!connected) {
+    const handleConnect = async () => {
+      try {
+        setConnecting(true)
+        const res = await api.post('/connect-integration', { provider: 'gmail' })
+        const url = res.data?.data?.redirect_url || res.data?.redirect_url
+        if (url) window.location.href = url
+        else toast.success('Gmail connected')
+      } catch {
+        toast.error('Could not initiate Gmail connection')
+      } finally {
+        setConnecting(false)
+      }
+    }
+
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: '#fce8e6' }}>
@@ -734,11 +750,12 @@ export function GmailMailbox() {
           )}
         </div>
         <button
-          onClick={() => navigate('/profile', { state: { section: 'integrations' } })}
-          className="px-5 py-2 rounded-full text-sm font-medium text-white transition-colors"
+          onClick={handleConnect}
+          disabled={connecting}
+          className="px-5 py-2 rounded-full text-sm font-medium text-white transition-colors disabled:opacity-50"
           style={{ background: '#1a73e8' }}
         >
-          Connect Gmail
+          {connecting ? 'Connecting…' : 'Connect Gmail'}
         </button>
       </div>
     )

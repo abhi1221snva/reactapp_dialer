@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Radio, Pencil, Play, Pause, Copy,
-  Users, LayoutList, Settings2, Phone, Clock, Globe, Tag,
+  Users, LayoutList, Phone, Clock, Globe, Tag,
   ToggleRight, ToggleLeft, ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -204,7 +204,7 @@ export function CampaignDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="card">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
@@ -239,17 +239,6 @@ export function CampaignDetail() {
           <p className="text-2xl font-bold text-slate-900">{d.lists_associated ?? 0}</p>
           <p className="text-xs text-slate-400 mt-0.5">attached lists</p>
         </div>
-
-        <div className="card">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
-              <Settings2 size={16} className="text-amber-600" />
-            </div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Hopper</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{Number(d.hopper_count ?? 0).toLocaleString()}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{hopperModeLabel} mode</p>
-        </div>
       </div>
 
       {/* Detail sections */}
@@ -257,8 +246,8 @@ export function CampaignDetail() {
         <SectionCard icon={Phone} title="Dialing" iconColor="text-indigo-500">
           <DetailRow label="Mode" value={dialModeDisplay} />
           <DetailRow label="Hopper Mode" value={hopperModeLabel} />
-          {d.call_ratio && <DetailRow label="Call Ratio" value={d.call_ratio} />}
-          {d.duration && <DetailRow label="Duration" value={d.duration} />}
+
+          {d.duration && d.duration !== '0' && <DetailRow label="Duration" value={d.duration} />}
           <DetailRow label="Max Lead Temp" value={d.max_lead_temp} />
           <DetailRow label="Min Lead Temp" value={d.min_lead_temp} />
           <DetailRow label="AMD" value={String(d.amd) === '1' ? 'Enabled' : 'Disabled'} />

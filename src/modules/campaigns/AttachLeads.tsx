@@ -1,13 +1,17 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, List, Upload, CheckCircle2, AlertCircle, Users, Hash, Radio, ToggleLeft, ToggleRight } from 'lucide-react'
+import { useMutation } from '@tanstack/react-query'
+import { ArrowLeft, ArrowRight, List, Upload, CheckCircle2, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { listService } from '../../services/list.service'
 import { campaignService } from '../../services/campaign.service'
 import { ListUpload } from '../lists/ListUpload'
 import { ColumnMapping } from '../lists/ColumnMapping'
 import type { UploadFormData, ParseResult, ImportResult } from '../lists/types'
+import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
+import { Badge } from '../../components/ui/Badge'
+import { formatDateTime } from '../../utils/format'
+import { useServerTable } from '../../hooks/useServerTable'
 
 type Step = 'choose' | 'existing' | 'upload' | 'mapping'
 
@@ -38,21 +42,15 @@ export function AttachLeads() {
   const [uploadFormData, setUploadFormData] = useState<UploadFormData | null>(null)
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
 
-  // ── Fetch all available lists (for "select existing" step) ──
-  const { data: listsData, isLoading: loadingLists } = useQuery({
-    queryKey: ['lists-all'],
-    queryFn: () => listService.getAll(),
-    enabled: step === 'existing',
-  })
-  const lists: ListRow[] =
-    (listsData as { data?: { data?: unknown[] } })?.data?.data as ListRow[] ?? []
+  // Server table state for the "existing" step — must be at top level (hooks rule)
+  const listTable = useServerTable({ defaultLimit: 15 })
 
   // ── Assign existing lists to campaign ──
   const assignMutation = useMutation({
     mutationFn: () => campaignService.assignLists(campaignId, selectedListIds),
     onSuccess: () => {
       toast.success('Lists assigned to campaign successfully')
-      navigate('/campaigns')
+      navigate(`/campaigns/${campaignId}/add-review`)
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -75,12 +73,88 @@ export function AttachLeads() {
   // ── Mapping complete → navigate back to campaigns ──
   const handleImported = (_result: ImportResult) => {
     toast.success('Leads imported successfully')
-    navigate('/campaigns')
+    navigate(`/campaigns/${campaignId}/add-review`)
   }
 
   const getListId = (row: ListRow) => row.list_id ?? row.id
   const getListName = (row: ListRow) => row.l_title ?? row.title ?? row.list_name ?? `List #${getListId(row)}`
   const getLeadCount = (row: ListRow) => row.lead_count ?? row.rowListData ?? 0
+
+  // Columns matching Lists.tsx exactly, with a Select checkbox prepended
+  const listColumns: Column<ListRow>[] = [
+    {
+      key: 'select',
+      header: '',
+      headerClassName: 'w-10 text-center',
+      className: 'w-10 text-center',
+      render: (row) => {
+        const lid = getListId(row)
+        const isSelected = selectedListIds.includes(lid)
+        return (
+          <div
+            className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-all ${
+              isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white hover:border-indigo-400'
+            }`}
+            onClick={(e) => { e.stopPropagation(); toggleList(lid) }}
+          >
+            {isSelected && (
+              <svg width="8" height="6" viewBox="0 0 10 8" fill="none">
+                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      key: 'name', header: 'List Name',
+      render: (row) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <List size={15} className="text-white" />
+          </div>
+          <div>
+            <p className="font-medium text-slate-900 text-sm">{getListName(row)}</p>
+            {row.campaign && (
+              <p className="text-xs text-slate-400 mt-0.5">{row.campaign as string}</p>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'lead_count', header: 'Leads',
+      render: (row) => (
+        <span className="text-sm font-medium text-slate-700">
+          {Number(getLeadCount(row)).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'is_active', header: 'Status',
+      render: (row) => (
+        <Badge variant={row.is_active === 1 ? 'green' : 'gray'}>
+          {row.is_active === 1 ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'is_dialing', header: 'Dialing',
+      render: (row) => (
+        <Badge variant={row.is_dialing === 1 ? 'blue' : 'gray'}>
+          {row.is_dialing === 1 ? 'Yes' : 'No'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'updated_at', header: 'Updated',
+      render: (row) => (
+        <span className="text-xs text-slate-500">
+          {row.updated_at ? formatDateTime(row.updated_at as string) : '—'}
+        </span>
+      ),
+    },
+  ]
 
   // ─────────────────────────────────────────────
   //  Render: Column Mapping step
@@ -162,151 +236,41 @@ export function AttachLeads() {
           </div>
         )}
 
-        {/* List Panel */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
-          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)' }}>
+        {/* Exact same ServerDataTable as Lists page */}
+        <ServerDataTable<ListRow>
+          queryKey={['lists-attach']}
+          queryFn={(params) => listService.list(params)}
+          dataExtractor={(res: unknown) => {
+            const r = res as { data?: { data?: ListRow[] } }
+            return r?.data?.data ?? []
+          }}
+          totalExtractor={(res: unknown) => {
+            const r = res as { data?: { total_rows?: number } }
+            return r?.data?.total_rows ?? 0
+          }}
+          columns={listColumns}
+          keyField="id"
+          searchPlaceholder="Search lists by name…"
+          filters={[
+            { key: 'is_active', label: 'All Status', options: [
+              { value: '1', label: 'Active' },
+              { value: '0', label: 'Inactive' },
+            ]},
+          ]}
+          emptyText="No lists found"
+          emptyIcon={<List size={40} />}
+          search={listTable.search}
+          onSearchChange={listTable.setSearch}
+          activeFilters={listTable.filters}
+          onFilterChange={listTable.setFilter}
+          onResetFilters={listTable.resetFilters}
+          hasActiveFilters={listTable.hasActiveFilters}
+          page={listTable.page}
+          limit={listTable.limit}
+          onPageChange={listTable.setPage}
+        />
 
-          {/* Panel Header */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
-            <div className="flex items-center gap-2">
-              <List size={15} className="text-slate-500" />
-              <span className="text-sm font-semibold text-slate-700">Available Lists</span>
-              {!loadingLists && (
-                <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-medium">
-                  {lists.length}
-                </span>
-              )}
-            </div>
-            {lists.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const allIds = lists.map(l => getListId(l))
-                  const allSelected = allIds.every(id => selectedListIds.includes(id))
-                  setSelectedListIds(allSelected ? [] : allIds)
-                }}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-              >
-                {lists.map(l => getListId(l)).every(id => selectedListIds.includes(id))
-                  ? 'Deselect All' : 'Select All'}
-              </button>
-            )}
-          </div>
-
-          {loadingLists ? (
-            <div className="p-8 text-center">
-              <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-slate-400">Loading lists…</p>
-            </div>
-          ) : lists.length === 0 ? (
-            <div className="p-10 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                <List size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm font-semibold text-slate-600 mb-1">No lists available</p>
-              <p className="text-xs text-slate-400">Upload a new list to get started</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {lists.map(list => {
-                const lid = getListId(list)
-                const isSelected = selectedListIds.includes(lid)
-                const name = getListName(list)
-                const leads = getLeadCount(list)
-                const isActive = list.is_active === 1
-                const isDialing = list.is_dialing === 1
-
-                return (
-                  <label
-                    key={lid}
-                    className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors select-none ${
-                      isSelected
-                        ? 'bg-indigo-50/80'
-                        : 'hover:bg-slate-50/70'
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'
-                    }`}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleList(lid)}
-                        className="sr-only"
-                      />
-                      {isSelected && (
-                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                          <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </div>
-
-                    {/* List Icon */}
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                      isSelected
-                        ? 'bg-indigo-100'
-                        : 'bg-gradient-to-br from-emerald-500 to-teal-600'
-                    }`}>
-                      <List size={16} className={isSelected ? 'text-indigo-600' : 'text-white'} />
-                    </div>
-
-                    {/* List Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className={`text-sm font-semibold truncate ${isSelected ? 'text-indigo-800' : 'text-slate-800'}`}>
-                          {name}
-                        </p>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                          <Hash size={9} />
-                          {lid}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 flex-wrap">
-                        {/* Lead count */}
-                        <span className="flex items-center gap-1 text-xs text-slate-500">
-                          <Users size={11} className="text-slate-400" />
-                          <span className="font-medium text-slate-700">{Number(leads).toLocaleString()}</span>
-                          <span>leads</span>
-                        </span>
-
-                        {/* Campaign */}
-                        {list.campaign && (
-                          <span className="flex items-center gap-1 text-xs text-slate-500">
-                            <Radio size={11} className="text-slate-400" />
-                            <span className="truncate max-w-[120px]">{list.campaign}</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Badges */}
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        isActive
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-100 text-slate-500 border border-slate-200'
-                      }`}>
-                        {isActive ? (
-                          <><ToggleRight size={10} /> Active</>
-                        ) : (
-                          <><ToggleLeft size={10} /> Inactive</>
-                        )}
-                      </span>
-                      {isDialing && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                          Dialing
-                        </span>
-                      )}
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {selectedListIds.length === 0 && lists.length > 0 && (
+        {selectedListIds.length === 0 && (
           <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
             <AlertCircle size={15} className="flex-shrink-0" />
             <span>Select at least one list to continue.</span>
@@ -345,14 +309,41 @@ export function AttachLeads() {
     <div className="w-full space-y-4 animate-fadeIn">
 
       {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={() => navigate('/campaigns')} className="btn-ghost p-2 rounded-lg">
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 leading-none">Attach Leads</h1>
-          <p className="text-xs text-slate-500 mt-1">Campaign #{campaignId} — add a lead list to start dialing</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate('/campaigns')}
+            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex-shrink-0">
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 leading-none">Attach Leads</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Campaign #{campaignId} — add a lead list to start dialing</p>
+          </div>
         </div>
+        <button type="button" onClick={() => navigate(`/campaigns/${campaignId}/add-review`)}
+          className="btn-primary px-6">
+          Next: Review
+          <ArrowRight size={15} />
+        </button>
+      </div>
+
+      {/* Step indicator */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">1</span>
+          Campaign Details
+          <CheckCircle2 size={13} className="text-emerald-500" />
+        </span>
+        <span className="w-6 h-px bg-slate-200" />
+        <span className="flex items-center gap-1.5 text-indigo-600 font-semibold">
+          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">2</span>
+          Attach Leads
+        </span>
+        <span className="w-6 h-px bg-slate-200" />
+        <span className="flex items-center gap-1.5 text-slate-400 font-medium">
+          <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] font-bold">3</span>
+          Review
+        </span>
       </div>
 
       {/* Two option cards */}
@@ -407,7 +398,7 @@ export function AttachLeads() {
       <div className="text-center pt-2">
         <button
           type="button"
-          onClick={() => navigate('/campaigns')}
+          onClick={() => navigate(`/campaigns/${campaignId}/add-review`)}
           className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 transition-colors"
         >
           Skip for now — I'll add leads later

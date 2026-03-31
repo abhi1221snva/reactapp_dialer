@@ -6,7 +6,7 @@ import {
   Send, Plus, Search, Users, Hash, Paperclip, Smile,
   CheckCheck, Check, MoreVertical, X, Download, Image,
   FileText, MessagesSquare, Phone, Video, ChevronDown,
-  PhoneOff, Mic, MicOff, VideoOff, UserPlus,
+  PhoneOff, Mic, MicOff, VideoOff, UserPlus, Building2, Store,
 } from 'lucide-react'
 import { chatService } from '../../services/chat.service'
 import { useAuthStore } from '../../stores/auth.store'
@@ -142,7 +142,7 @@ const MessageBubble = memo(function MessageBubble({
   if (msg.message_type === 'system') {
     return (
       <div className="flex justify-center my-1">
-        <span className="text-[11px] text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{msg.body}</span>
+        <span className="text-sm text-black bg-slate-100 px-3 py-1 rounded-full">{msg.body}</span>
       </div>
     )
   }
@@ -872,7 +872,7 @@ export function TeamChat() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pusherRef = useRef<Pusher | null>(null)
-  const presenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const selectedUuidRef = useRef<string | null>(null)
   const typingTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const typingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollRestorationRef = useRef<number>(0)
@@ -892,6 +892,7 @@ export function TeamChat() {
   // Sync state → refs
   useEffect(() => { callPhaseRef.current = callPhase }, [callPhase])
   useEffect(() => { callSessionRef.current = callSession }, [callSession])
+  useEffect(() => { selectedUuidRef.current = selectedUuid }, [selectedUuid])
 
   const selectedConv = conversations.find(c => c.uuid === selectedUuid) ?? null
 
@@ -1024,6 +1025,13 @@ export function TeamChat() {
     const userChannel = pusher.subscribe(`private-team-user.${parentId}.${userId}`)
 
     userChannel.bind('new.message', (data: PusherNewMessageEvent) => {
+      const isActiveConv = data.conversation_uuid === selectedUuidRef.current
+
+      // If this message is for the currently active conversation, mark it read immediately
+      if (isActiveConv && document.hasFocus()) {
+        chatService.markAsRead(data.conversation_uuid).catch(() => {})
+      }
+
       // Refresh conversation list to update unread counts and last message
       setConversations(prev => {
         const idx = prev.findIndex(c => c.uuid === data.conversation_uuid)
@@ -1036,14 +1044,14 @@ export function TeamChat() {
         }
         const updated = [...prev]
         const conv = { ...updated[idx] }
-        if (data.conversation_uuid !== selectedUuid) {
+        // Only increment unread if this is NOT the active conversation or window is not focused
+        if (!isActiveConv || !document.hasFocus()) {
           conv.unread_count = (conv.unread_count || 0) + 1
         }
-        if (conv.last_message) {
-          conv.last_message = {
-            ...conv.last_message,
-            body: data.preview,
-          }
+        conv.last_message = {
+          ...conv.last_message,
+          body: data.preview,
+          created_at: new Date().toISOString(),
         }
         updated.splice(idx, 1)
         updated.unshift(conv)
@@ -1150,21 +1158,44 @@ export function TeamChat() {
 
     pusherRef.current = pusher
 
-    // Presence on mount
-    chatService.updatePresence('online').catch(() => {})
-    presenceIntervalRef.current = setInterval(() => {
-      chatService.updatePresence('online').catch(() => {})
-    }, 30000)
+    // Presence is handled globally by usePresence() hook in AppWithPusher
 
     return () => {
-      if (presenceIntervalRef.current) clearInterval(presenceIntervalRef.current)
-      chatService.updatePresence('offline').catch(() => {})
       userChannel.unbind_all()
       pusher.unsubscribe(`private-team-user.${parentId}.${userId}`)
       pusher.disconnect()
       pusherRef.current = null
     }
   }, [user?.id, token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Visibility change — mark read & clear badge when tab regains focus ──
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && selectedUuidRef.current) {
+        chatService.markAsRead(selectedUuidRef.current).catch(() => {})
+        setConversations(prev => prev.map(c =>
+          c.uuid === selectedUuidRef.current ? { ...c, unread_count: 0 } : c
+        ))
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  // ─── Periodically refresh team member presence (every 30s) ────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      chatService.searchUsers('').then(res => {
+        const all: SearchUser[] = Array.isArray(res.data?.data) ? res.data.data : []
+        setOnlineStatus(prev => {
+          const updated = new Map(prev)
+          all.forEach(m => updated.set(m.id, m.status))
+          return updated
+        })
+      }).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Subscribe/unsubscribe conversation channel when selection changes
   useEffect(() => {
@@ -1184,6 +1215,10 @@ export function TeamChat() {
       // Mark as read if window is focused and this conv is active
       if (!isMine && document.hasFocus()) {
         chatService.markAsRead(selectedUuid).catch(() => {})
+        // Clear badge for active conversation
+        setConversations(prev => prev.map(c =>
+          c.uuid === selectedUuid ? { ...c, unread_count: 0 } : c
+        ))
       }
       // Update conversation last message
       setConversations(prev => prev.map(c =>
@@ -1191,6 +1226,8 @@ export function TeamChat() {
           ? { ...c, last_message: { body: msg.body, sender_id: msg.sender.id, created_at: msg.created_at, message_type: msg.message_type } }
           : c
       ))
+      // Auto-scroll to bottom for new messages (own or incoming)
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     })
 
     channel.bind('message.read', (data: PusherMessageReadEvent) => {
@@ -1316,10 +1353,11 @@ export function TeamChat() {
     setInput('')
     setPendingFile(null)
     setShowEmoji(false)
-    // Clear unread badge
+    // Clear unread badge locally + mark read on server
     setConversations(prev => prev.map(c =>
       c.uuid === uuid ? { ...c, unread_count: 0 } : c
     ))
+    chatService.markAsRead(uuid).catch(() => {})
   }, [])
 
   // ─── Open DM with a team member ──────────────────────────────────────────
@@ -1493,7 +1531,8 @@ export function TeamChat() {
     c.name.toLowerCase().includes(sidebarSearch.toLowerCase())
   )
   const directConvs = filteredConvs.filter(c => c.type === 'direct')
-  const groupConvs = filteredConvs.filter(c => c.type === 'group')
+  const systemConvs = filteredConvs.filter(c => c.is_system)
+  const groupConvs = filteredConvs.filter(c => c.type === 'group' && !c.is_system)
   const currentTyping = selectedUuid ? (typingUsers.get(selectedUuid) ?? []) : []
 
   // Team members filtered by search, sorted online-first then alphabetically
@@ -1536,7 +1575,42 @@ export function TeamChat() {
         {/* Sidebar list */}
         <div className="flex-1 overflow-y-auto pb-4 space-y-0.5 px-2">
 
-          {/* Groups / Channels section */}
+          {/* Channels (system) */}
+          {systemConvs.length > 0 && (
+            <div>
+              <div className="flex items-center px-2 pt-3 pb-1.5">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Channels</p>
+              </div>
+              {systemConvs.map(conv => (
+                <button
+                  key={conv.uuid}
+                  onClick={() => selectConversation(conv.uuid)}
+                  className={cn(
+                    'w-full flex items-start gap-2.5 px-2 py-2 rounded-xl transition-all text-left',
+                    selectedUuid === conv.uuid ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                  )}
+                >
+                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5', conv.system_slug === 'lender' ? 'bg-violet-500' : 'bg-emerald-500')}>
+                    {conv.system_slug === 'lender' ? <Building2 className="w-4 h-4" /> : conv.system_slug === 'merchant' ? <Store className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className={cn('text-sm truncate font-medium', selectedUuid === conv.uuid ? 'text-indigo-700' : 'text-slate-700')}>{conv.name}</p>
+                      {(conv.unread_count ?? 0) > 0 && (
+                        <span className="min-w-[18px] h-[18px] px-1 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
+                          {conv.unread_count > 9 ? '9+' : conv.unread_count}
+                        </span>
+                      )}
+                    </div>
+                    {conv.last_message && <p className="text-xs text-slate-400 truncate mt-0.5">{conv.last_message.body}</p>}
+                    {!conv.last_message && <p className="text-xs text-slate-400 mt-0.5">Broadcast channel</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Groups section */}
           <div>
             <div className="flex items-center justify-between px-2 pt-3 pb-1.5">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -1750,7 +1824,12 @@ export function TeamChat() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input area */}
+            {/* Input area / read-only notice */}
+            {selectedConv?.is_system ? (
+              <div className="flex-shrink-0 px-4 py-3 border-t border-slate-100 bg-slate-50 text-center">
+                <p className="text-xs text-slate-400">This is a read-only broadcast channel</p>
+              </div>
+            ) : (
             <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-slate-100 bg-white">
               {/* File preview bar */}
               {pendingFile && (
@@ -1837,6 +1916,7 @@ export function TeamChat() {
               </div>
               <p className="text-[10px] text-slate-400 mt-1.5 pl-20">Enter to send · Shift+Enter for new line</p>
             </div>
+            )}
           </>
         )}
       </div>

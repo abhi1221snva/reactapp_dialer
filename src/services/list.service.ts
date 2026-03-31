@@ -14,6 +14,15 @@ export const listService = {
   getAll: () =>
     api.post('/raw-list', { start: 0, limit: 500 }),
 
+  // Paginated fetch of lists attached to a specific campaign
+  listByCampaign: (campaignId: number, params: TableParams) =>
+    api.post('/raw-list', {
+      campaign_id: campaignId,
+      start: (params.page - 1) * params.limit,
+      limit: params.limit,
+      ...(params.search ? { title: params.search } : {}),
+    }),
+
   // Get list by id — POST /raw-list with list_id returns single object
   getById: (listId: number) =>
     api.post('/raw-list', { list_id: listId }),

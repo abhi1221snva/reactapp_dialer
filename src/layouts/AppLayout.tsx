@@ -3,7 +3,7 @@ import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
 import { IncomingCallModal } from '../components/dialer/IncomingCallModal'
 import { WebPhone } from '../components/webphone/WebPhone'
-import { FloatingChat } from '../components/chat/FloatingChat'
+import { FloatingChatOrchestrator } from '../components/chat/FloatingChatOrchestrator'
 import { FloatingFab } from '../components/floating/FloatingFab'
 import { FloatingSms } from '../components/sms/FloatingSms'
 import { useUIStore } from '../stores/ui.store'
@@ -69,7 +69,7 @@ export function AppLayout() {
       </div>
 
       <IncomingCallModal />
-      <FloatingChat />
+      <FloatingChatOrchestrator />
       <WebPhone />
       <FloatingSms />
       <FloatingFab />

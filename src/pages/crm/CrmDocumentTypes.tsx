@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Loader2, Search, Tag, X, Check, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Search, Tag, X, Check, ChevronDown, ChevronUp, RefreshCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
@@ -10,6 +10,53 @@ import { confirmDelete } from '../../utils/confirmDelete'
 import { cn } from '../../utils/cn'
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { parseValues } from '../../components/crm/CrmDocumentTypesManager'
+
+const PER_PAGE = 15
+
+// ── Pagination ─────────────────────────────────────────────────────────────────
+function Pagination({
+  page, totalPages, total, limit, onPageChange,
+}: {
+  page: number; totalPages: number; total: number; limit: number; onPageChange: (p: number) => void
+}) {
+  const from = total === 0 ? 0 : (page - 1) * limit + 1
+  const to   = Math.min(page * limit, total)
+  const pages = (() => {
+    const delta = 2; const range: (number | '...')[] = []; let prev = 0
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || (p >= page - delta && p <= page + delta)) {
+        if (prev && p - prev > 1) range.push('...')
+        range.push(p); prev = p
+      }
+    }
+    return range
+  })()
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white">
+      <span className="text-xs text-slate-500">
+        {total === 0 ? 'No results' : `${from}–${to} of ${total}`}
+      </span>
+      <div className="flex items-center gap-0.5">
+        <button onClick={() => onPageChange(1)} disabled={page === 1}
+          className="btn-ghost btn-sm px-1.5 py-1 disabled:opacity-40"><ChevronsLeft size={14} /></button>
+        <button onClick={() => onPageChange(page - 1)} disabled={page === 1}
+          className="btn-ghost btn-sm px-1.5 py-1 disabled:opacity-40"><ChevronLeft size={14} /></button>
+        {pages.map((p, i) =>
+          p === '...' ? <span key={`dots-${i}`} className="px-2 py-1 text-xs text-slate-400">…</span> : (
+            <button key={p} onClick={() => onPageChange(p as number)}
+              className={cn('min-w-[28px] h-7 rounded-md text-xs font-medium transition-colors',
+                p === page ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100')}
+            >{p}</button>
+          )
+        )}
+        <button onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}
+          className="btn-ghost btn-sm px-1.5 py-1 disabled:opacity-40"><ChevronRight size={14} /></button>
+        <button onClick={() => onPageChange(totalPages)} disabled={page >= totalPages}
+          className="btn-ghost btn-sm px-1.5 py-1 disabled:opacity-40"><ChevronsRight size={14} /></button>
+      </div>
+    </div>
+  )
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function serializeValues(tags: string[]): string {
@@ -160,6 +207,7 @@ export function CrmDocumentTypes() {
   const [editing, setEditing]       = useState<DocumentType | null>(null)
   const [search, setSearch]         = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [page, setPage]             = useState(1)
 
   useEffect(() => {
     setDescription('Define document categories used when uploading files to leads')
@@ -179,9 +227,14 @@ export function CrmDocumentTypes() {
 
   const types = data ?? []
 
-  const filtered = types.filter(dt =>
+  const filtered   = types.filter(dt =>
     !search || dt.title.toLowerCase().includes(search.toLowerCase())
   )
+  const total      = filtered.length
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+
+  useEffect(() => { setPage(1) }, [search])
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const invalidate = () => qc.invalidateQueries({ queryKey: ['document-types'] })
@@ -206,50 +259,45 @@ export function CrmDocumentTypes() {
   }
 
   return (
-    <div className="space-y-3">
-
-      {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex flex-1 flex-wrap gap-2 items-center">
-          <div className="relative min-w-[220px] flex-1 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              className="input pl-9 pr-8 h-9 text-sm"
-              placeholder="Search document types…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => refetch()} disabled={isFetching} className="btn-ghost btn-sm p-2 h-9 w-9" title="Refresh">
-            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-          </button>
-          <button onClick={openAdd} className="btn-primary">
-            <Plus size={15} /> Add Type
-          </button>
-        </div>
-      </div>
+    <div className="space-y-2">
 
       {/* ── Table ── */}
       <div className="table-wrapper bg-white">
 
-        {/* Count bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
-          <span className="text-xs text-slate-500 font-medium">
-            {isLoading ? 'Loading…' : `${filtered.length} type${filtered.length !== 1 ? 's' : ''}`}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Updating…
+        {/* Toolbar */}
+        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+              {isLoading ? 'Loading…' : `${total} type${total !== 1 ? 's' : ''}`}
             </span>
-          )}
+            <div className="relative flex-1 max-w-xs">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                className="input pl-8 pr-7 h-8 text-xs w-full"
+                placeholder="Search…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            {isFetching && !isLoading && (
+              <span className="text-xs text-slate-400 flex items-center gap-1">
+                <RefreshCw size={11} className="animate-spin" /> Updating…
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button onClick={() => refetch()} disabled={isFetching} className="btn-ghost btn-sm p-1.5 h-8 w-8" title="Refresh">
+              <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={openAdd} className="btn-primary h-8 text-xs px-3">
+              <Plus size={14} /> Add Type
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -273,12 +321,12 @@ export function CrmDocumentTypes() {
                     </tr>
                   ))}
                 </>
-              ) : filtered.length === 0 ? (
+              ) : total === 0 ? (
                 <tr>
                   <td colSpan={4}>
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                      <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-                        <Tag size={22} className="text-slate-300 opacity-60" />
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                      <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-2">
+                        <Tag size={20} className="text-slate-300 opacity-60" />
                       </div>
                       <p className="font-medium text-slate-500">
                         {search ? 'No types match your search' : 'No document types yet'}
@@ -290,7 +338,7 @@ export function CrmDocumentTypes() {
                   </td>
                 </tr>
               ) : (
-                filtered.map(dt => {
+                paginated.map(dt => {
                   const isActive = String(dt.status) === '1'
                   const tags     = parseValues(dt.values)
                   const expanded = expandedId === dt.id
@@ -376,9 +424,14 @@ export function CrmDocumentTypes() {
           </table>
         </div>
 
+        {/* Pagination */}
+        {!isLoading && total > 0 && (
+          <Pagination page={page} totalPages={totalPages} total={total} limit={PER_PAGE} onPageChange={setPage} />
+        )}
+
         {/* Footer hint */}
-        {!isLoading && filtered.length > 0 && (
-          <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/40">
+        {!isLoading && total > 0 && (
+          <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/40">
             <p className="text-xs text-slate-400">
               Only <strong className="text-slate-600">active</strong> types appear in the upload dropdown on lead pages.
               Sub-values (e.g. months) show as a second selector when uploading.

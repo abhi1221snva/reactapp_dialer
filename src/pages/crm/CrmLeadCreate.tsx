@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -95,6 +95,8 @@ export function CrmLeadCreate() {
   const [apiError,         setApiError]         = useState<string | null>(null)
   const [activeTab,        setActiveTab]        = useState<'personal' | 'business' | 'second_owner'>('personal')
   const [hasSecondOwner,   setHasSecondOwner]   = useState(false)
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
+  const agentDropdownRef = useRef<HTMLDivElement>(null)
 
   const {
     register, handleSubmit, setValue, watch, getValues, setError,
@@ -196,6 +198,16 @@ export function CrmLeadCreate() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing, leadFields])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false)
+      }
+    }
+    if (agentDropdownOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [agentDropdownOpen])
 
   const handleApiError = (err: unknown): string | null => {
     if (err && typeof err === 'object' && 'response' in err) {
@@ -601,33 +613,105 @@ export function CrmLeadCreate() {
                 </div>
 
                 {/* Assigned Agent */}
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-sky-50/60 to-white">
+                <div className="rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-sky-50/60 to-white rounded-t-xl">
                     <div className="w-5 h-5 rounded-md bg-sky-50 border border-sky-100 flex items-center justify-center flex-shrink-0">
                       <UserCheck size={11} className="text-sky-600" />
                     </div>
                     <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Assigned To</span>
                   </div>
-                  <div className="p-3 space-y-2">
-                    {assignedAgent && (
-                      <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-sky-50 border border-sky-200">
-                        <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-bold text-white leading-none">
-                            {(assignedAgent.name ?? 'A').slice(0, 2).toUpperCase()}
-                          </span>
+                  <div className="p-3">
+                    <div className="relative" ref={agentDropdownRef}>
+                      {/* Clickable card — shows selected agent or unassigned placeholder */}
+                      <button
+                        type="button"
+                        onClick={() => setAgentDropdownOpen(o => !o)}
+                        className={[
+                          'w-full flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left transition-colors',
+                          agentDropdownOpen
+                            ? 'bg-sky-100 border-sky-300 ring-1 ring-sky-300'
+                            : 'bg-sky-50 border-sky-200 hover:bg-sky-100 hover:border-sky-300',
+                        ].join(' ')}
+                      >
+                        {assignedAgent ? (
+                          <>
+                            <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-white leading-none">
+                                {(assignedAgent.name ?? 'A').slice(0, 2).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-sky-800 leading-none truncate">{assignedAgent.name}</p>
+                              <p className="text-xs text-sky-400 mt-0.5">Assigned agent</p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                              <User size={13} className="text-slate-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-slate-400 leading-none">Unassigned</p>
+                              <p className="text-xs text-slate-300 mt-0.5">Click to assign</p>
+                            </div>
+                          </>
+                        )}
+                        <svg
+                          className={['w-3.5 h-3.5 text-sky-400 flex-shrink-0 transition-transform duration-200', agentDropdownOpen ? 'rotate-180' : ''].join(' ')}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Custom dropdown */}
+                      {agentDropdownOpen && (
+                        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-xl border border-sky-200 bg-white shadow-lg overflow-hidden">
+                          <div className="max-h-52 overflow-y-auto py-1">
+                            {/* Unassigned option */}
+                            <button
+                              type="button"
+                              onClick={() => { setValue('assigned_to', ''); setAgentDropdownOpen(false) }}
+                              className={[
+                                'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+                                !assignedTo ? 'bg-sky-50' : 'hover:bg-slate-50',
+                              ].join(' ')}
+                            >
+                              <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                <User size={13} className="text-slate-400" />
+                              </div>
+                              <span className="text-xs font-medium text-slate-400">— Unassigned —</span>
+                            </button>
+
+                            {(agents ?? []).map(a => (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => { setValue('assigned_to', String(a.id)); setAgentDropdownOpen(false) }}
+                                className={[
+                                  'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+                                  String(assignedTo) === String(a.id) ? 'bg-sky-50' : 'hover:bg-slate-50',
+                                ].join(' ')}
+                              >
+                                <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-xs font-bold text-white leading-none">
+                                    {(a.name ?? 'A').slice(0, 2).toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-slate-700 leading-none truncate">{a.name}</p>
+                                </div>
+                                {String(assignedTo) === String(a.id) && (
+                                  <svg className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-semibold text-sky-800 leading-none">{assignedAgent.name}</p>
-                          <p className="text-xs text-sky-400 mt-0.5">Assigned agent</p>
-                        </div>
-                      </div>
-                    )}
-                    <select {...register('assigned_to')} className="input w-full text-xs">
-                      <option value="">— Unassigned —</option>
-                      {(agents ?? []).map(a => (
-                        <option key={a.id} value={a.id}>{a.name}</option>
-                      ))}
-                    </select>
+                      )}
+                    </div>
                   </div>
                 </div>
 

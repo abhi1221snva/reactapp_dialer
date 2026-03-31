@@ -441,7 +441,7 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
   return (
-    <div className="flex flex-col items-center gap-4 py-8">
+    <div className="flex flex-col items-center gap-2 py-3">
       {micPending && !micDenied && (
         <div className="w-full px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-center">
           <p className="text-xs text-blue-700 font-medium">
@@ -466,19 +466,19 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
       )}
       <button type="button" onClick={recording ? stop : start}
         className={cn(
-          'w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg',
+          'w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg',
           recording
             ? 'bg-red-500 hover:bg-red-600 ring-4 ring-red-200 animate-pulse'
             : 'bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 ring-4 ring-indigo-100'
         )}>
-        {recording ? <Square size={28} className="text-white" /> : <Mic size={28} className="text-white" />}
+        {recording ? <Square size={18} className="text-white" /> : <Mic size={18} className="text-white" />}
       </button>
       <div className="text-center">
-        <p className={cn('text-2xl font-mono font-bold', recording ? 'text-red-600' : 'text-slate-400')}>
+        <p className={cn('text-base font-mono font-bold', recording ? 'text-red-600' : 'text-slate-400')}>
           {fmt(time)}
         </p>
         <p className="text-xs text-slate-400 mt-0.5">
-          {recording ? 'Recording… click to stop' : 'Click the button to start recording'}
+          {recording ? 'Recording… click to stop' : 'Click to start recording'}
         </p>
       </div>
     </div>
@@ -490,7 +490,10 @@ function AudioRecorder({ onRecorded }: { onRecorded: (blob: Blob, url: string) =
 const DEFAULT_LANG = 'en-US'
 const DEFAULT_VOICE = getVoicesForLang(DEFAULT_LANG)[0]?.value ?? ''
 
-function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose: () => void }) {
+function AudioForm({ editing, onClose, formId = 'audio-form', onSavingChange }: {
+  editing: AudioMessage | null; onClose: () => void
+  formId?: string; onSavingChange?: (s: boolean) => void
+}) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
     ivr_desc: '', language: DEFAULT_LANG, voice_name: DEFAULT_VOICE, speech_text: '',
@@ -498,11 +501,17 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
   })
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [ttsPreviewUrl, setTtsPreviewUrl] = useState<string | null>(null)
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null)
+  const [recordPreviewUrl, setRecordPreviewUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [ttsPreviewLoading, setTtsPreviewLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const ttsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ttsUrlRef = useRef<string | null>(null)
+  const uploadUrlRef = useRef<string | null>(null)
+  const recordUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (editing) {
@@ -520,10 +529,17 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
     } else {
       setForm({ ivr_desc: '', language: DEFAULT_LANG, voice_name: DEFAULT_VOICE, speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium', ann_id: '' })
     }
-    setAudioFile(null); setRecordedBlob(null); setPreviewUrl(null)
+    setAudioFile(null); setRecordedBlob(null)
+    setTtsPreviewUrl(null); setUploadPreviewUrl(null); setRecordPreviewUrl(null)
+    ttsUrlRef.current = null; uploadUrlRef.current = null; recordUrlRef.current = null
   }, [editing])
 
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+  useEffect(() => () => {
+    if (ttsUrlRef.current) URL.revokeObjectURL(ttsUrlRef.current)
+    if (uploadUrlRef.current) URL.revokeObjectURL(uploadUrlRef.current)
+    if (recordUrlRef.current) URL.revokeObjectURL(recordUrlRef.current)
+    if (ttsDebounceRef.current) clearTimeout(ttsDebounceRef.current)
+  }, [])
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
@@ -537,50 +553,60 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
       toast.error('Please upload a valid audio file'); return
     }
     setAudioFile(file)
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(URL.createObjectURL(file))
+    if (uploadUrlRef.current) URL.revokeObjectURL(uploadUrlRef.current)
+    const uploadUrl = URL.createObjectURL(file)
+    uploadUrlRef.current = uploadUrl
+    setUploadPreviewUrl(uploadUrl)
     setRecordedBlob(null)
   }
 
   const handleRecorded = (blob: Blob, url: string) => {
     setRecordedBlob(blob)
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(url)
+    if (recordUrlRef.current) URL.revokeObjectURL(recordUrlRef.current)
+    recordUrlRef.current = url
+    setRecordPreviewUrl(url)
     setAudioFile(null)
   }
 
-  const handlePreviewTts = async () => {
-    if (!form.speech_text.trim()) { toast.error('Enter speech text first'); return }
-    setTtsPreviewLoading(true)
-    try {
-      const voices = getVoicesForLang(form.language)
-      const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
-      const res = await ivrService.generateTts({
-        speech_text: form.speech_text,
-        language: form.language,
-        voice_name: form.voice_name,
-        voice_gender: voiceGender,
-        speed: form.speed,
-        pitch: form.pitch,
-      })
-      const relPath = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? ''
-      if (relPath) {
-        const parts = relPath.split('/')
-        const blobRes = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
-        const blob = new Blob([blobRes.data as BlobPart], {
-          type: (blobRes.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+  // Auto-generate TTS preview (1.2s debounce after any TTS param change)
+  useEffect(() => {
+    if (form.prompt_option !== '1' || !form.speech_text.trim()) return
+    if (ttsDebounceRef.current) clearTimeout(ttsDebounceRef.current)
+    ttsDebounceRef.current = setTimeout(async () => {
+      setTtsPreviewLoading(true)
+      try {
+        const voices = getVoicesForLang(form.language)
+        const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
+        const res = await ivrService.generateTts({
+          speech_text: form.speech_text,
+          language: form.language,
+          voice_name: form.voice_name,
+          voice_gender: voiceGender,
+          speed: form.speed,
+          pitch: form.pitch,
         })
-        if (previewUrl) URL.revokeObjectURL(previewUrl)
-        setPreviewUrl(URL.createObjectURL(blob))
-      }
-    } catch { toast.error('Failed to generate TTS preview') }
-    finally { setTtsPreviewLoading(false) }
-  }
+        const relPath = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? ''
+        if (relPath) {
+          const parts = relPath.split('/')
+          const blobRes = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
+          const blob = new Blob([blobRes.data as BlobPart], {
+            type: (blobRes.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+          })
+          if (ttsUrlRef.current) URL.revokeObjectURL(ttsUrlRef.current)
+          const ttsUrl = URL.createObjectURL(blob)
+          ttsUrlRef.current = ttsUrl
+          setTtsPreviewUrl(ttsUrl)
+        }
+      } catch { /* silent — preview failure shouldn't block the user */ }
+      finally { setTtsPreviewLoading(false) }
+    }, 1200)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.speech_text, form.language, form.voice_name, form.speed, form.pitch, form.prompt_option])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.ivr_desc.trim()) { toast.error('Name is required'); return }
-    setSaving(true)
+    setSaving(true); onSavingChange?.(true)
     try {
       let annId = form.ann_id
       if (form.prompt_option === '1' && form.speech_text.trim()) {
@@ -612,13 +638,13 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
       onClose()
     } catch {
       toast.error('Failed to save audio message')
-    } finally { setSaving(false) }
+    } finally { setSaving(false); onSavingChange?.(false) }
   }
 
   const voiceOptions = getVoicesForLang(form.language)
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-3">
       <div>
         <label className="label">Name <span className="text-red-500">*</span></label>
         <input className="input" value={form.ivr_desc}
@@ -644,7 +670,7 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
         <>
           <div>
             <label className="label">Greeting Message</label>
-            <textarea className="input min-h-[80px] resize-none" value={form.speech_text}
+            <textarea className="input min-h-[60px] resize-none" value={form.speech_text}
               onChange={e => set('speech_text', e.target.value)}
               placeholder="Welcome to our company! Press 1 for Sales…" />
           </div>
@@ -676,14 +702,18 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
               </select>
             </div>
           </div>
-          <div className="flex justify-end">
-            <button type="button" onClick={handlePreviewTts}
-              disabled={!form.speech_text.trim() || ttsPreviewLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors disabled:opacity-50 bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100">
-              {ttsPreviewLoading
-                ? <><Loader2 size={12} className="animate-spin" />Generating…</>
-                : <><Play size={12} />Preview TTS</>}
-            </button>
+          <div className="h-8 flex items-center">
+            {ttsPreviewLoading && (
+              <span className="flex items-center gap-1.5 text-xs text-indigo-600">
+                <Loader2 size={12} className="animate-spin" /> Generating preview…
+              </span>
+            )}
+            {ttsPreviewUrl && !ttsPreviewLoading && (
+              <audio controls src={ttsPreviewUrl} className="w-full h-8" />
+            )}
+            {!ttsPreviewUrl && !ttsPreviewLoading && form.speech_text.trim() && (
+              <span className="text-xs text-slate-400">Preview generates automatically…</span>
+            )}
           </div>
         </>
       )}
@@ -714,6 +744,7 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
               </div>
             )}
           </div>
+          {uploadPreviewUrl && <audio controls src={uploadPreviewUrl} className="w-full mt-2" />}
         </div>
       )}
 
@@ -723,27 +754,12 @@ function AudioForm({ editing, onClose }: { editing: AudioMessage | null; onClose
           <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
             <AudioRecorder onRecorded={handleRecorded} />
           </div>
-          {recordedBlob && (
-            <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1">
-              <CheckCircle2 size={12} /> Recording ready
-            </p>
+          {recordPreviewUrl && (
+            <audio controls src={recordPreviewUrl} className="w-full mt-2" />
           )}
         </div>
       )}
 
-      {previewUrl && (
-        <div>
-          <label className="label">Preview</label>
-          <audio controls src={previewUrl} className="w-full" />
-        </div>
-      )}
-
-      <div className="flex justify-end gap-3 pt-4 pb-1 border-t border-slate-100 mt-2">
-        <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-        <button type="submit" disabled={saving} className="btn-primary flex items-center gap-1.5">
-          {saving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : editing ? 'Save Changes' : 'Create'}
-        </button>
-      </div>
     </form>
   )
 }
@@ -755,6 +771,7 @@ function AudioMessagesTab() {
   const table = useServerTable()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<AudioMessage | null>(null)
+  const [audioSaving, setAudioSaving] = useState(false)
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ivrService.deleteAudio(id),
@@ -879,7 +896,13 @@ function AudioMessagesTab() {
               </button>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-5">
-              <AudioForm editing={editing} onClose={() => setShowModal(false)} />
+              <AudioForm editing={editing} onClose={() => setShowModal(false)} formId="audio-form" onSavingChange={setAudioSaving} />
+            </div>
+            <div className="flex justify-end gap-3 px-6 pt-4 pb-4 border-t border-slate-100 flex-shrink-0">
+              <button type="button" onClick={() => setShowModal(false)} className="btn-outline">Cancel</button>
+              <button type="submit" form="audio-form" disabled={audioSaving} className="btn-primary flex items-center gap-1.5">
+                {audioSaving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : editing ? 'Save Changes' : 'Create'}
+              </button>
             </div>
           </div>
         </div>
@@ -1319,11 +1342,17 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
   })
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [ttsPreviewUrl, setTtsPreviewUrl] = useState<string | null>(null)
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null)
+  const [recordPreviewUrl, setRecordPreviewUrl] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [saving, setSaving] = useState(false)
   const [ttsPreviewLoading, setTtsPreviewLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const ttsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ttsUrlRef = useRef<string | null>(null)
+  const uploadUrlRef = useRef<string | null>(null)
+  const recordUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (ivr) {
@@ -1342,10 +1371,17 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
     } else {
       setForm({ ivr_id: '', ann_id: '', ivr_desc: '', language: DEFAULT_LANG, voice_name: DEFAULT_VOICE, speech_text: '', prompt_option: '1', speed: 'medium', pitch: 'medium' })
     }
-    setAudioFile(null); setRecordedBlob(null); setPreviewUrl(null)
+    setAudioFile(null); setRecordedBlob(null)
+    setTtsPreviewUrl(null); setUploadPreviewUrl(null); setRecordPreviewUrl(null)
+    ttsUrlRef.current = null; uploadUrlRef.current = null; recordUrlRef.current = null
   }, [ivr])
 
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+  useEffect(() => () => {
+    if (ttsUrlRef.current) URL.revokeObjectURL(ttsUrlRef.current)
+    if (uploadUrlRef.current) URL.revokeObjectURL(uploadUrlRef.current)
+    if (recordUrlRef.current) URL.revokeObjectURL(recordUrlRef.current)
+    if (ttsDebounceRef.current) clearTimeout(ttsDebounceRef.current)
+  }, [])
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
   const isEditing = !!(ivr?.auto_id || ivr?.id)
@@ -1360,45 +1396,55 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
       toast.error('Please upload a valid audio file'); return
     }
     setAudioFile(file)
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(URL.createObjectURL(file))
+    if (uploadUrlRef.current) URL.revokeObjectURL(uploadUrlRef.current)
+    const uploadUrl = URL.createObjectURL(file)
+    uploadUrlRef.current = uploadUrl
+    setUploadPreviewUrl(uploadUrl)
     setRecordedBlob(null)
   }
 
   const handleRecorded = (blob: Blob, url: string) => {
     setRecordedBlob(blob)
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(url)
+    if (recordUrlRef.current) URL.revokeObjectURL(recordUrlRef.current)
+    recordUrlRef.current = url
+    setRecordPreviewUrl(url)
     setAudioFile(null)
   }
 
-  const handlePreviewTts = async () => {
-    if (!form.speech_text.trim()) { toast.error('Enter speech text first'); return }
-    setTtsPreviewLoading(true)
-    try {
-      const voices = getVoicesForLang(form.language)
-      const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
-      const res = await ivrService.generateTts({
-        speech_text: form.speech_text,
-        language: form.language,
-        voice_name: form.voice_name,
-        voice_gender: voiceGender,
-        speed: form.speed,
-        pitch: form.pitch,
-      })
-      const relPath = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? ''
-      if (relPath) {
-        const parts = relPath.split('/')
-        const blobRes = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
-        const blob = new Blob([blobRes.data as BlobPart], {
-          type: (blobRes.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+  // Auto-generate TTS preview (1.2s debounce after any TTS param change)
+  useEffect(() => {
+    if (form.prompt_option !== '1' || !form.speech_text.trim()) return
+    if (ttsDebounceRef.current) clearTimeout(ttsDebounceRef.current)
+    ttsDebounceRef.current = setTimeout(async () => {
+      setTtsPreviewLoading(true)
+      try {
+        const voices = getVoicesForLang(form.language)
+        const voiceGender = voices.find(v => v.value === form.voice_name)?.gender ?? 'FEMALE'
+        const res = await ivrService.generateTts({
+          speech_text: form.speech_text,
+          language: form.language,
+          voice_name: form.voice_name,
+          voice_gender: voiceGender,
+          speed: form.speed,
+          pitch: form.pitch,
         })
-        if (previewUrl) URL.revokeObjectURL(previewUrl)
-        setPreviewUrl(URL.createObjectURL(blob))
-      }
-    } catch { toast.error('Failed to generate TTS preview') }
-    finally { setTtsPreviewLoading(false) }
-  }
+        const relPath = (res.data as { data?: { relative_path?: string } })?.data?.relative_path ?? ''
+        if (relPath) {
+          const parts = relPath.split('/')
+          const blobRes = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
+          const blob = new Blob([blobRes.data as BlobPart], {
+            type: (blobRes.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+          })
+          if (ttsUrlRef.current) URL.revokeObjectURL(ttsUrlRef.current)
+          const ttsUrl = URL.createObjectURL(blob)
+          ttsUrlRef.current = ttsUrl
+          setTtsPreviewUrl(ttsUrl)
+        }
+      } catch { /* silent — preview failure shouldn't block the user */ }
+      finally { setTtsPreviewLoading(false) }
+    }, 1200)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.speech_text, form.language, form.voice_name, form.speed, form.pitch, form.prompt_option])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1450,7 +1496,7 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
   const voiceOptions = getVoicesForLang(form.language)
 
   return (
-    <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-3">
       <div>
         <label className="label">Display Name <span className="text-red-500">*</span></label>
         <input className="input" value={form.ivr_desc}
@@ -1476,11 +1522,11 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
         <>
           <div>
             <label className="label">Greeting Message</label>
-            <textarea className="input min-h-[72px] resize-none" value={form.speech_text}
+            <textarea className="input min-h-[60px] resize-none" value={form.speech_text}
               onChange={e => set('speech_text', e.target.value)}
               placeholder="Welcome to Acme Corp! Press 1 for Sales, press 2 for Support…" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Language</label>
               <select className="input" value={form.language} onChange={e => handleLangChange(e.target.value)}>
@@ -1494,7 +1540,7 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Speed</label>
               <select className="input" value={form.speed} onChange={e => set('speed', e.target.value)}>
@@ -1508,14 +1554,18 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
               </select>
             </div>
           </div>
-          <div className="flex justify-end">
-            <button type="button" onClick={handlePreviewTts}
-              disabled={!form.speech_text.trim() || ttsPreviewLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors disabled:opacity-50 bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100">
-              {ttsPreviewLoading
-                ? <><Loader2 size={12} className="animate-spin" />Generating…</>
-                : <><Play size={12} />Preview TTS</>}
-            </button>
+          <div className="h-8 flex items-center">
+            {ttsPreviewLoading && (
+              <span className="flex items-center gap-1.5 text-xs text-indigo-600">
+                <Loader2 size={12} className="animate-spin" /> Generating preview…
+              </span>
+            )}
+            {ttsPreviewUrl && !ttsPreviewLoading && (
+              <audio controls src={ttsPreviewUrl} className="w-full h-8" />
+            )}
+            {!ttsPreviewUrl && !ttsPreviewLoading && form.speech_text.trim() && (
+              <span className="text-xs text-slate-400">Preview generates automatically…</span>
+            )}
           </div>
         </>
       )}
@@ -1547,6 +1597,7 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
               </div>
             )}
           </div>
+          {uploadPreviewUrl && <audio controls src={uploadPreviewUrl} className="w-full mt-2" />}
         </div>
       )}
 
@@ -1556,18 +1607,9 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
           <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
             <AudioRecorder onRecorded={handleRecorded} />
           </div>
-          {recordedBlob && (
-            <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1">
-              <CheckCircle2 size={12} /> Recording ready
-            </p>
+          {recordPreviewUrl && (
+            <audio controls src={recordPreviewUrl} className="w-full mt-2" />
           )}
-        </div>
-      )}
-
-      {previewUrl && (
-        <div>
-          <label className="label">Preview</label>
-          <audio controls src={previewUrl} className="w-full" />
         </div>
       )}
 

@@ -1011,28 +1011,31 @@ export function CrmLeadFields() {
     <div className="space-y-3">
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex flex-1 flex-wrap gap-2 items-center">
-          {/* Search */}
-          <div className="relative min-w-[220px] flex-1 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              className="input pl-9 pr-8 h-9 text-sm"
-              placeholder="Search fields…"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
-            />
-            {search && (
-              <button onClick={() => { setSearch(''); setPage(1) }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X size={13} />
-              </button>
-            )}
-          </div>
-          {/* Section filter */}
-          {presentSections.length > 1 && (
+      <div className="flex items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1 min-w-0 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            className="w-full h-9 rounded-lg border border-slate-200 bg-white pl-8 pr-8 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+            placeholder="Search fields…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1) }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Section filter */}
+        {presentSections.length > 1 && (
+          <div className="relative flex-shrink-0">
             <select
-              className="input h-9 text-sm min-w-[170px]"
+              className="h-9 appearance-none rounded-lg border border-slate-200 bg-white pl-3 pr-8 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition cursor-pointer"
               value={sectionFilter}
               onChange={e => setSectionFilter(e.target.value)}
             >
@@ -1041,25 +1044,42 @@ export function CrmLeadFields() {
                 <option key={s} value={s}>{humanizeSection(s)}</option>
               ))}
             </select>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => refetch()} disabled={isFetching}
-            className="btn-ghost btn-sm p-2 h-9 w-9" title="Refresh">
-            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={() => setShowReorder(true)}
-            disabled={!allFields?.length}
-            className="btn-outline flex items-center gap-1.5 h-9 text-sm disabled:opacity-40"
-            title="Reorder all fields section-by-section"
-          >
-            <ListOrdered size={15} /> Reorder Fields
-          </button>
-          <button onClick={openAdd} className="btn-primary">
-            <Plus size={15} /> Add Field
-          </button>
-        </div>
+            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
+        )}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Refresh */}
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          title="Refresh"
+          className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition disabled:opacity-40 flex-shrink-0"
+        >
+          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+        </button>
+
+        {/* Reorder Fields */}
+        <button
+          onClick={() => setShowReorder(true)}
+          disabled={!allFields?.length}
+          title="Reorder all fields section-by-section"
+          className="h-9 flex items-center gap-1.5 px-3.5 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition disabled:opacity-40 flex-shrink-0"
+        >
+          <ListOrdered size={14} />
+          <span>Reorder Fields</span>
+        </button>
+
+        {/* Add Field */}
+        <button
+          onClick={openAdd}
+          className="h-9 flex items-center gap-1.5 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition flex-shrink-0"
+        >
+          <Plus size={14} />
+          <span>Add Field</span>
+        </button>
       </div>
 
       {/* ── Table ── */}

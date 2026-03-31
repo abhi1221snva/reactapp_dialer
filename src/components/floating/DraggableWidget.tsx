@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { Minus, X, ChevronUp } from 'lucide-react'
+import { Minus, X, ChevronUp, Maximize2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,6 +12,8 @@ export interface DraggableWidgetProps {
   headerLeft: ReactNode
   /** Extra controls on the right of the header (before Minimize/Close) */
   headerRight?: ReactNode
+  /** Called when the maximize button is clicked */
+  onMaximize?: () => void
   headerGradient?: string
   /** Distance from the right viewport edge */
   defaultRight?: number
@@ -21,6 +23,8 @@ export interface DraggableWidgetProps {
   zIndex?: number
   /** Max pixel height of the collapsible body */
   bodyHeight?: number
+  /** Fires on mousedown/pointerdown for focus-on-click (e.g. multi-window z-order) */
+  onMouseDown?: () => void
   children: ReactNode
 }
 
@@ -32,12 +36,14 @@ export function DraggableWidget({
   onMinimize,
   headerLeft,
   headerRight,
+  onMaximize,
   headerGradient = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
   defaultRight  = 16,
   defaultBottom = 80,
   width         = 340,
   zIndex        = 62,
   bodyHeight    = 480,
+  onMouseDown,
   children,
 }: DraggableWidgetProps) {
   const [isMinimized, setIsMinimized] = useState(false)
@@ -84,6 +90,7 @@ export function DraggableWidget({
 
   return (
     <div
+      onMouseDown={onMouseDown}
       style={{
         position:      'fixed',
         bottom:        defaultBottom,
@@ -97,8 +104,13 @@ export function DraggableWidget({
         border:        '1px solid rgba(0,0,0,0.07)',
         // Open/close animation — originates from bottom-right corner
         opacity:        isOpen ? 1 : 0,
+        // visibility cascades to all descendants — prevents hidden buttons intercepting clicks.
+        // When closing, delay visibility:hidden until after the opacity fade completes.
+        visibility:     isOpen ? 'visible' : 'hidden',
         transform:      isOpen ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.96)',
-        transition:     'opacity 0.22s ease, transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)',
+        transition:     isOpen
+          ? 'opacity 0.22s ease, transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0s'
+          : 'opacity 0.22s ease, transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0.22s',
         pointerEvents:  isOpen ? 'auto' : 'none',
         transformOrigin: 'bottom right',
       }}
@@ -141,6 +153,16 @@ export function DraggableWidget({
 
         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
           {headerRight}
+
+          {onMaximize && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onMaximize() }}
+              className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 flex items-center justify-center transition-colors"
+              title="Maximize"
+            >
+              <Maximize2 size={12} className="text-white" />
+            </button>
+          )}
 
           <button
             onClick={(e) => { e.stopPropagation(); setIsMinimized(v => { onMinimize?.(!v); return !v }) }}

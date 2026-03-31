@@ -21,6 +21,8 @@ export interface Conversation {
   type: ConversationType
   name: string
   avatar: string | null
+  is_system?: boolean
+  system_slug?: string | null
   participants: ConversationParticipant[]
   last_message: LastMessage | null
   unread_count: number

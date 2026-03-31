@@ -5,7 +5,7 @@ import {
   MessageSquare, X, Send, ArrowLeft, Plus, Search,
   Smile, Paperclip, CheckCheck, Check, Hash,
   FileText, Users, Loader2, Phone, Video,
-  PhoneOff, Mic, MicOff, VideoOff,
+  PhoneOff, Mic, MicOff, VideoOff, Building2, Store,
 } from 'lucide-react'
 import { chatService } from '../../services/chat.service'
 import { useAuthStore } from '../../stores/auth.store'
@@ -349,6 +349,10 @@ export function FloatingChat() {
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Refs for stable access inside Pusher callbacks (avoid stale closures)
+  const conversationsRef = useRef<Conversation[]>([])
+  const openThreadRef = useRef<(conv: Conversation) => void>(() => {})
+
   // ── Call state ──────────────────────────────────────────────────────────────
   const [callPhase, setCallPhase] = useState<CallPhase>('idle')
   const [callSession, setCallSession] = useState<CallSession | null>(null)
@@ -371,6 +375,7 @@ export function FloatingChat() {
   // Sync state → refs
   useEffect(() => { callPhaseRef.current = callPhase }, [callPhase])
   useEffect(() => { callSessionRef.current = callSession }, [callSession])
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
 
   // ─── Load conversations ────────────────────────────────────────────────────
 
@@ -432,6 +437,21 @@ export function FloatingChat() {
         updated.unshift(conv)
         return updated
       })
+
+      // Auto-open the chat widget and navigate to the conversation thread
+      setChatOpen(true)
+      const conv = conversationsRef.current.find(c => c.uuid === data.conversation_uuid)
+      if (conv) {
+        openThreadRef.current(conv)
+      } else {
+        // Conversation not loaded yet — reload list, then open when available
+        chatService.getConversations().then(res => {
+          const list: Conversation[] = Array.isArray(res.data?.data) ? res.data.data : []
+          setConversations(list)
+          const found = list.find(c => c.uuid === data.conversation_uuid)
+          if (found) openThreadRef.current(found)
+        }).catch(() => {})
+      }
     })
 
     userChannel.bind('presence.updated', (data: PusherPresenceEvent) => {
@@ -587,6 +607,9 @@ export function FloatingChat() {
     ))
     setTotalUnread(prev => Math.max(0, prev - (conv.unread_count ?? 0)))
   }, [])
+
+  // Keep ref in sync so Pusher callbacks can call the latest version
+  useEffect(() => { openThreadRef.current = openThread }, [openThread])
 
   // ─── Send ──────────────────────────────────────────────────────────────────
 
@@ -944,11 +967,52 @@ interface ConvListProps {
 }
 
 function ConversationList({ conversations, teamMembers, onlineStatus, onSelect, onNewGroup, onOpenDm }: ConvListProps) {
-  const groupConvs = conversations.filter(c => c.type === 'group')
+  const systemConvs = conversations.filter(c => c.is_system)
+  const groupConvs = conversations.filter(c => c.type === 'group' && !c.is_system)
   const directConvs = conversations.filter(c => c.type === 'direct')
+
+  const systemIcon = (slug: string | null | undefined) =>
+    slug === 'lender' ? <Building2 className="w-4 h-4" /> :
+    slug === 'merchant' ? <Store className="w-4 h-4" /> :
+    <Hash className="w-4 h-4" />
 
   return (
     <div className="flex-1 overflow-y-auto">
+
+      {/* ── Channels (system) ── */}
+      {systemConvs.length > 0 && (
+        <div>
+          <div className="flex items-center px-3.5 pt-3 pb-1">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Channels</p>
+          </div>
+          {systemConvs.map(conv => {
+            const unread = conv.unread_count ?? 0
+            const lm = conv.last_message
+            return (
+              <button
+                key={conv.uuid}
+                onClick={() => onSelect(conv)}
+                className="w-full flex items-start gap-3 px-3.5 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100/70 last:border-0 text-left"
+              >
+                <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5', conv.system_slug === 'lender' ? 'bg-violet-500' : 'bg-emerald-500')}>
+                  {systemIcon(conv.system_slug)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className={cn('text-sm truncate', unread > 0 ? 'font-semibold text-slate-900' : 'font-medium text-slate-800')}>{conv.name}</p>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {lm && <span className="text-[10px] text-slate-400">{msgTime(lm.created_at)}</span>}
+                      {unread > 0 && <span className="min-w-[18px] h-[18px] px-1 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>}
+                    </div>
+                  </div>
+                  {lm && <p className="text-xs text-slate-400 truncate mt-0.5">{lm.body}</p>}
+                  {!lm && <p className="text-xs text-slate-400 mt-0.5">Broadcast channel</p>}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── Groups ── */}
       <div>
@@ -1187,7 +1251,12 @@ function ThreadView({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Input / read-only notice */}
+      {conv.is_system ? (
+        <div className="flex-shrink-0 px-3 py-2.5 border-t border-slate-100 bg-slate-50 text-center">
+          <p className="text-[10px] text-slate-400">This is a read-only broadcast channel</p>
+        </div>
+      ) : (
       <div className="flex-shrink-0 px-3 py-2.5 border-t border-slate-100 bg-white">
         {/* File preview */}
         {pendingFile && (
@@ -1267,6 +1336,7 @@ function ThreadView({
           </button>
         </div>
       </div>
+      )}
     </>
   )
 }

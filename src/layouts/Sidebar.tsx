@@ -8,8 +8,8 @@ import {
   Mail, Building2, X, ChevronDown,
   Headphones, Globe, Bot, Calendar,
   Mic, Inbox, BrainCircuit, Settings2, User,
-  Wifi, DollarSign, BookMarked,
-  Target, CheckCircle2, Zap, Clock, CalendarDays,
+  Wifi, DollarSign, BookMarked, Plug2,
+  Target, CheckCircle2, Zap, Clock, CalendarDays, RefreshCw,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
@@ -28,7 +28,6 @@ const ADMIN_ALLOWED_ROUTES = new Set([
   '/crm/email-templates',
   '/crm/sms-templates',
   '/crm/lenders',
-  '/crm/lender-api-configs',
   '/crm/lender-api-logs',
   '/crm/affiliate-links',
   '/crm/company-settings',
@@ -36,6 +35,9 @@ const ADMIN_ALLOWED_ROUTES = new Set([
   '/crm/automations',
   '/crm/approvals',
   '/crm/email-settings',
+  '/crm/agent-performance',
+  '/crm/commissions',
+  '/crm/renewals',
   '/sms',
   '/chat',
   '/gmail-mailbox',
@@ -239,8 +241,18 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'INBOX',
     minLevel: 1,
     items: [
-      { to: '/chat',          label: 'Team Chat',   icon: MessagesSquare,minLevel: 1 },
-      { to: '/crm/sms-inbox', label: 'SMS Inbox',   icon: MessageSquare, minLevel: 1 },
+      { to: '/chat',          label: 'Chat',   icon: MessagesSquare,minLevel: 1 },
+      { to: '/crm/sms-inbox', label: 'SMS',   icon: MessageSquare, minLevel: 1 },
+      { to: '/gmail-mailbox', label: 'Gmail Inbox',  icon: Inbox,   minLevel: 1 },
+    ],
+  },
+  {
+    label: 'TEMPLATE MANAGEMENT',
+    minLevel: LEVELS.MANAGER,
+    items: [
+      { to: '/crm/email-templates',  label: 'Email Templates',  icon: Mail,          minLevel: LEVELS.MANAGER },
+      { to: '/crm/sms-templates',    label: 'SMS Templates',    icon: MessageSquare, minLevel: LEVELS.MANAGER },
+      { to: '/crm/pdf-templates',    label: 'PDF Templates',    icon: FileText,      minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -248,9 +260,6 @@ const CRM_SECTIONS: NavSection[] = [
     minLevel: LEVELS.MANAGER,
     items: [
       { to: '/crm/email-settings',   label: 'Email Settings',   icon: Mail,          minLevel: LEVELS.MANAGER },
-      { to: '/crm/email-templates',  label: 'Email Templates',  icon: Mail,          minLevel: LEVELS.MANAGER },
-      { to: '/crm/sms-templates',    label: 'SMS Templates',    icon: MessageSquare, minLevel: LEVELS.MANAGER },
-      { to: '/crm/pdf-templates',    label: 'PDF Templates',    icon: FileText,      minLevel: LEVELS.MANAGER },
       { to: '/crm/document-types',   label: 'Document Types',   icon: Tag,           minLevel: LEVELS.MANAGER },
     ],
   },
@@ -258,17 +267,25 @@ const CRM_SECTIONS: NavSection[] = [
     label: 'INTEGRATIONS',
     minLevel: 1,
     items: [
-      { to: '/gmail-mailbox',   label: 'Gmail Inbox',      icon: Inbox,    minLevel: 1 },
-      { to: '/google-calendar', label: 'Google Calendar',  icon: Calendar, minLevel: 1 },
+      { to: '/google-calendar',    label: 'Google Calendar',   icon: Calendar, minLevel: 1 },
+      { to: '/crm/integrations',   label: 'API Integrations',  icon: Plug2,    minLevel: LEVELS.ADMIN },
+    ],
+  },
+  {
+    label: 'PERFORMANCE',
+    minLevel: LEVELS.ADMIN,
+    items: [
+      { to: '/crm/agent-performance', label: 'Agent Performance', icon: BarChart3, minLevel: LEVELS.ADMIN },
+      { to: '/crm/commissions',       label: 'Commissions',       icon: DollarSign, minLevel: LEVELS.ADMIN },
+      { to: '/crm/renewals',          label: 'Renewal Pipeline',  icon: RefreshCw,  minLevel: LEVELS.ADMIN },
     ],
   },
   {
     label: 'PARTNERS',
     minLevel: LEVELS.MANAGER,
     items: [
-      { to: '/crm/lenders',          label: 'Lenders',         icon: Building2,  minLevel: LEVELS.MANAGER },
-      { to: '/crm/lender-api-configs', label: 'Lender APIs',   icon: Zap,        minLevel: LEVELS.MANAGER },
-      { to: '/crm/lender-api-logs',  label: 'API Call Logs',   icon: Activity,   minLevel: LEVELS.MANAGER },
+      { to: '/crm/lenders',         label: 'Lenders',      icon: Building2, minLevel: LEVELS.MANAGER },
+      { to: '/crm/lender-api-logs', label: 'API Call Logs', icon: Activity,  minLevel: LEVELS.MANAGER },
     ],
   },
   {

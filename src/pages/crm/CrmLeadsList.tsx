@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, SlidersHorizontal, Loader2, X,
@@ -12,7 +12,7 @@ import { crmService } from '../../services/crm.service'
 import { leadService } from '../../services/lead.service'
 import { LeadStatusBadge } from '../../components/crm/LeadStatusBadge'
 import { BulkActionsBar } from '../../components/crm/BulkActionsBar'
-import { LeadSearchFilters } from '../../components/crm/LeadSearchFilters'
+import { LeadSearchFilters, Filters, EMPTY_FILTERS } from '../../components/crm/LeadSearchFilters'
 import { RowActions } from '../../components/ui/RowActions'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { formatPhoneNumber } from '../../utils/format'
@@ -26,23 +26,34 @@ import api from '../../api/axios'
 const AVATAR_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899']
 const PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
-// ── Filters ────────────────────────────────────────────────────────────────────
+// ── URL helpers ────────────────────────────────────────────────────────────────
 
-interface Filters {
-  lead_status: string[]
-  assigned_to: string
-  date_from: string
-  date_to: string
-  lead_type: string
-  company_name: string
-  phone_number: string
-  email: string
-  industry_type: string
+function parseFiltersFromUrl(sp: URLSearchParams): Filters {
+  return {
+    lead_status:   sp.getAll('status'),
+    assigned_to:   sp.get('agent_id')      || '',
+    date_from:     sp.get('date_from')     || '',
+    date_to:       sp.get('date_to')       || '',
+    lead_type:     sp.get('lead_type')     || '',
+    company_name:  sp.get('company_name')  || '',
+    phone_number:  sp.get('phone_number')  || '',
+    email:         sp.get('email')         || '',
+    industry_type: sp.get('industry_type') || '',
+  }
 }
 
-const EMPTY_FILTERS: Filters = {
-  lead_status: [], assigned_to: '', date_from: '', date_to: '',
-  lead_type: '', company_name: '', phone_number: '', email: '', industry_type: '',
+function filtersToSearchParams(f: Filters): URLSearchParams {
+  const sp = new URLSearchParams()
+  f.lead_status.forEach(s => sp.append('status', s))
+  if (f.assigned_to)   sp.set('agent_id',      f.assigned_to)
+  if (f.date_from)     sp.set('date_from',      f.date_from)
+  if (f.date_to)       sp.set('date_to',        f.date_to)
+  if (f.lead_type)     sp.set('lead_type',      f.lead_type)
+  if (f.company_name)  sp.set('company_name',   f.company_name)
+  if (f.phone_number)  sp.set('phone_number',   f.phone_number)
+  if (f.email)         sp.set('email',          f.email)
+  if (f.industry_type) sp.set('industry_type',  f.industry_type)
+  return sp
 }
 
 // ── Affiliate Link Modal ───────────────────────────────────────────────────────
@@ -268,15 +279,17 @@ function Pagination({
 // ── CrmLeadsList ───────────────────────────────────────────────────────────────
 
 export function CrmLeadsList() {
-  const navigate   = useNavigate()
-  const qc         = useQueryClient()
-  const { setDescription, setActions } = useCrmHeader()
+  const navigate                        = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const qc                              = useQueryClient()
+  const { setDescription, setActions }  = useCrmHeader()
+  const tableRef                        = useRef<HTMLDivElement>(null)
 
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch]           = useState('')
   const [page, setPage]               = useState(1)
   const [perPage, setPerPage]         = useState(25)
-  const [filters, setFilters]         = useState<Filters>(EMPTY_FILTERS)
+  const [appliedFilters, setAppliedFilters] = useState<Filters>(() => parseFiltersFromUrl(searchParams))
   const [showFilters, setShowFilters]           = useState(false)
   const [selectedIds, setSelectedIds]           = useState<number[]>([])
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
@@ -309,21 +322,21 @@ export function CrmLeadsList() {
 
   const buildParams = (): CrmSearchParams => ({
     search:        search || undefined,
-    lead_status:   filters.lead_status.length ? filters.lead_status : undefined,
-    assigned_to:   filters.assigned_to ? [Number(filters.assigned_to)] : undefined,
-    date_from:     filters.date_from || undefined,
-    date_to:       filters.date_to   || undefined,
-    lead_type:     filters.lead_type     || undefined,
-    company_name:  filters.company_name  || undefined,
-    phone_number:  filters.phone_number  || undefined,
-    email:         filters.email         || undefined,
-    industry_type: filters.industry_type || undefined,
+    lead_status:   appliedFilters.lead_status.length ? appliedFilters.lead_status : undefined,
+    assigned_to:   appliedFilters.assigned_to ? [Number(appliedFilters.assigned_to)] : undefined,
+    date_from:     appliedFilters.date_from || undefined,
+    date_to:       appliedFilters.date_to   || undefined,
+    lead_type:     appliedFilters.lead_type     || undefined,
+    company_name:  appliedFilters.company_name  || undefined,
+    phone_number:  appliedFilters.phone_number  || undefined,
+    email:         appliedFilters.email         || undefined,
+    industry_type: appliedFilters.industry_type || undefined,
     lower_limit:   (page - 1) * perPage,
     upper_limit:   perPage,
   })
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['crm-leads-search', search, filters, page, perPage],
+    queryKey: ['crm-leads-search', search, appliedFilters, page, perPage],
     queryFn:  async () => {
       const res = await crmService.searchLeads(buildParams())
       return res.data?.data ?? res.data
@@ -368,6 +381,23 @@ export function CrmLeadsList() {
     setPage(1)
   }
 
+  // ── Apply filters (from drawer) ───────────────────────────────────────────────
+
+  const handleApplyFilters = useCallback((f: Filters) => {
+    setAppliedFilters(f)
+    setPage(1)
+    setSearchParams(filtersToSearchParams(f), { replace: true })
+    setTimeout(() => {
+      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }, [setSearchParams])
+
+  // ── Remove individual chip ────────────────────────────────────────────────────
+
+  const removeChip = (patch: Partial<Filters>) => {
+    handleApplyFilters({ ...appliedFilters, ...patch })
+  }
+
   // ── Selection ────────────────────────────────────────────────────────────────
 
   const toggleSelect = (id: number) =>
@@ -379,16 +409,95 @@ export function CrmLeadsList() {
   // ── Active filter count ───────────────────────────────────────────────────────
 
   const activeFilterCount = [
-    filters.lead_status.length > 0,
-    !!filters.assigned_to,
-    !!filters.date_from,
-    !!filters.date_to,
-    !!filters.lead_type,
-    !!filters.company_name,
-    !!filters.phone_number,
-    !!filters.email,
-    !!filters.industry_type,
+    appliedFilters.lead_status.length > 0,
+    !!appliedFilters.assigned_to,
+    !!appliedFilters.date_from,
+    !!appliedFilters.date_to,
+    !!appliedFilters.lead_type,
+    !!appliedFilters.company_name,
+    !!appliedFilters.phone_number,
+    !!appliedFilters.email,
+    !!appliedFilters.industry_type,
   ].filter(Boolean).length
+
+  // ── Filter chips (active filters row) ────────────────────────────────────────
+
+  type Chip = { key: string; label: string; onRemove: () => void }
+
+  const filterChips = useMemo<Chip[]>(() => {
+    const chips: Chip[] = []
+
+    appliedFilters.lead_status.forEach(slug => {
+      const s = statusMap[slug] as (typeof statuses[number] & Record<string, unknown>) | undefined
+      chips.push({
+        key:      `status_${slug}`,
+        label:    `Status: ${s?.lead_title ?? slug}`,
+        onRemove: () => removeChip({ lead_status: appliedFilters.lead_status.filter(x => x !== slug) }),
+      })
+    })
+
+    if (appliedFilters.assigned_to) {
+      const agent = agents.find(a => String(a.id) === appliedFilters.assigned_to)
+      chips.push({
+        key:      'assigned_to',
+        label:    `Agent: ${agent?.name ?? appliedFilters.assigned_to}`,
+        onRemove: () => removeChip({ assigned_to: '' }),
+      })
+    }
+
+    if (appliedFilters.date_from || appliedFilters.date_to) {
+      const from = appliedFilters.date_from || '…'
+      const to   = appliedFilters.date_to   || '…'
+      chips.push({
+        key:      'date',
+        label:    `Date: ${from} – ${to}`,
+        onRemove: () => removeChip({ date_from: '', date_to: '' }),
+      })
+    }
+
+    if (appliedFilters.lead_type) {
+      chips.push({
+        key:      'lead_type',
+        label:    `Type: ${appliedFilters.lead_type.charAt(0).toUpperCase() + appliedFilters.lead_type.slice(1)}`,
+        onRemove: () => removeChip({ lead_type: '' }),
+      })
+    }
+
+    if (appliedFilters.company_name) {
+      chips.push({
+        key:      'company_name',
+        label:    `Company: ${appliedFilters.company_name}`,
+        onRemove: () => removeChip({ company_name: '' }),
+      })
+    }
+
+    if (appliedFilters.phone_number) {
+      chips.push({
+        key:      'phone_number',
+        label:    `Phone: ${appliedFilters.phone_number}`,
+        onRemove: () => removeChip({ phone_number: '' }),
+      })
+    }
+
+    if (appliedFilters.email) {
+      chips.push({
+        key:      'email',
+        label:    `Email: ${appliedFilters.email}`,
+        onRemove: () => removeChip({ email: '' }),
+      })
+    }
+
+    if (appliedFilters.industry_type) {
+      chips.push({
+        key:      'industry_type',
+        label:    `Industry: ${appliedFilters.industry_type}`,
+        onRemove: () => removeChip({ industry_type: '' }),
+      })
+    }
+
+    return chips
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedFilters, statusMap, agents])
 
   // ── Header (CrmLayout) ────────────────────────────────────────────────────────
 
@@ -475,19 +584,35 @@ export function CrmLeadsList() {
         </div>
       </div>
 
-      {/* ── Filter panel ────────────────────────────────────────────────────── */}
-      {showFilters && (
-        <LeadSearchFilters
-          filters={filters}
-          onFilterChange={f => { setFilters(f); setPage(1) }}
-          statuses={statuses}
-          agents={agents}
-          onClose={() => setShowFilters(false)}
-        />
+      {/* ── Active filter chips ──────────────────────────────────────────────── */}
+      {filterChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {filterChips.map(chip => (
+            <span
+              key={chip.key}
+              className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium"
+            >
+              {chip.label}
+              <button
+                onClick={chip.onRemove}
+                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-indigo-200 transition-colors flex-shrink-0"
+                title="Remove filter"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+          <button
+            onClick={() => handleApplyFilters(EMPTY_FILTERS)}
+            className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors px-1.5 py-1 rounded-lg hover:bg-red-50"
+          >
+            Clear all
+          </button>
+        </div>
       )}
 
       {/* ── Table card ──────────────────────────────────────────────────────── */}
-      <div className="table-wrapper">
+      <div className="table-wrapper" ref={tableRef}>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
@@ -534,7 +659,8 @@ export function CrmLeadsList() {
                 </tr>
               ) : (
                 leads.map(lead => {
-                  const name     = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${lead.id}`
+                  const capitalize = (s: unknown) => s ? String(s).trim().replace(/\b\w/g, c => c.toUpperCase()) : ''
+                  const name     = [capitalize(lead.first_name), capitalize(lead.last_name)].filter(Boolean).join(' ') || `Lead #${lead.id}`
                   const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
                   const bg       = AVATAR_COLORS[lead.id % AVATAR_COLORS.length]
                   const selected = selectedIds.includes(lead.id)
@@ -675,6 +801,16 @@ export function CrmLeadsList() {
       {showAffiliateModal && (
         <AffiliateLinkModal onClose={() => setShowAffiliateModal(false)} />
       )}
+
+      {/* ── Filter Drawer (slide-over) ───────────────────────────────────────── */}
+      <LeadSearchFilters
+        open={showFilters}
+        filters={appliedFilters}
+        onApply={handleApplyFilters}
+        onClose={() => setShowFilters(false)}
+        statuses={statuses}
+        agents={agents}
+      />
     </div>
   )
 }

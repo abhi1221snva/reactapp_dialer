@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { DraggableWidget } from '../floating/DraggableWidget'
-import { useFloatingStore } from '../../stores/floating.store'
+import { useFloatingStore, useWidgetPositions } from '../../stores/floating.store'
 import { crmService } from '../../services/crm.service'
 import type { SmsConversation, SmsMessage } from '../../types/crm.types'
 
@@ -136,6 +136,7 @@ export function FloatingSms() {
   const isOpen     = useFloatingStore(s => s.smsOpen)
   const setSmsOpen = useFloatingStore(s => s.setSmsOpen)
   const setSmsUnread = useFloatingStore(s => s.setSmsUnread)
+  const { smsRight } = useWidgetPositions()
 
   const qc = useQueryClient()
   const [activeId, setActiveId]   = useState<number | null>(null)
@@ -217,9 +218,9 @@ export function FloatingSms() {
       isOpen={isOpen}
       onClose={() => setSmsOpen(false)}
       headerGradient="linear-gradient(145deg, #064e3b 0%, #065f46 55%, #047857 100%)"
-      defaultRight={16}
+      defaultRight={smsRight}
       defaultBottom={20}
-      width={320}
+      width={340}
       zIndex={62}
       bodyHeight={470}
       headerLeft={

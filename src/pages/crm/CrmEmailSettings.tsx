@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Mail, RefreshCw,
-  ToggleLeft, ToggleRight, Send, Eye, EyeOff, ChevronDown,
+  Send, Eye, EyeOff, ChevronDown,
   Check, Server, AlertCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -595,13 +595,9 @@ export function CrmEmailSettings() {
                         <button
                           onClick={() => toggleMutation.mutate(s.id)}
                           disabled={toggleMutation.isPending}
-                          className="flex items-center gap-1.5 group/toggle"
                           title={isActive ? 'Click to deactivate' : 'Click to activate'}
+                          className="disabled:opacity-60"
                         >
-                          {isActive
-                            ? <ToggleRight size={20} className="text-emerald-500 group-hover/toggle:text-emerald-600 transition-colors" />
-                            : <ToggleLeft  size={20} className="text-slate-300 group-hover/toggle:text-slate-400 transition-colors" />
-                          }
                           <Badge variant={isActive ? 'green' : 'gray'}>
                             {isActive ? 'Active' : 'Inactive'}
                           </Badge>

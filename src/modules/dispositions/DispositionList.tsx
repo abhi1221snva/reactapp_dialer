@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, ToggleLeft, ToggleRight, Trash2, ArrowLeft, ListChecks, MessageSquare,
+  Plus, Pencil, Trash2, ArrowLeft, ListChecks, MessageSquare,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
@@ -92,9 +92,16 @@ export function DispositionList() {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <Badge variant={Number(row.status) === 1 ? 'green' : 'red'}>
-          {Number(row.status) === 1 ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={() => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) })}
+          disabled={toggleMutation.isPending}
+          title={Number(row.status) === 1 ? 'Click to disable' : 'Click to enable'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={Number(row.status) === 1 ? 'green' : 'red'}>
+            {Number(row.status) === 1 ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {
@@ -109,13 +116,6 @@ export function DispositionList() {
             icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => setEditItem(row),
-          },
-          {
-            label: Number(row.status) === 1 ? 'Disable' : 'Enable',
-            icon: Number(row.status) === 1 ? <ToggleRight size={13} /> : <ToggleLeft size={13} />,
-            variant: Number(row.status) === 1 ? 'warning' : 'success',
-            onClick: () => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) }),
-            disabled: toggleMutation.isPending,
           },
           {
             label: 'Delete',

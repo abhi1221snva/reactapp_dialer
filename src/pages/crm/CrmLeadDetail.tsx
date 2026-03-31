@@ -6,7 +6,7 @@ import {
   ArrowLeft, Pencil, Loader2, ChevronDown, ChevronUp, Upload, FileText,
   Trash2, Download, Building2, Send, AlertCircle, X, Eye,
   Settings2, Mail, Phone, MapPin, Calendar, User, Briefcase,
-  Hash, UserCheck, Clock, FolderOpen, CheckSquare, MoreVertical, Tag,
+  Hash, UserCheck, Clock, FolderOpen, MoreVertical, Tag,
   ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
   Activity, Search, Wrench, RefreshCw, AlertTriangle, CheckCircle,
@@ -17,29 +17,33 @@ import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
 import { ActivityTimeline } from '../../components/crm/ActivityTimeline'
 import { LenderErrorList, ErrorFixModal, describeApiError } from '../../components/crm/LenderApiFixModal'
-import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
+import { LenderValidationPanel } from '../../components/crm/LenderValidationPanel'
+import { SubmissionResultSummary } from '../../components/crm/SubmissionResultSummary'
 import { MerchantPortalSection } from '../../components/crm/MerchantPortalSection'
 import { OffersStipsTab } from '../../components/crm/OffersStipsTab'
 import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
+import { OnDeckPanel } from '../../components/crm/OnDeckPanel'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDocumentTypesManager'
 import { RichEmailEditor } from '../../components/crm/RichEmailEditor'
 import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
+import { ErrorBoundary } from '../../components/ui/ErrorBoundary'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, MappedApiError, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload, GroupedValidationState, LenderValidationResult, LenderSubmissionOutcome } from '../../types/crm.types'
+import { CRM_FIELD_LABELS, COMPUTED_FIELDS, autoLabel as sharedAutoLabel } from '../../constants/crmFieldLabels'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
-type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'approvals' | 'merchant' | 'offers' | 'deal' | 'compliance'
+type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance'
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'details',   label: 'Lead Info',       icon: Hash         },
   { id: 'activity',  label: 'Activity',        icon: Clock        },
   { id: 'documents', label: 'Documents',       icon: FolderOpen   },
   { id: 'lenders',   label: 'Lenders',         icon: Building2    },
-  { id: 'approvals', label: 'Approvals',       icon: CheckSquare  },
+  // { id: 'ondeck',    label: 'OnDeck API',       icon: Zap          },
   { id: 'merchant',  label: 'Merchant Portal', icon: ExternalLink },
   { id: 'offers',     label: 'Offers & Stips',  icon: DollarSign    },
   { id: 'deal',       label: 'Deal',             icon: TrendingUp    },
@@ -677,6 +681,7 @@ const SUBMISSION_STATUS_MAP: Record<LenderSubmissionStatus, { label: string; bg:
   approved:    { label: 'Approved',    bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
   declined:    { label: 'Declined',    bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500'     },
   no_response: { label: 'No Response', bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400'   },
+  failed:      { label: 'Failed',      bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500'     },
 }
 const RESPONSE_STATUS_MAP: Record<LenderResponseStatus, { label: string; bg: string; text: string; dot: string; border: string }> = {
   pending:         { label: 'Awaiting',    bg: 'bg-slate-100',  text: 'text-slate-500',   dot: 'bg-slate-400',   border: 'border-l-slate-300'   },
@@ -723,27 +728,37 @@ const INLINE_STATUS_OPTIONS = [
 
 // Parse backend auto-submission notes: "[YYYY-MM-DD HH:mm] message" separated by "\n\n"
 function parseSubmissionNotes(raw: string): { ts: string; text: string }[] {
-  if (!raw.trim()) return []
-  return raw.split(/\n\n+/).map(entry => {
-    entry = entry.trim()
-    const m = entry.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\]\s*(.+)$/s)
-    if (m) return { ts: m[1], text: m[2].trim() }
-    return { ts: '', text: entry }
-  }).filter(e => e.text)
+  try {
+    if (!raw || typeof raw !== 'string' || !raw.trim()) return []
+    return raw.split(/\n\n+/).map(entry => {
+      entry = entry.trim()
+      const m = entry.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\]\s*(.+)$/s)
+      if (m) return { ts: m[1], text: m[2].trim() }
+      return { ts: '', text: entry }
+    }).filter(e => e.text)
+  } catch (err) {
+    console.error('[parseSubmissionNotes] Failed to parse:', err)
+    return []
+  }
 }
 
 // Parse stored note log: entries separated by "\n---\n"
 function parseNoteLog(raw: string): { ts: string; text: string }[] {
-  if (!raw.trim()) return []
-  return raw.split('\n---\n').map(entry => {
-    const nl = entry.indexOf('\n')
-    if (nl === -1) return { ts: '', text: entry.trim() }
-    const firstLine = entry.slice(0, nl).trim()
-    const rest      = entry.slice(nl + 1).trim()
-    // first line is timestamp if it matches [Mar 23, 2026 8:14 PM]
-    if (/^\[.+\]$/.test(firstLine)) return { ts: firstLine.slice(1, -1), text: rest }
-    return { ts: '', text: entry.trim() }
-  }).filter(e => e.text)
+  try {
+    if (!raw || typeof raw !== 'string' || !raw.trim()) return []
+    return raw.split('\n---\n').map(entry => {
+      const nl = entry.indexOf('\n')
+      if (nl === -1) return { ts: '', text: entry.trim() }
+      const firstLine = entry.slice(0, nl).trim()
+      const rest      = entry.slice(nl + 1).trim()
+      // first line is timestamp if it matches [Mar 23, 2026 8:14 PM]
+      if (/^\[.+\]$/.test(firstLine)) return { ts: firstLine.slice(1, -1), text: rest }
+      return { ts: '', text: entry.trim() }
+    }).filter(e => e.text)
+  } catch (err) {
+    console.error('[parseNoteLog] Failed to parse:', err)
+    return []
+  }
 }
 
 function buildAppendedNote(existing: string, newText: string): string {
@@ -752,13 +767,261 @@ function buildAppendedNote(existing: string, newText: string): string {
   return existing.trim() ? `${existing.trim()}\n---\n${entry}` : entry
 }
 
+/** Parse error_messages from submission (handles JSON string or array).
+ *  Always returns a valid MappedApiError[] — never throws. */
+function parseErrorMessages(raw: LenderSubmission['error_messages']): MappedApiError[] {
+  try {
+    if (!raw) return []
+    let parsed: unknown = raw
+    if (typeof raw === 'string') {
+      try { parsed = JSON.parse(raw) } catch { return [] }
+    }
+    // Must be an array
+    if (!Array.isArray(parsed)) {
+      console.warn('[parseErrorMessages] Expected array, got:', typeof parsed, parsed)
+      return []
+    }
+    // Validate each entry has at minimum a field or message string
+    return parsed.filter((item): item is MappedApiError =>
+      item != null && typeof item === 'object' && (typeof item.field === 'string' || typeof item.message === 'string')
+    ).map(item => ({
+      label: typeof item.label === 'string' ? item.label : '',
+      field: typeof item.field === 'string' ? item.field : '',
+      message: typeof item.message === 'string' ? item.message : 'Unknown error',
+      fix_type: typeof item.fix_type === 'string' ? item.fix_type : 'unknown',
+      expected: typeof item.expected === 'string' ? item.expected : '',
+    }))
+  } catch (err) {
+    console.error('[parseErrorMessages] Unexpected error parsing error_messages:', err, raw)
+    return []
+  }
+}
+
+// ── Quick Fix Modal — edit error fields in a popup ─────────────────────────────
+function QuickFixModal({
+  leadId,
+  lenderName,
+  errors,
+  leadData,
+  onClose,
+}: {
+  leadId: number
+  lenderName: string
+  errors: MappedApiError[]
+  leadData: Record<string, unknown>
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  // Only include errors that have a field key AND exist in lead data (skip computed/synthetic lender fields)
+  // Deduplicate by field key (multiple API errors can map to the same CRM field)
+  const fixable = (() => {
+    const seen = new Set<string>()
+    return errors.filter(e => {
+      if (!e.field || e.field === '') return false
+      if (seen.has(e.field)) return false
+      // Field must exist as a key in leadData (even if value is empty/null)
+      if (!(e.field in leadData)) return false
+      seen.add(e.field)
+      return true
+    })
+  })()
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const err of fixable) {
+      init[err.field] = String(leadData[err.field] ?? '')
+    }
+    return init
+  })
+
+  const LABELS: Record<string, string> = {
+    first_name: 'First Name', last_name: 'Last Name', email: 'Email',
+    phone: 'Phone', phone_number: 'Phone Number', cell_phone: 'Cell Phone',
+    dob: 'Date of Birth', date_of_birth: 'Date of Birth',
+    ssn: 'SSN', home_state: 'Home State', home_address: 'Home Address',
+    home_city: 'Home City', home_zip: 'Home ZIP', zip_code: 'ZIP Code',
+    address: 'Address', city: 'City', state: 'State',
+    company_name: 'Company Name', business_phone: 'Business Phone',
+    business_address: 'Business Address', business_city: 'Business City',
+    business_state: 'Business State', business_zip: 'Business ZIP',
+    ein: 'EIN / Tax ID', tax_id: 'Tax ID', fein: 'Federal EIN',
+    amount_requested: 'Amount Requested', monthly_revenue: 'Monthly Revenue',
+    annual_revenue: 'Annual Revenue', credit_score: 'Credit Score',
+    business_start_date: 'Business Start Date', industry: 'Industry',
+    ownership_percentage: 'Ownership %', full_name: 'Full Name',
+    option_34: 'Home State', option_37: 'Home Address', option_38: 'Business Phone',
+    option_39: 'Amount Requested', option_44: 'SSN', option_45: 'Business ZIP',
+    option_46: 'Home ZIP', option_724: 'Business Address', option_730: 'EIN / Tax ID',
+    option_731: 'Business Start Date', option_733: 'Ownership %',
+    option_749: 'Monthly Revenue', option_750: 'Avg Bank Balance',
+  }
+  const label = (key: string) => LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
+  // Simple inline validation based on fix_type
+  const validate = (val: string, fixType: string): string | null => {
+    if (!val.trim()) return 'This field is required'
+    const v = val.trim()
+    if (fixType === 'zip' && !/^\d{5}$/.test(v)) return 'Must be exactly 5 digits'
+    if ((fixType === 'ein' || fixType === 'ssn') && !/^\d{9}$/.test(v.replace(/[-\s]/g, ''))) return 'Must be exactly 9 digits'
+    if (fixType === 'phone' && !/^\d{10,11}$/.test(v.replace(/[-\s().+]/g, ''))) return 'Must be 10-11 digits'
+    return null
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      // Only send fields that actually changed
+      const changed: Record<string, string> = {}
+      for (const [k, v] of Object.entries(values)) {
+        if (v !== String(leadData[k] ?? '')) changed[k] = v
+      }
+      if (Object.keys(changed).length === 0) throw new Error('No changes')
+      return leadService.update(leadId, changed)
+    },
+    onSuccess: () => {
+      toast.success('Lead updated — you can now resubmit')
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['lead-detail', leadId] })
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as Error)?.message === 'No changes'
+        ? 'No fields were changed'
+        : 'Failed to save'
+      toast.error(msg)
+    },
+  })
+
+  if (fixable.length === 0) return null
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Wrench size={14} className="text-indigo-500" />
+              Fix Fields — {lenderName}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Update the values below and save to fix the API errors
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Fields */}
+        <div className="px-5 py-4 overflow-y-auto flex-1 space-y-3">
+          {fixable.length === 0 && errors.length > 0 && (
+            <p className="text-xs text-slate-500 italic">
+              The API errors reference fields that cannot be edited here (computed by the lender).
+              Please update the lead data directly and resubmit.
+            </p>
+          )}
+          {fixable.map(err => {
+            const val = values[err.field] ?? ''
+            const vErr = validate(val, err.fix_type)
+            const changed = val !== String(leadData[err.field] ?? '')
+            return (
+              <div key={err.field}>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {err.label || label(err.field)}
+                  {err.expected && (
+                    <span className="ml-1.5 text-[10px] font-normal text-amber-600">
+                      ({err.expected})
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={val}
+                  onChange={e => setValues(prev => ({ ...prev, [err.field]: e.target.value }))}
+                  className={`w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors ${
+                    vErr
+                      ? 'border-red-300 bg-red-50'
+                      : changed
+                        ? 'border-emerald-300 bg-emerald-50'
+                        : 'border-slate-200'
+                  }`}
+                  placeholder={err.expected || label(err.field)}
+                />
+                <div className="flex items-center justify-between mt-0.5">
+                  {vErr ? (
+                    <p className="text-[10px] text-red-500 font-medium">{vErr}</p>
+                  ) : changed ? (
+                    <p className="text-[10px] text-emerald-600 font-medium">Changed</p>
+                  ) : (
+                    <p className="text-[10px] text-amber-500">Needs correction</p>
+                  )}
+                  {String(leadData[err.field] ?? '') !== '' && (
+                    <p className="text-[10px] text-slate-400">
+                      Current: <span className="font-medium text-slate-500">{String(leadData[err.field])}</span>
+                    </p>
+                  )}
+                </div>
+                {err.message && (
+                  <p className="text-[10px] text-slate-400 mt-0.5 italic">{err.message}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3.5 border-t border-slate-100 flex items-center gap-2.5 flex-shrink-0 bg-slate-50/80 rounded-b-2xl">
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="flex-1 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            {saveMutation.isPending
+              ? <><Loader2 size={12} className="animate-spin" /> Saving…</>
+              : <><Check size={12} /> Save & Close</>
+            }
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number }) {
   const qc = useQueryClient()
   const [editing,  setEditing]  = useState(false)
+  const [errorsExpanded, setErrorsExpanded] = useState(sub.submission_status === 'failed')
+  const [fixModalOpen, setFixModalOpen] = useState(false)
   const [status,   setStatus]   = useState<LenderResponseStatus>(sub.response_status ?? 'pending')
   const [newNote,  setNewNote]  = useState('')
   const existingNotes = sub.response_note ?? ''
   const noteLog       = parseNoteLog(existingNotes)
+  const errorMessages = parseErrorMessages(sub.error_messages)
+  const isFailed      = sub.submission_status === 'failed'
+
+  // Fetch lead data for the fix modal
+  const { data: leadDataForFix } = useQuery({
+    queryKey: ['crm-lead', leadId],
+    queryFn: async () => {
+      try {
+        const r = await leadService.getById(leadId)
+        return (r.data?.data ?? r.data) as CrmLead
+      } catch (err) {
+        console.error('[SubmissionRow] Failed to fetch lead data for fix modal:', err)
+        return null
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: fixModalOpen,
+  })
 
   const statusColors: Record<string, string> = {
     approved:        'text-white bg-emerald-500 border-emerald-500',
@@ -768,6 +1031,14 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
   }
   const statusLabel: Record<string, string> = {
     approved: 'Approved', declined: 'Declined', needs_documents: 'Missing Docs', pending: 'Pending',
+  }
+
+  // Submission status badges (separate from response status)
+  const submissionBadge: Record<string, { color: string; label: string }> = {
+    failed:    { color: 'text-white bg-red-500 border-red-500',       label: 'Failed' },
+    submitted: { color: 'text-white bg-emerald-500 border-emerald-500', label: 'Sent' },
+    pending:   { color: 'text-amber-700 bg-amber-100 border-amber-300', label: 'Processing' },
+    partial:   { color: 'text-orange-700 bg-orange-100 border-orange-300', label: 'Partial' },
   }
 
   const mutation = useMutation({
@@ -785,13 +1056,12 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
       setEditing(false)
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
-      qc.invalidateQueries({ queryKey: ['crm-approvals', leadId] })
     },
     onError: () => toast.error('Failed to save'),
   })
 
   return (
-    <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+    <div className={`border rounded-lg bg-white overflow-hidden ${isFailed ? 'border-red-300' : 'border-slate-200'}`}>
       {/* Summary row */}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
         <div className="flex-1 min-w-0">
@@ -808,6 +1078,14 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
                 <Mail size={8} /> Email
               </span>
             )}
+            {/* Submission status badge */}
+            {sub.submission_type === 'api' && submissionBadge[sub.submission_status] && (
+              <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${submissionBadge[sub.submission_status].color}`}>
+                {sub.submission_status === 'failed' && <AlertCircle size={8} />}
+                {sub.submission_status === 'submitted' && <CheckCircle size={8} />}
+                {submissionBadge[sub.submission_status].label}
+              </span>
+            )}
           </div>
           {sub.submitted_at && (
             <p className="text-[10px] text-slate-400 tabular-nums">
@@ -818,6 +1096,15 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 ${statusColors[status] ?? statusColors.pending}`}>
           {statusLabel[status] ?? status}
         </span>
+        {isFailed && errorMessages.length > 0 && (
+          <button
+            onClick={() => setErrorsExpanded(v => !v)}
+            className="p-1 rounded flex-shrink-0 text-red-500 hover:bg-red-50 transition-colors"
+            title={errorsExpanded ? 'Hide errors' : 'Show errors'}
+          >
+            {errorsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        )}
         <button
           onClick={() => setEditing(v => !v)}
           className={`p-1 rounded flex-shrink-0 transition-colors ${editing ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600'}`}
@@ -826,6 +1113,92 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
           <Pencil size={12} />
         </button>
       </div>
+
+      {/* ── Error Messages Box (failed API submissions) ── */}
+      {isFailed && errorsExpanded && errorMessages.length > 0 && (
+        <div className="border-t border-red-200 bg-red-50 px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <AlertCircle size={12} className="text-red-500 flex-shrink-0" />
+            <p className="text-[11px] font-bold text-red-700">Submission Failed — Fix Required Fields</p>
+          </div>
+          <ul className="space-y-1">
+            {errorMessages.map((err, i) => (
+              <li
+                key={i}
+                data-field={err.field}
+                className="flex items-start gap-2 text-[11px] text-red-700 cursor-pointer hover:text-red-900 hover:bg-red-100 rounded px-1.5 py-1 transition-colors"
+                onClick={() => {
+                  if (!err.field) return
+                  // Try direct input first (DynamicFieldForm), then data-attr (PropertyRow), then id
+                  const el = document.querySelector<HTMLElement>(
+                    `[name="${err.field}"], [data-field-key="${err.field}"], #field-${err.field}`
+                  )
+                  if (!el) return
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  // If it's an input/select/textarea, focus directly
+                  if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+                    el.focus()
+                    el.classList.add('field-error')
+                    setTimeout(() => el.classList.remove('field-error'), 3000)
+                  } else {
+                    // PropertyRow: click the edit button inside to open inline edit
+                    const btn = el.querySelector<HTMLElement>('button[data-field-key]') || el.querySelector<HTMLElement>('button')
+                    if (btn) btn.click()
+                    el.classList.add('field-error')
+                    setTimeout(() => {
+                      el.classList.remove('field-error')
+                      // After edit mode opens, try to focus the input
+                      const input = el.querySelector<HTMLElement>('input, select, textarea')
+                      if (input) input.focus()
+                    }, 150)
+                  }
+                }}
+                title={err.message}
+              >
+                <span className="flex-shrink-0 w-1 h-1 rounded-full bg-red-400 mt-1.5" />
+                <span>
+                  <strong className="font-semibold">{err.label}</strong>
+                  {err.expected && <span className="text-red-500 ml-1">— {err.expected}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-2 mt-2.5">
+            <button
+              onClick={() => setFixModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <Wrench size={10} /> Fix Fields & Resubmit
+            </button>
+            {sub.api_error && (
+              <p className="text-[10px] text-red-400 italic truncate flex-1" title={sub.api_error}>
+                {sub.api_error}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Fix Modal */}
+      {fixModalOpen && leadDataForFix && (
+        <ErrorBoundary fallbackTitle="Error loading fix modal">
+          <QuickFixModal
+            leadId={leadId}
+            lenderName={sub.lender_name ?? `Lender #${sub.lender_id}`}
+            errors={errorMessages}
+            leadData={leadDataForFix as unknown as Record<string, unknown>}
+            onClose={() => setFixModalOpen(false)}
+          />
+        </ErrorBoundary>
+      )}
+
+      {/* Inline api_error banner for failed subs without structured errors */}
+      {isFailed && !errorMessages.length && sub.api_error && (
+        <div className="border-t border-red-200 bg-red-50 px-3 py-2 flex items-start gap-2">
+          <AlertCircle size={12} className="text-red-500 flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-red-700">{sub.api_error}</p>
+        </div>
+      )}
 
       {/* Note log — always visible if notes exist */}
       {noteLog.length > 0 && (
@@ -917,7 +1290,7 @@ function fillPlaceholders(html: string, lead: Record<string, unknown>): string {
     .replace(/\{\{(\w+)\}\}/g, resolve)
 }
 
-interface LenderApiCfg { id: number; crm_lender_id: number; lender_name?: string; api_name: string; status: boolean | number }
+interface LenderApiCfg { id: number; crm_lender_id: number; lender_name?: string; api_name: string; status: boolean | number; required_fields?: string[] | null; payload_mapping?: Record<string, string | string[]> | string | null }
 
 // ── Extended ApiLog type (includes structured error analysis) ──────────────────
 interface ApiLog {
@@ -937,13 +1310,13 @@ interface ApiLog {
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
 
-  const [showForm, setShowForm]             = useState(false)
   const [selectedIds, setSelectedIds]       = useState<Set<number>>(new Set())
   const [notes, setNotes]                   = useState('')
   const [templateId, setTemplateId]         = useState<number | ''>('')
   const [uploadingDocs, setUploadingDocs]   = useState(false)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [previewExpanded, setPreviewExpanded] = useState(false)
 
   // Re-use cached lead data (already fetched by parent — no extra request)
   const { data: leadData } = useQuery({
@@ -955,16 +1328,28 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const { data: submissions, isLoading: subsLoading } = useQuery({
     queryKey: ['lender-submissions', leadId],
     queryFn: async () => {
-      const res = await crmService.getLenderSubmissions(leadId)
-      return (res.data?.data ?? res.data ?? []) as LenderSubmission[]
+      try {
+        const res = await crmService.getLenderSubmissions(leadId)
+        const data = res.data?.data ?? res.data ?? []
+        return Array.isArray(data) ? data as LenderSubmission[] : []
+      } catch (err) {
+        console.error('[LendersPanel] Failed to fetch lender submissions:', err)
+        return []
+      }
     },
   })
 
   const { data: lendersData } = useQuery({
     queryKey: ['lenders-all'],
     queryFn: async () => {
-      const res = await crmService.getLenders({ per_page: 200 })
-      return (res.data?.data?.data ?? res.data?.data ?? res.data?.records ?? res.data ?? []) as Lender[]
+      try {
+        const res = await crmService.getLenders({ per_page: 200 })
+        const data = res.data?.data?.data ?? res.data?.data ?? res.data?.records ?? res.data ?? []
+        return Array.isArray(data) ? data as Lender[] : []
+      } catch (err) {
+        console.error('[LendersPanel] Failed to fetch lenders:', err)
+        return []
+      }
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -972,8 +1357,14 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const { data: emailTemplates } = useQuery({
     queryKey: ['email-templates'],
     queryFn: async () => {
-      const res = await crmService.getEmailTemplates()
-      return (res.data?.data ?? res.data ?? []) as EmailTemplate[]
+      try {
+        const res = await crmService.getEmailTemplates()
+        const data = res.data?.data ?? res.data ?? []
+        return Array.isArray(data) ? data as EmailTemplate[] : []
+      } catch (err) {
+        console.error('[LendersPanel] Failed to fetch email templates:', err)
+        return []
+      }
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -981,16 +1372,28 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const { data: leadDocs } = useQuery({
     queryKey: ['lead-documents', leadId],
     queryFn: async () => {
-      const res = await crmService.getLeadDocuments(leadId)
-      return (res.data?.data ?? res.data ?? []) as CrmDocument[]
+      try {
+        const res = await crmService.getLeadDocuments(leadId)
+        const data = res.data?.data ?? res.data ?? []
+        return Array.isArray(data) ? data as CrmDocument[] : []
+      } catch (err) {
+        console.error('[LendersPanel] Failed to fetch lead documents:', err)
+        return []
+      }
     },
   })
 
   const { data: apiConfigs } = useQuery({
     queryKey: ['lender-api-configs'],
     queryFn: async () => {
-      const res = await crmService.getLenderApiConfigs()
-      return (res.data?.data ?? []) as LenderApiCfg[]
+      try {
+        const res = await crmService.getLenderApiConfigs()
+        const data = res.data?.data ?? []
+        return Array.isArray(data) ? data as LenderApiCfg[] : []
+      } catch (err) {
+        console.error('[LendersPanel] Failed to fetch API configs:', err)
+        return []
+      }
     },
     staleTime: 60_000,
   })
@@ -998,13 +1401,27 @@ function LendersPanel({ leadId }: { leadId: number }) {
   // Fix modal state
   const [fixModal, setFixModal] = useState<{ log: ApiLog; error: FixSuggestion } | null>(null)
 
-  const { data: apiLogs, isLoading: apiLogsLoading } = useQuery({
+  // Per-lender validation & submission result state
+  const [validationState, setValidationState] = useState<GroupedValidationState | null>(null)
+  const [submissionOutcomes, setSubmissionOutcomes] = useState<LenderSubmissionOutcome[] | null>(null)
+  const [retryingLenderId, setRetryingLenderId] = useState<number | null>(null)
+  const [isValidating, setIsValidating] = useState(false)
+
+  // API logs query — only used when fix modal needs log context.
+  // Disabled refetchInterval to prevent unnecessary re-renders of the entire panel.
+  const { data: apiLogs } = useQuery({
     queryKey: ['lead-api-logs', leadId],
     queryFn: async () => {
-      const res = await crmService.getLenderApiLogs({ lead_id: leadId, per_page: 50 })
-      return (res.data?.data?.data ?? res.data?.data ?? []) as ApiLog[]
+      try {
+        const res = await crmService.getLenderApiLogs({ lead_id: leadId, per_page: 50 })
+        const data = res.data?.data?.data ?? res.data?.data ?? []
+        return Array.isArray(data) ? data as ApiLog[] : []
+      } catch (err) {
+        console.error('[LendersPanel] Failed to fetch API logs:', err)
+        return []
+      }
     },
-    refetchInterval: 15_000,
+    staleTime: 30_000,
   })
 
 
@@ -1023,33 +1440,180 @@ function LendersPanel({ leadId }: { leadId: number }) {
   }, {})
   const docs          = leadDocs ?? []
 
-  // Compute preview template + filled HTML at component scope so the mutation can use them
+  // Compute preview template object (used for subject/name display)
   const previewTemplate = templateId !== ''
     ? (emailTemplates ?? []).find(t => t.id === templateId) ?? null
     : null
 
-  const previewHtml = previewTemplate
-    ? (leadData
-        ? fillPlaceholders(previewTemplate.template_html, leadData as Record<string, unknown>)
-        : previewTemplate.template_html)
-    : ''
+  // Server-side resolved HTML + subject (all [[field_key]] replaced with actual EAV values)
+  const { data: resolvedTemplate } = useQuery({
+    queryKey: ['resolve-email-template', leadId, templateId],
+    queryFn: async () => {
+      const res = await crmService.resolveEmailTemplate(leadId, templateId as number)
+      const d = res.data?.data ?? res.data ?? {}
+      return { body: (d.body ?? '') as string, subject: (d.subject ?? '') as string }
+    },
+    enabled: templateId !== '',
+    staleTime: 30_000,
+  })
+
+  const previewHtml    = resolvedTemplate?.body    ?? previewTemplate?.template_html ?? ''
+  const resolvedSubject = resolvedTemplate?.subject || previewTemplate?.subject || ''
 
   function toggleLender(id: number) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setSelectedIds(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) { n.delete(id) } else { n.add(id) }
+      return n
+    })
+    // Clear validation state when selection changes
+    if (validationState) setValidationState(null)
   }
   function toggleDoc(id: number) {
     setSelectedDocIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
-  const openForm = () => {
-    setShowForm(true)
-    // Pre-select only docs that have a file on disk
-    setSelectedDocIds(new Set((leadDocs ?? []).filter(d => d.attachable !== false && d.file_path).map(d => d.id)))
+  // Auto-select attachable docs on initial load
+  useEffect(() => {
+    if (leadDocs?.length && selectedDocIds.size === 0) {
+      setSelectedDocIds(new Set(leadDocs.filter(d => d.attachable !== false && d.file_path).map(d => d.id)))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadDocs])
+
+  const resetForm = () => {
+    setSelectedIds(new Set()); setNotes('')
+    setTemplateId(''); setSelectedDocIds(new Set()); setPreviewExpanded(false)
+    setValidationState(null); setSubmissionOutcomes(null)
   }
 
-  const closeForm = () => {
-    setShowForm(false); setSelectedIds(new Set()); setNotes('')
-    setTemplateId(''); setSelectedDocIds(new Set())
+  /** Safely normalize required_fields — handles string, JSON string, array, null */
+  const normalizeRequiredFields = (raw: unknown): string[] => {
+    if (!raw) return []
+    if (Array.isArray(raw)) return raw.filter(f => typeof f === 'string')
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed.filter((f: unknown) => typeof f === 'string')
+      } catch { /* not JSON, ignore */ }
+      return []
+    }
+    return []
+  }
+
+  /** Extract CRM field keys from a payload_mapping config */
+  const extractMappingKeys = (cfg: LenderApiCfg): string[] => {
+    try {
+      if (!cfg.payload_mapping) return []
+      let mapping: Record<string, unknown> = {}
+      if (typeof cfg.payload_mapping === 'string') {
+        try {
+          const parsed = JSON.parse(cfg.payload_mapping)
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) mapping = parsed
+          else return []
+        } catch { return [] }
+      } else if (cfg.payload_mapping && typeof cfg.payload_mapping === 'object') {
+        mapping = cfg.payload_mapping as Record<string, unknown>
+      } else {
+        return []
+      }
+      return Object.keys(mapping).filter(k => typeof k === 'string' && !k.startsWith('=') && !COMPUTED_FIELDS.has(k))
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Per-lender validation: checks required fields for each selected lender independently.
+   * First tries server-side validation, falls back to local validation.
+   * Returns GroupedValidationState.
+   */
+  const validateBeforeSubmit = async (): Promise<GroupedValidationState> => {
+    setIsValidating(true)
+    try {
+      // Try server-side validation first
+      try {
+        const res = await crmService.validateSubmission(leadId, Array.from(selectedIds))
+        const data = res.data?.data ?? res.data ?? {}
+        const serverResults = data.results ?? {}
+        const results: LenderValidationResult[] = []
+        for (const lenderId of selectedIds) {
+          const sr = serverResults[lenderId]
+          if (!sr) continue
+          results.push({
+            lenderId: sr.lender_id,
+            lenderName: sr.lender_name,
+            isApiLender: sr.is_api_lender,
+            isValid: sr.valid,
+            missingFields: sr.missing_fields ?? [],
+            fieldLabels: sr.field_labels ?? {},
+          })
+        }
+        const state: GroupedValidationState = {
+          results,
+          validLenderIds: results.filter(r => r.isValid || !r.isApiLender).map(r => r.lenderId),
+          invalidLenderIds: results.filter(r => !r.isValid && r.isApiLender).map(r => r.lenderId),
+          emailOnlyIds: results.filter(r => !r.isApiLender).map(r => r.lenderId),
+          hasAnyErrors: results.some(r => !r.isValid && r.isApiLender),
+        }
+        setValidationState(state)
+        return state
+      } catch {
+        // Server validation failed — fall back to local validation
+      }
+
+      // Local validation fallback
+      const configs = apiConfigs ?? []
+      const lead = leadData as Record<string, unknown> | undefined
+      const results: LenderValidationResult[] = []
+
+      for (const lenderId of selectedIds) {
+        const lender = activeLenders.find(l => l.id === lenderId)
+        if (!lender) continue
+
+        const isApi = !!(lender.api_status && lender.api_status !== '0')
+        const cfg = isApi ? configs.find(c => c.crm_lender_id === lenderId && (c.status === true || c.status === 1)) : null
+
+        if (!isApi || !cfg) {
+          results.push({ lenderId, lenderName: lender.lender_name, isApiLender: false, isValid: true, missingFields: [], fieldLabels: {} })
+          continue
+        }
+
+        const requiredFields = normalizeRequiredFields(cfg.required_fields)
+        const fieldsToCheck = requiredFields.length > 0 ? requiredFields : extractMappingKeys(cfg)
+        const missing: string[] = []
+        const labels: Record<string, string> = {}
+
+        for (const key of fieldsToCheck) {
+          if (typeof key !== 'string' || !key || COMPUTED_FIELDS.has(key)) continue
+          labels[key] = sharedAutoLabel(key)
+          const val = lead?.[key]
+          if (val === undefined || val === null || String(val).trim() === '') {
+            missing.push(key)
+          }
+        }
+
+        results.push({ lenderId, lenderName: lender.lender_name, isApiLender: true, isValid: missing.length === 0, missingFields: missing, fieldLabels: labels })
+      }
+
+      const state: GroupedValidationState = {
+        results,
+        validLenderIds: results.filter(r => r.isValid || !r.isApiLender).map(r => r.lenderId),
+        invalidLenderIds: results.filter(r => !r.isValid && r.isApiLender).map(r => r.lenderId),
+        emailOnlyIds: results.filter(r => !r.isApiLender).map(r => r.lenderId),
+        hasAnyErrors: results.some(r => !r.isValid && r.isApiLender),
+      }
+      setValidationState(state)
+      return state
+    } catch (err) {
+      console.error('[validateBeforeSubmit] Unexpected error:', err)
+      toast.error('Validation error — submitting anyway')
+      const empty: GroupedValidationState = { results: [], validLenderIds: Array.from(selectedIds), invalidLenderIds: [], emailOnlyIds: [], hasAnyErrors: false }
+      setValidationState(null)
+      return empty
+    } finally {
+      setIsValidating(false)
+    }
   }
 
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1078,549 +1642,583 @@ function LendersPanel({ leadId }: { leadId: number }) {
     return doc && doc.attachable !== false && !!doc.file_path
   })
 
+  /** Build outcomes from the API response for the result summary */
+  const buildOutcomes = (data: Record<string, unknown>): LenderSubmissionOutcome[] => {
+    const outcomes: LenderSubmissionOutcome[] = []
+    const records = (data.records ?? {}) as Record<string, Record<string, unknown>>
+    for (const id of (Array.isArray(data.submitted) ? data.submitted : [])) {
+      const rec = records[id] ?? {}
+      outcomes.push({
+        lenderId: Number(id),
+        lenderName: String(rec.lender_name ?? `Lender #${id}`),
+        success: true,
+        submissionType: (rec.submission_type as 'api' | 'normal') ?? 'normal',
+        submissionId: Number(rec.id ?? 0) || undefined,
+      })
+    }
+    for (const id of (Array.isArray(data.failed) ? data.failed : [])) {
+      const rec = records[id] ?? {}
+      outcomes.push({
+        lenderId: Number(id),
+        lenderName: String(rec.lender_name ?? `Lender #${id}`),
+        success: false,
+        submissionType: (rec.submission_type as 'api' | 'normal') ?? 'normal',
+        error: rec.error ? String(rec.error) : undefined,
+      })
+    }
+    for (const id of (Array.isArray(data.skipped) ? data.skipped : [])) {
+      const rec = records[id] ?? {}
+      outcomes.push({
+        lenderId: Number(id),
+        lenderName: String(rec.lender_name ?? `Lender #${id}`),
+        success: false,
+        submissionType: 'api',
+        error: rec.error ? String(rec.error) : 'Skipped due to validation',
+        validationErrors: Array.isArray(rec.validation_errors) ? rec.validation_errors as string[] : undefined,
+      })
+    }
+    return outcomes
+  }
+
   const submitMutation = useMutation({
-    mutationFn: () => crmService.submitApplication(leadId, {
-      lender_ids:    Array.from(selectedIds),
+    mutationFn: (overrideLenderIds?: number[]) => crmService.submitApplication(leadId, {
+      lender_ids:    overrideLenderIds ?? Array.from(selectedIds),
       notes:         notes || undefined,
       document_ids:  attachableDocIds.length ? attachableDocIds : undefined,
       email_html:    previewHtml || undefined,
-      email_subject: previewTemplate?.subject || undefined,
+      email_subject: resolvedSubject || undefined,
+      skip_invalid:  true,
     }),
     onSuccess: (res) => {
-      const { submitted = [], failed = [] } = res.data?.data ?? {}
-      if (submitted.length) toast.success(`Sent to ${submitted.length} lender${submitted.length !== 1 ? 's' : ''}`)
-      if (failed.length)    toast.error(`Failed for ${failed.length} lender${failed.length !== 1 ? 's' : ''}`)
-      closeForm()
+      try {
+        const data = (res?.data?.data ?? res?.data ?? {}) as Record<string, unknown>
+        const outcomes = buildOutcomes(data)
+        setSubmissionOutcomes(outcomes)
+        setValidationState(null)
+
+        const successCount = outcomes.filter(o => o.success).length
+        const failCount = outcomes.filter(o => !o.success && !o.validationErrors?.length).length
+        if (successCount) toast.success(`Sent to ${successCount} lender${successCount !== 1 ? 's' : ''}`)
+        if (failCount) toast.error(`${failCount} failed`)
+      } catch (parseErr) {
+        console.error('[LendersPanel] Error parsing submit response:', parseErr, res)
+        toast.success('Submission sent')
+      }
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
       qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? 'Submission failed'
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Submission failed'
       toast.error(msg)
     },
   })
 
+  const retryMutation = useMutation({
+    mutationFn: (lenderId: number) => {
+      setRetryingLenderId(lenderId)
+      return crmService.retryLenderSubmission(leadId, lenderId, {
+        document_ids: attachableDocIds.length ? attachableDocIds : undefined,
+        email_html: previewHtml || undefined,
+        email_subject: resolvedSubject || undefined,
+      })
+    },
+    onSuccess: (res, lenderId) => {
+      setRetryingLenderId(null)
+      const data = (res?.data?.data ?? res?.data ?? {}) as Record<string, unknown>
+      const success = Array.isArray(data.submitted) && data.submitted.includes(lenderId)
+      setSubmissionOutcomes(prev => prev?.map(o =>
+        o.lenderId === lenderId ? { ...o, success, error: success ? undefined : o.error } : o
+      ) ?? null)
+      if (success) toast.success('Retry successful')
+      else toast.error('Retry failed')
+      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+    },
+    onError: () => {
+      setRetryingLenderId(null)
+      toast.error('Retry failed')
+    },
+  })
+
   return (
-    <div className="space-y-4">
+    <div className="flex gap-5 items-start">
 
-      {/* ── Submit to Lenders button ── */}
-      <button
-        onClick={openForm}
-        className="btn-primary w-full justify-center gap-2 py-2.5"
+      {/* ═══ Left column — History & Logs ════════════════════════════════════ */}
+      <div
+        className="space-y-5 min-w-0"
+        style={{ flex: previewExpanded ? '4 4 0%' : '6 6 0%', transition: 'flex 0.3s ease' }}
       >
-        <Send size={14} /> Submit to Lenders
-      </button>
 
-      {/* ── Submit Application Modal ── */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)' }}
-          onClick={e => { if (e.target === e.currentTarget) closeForm() }}
-        >
-          <div
-            className={`w-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all ${previewTemplate ? 'max-w-4xl' : 'max-w-lg'}`}
-            style={{ maxHeight: '90vh' }}
-          >
-            {/* Gradient accent bar */}
-            <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
-
-            {/* Header */}
-            <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center gap-4 flex-shrink-0">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 12px rgba(5,150,105,0.35)' }}>
-                <Send size={16} className="text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-base font-bold text-slate-900 leading-tight">Submit Application</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Choose lenders, attach documents and send</p>
-              </div>
-              <button
-                onClick={closeForm}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0"
-              >
-                <X size={16} />
-              </button>
+        {/* ── Submission History ── */}
+        <div>
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
+            Submission History {subList.length > 0 && <span className="font-normal">({subList.length})</span>}
+          </p>
+          {subsLoading ? (
+            <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
+          ) : subList.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-6">No submissions yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {subList.map(s => (
+                <ErrorBoundary key={s.id} fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
+                  <SubmissionRow sub={s} leadId={leadId} />
+                </ErrorBoundary>
+              ))}
             </div>
+          )}
+        </div>
 
-            {/* Body */}
-            <div className={`flex-1 overflow-hidden flex ${previewTemplate ? 'flex-row' : 'flex-col'}`}>
+        {/* ── Error Fix Modal ── */}
+        {fixModal && (
+          <ErrorBoundary fallbackTitle="Error loading fix modal">
+            <ErrorFixModal
+              leadId={leadId}
+              lenderId={fixModal.log.lender_id}
+              error={fixModal.error}
+              onClose={() => setFixModal(null)}
+              onFixed={() => {
+                setFixModal(null)
+                qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+              }}
+            />
+          </ErrorBoundary>
+        )}
 
-              {/* ── Form fields column ── */}
-              <div className={`overflow-y-auto py-5 px-6 space-y-5 flex-shrink-0 ${previewTemplate ? 'w-[340px] border-r border-slate-100' : 'flex-1'}`}>
+      </div>
 
-                {/* ── Lenders section ── */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center">
-                        <Building2 size={11} className="text-emerald-600" />
+      {/* ═══ Right column — Submit Form + Preview ════════════════════════════ */}
+      <div
+        className="min-w-0"
+        style={{ flex: previewExpanded ? '8 8 0%' : '6 6 0%', transition: 'flex 0.3s ease' }}
+      >
+        <div className={previewExpanded && !!previewTemplate ? 'flex gap-5 items-start' : ''}>
+
+          {/* ── Submit Form card ── */}
+          <div className={previewExpanded && !!previewTemplate ? 'flex-1 min-w-0' : ''}>
+            <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden sticky top-4">
+
+              {/* Gradient accent bar */}
+              <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
+
+              {/* Header */}
+              <div className="px-5 pt-4 pb-3.5 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 12px rgba(5,150,105,0.35)' }}>
+                  <Send size={15} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-sm font-bold text-slate-900 leading-tight">Submit Application</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Choose lenders, attach documents and send</p>
+                </div>
+              </div>
+
+              {/* Scrollable form body */}
+              <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                <div className="py-4 px-5 space-y-4">
+
+                  {/* ── Select Lenders ── */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center">
+                          <Building2 size={11} className="text-emerald-600" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Select Lenders</span>
+                        {selectedIds.size > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white leading-none">
+                            {selectedIds.size}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Select Lenders</span>
-                      {selectedIds.size > 0 && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white leading-none">
-                          {selectedIds.size}
-                        </span>
+                      {activeLenders.length > 0 && (
+                        <button
+                          onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
+                          className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+                        >
+                          {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
+                        </button>
                       )}
                     </div>
-                    {activeLenders.length > 0 && (
-                      <button
-                        onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
-                        className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
-                      >
-                        {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
-                      </button>
+
+                    {activeLenders.length === 0 ? (
+                      <div className="flex flex-col items-center py-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                        <Building2 size={20} className="text-slate-300 mb-1.5" />
+                        <p className="text-xs font-medium text-slate-500">No active lenders configured</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Add lenders from the Lenders menu first</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                        {activeLenders.map(l => {
+                          const on = selectedIds.has(l.id)
+                          const prevSub = submittedLenderMap[l.id]
+                          const alreadySent = !!prevSub
+                          const vResult = validationState?.results.find(r => r.lenderId === l.id)
+                          const hasErrors = vResult && !vResult.isValid && vResult.isApiLender
+                          return (
+                            <div
+                              key={l.id}
+                              role="checkbox"
+                              aria-checked={on}
+                              tabIndex={0}
+                              onClick={() => toggleLender(l.id)}
+                              onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleLender(l.id) } }}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                                hasErrors
+                                  ? 'border-red-300 bg-red-50'
+                                  : on
+                                    ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                                    : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                                on ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'
+                              }`}>
+                                {on && <Check size={10} className="text-white" strokeWidth={3} />}
+                              </div>
+                              <span className="text-sm font-medium text-slate-700 truncate flex-1">{l.lender_name}</span>
+                              {hasErrors && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200 flex-shrink-0">
+                                  {vResult.missingFields.length} missing
+                                </span>
+                              )}
+                              {alreadySent && !hasErrors && (
+                                <span
+                                  title={`Previously sent on ${prevSub.submitted_at ? new Date(prevSub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : 'unknown date'}`}
+                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0"
+                                >
+                                  <CheckCircle size={8} /> Sent
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {(() => {
+                      const alreadySentSelected = Array.from(selectedIds).filter(id => !!submittedLenderMap[id])
+                      if (!alreadySentSelected.length) return null
+                      const names = alreadySentSelected.map(id => submittedLenderMap[id].lender_name ?? `Lender #${id}`).join(', ')
+                      return (
+                        <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                          <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-[11px] text-amber-700 leading-relaxed">
+                            <strong className="font-semibold">{names}</strong>{' '}
+                            {alreadySentSelected.length === 1 ? 'was' : 'were'} already submitted. This will resend the application.
+                          </p>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                  <div className="border-t border-slate-100" />
+
+                  {/* ── Email Template ── */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded-lg bg-sky-100 flex items-center justify-center">
+                        <Mail size={11} className="text-sky-600" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Email Template</span>
+                    </div>
+                    <select
+                      className="input w-full text-sm"
+                      value={templateId}
+                      onChange={e => {
+                        const val: number | '' = e.target.value === '' ? '' : Number(e.target.value)
+                        setTemplateId(val)
+                        setPreviewExpanded(val !== '')
+                      }}
+                    >
+                      <option value="">— Default template —</option>
+                      {(emailTemplates ?? []).map(t => (
+                        <option key={t.id} value={t.id}>{t.template_name}</option>
+                      ))}
+                    </select>
+                    {previewTemplate && (
+                      <p className="text-[11px] text-emerald-600 flex items-center gap-1 mt-1.5">
+                        <Eye size={10} /> Preview expanded to the right
+                      </p>
                     )}
                   </div>
 
-                  {activeLenders.length === 0 ? (
-                    <div className="flex flex-col items-center py-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
-                      <Building2 size={20} className="text-slate-300 mb-1.5" />
-                      <p className="text-xs font-medium text-slate-500">No active lenders configured</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Add lenders from the Lenders menu first</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
-                      {activeLenders.map(l => {
-                        const on = selectedIds.has(l.id)
-                        const prevSub = submittedLenderMap[l.id]
-                        const alreadySent = !!prevSub
-                        return (
-                          <label
-                            key={l.id}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
-                              on
-                                ? 'border-emerald-300 bg-emerald-50 shadow-sm'
-                                : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50'
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
-                              on ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'
-                            }`}>
-                              {on && <Check size={10} className="text-white" strokeWidth={3} />}
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={on}
-                              onChange={() => toggleLender(l.id)}
-                              className="sr-only"
-                            />
-                            <span className="text-sm font-medium text-slate-700 truncate flex-1">{l.lender_name}</span>
-                            {alreadySent && (
-                              <span
-                                title={`Previously sent on ${prevSub.submitted_at ? new Date(prevSub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : 'unknown date'}`}
-                                className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0"
-                              >
-                                <CheckCircle size={8} /> Sent
-                              </span>
-                            )}
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <div className="border-t border-slate-100" />
 
-                  {/* Resubmit warning */}
-                  {(() => {
-                    const alreadySentSelected = Array.from(selectedIds).filter(id => !!submittedLenderMap[id])
-                    if (!alreadySentSelected.length) return null
-                    const names = alreadySentSelected.map(id => submittedLenderMap[id].lender_name ?? `Lender #${id}`).join(', ')
-                    return (
-                      <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                        <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                        <p className="text-[11px] text-amber-700 leading-relaxed">
-                          <strong className="font-semibold">{names}</strong>{' '}
-                          {alreadySentSelected.length === 1 ? 'was' : 'were'} already submitted. This will resend the application.
-                        </p>
+                  {/* ── Documents ── */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
+                          <FileText size={11} className="text-violet-600" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Documents</span>
+                        {selectedDocIds.size > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500 text-white leading-none">
+                            {selectedDocIds.size}
+                          </span>
+                        )}
                       </div>
-                    )
-                  })()}
-                </div>
-
-                <div className="border-t border-slate-100" />
-
-                {/* ── Email Template section ── */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-lg bg-sky-100 flex items-center justify-center">
-                      <Mail size={11} className="text-sky-600" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Email Template</span>
-                  </div>
-                  <select
-                    className="input w-full text-sm"
-                    value={templateId}
-                    onChange={e => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
-                  >
-                    <option value="">— Default template —</option>
-                    {(emailTemplates ?? []).map(t => (
-                      <option key={t.id} value={t.id}>{t.template_name}</option>
-                    ))}
-                  </select>
-                  {previewTemplate && (
-                    <p className="text-[11px] text-emerald-600 flex items-center gap-1 mt-1.5">
-                      <Eye size={10} /> Preview shown on the right
-                    </p>
-                  )}
-                </div>
-
-                <div className="border-t border-slate-100" />
-
-                {/* ── Documents section ── */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
-                        <FileText size={11} className="text-violet-600" />
+                      <div className="flex items-center gap-2">
+                        {docs.length > 0 && (() => {
+                          const attachable = docs.filter(d => d.attachable !== false && !!d.file_path)
+                          if (!attachable.length) return null
+                          const allSelected = attachable.every(d => selectedDocIds.has(d.id))
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDocIds(allSelected ? new Set() : new Set(attachable.map(d => d.id)))}
+                              className="text-[11px] font-medium text-slate-500 hover:text-emerald-600 hover:underline"
+                            >
+                              {allSelected ? 'Deselect all' : 'Select all'}
+                            </button>
+                          )
+                        })()}
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingDocs}
+                          className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg transition-colors"
+                        >
+                          {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                          Upload
+                        </button>
+                        <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
                       </div>
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Documents</span>
-                      {selectedDocIds.size > 0 && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500 text-white leading-none">
-                          {selectedDocIds.size}
-                        </span>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {docs.length > 0 && (() => {
-                        const attachable = docs.filter(d => d.attachable !== false && !!d.file_path)
-                        if (!attachable.length) return null
-                        const allSelected = attachable.every(d => selectedDocIds.has(d.id))
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDocIds(allSelected ? new Set() : new Set(attachable.map(d => d.id)))}
-                            className="text-[11px] font-medium text-slate-500 hover:text-emerald-600 hover:underline"
-                          >
-                            {allSelected ? 'Deselect all' : 'Select all'}
-                          </button>
-                        )
-                      })()}
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploadingDocs}
-                        className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg transition-colors"
-                      >
-                        {uploadingDocs ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
-                        Upload
-                      </button>
-                      <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={handleDocUpload} />
-                    </div>
-                  </div>
 
-                  {docs.length === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50">
-                      <Upload size={12} className="text-slate-300" />
-                      <p className="text-xs text-slate-400">No documents yet — click Upload to add files</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
-                      {docs.map(d => {
-                        const on = selectedDocIds.has(d.id)
-                        const canAttach = d.attachable !== false && !!d.file_path
-                        const docLabel = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
-                        return (
-                          <div
-                            key={d.id}
-                            title={!canAttach ? 'File not on server — re-upload to attach' : undefined}
-                            onClick={() => canAttach && toggleDoc(d.id)}
-                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs select-none transition-all ${
-                              canAttach
-                                ? on
-                                  ? 'cursor-pointer border-violet-200 bg-violet-50'
-                                  : 'cursor-pointer border-slate-200 bg-white hover:border-violet-200 hover:bg-slate-50'
-                                : 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-50'
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
-                              on && canAttach ? 'bg-violet-500 border-violet-500' : 'border-slate-300 bg-white'
-                            }`}>
-                              {on && canAttach && <Check size={9} className="text-white" strokeWidth={3} />}
+                    {docs.length === 0 ? (
+                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                        <Upload size={12} className="text-slate-300" />
+                        <p className="text-xs text-slate-400">No documents yet \u2014 click Upload to add files</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
+                        {docs.map(d => {
+                          const on = selectedDocIds.has(d.id)
+                          const canAttach = d.attachable !== false && !!d.file_path
+                          const docLabel = d.document_type || d.document_name || d.file_path?.split('/').pop() || `Doc #${d.id}`
+                          return (
+                            <div
+                              key={d.id}
+                              title={!canAttach ? 'File not on server \u2014 re-upload to attach' : undefined}
+                              onClick={() => canAttach && toggleDoc(d.id)}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs select-none transition-all ${
+                                canAttach
+                                  ? on
+                                    ? 'cursor-pointer border-violet-200 bg-violet-50'
+                                    : 'cursor-pointer border-slate-200 bg-white hover:border-violet-200 hover:bg-slate-50'
+                                  : 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-50'
+                              }`}
+                            >
+                              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                                on && canAttach ? 'bg-violet-500 border-violet-500' : 'border-slate-300 bg-white'
+                              }`}>
+                                {on && canAttach && <Check size={9} className="text-white" strokeWidth={3} />}
+                              </div>
+                              <FileText size={11} className={`flex-shrink-0 ${on && canAttach ? 'text-violet-500' : 'text-slate-400'}`} />
+                              <span className={`truncate flex-1 ${on && canAttach ? 'text-slate-800 font-medium' : 'text-slate-600'}`}>{docLabel}</span>
+                              {!canAttach && (
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); fileInputRef.current?.click() }}
+                                  className="ml-auto text-[10px] text-amber-500 hover:text-amber-700 flex-shrink-0 underline"
+                                >
+                                  re-upload
+                                </button>
+                              )}
                             </div>
-                            <FileText size={11} className={`flex-shrink-0 ${on && canAttach ? 'text-violet-500' : 'text-slate-400'}`} />
-                            <span className={`truncate flex-1 ${on && canAttach ? 'text-slate-800 font-medium' : 'text-slate-600'}`}>{docLabel}</span>
-                            {!canAttach && (
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); fileInputRef.current?.click() }}
-                                className="ml-auto text-[10px] text-amber-500 hover:text-amber-700 flex-shrink-0 underline"
-                              >
-                                re-upload
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                          )
+                        })}
+                      </div>
+                    )}
 
-                  {selectedDocIds.size > 0 && attachableDocIds.length < selectedDocIds.size && (
-                    <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600">
-                      <AlertTriangle size={11} className="flex-shrink-0" />
-                      {selectedDocIds.size - attachableDocIds.length} file(s) need re-upload and will be skipped.
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-slate-100" />
-
-                {/* ── Notes section ── */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center">
-                      <MessageSquare size={11} className="text-slate-500" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Note</span>
-                    <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+                    {selectedDocIds.size > 0 && attachableDocIds.length < selectedDocIds.size && (
+                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600">
+                        <AlertTriangle size={11} className="flex-shrink-0" />
+                        {selectedDocIds.size - attachableDocIds.length} file(s) need re-upload and will be skipped.
+                      </div>
+                    )}
                   </div>
-                  <textarea
-                    className="input w-full resize-none text-sm"
-                    rows={3}
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Additional notes for the lender…"
-                  />
+
+                  <div className="border-t border-slate-100" />
+
+                  {/* ── Notes ── */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <MessageSquare size={11} className="text-slate-500" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Note</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+                    </div>
+                    <textarea
+                      className="input w-full resize-none text-sm"
+                      rows={3}
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Additional notes for the lender\u2026"
+                    />
+                  </div>
+
                 </div>
               </div>
 
-              {/* ── Email preview panel ── */}
-              {previewTemplate && (
-                <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-50">
-
-                  {/* macOS-style chrome bar */}
-                  <div className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0" style={{ background: '#1e293b' }}>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                    </div>
-                    <div className="flex-1 flex items-center justify-center">
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-md text-slate-400 text-[11px]" style={{ background: '#334155' }}>
-                        <Mail size={10} />
-                        <span>Email Preview</span>
-                      </div>
-                    </div>
-                    <div className="w-[52px]" />
-                  </div>
-
-                  {/* Email meta header */}
-                  <div className="px-5 pt-4 pb-3 border-b border-slate-200 bg-white flex-shrink-0">
-                    <h3 className="text-sm font-bold text-slate-900 leading-snug mb-3 truncate">
-                      {previewTemplate.subject || previewTemplate.template_name}
-                    </h3>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-                        style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
-                        <Mail size={13} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-slate-800">Submission Email</span>
-                          <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
-                        </div>
-                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                          <span className="text-[11px] text-slate-500">to</span>
-                          {selectedIds.size > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
-                              <Building2 size={9} className="text-slate-500" />
-                              {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
-                        style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
-                        <Check size={9} /> {previewTemplate.template_name}
-                      </span>
-                      {selectedDocIds.size > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
-                          <FileText size={9} /> {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Email iframe */}
-                  <div className="flex-1 overflow-auto p-3">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full" style={{ minHeight: 260 }}>
-                      <iframe
-                        key={previewTemplate.id}
-                        srcDoc={previewHtml}
-                        className="w-full border-0 block"
-                        style={{ minHeight: 260, height: '100%' }}
-                        sandbox="allow-same-origin"
-                        title="Email body preview"
-                      />
-                    </div>
-                  </div>
+              {/* ── Per-Lender Validation Panel ── */}
+              {validationState?.hasAnyErrors && !submissionOutcomes && (
+                <div className="mx-5 mt-1">
+                  <LenderValidationPanel
+                    validationState={validationState}
+                    leadId={leadId}
+                    onDismiss={() => setValidationState(null)}
+                    onSubmitValid={() => submitMutation.mutate(validationState.validLenderIds)}
+                    onRetryValidation={() => { validateBeforeSubmit() }}
+                    isSubmitting={submitMutation.isPending}
+                    isValidating={isValidating}
+                  />
                 </div>
               )}
-            </div>
 
-            {/* Footer */}
-            <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center gap-3 flex-shrink-0">
-              <button
-                onClick={() => submitMutation.mutate()}
-                disabled={selectedIds.size === 0 || submitMutation.isPending}
-                className="btn-primary flex items-center gap-2 px-6 disabled:opacity-50"
-              >
-                {submitMutation.isPending ? (
-                  <><Loader2 size={14} className="animate-spin" /> Sending…</>
-                ) : (() => {
-                  const allResend = selectedIds.size > 0 && Array.from(selectedIds).every(id => !!submittedLenderMap[id])
-                  const count = selectedIds.size || '…'
-                  return <><Send size={14} /> {allResend ? 'Resend' : 'Send'} to {count} Lender{selectedIds.size !== 1 ? 's' : ''}</>
-                })()}
-              </button>
-              <button onClick={closeForm} className="btn-outline px-5">Cancel</button>
-              {attachableDocIds.length > 0 && (
-                <span className="ml-auto text-[11px] text-slate-400 flex items-center gap-1">
-                  <FileText size={11} /> {attachableDocIds.length} file{attachableDocIds.length !== 1 ? 's' : ''} attached
-                </span>
+              {/* ── Submission Result Summary ── */}
+              {submissionOutcomes && (
+                <div className="mx-5 mt-1">
+                  <SubmissionResultSummary
+                    outcomes={submissionOutcomes}
+                    onClose={() => { setSubmissionOutcomes(null); resetForm() }}
+                    onRetry={(id) => retryMutation.mutate(id)}
+                    isRetrying={retryingLenderId}
+                  />
+                </div>
               )}
+
+              {/* Footer */}
+              <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center gap-2.5 flex-shrink-0">
+                <button
+                  onClick={async () => {
+                    try {
+                      const state = await validateBeforeSubmit()
+                      if (!state.hasAnyErrors) {
+                        submitMutation.mutate(undefined)
+                      }
+                      // If has errors, the validation panel is shown automatically
+                    } catch (err) {
+                      console.error('[LendersPanel] Submit click handler error:', err)
+                      toast.error('An error occurred. Please try again.')
+                    }
+                  }}
+                  disabled={selectedIds.size === 0 || submitMutation.isPending || isValidating}
+                  className="btn-primary flex items-center gap-2 px-5 disabled:opacity-50 flex-1 justify-center"
+                >
+                  {submitMutation.isPending ? (
+                    <><Loader2 size={14} className="animate-spin" /> Sending…</>
+                  ) : isValidating ? (
+                    <><Loader2 size={14} className="animate-spin" /> Validating…</>
+                  ) : (() => {
+                    const allResend = selectedIds.size > 0 && Array.from(selectedIds).every(id => !!submittedLenderMap[id])
+                    const count = selectedIds.size || '…'
+                    return <><Send size={14} /> {allResend ? 'Resend' : 'Send'} to {count} Lender{selectedIds.size !== 1 ? 's' : ''}</>
+                  })()}
+                </button>
+                <button onClick={resetForm} className="btn-outline px-4 flex-shrink-0">Reset</button>
+              </div>
+
             </div>
-
           </div>
-        </div>
-      )}
 
-      {/* ── Submission History ── */}
-      <div>
-        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
-          Submission History {subList.length > 0 && <span className="font-normal">({subList.length})</span>}
-        </p>
+          {/* ── Email preview card (expanded to the right when template selected) ── */}
+          {previewExpanded && previewTemplate && (
+            <div className="flex-1 min-w-0 sticky top-4" style={{ animation: 'fadeIn 0.25s ease' }}>
+              <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
 
-        {subsLoading ? (
-          <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
-        ) : subList.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-6">No submissions yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {subList.map(s => (
-              <SubmissionRow key={s.id} sub={s} leadId={leadId} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Error Fix Modal ── */}
-      {fixModal && (
-        <ErrorFixModal
-          leadId={leadId}
-          lenderId={fixModal.log.lender_id}
-          error={fixModal.error}
-          onClose={() => setFixModal(null)}
-          onFixed={() => {
-            setFixModal(null)
-            qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
-          }}
-        />
-      )}
-
-      {/* ── API Call History ── */}
-      <div>
-        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
-          API Call History {(apiLogs ?? []).length > 0 && <span className="font-normal">({(apiLogs ?? []).length})</span>}
-        </p>
-
-        {apiLogsLoading ? (
-          <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
-        ) : (apiLogs ?? []).length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-6">No API calls yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {(apiLogs ?? []).map(log => {
-              const isSuccess = log.status === 'success'
-              const isTimeout = log.status === 'timeout'
-              const statusCfg = isSuccess
-                ? { bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Success' }
-                : isTimeout
-                ? { bg: 'bg-amber-50 border-amber-200',   text: 'text-amber-700',   dot: 'bg-amber-400',   label: 'Timeout' }
-                : { bg: 'bg-red-50 border-red-200',       text: 'text-red-700',     dot: 'bg-red-500',     label: log.status === 'error' ? 'Error' : `HTTP ${log.response_code ?? '?'}` }
-
-              let parsedResponse: Record<string, unknown> | null = null
-              try { if (log.response_body) parsedResponse = JSON.parse(log.response_body) } catch { /* ignore */ }
-              const businessId = (parsedResponse as { businessID?: string } | null)?.businessID
-              const appNumber  = (parsedResponse as { applicationNumber?: string } | null)?.applicationNumber
-              const logSuggestions: FixSuggestion[] = Array.isArray(log.fix_suggestions) ? log.fix_suggestions
-                : Array.isArray(log.error_json) ? log.error_json : []
-              const hasFixes   = !isSuccess && logSuggestions.length > 0
-              const errInfo    = !isSuccess && !hasFixes
-                ? describeApiError({ status: log.status, response_code: log.response_code, response_body: log.response_body, error_message: log.error_message })
-                : null
-
-              return (
-                <div key={log.id} className={`rounded-lg border p-3 ${statusCfg.bg}`}>
-                  {/* Header row */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
-                        {statusCfg.label}
-                      </span>
-                      <span className="text-xs font-medium text-slate-600 truncate">
-                        {log.lender_name ?? log.api_name ?? `API #${log.crm_lender_api_id}`}
-                      </span>
-                      {log.attempt > 1 && (
-                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
-                          Attempt {log.attempt}
-                        </span>
-                      )}
-                      {/* Fixable badge */}
-                      {!!log.is_fixable && !isSuccess && (
-                        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                          <Wrench size={8} /> Fixable
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-slate-400 flex-shrink-0 text-right">
-                      <div>{new Date(log.created_at).toLocaleString()}</div>
-                      <div>{log.duration_ms}ms</div>
+                {/* macOS-style chrome bar */}
+                <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: '#1e293b' }}>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                  </div>
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-md text-slate-400 text-[11px]" style={{ background: '#334155' }}>
+                      <Mail size={10} />
+                      <span>Email Preview</span>
                     </div>
                   </div>
+                  <button
+                    onClick={() => { setTemplateId(''); setPreviewExpanded(false) }}
+                    className="text-slate-500 hover:text-slate-200 transition-colors text-[11px] flex-shrink-0"
+                    title="Close preview"
+                  >
+                    \u2715
+                  </button>
+                </div>
 
-                  {/* Success details */}
-                  {isSuccess && (appNumber || businessId) && (
-                    <div className="mt-2 text-xs text-emerald-700 space-y-0.5">
-                      {appNumber && <p><span className="font-medium">Application #:</span> <span className="font-mono">{appNumber}</span></p>}
-                      {businessId && <p><span className="font-medium">Business ID:</span> <span className="font-mono">{businessId}</span></p>}
+                {/* Email meta */}
+                <div className="px-4 pt-3 pb-2.5 border-b border-slate-200 bg-white">
+                  <h3 className="text-sm font-bold text-slate-900 leading-snug mb-2 truncate">
+                    {resolvedSubject || previewTemplate.template_name}
+                  </h3>
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+                      style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
+                      <Mail size={12} />
                     </div>
-                  )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-800">Submission Email</span>
+                        <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                        <span className="text-[11px] text-slate-500">to</span>
+                        {selectedIds.size > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                            <Building2 size={9} className="text-slate-500" />
+                            {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
+                      style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
+                      <Check size={9} /> {previewTemplate.template_name}
+                    </span>
+                    {selectedDocIds.size > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
+                        <FileText size={9} /> {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                  {/* Structured error list with Fix Now buttons */}
-                  {hasFixes && (
-                    <LenderErrorList
-                      suggestions={logSuggestions}
-                      onFix={err => setFixModal({ log, error: err })}
+                {/* Email iframe */}
+                <div className="p-3">
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" style={{ minHeight: 420 }}>
+                    <iframe
+                      key={previewTemplate.id}
+                      srcDoc={previewHtml}
+                      className="w-full border-0 block"
+                      style={{ minHeight: 420, height: '100%' }}
+                      sandbox="allow-same-origin"
+                      title="Email body preview"
                     />
-                  )}
-
-                  {/* Fallback: plain error details when no structured data */}
-                  {errInfo && (
-                    <div className="mt-2 space-y-1">
-                      <p className={`text-xs font-semibold ${statusCfg.text}`}>{errInfo.title}</p>
-                      {errInfo.details.map((d, i) => (
-                        <p key={i} className={`text-xs ${statusCfg.text} opacity-80 whitespace-pre-wrap`}>{d}</p>
-                      ))}
-                    </div>
-                  )}
+                  </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
+
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
+
     </div>
   )
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// \u2500\u2500 Helpers ───────────────────────────────────────────────────────────────────
 /**
  * Strip elements whose *text content* must not appear in TipTap
  * (style/script rules, head blocks) and unwrap html/body wrappers.
@@ -2070,21 +2668,21 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
   }
 
   return (
-    <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group">
+    <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group" data-field-key={fieldKey} id={`field-${fieldKey}`}>
       <span className="text-xs text-slate-500 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
       {readOnly ? (
         <span className="text-sm font-medium text-slate-800 flex-1 truncate leading-tight">{renderDisplayValue()}</span>
       ) : editing ? (
         <div className="flex items-center gap-1 flex-1 min-w-0">
           {resolvedType === 'textarea' ? (
-            <textarea autoFocus rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
+            <textarea autoFocus name={fieldKey} rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
           ) : resolvedType === 'select' ? (
-            <select autoFocus className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)}>
+            <select autoFocus name={fieldKey} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)}>
               <option value="">— select —</option>
               {parsedOptions.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           ) : (
-            <input autoFocus type={resolvedType} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
+            <input autoFocus name={fieldKey} type={resolvedType} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
           )}
           <button onMouseDown={e => { e.preventDefault(); save() }} disabled={saving} className="p-1 rounded bg-emerald-600 text-white flex-shrink-0 disabled:opacity-50">
             {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
@@ -2092,7 +2690,7 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
           <button onMouseDown={e => { e.preventDefault(); cancel() }} className="p-1 rounded bg-slate-100 text-slate-500 flex-shrink-0"><X size={10} /></button>
         </div>
       ) : (
-        <button onClick={startEdit} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">
+        <button onClick={startEdit} data-field-key={fieldKey} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">
           <span className="text-sm font-medium text-slate-800 flex-1 truncate leading-tight">
             {renderDisplayValue()}
           </span>
@@ -3065,76 +3663,153 @@ export function CrmLeadDetail() {
           <div className="flex-1 overflow-y-auto">
 
             {activeTab === 'details' && (() => {
-              const allFields = leadFields ?? []
-              const CONTACT_KEYS  = new Set(['first_name','last_name','email','phone_number'])
-              const BUSINESS_KEYS = new Set(['company_name','address','city','state','zip'])
-              const extraContact  = allFields.filter(f => f.section === 'contact'  && !CONTACT_KEYS.has(f.field_key))
-              const extraBusiness = allFields.filter(f => (f.section === 'business' || f.section === 'address') && !BUSINESS_KEYS.has(f.field_key))
-              const extraOther    = allFields.filter(f => !['contact','business','address'].includes(f.section))
+
+              // ── Internal field type ──────────────────────────────────────────
+              type FieldDef = {
+                field_key:     string
+                label_name:    string
+                field_type:    string
+                display_order: number
+              }
+
+              // ── Build section map fully from leadFields (crm_labels) ─────────
+              // Fields are sorted by display_order so section card order reflects
+              // the order configured on the Lead Fields page.
+              const configuredKeys = new Set((leadFields ?? []).map(f => f.field_key))
+              const sectionMap = new Map<string, FieldDef[]>()
+
+              const addToSection = (sec: string, f: FieldDef) => {
+                const key = sec.toLowerCase().trim() || 'general'
+                if (!sectionMap.has(key)) sectionMap.set(key, [])
+                sectionMap.get(key)!.push(f)
+              }
+
+              // Primary: all active fields from crm_labels, sorted by display_order
+              for (const f of [...(leadFields ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))) {
+                addToSection(f.section || 'general', {
+                  field_key:     f.field_key,
+                  label_name:    f.label_name,
+                  field_type:    f.field_type || 'text',
+                  display_order: f.display_order ?? 0,
+                })
+              }
+
+              // Fallback: system cols that crm_labels does not cover are injected
+              // at the top of their natural section so no lead data is ever hidden.
+              const SYS_FALLBACKS: Array<FieldDef & { section: string }> = [
+                { field_key: 'first_name',   label_name: 'First Name', field_type: 'text',         section: 'contact',  display_order: -40 },
+                { field_key: 'last_name',    label_name: 'Last Name',  field_type: 'text',         section: 'contact',  display_order: -30 },
+                { field_key: 'email',        label_name: 'Email',      field_type: 'email',        section: 'contact',  display_order: -20 },
+                { field_key: 'phone_number', label_name: 'Phone',      field_type: 'phone_number', section: 'contact',  display_order: -10 },
+                { field_key: 'company_name', label_name: 'Company',    field_type: 'text',         section: 'business', display_order: -50 },
+                { field_key: 'address',      label_name: 'Address',    field_type: 'text',         section: 'business', display_order: -40 },
+                { field_key: 'city',         label_name: 'City',       field_type: 'text',         section: 'business', display_order: -30 },
+                { field_key: 'state',        label_name: 'State',      field_type: 'text',         section: 'business', display_order: -20 },
+                { field_key: 'zip',          label_name: 'ZIP Code',   field_type: 'text',         section: 'business', display_order: -10 },
+              ]
+              for (const fb of SYS_FALLBACKS) {
+                if (!configuredKeys.has(fb.field_key)) {
+                  const { section, ...def } = fb
+                  const list = sectionMap.get(section) ?? []
+                  sectionMap.set(section, [def, ...list])
+                }
+              }
+
+              // ── Preferred section rendering order ────────────────────────────
+              const PREF_ORDER = ['owner', 'contact', 'business', 'general', 'address', 'financial', 'legal', 'compliance', 'deal', 'marketing', 'custom']
+              const orderedSections = [
+                ...PREF_ORDER.filter(s => sectionMap.has(s)),
+                ...[...sectionMap.keys()].filter(s => !PREF_ORDER.includes(s)),
+              ]
+
+              // ── Display value formatter ──────────────────────────────────────
+              const fmtVal = (ft: string, val: unknown): string => {
+                if (val === null || val === undefined || val === '') return ''
+                const s = String(val)
+                if (ft === 'phone_number') return formatPhoneNumber(s)
+                if (ft === 'date') {
+                  try {
+                    return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  } catch { return s }
+                }
+                return s
+              }
+
+              // ── Section icon map ─────────────────────────────────────────────
+              const ICON_MAP: Record<string, LucideIcon> = {
+                contact: User, business: Briefcase, address: MapPin,
+                owner: UserCheck, general: ClipboardList,
+                financial: DollarSign, legal: FileText,
+                compliance: ShieldCheck, deal: TrendingUp,
+                marketing: Tag, custom: Hash,
+              }
+
+              // ── Section label map ────────────────────────────────────────────
+              const SECTION_LABELS: Record<string, string> = {
+                owner:      'Owner Information',
+                contact:    'Contact Information',
+                business:   'Business Information',
+                general:    'General Information',
+                address:    'Address Information',
+                financial:  'Financial Information',
+                legal:      'Legal Information',
+                compliance: 'Compliance Information',
+                deal:       'Deal Information',
+                marketing:  'Marketing Information',
+                custom:     'Custom Information',
+              }
+
+              // ── Section card ─────────────────────────────────────────────────
+              const renderSection = (secKey: string) => {
+                const fields = sectionMap.get(secKey) ?? []
+                if (fields.length === 0) return null
+                const title = SECTION_LABELS[secKey]
+                  ?? (secKey.charAt(0).toUpperCase() + secKey.slice(1) + ' Information')
+                const SecIcon   = ICON_MAP[secKey] ?? Settings2
+                return (
+                  <div key={secKey} className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                      <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <SecIcon size={11} className="text-emerald-600" />
+                      </div>
+                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{title}</h3>
+                      <span className="ml-auto text-[10px] text-slate-400">{fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="p-4 divide-y divide-slate-50">
+                      {fields.map(f => {
+                        const raw     = (lead as Record<string, unknown>)[f.field_key]
+                        const display = fmtVal(f.field_type, raw)
+                        return (
+                          <div key={f.field_key} className="flex items-start gap-4 py-2.5">
+                            <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5 leading-tight">
+                              {f.label_name}
+                            </span>
+                            <span className={`text-sm font-medium flex-1 leading-tight break-words ${display ? 'text-slate-800' : 'text-slate-300'}`}>
+                              {display || '—'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              }
 
               return (
-                <div className="px-6 py-5 h-full">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100 h-full">
-
-                    {/* ── Col 1: Contact + Custom Fields ── */}
-                    <div className="pr-6 pb-5 md:pb-0">
-
-                      {/* Contact */}
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <User size={11} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact</span>
-                      </div>
-                      <PropertyRow fieldKey="first_name"   label="First name"  value={lead.first_name   as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="last_name"    label="Last name"   value={lead.last_name    as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="email"        label="Email"       value={lead.email        as string|undefined} type="email" leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="phone_number" label="Phone"       value={lead.phone_number as string|undefined} type="tel"   leadId={leadId} onUpdated={onLeadUpdated} />
-                      {extraContact.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      ))}
-
-                      {/* Custom (other-section) fields */}
-                      {extraOther.length > 0 && (
-                        <>
-                          <div className="flex items-center gap-1.5 mb-2 mt-4">
-                            <Hash size={11} className="text-slate-400" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Custom Fields</span>
-                          </div>
-                          {extraOther.map(f => (
-                            <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                          ))}
-                        </>
-                      )}
-                    </div>
-
-                    {/* ── Col 2: Business ── */}
-                    <div className="pt-5 md:pt-0 md:pl-6">
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <Briefcase size={11} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business</span>
-                      </div>
-                      <PropertyRow fieldKey="company_name" label="Company" value={lead.company_name as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="address"      label="Address" value={lead.address      as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="city"         label="City"    value={lead.city         as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="state"        label="State"   value={lead.state        as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      <PropertyRow fieldKey="zip"          label="ZIP"     value={(lead as Record<string,unknown>)['zip'] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      {extraBusiness.map(f => (
-                        <PropertyRow key={f.field_key} fieldKey={f.field_key} label={f.label_name} fieldType={f.field_type} options={f.options} value={(lead as Record<string,unknown>)[f.field_key] as string|undefined} leadId={leadId} onUpdated={onLeadUpdated} />
-                      ))}
-                    </div>
-
-                  </div>
+                <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start overflow-y-auto">
+                  {orderedSections.map(sec => renderSection(sec))}
                 </div>
               )
             })()}
 
-            {activeTab === 'activity'  && <div ref={activityRef}  className="p-5"><ActivityTimeline leadId={leadId} /></div>}
-            {activeTab === 'documents' && <div className="px-5 py-4 h-full"><DocumentsPanel leadId={leadId} /></div>}
-            {activeTab === 'lenders'   && <div ref={lendersRef}   className="p-5"><LendersPanel leadId={leadId} /></div>}
-            {activeTab === 'approvals' && <div className="p-5"><ApprovalsSection leadId={leadId} /></div>}
-            {activeTab === 'merchant'  && <div className="p-5"><MerchantPortalSection leadId={leadId} /></div>}
-            {activeTab === 'offers'     && <div className="p-5"><OffersStipsTab leadId={leadId} /></div>}
-            {activeTab === 'deal'       && <div className="p-5"><DealTab leadId={leadId} /></div>}
-            {activeTab === 'compliance' && <div className="p-5"><ComplianceTab leadId={leadId} /></div>}
+            {activeTab === 'activity'  && <ErrorBoundary fallbackTitle="Activity failed to load"><div ref={activityRef}  className="p-5"><ActivityTimeline leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'documents' && <ErrorBoundary fallbackTitle="Documents failed to load"><div className="px-5 py-4 h-full"><DocumentsPanel leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'lenders'   && <ErrorBoundary fallbackTitle="Lenders panel failed to load"><div ref={lendersRef}   className="p-5"><LendersPanel leadId={leadId} /></div></ErrorBoundary>}
+            {/* {activeTab === 'ondeck'    && <ErrorBoundary fallbackTitle="OnDeck panel failed to load"><div className="h-full flex flex-col"><OnDeckPanel leadId={leadId} /></div></ErrorBoundary>} */}
+            {activeTab === 'merchant'  && <ErrorBoundary fallbackTitle="Merchant portal failed to load"><div className="p-5"><MerchantPortalSection leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'offers'     && <ErrorBoundary fallbackTitle="Offers failed to load"><div className="p-5"><OffersStipsTab leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'deal'       && <ErrorBoundary fallbackTitle="Deal failed to load"><div className="p-5"><DealTab leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'compliance' && <ErrorBoundary fallbackTitle="Compliance failed to load"><div className="p-5"><ComplianceTab leadId={leadId} /></div></ErrorBoundary>}
 
           </div>
 

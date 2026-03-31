@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Loader2, Check, Building2, Phone, Mail, Zap } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Check, Building2, Phone, Mail, Zap, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { RowActions } from '../../components/ui/RowActions'
+import { TablePagination } from '../../components/ui/TablePagination'
 import type { Lender } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
+
+const PER_PAGE = 15
 
 const LENDER_API_TYPES = [
   { value: 'ondeck',            label: 'OnDeck' },
@@ -25,20 +29,45 @@ export function CrmLenders() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { setDescription, setActions } = useCrmHeader()
-  const [page, setPage] = useState(1)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Read filter state from URL
+  const page   = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+  const search = searchParams.get('search') || ''
+
+  const setFilter = (key: string, value: string) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      next.delete('page')
+      return next
+    })
+  }
+
+  const goToPage = (p: number) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (p <= 1) next.delete('page')
+      else next.set('page', String(p))
+      return next
+    })
+  }
+
+  const reset = () => setSearchParams({})
 
   const { data, isLoading } = useQuery({
-    queryKey: ['lenders', page],
+    queryKey: ['lenders', page, search],
     queryFn: async () => {
-      const res = await crmService.getLenders({ page, per_page: 25 })
+      const res = await crmService.getLenders({ page, per_page: PER_PAGE, ...(search ? { search } : {}) })
       return res.data
     },
     staleTime: 30 * 1000,
   })
 
-  const lenders: Lender[] = data?.data?.data ?? data?.data ?? data?.records ?? data ?? []
-  const total: number = data?.data?.total ?? data?.total ?? 0
-  const totalPages = data?.data?.last_page ?? data?.last_page ?? (Math.ceil(total / 25) || 1)
+  const lenders: Lender[]  = data?.data?.data ?? data?.data ?? data?.records ?? data ?? []
+  const total: number      = data?.data?.total ?? data?.total ?? 0
+  const totalPages: number = data?.data?.last_page ?? data?.last_page ?? (Math.ceil(total / PER_PAGE) || 1)
 
   useEffect(() => {
     setDescription(isLoading ? 'Loading...' : `${total.toLocaleString()} lenders`)
@@ -68,6 +97,25 @@ export function CrmLenders() {
 
   return (
     <div className="space-y-5">
+
+      {/* Search bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className="input pl-8 h-9 text-sm w-64"
+            placeholder="Search by name, email, contact…"
+            value={search}
+            onChange={e => setFilter('search', e.target.value)}
+          />
+        </div>
+        {search && (
+          <button onClick={reset} className="btn-ghost btn-sm h-9 px-3 flex items-center gap-1 text-slate-500">
+            <X size={13} /> Clear
+          </button>
+        )}
+      </div>
+
       <div className="table-wrapper">
         <div className="overflow-x-auto">
           <table className="table">
@@ -86,7 +134,9 @@ export function CrmLenders() {
                   <td colSpan={6} className="py-12">
                     <div className="text-center">
                       <Building2 size={32} className="mx-auto mb-2 text-slate-300" />
-                      <p className="text-sm text-slate-400">No lenders added yet</p>
+                      <p className="text-sm text-slate-400">
+                        {search ? 'No lenders match your search' : 'No lenders added yet'}
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -164,14 +214,15 @@ export function CrmLenders() {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="pagination-bar">
-            <span>Page {page} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="pagination-btn">Previous</button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="pagination-btn">Next</button>
-            </div>
-          </div>
+        {/* Numbered pagination matching lead-fields UI */}
+        {(totalPages > 1 || total > 0) && (
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            limit={PER_PAGE}
+            onPageChange={goToPage}
+          />
         )}
       </div>
     </div>

@@ -1,4 +1,7 @@
 import { create } from 'zustand'
+import type { Conversation } from '../types/chat.types'
+
+const MAX_CHAT_WINDOWS = 4
 
 /** Visual icon variant for the phone FAB sub-button */
 export type PhoneFabIcon = 'idle' | 'calling' | 'loading' | 'incoming'
@@ -13,6 +16,8 @@ interface FloatingState {
   setPhoneOpen: (v: boolean) => void
   setSmsOpen: (v: boolean) => void
   setPhoneMinimized: (v: boolean) => void
+  chatMaximized: boolean
+  setChatMaximized: (v: boolean) => void
 
   // ── Phone FAB visual ───────────────────────────────────────────────────────
   phoneFabBg: string
@@ -41,6 +46,13 @@ interface FloatingState {
   // ── SMS unread ─────────────────────────────────────────────────────────────
   smsUnread: number
   setSmsUnread: (n: number) => void
+
+  // ── Multi-window chat ──────────────────────────────────────────────────────
+  openChatWindows: string[]                      // Conv UUIDs, ordered by focus (last = front)
+  chatWindowConvs: Record<string, Conversation>  // Cache for open window rendering
+  openChatWindow: (conv: Conversation) => void
+  closeChatWindow: (uuid: string) => void
+  focusChatWindow: (uuid: string) => void
 }
 
 export const useFloatingStore = create<FloatingState>((set) => ({
@@ -48,23 +60,19 @@ export const useFloatingStore = create<FloatingState>((set) => ({
   phoneOpen: false,
   smsOpen: false,
   phoneMinimized: false,
-  setChatOpen: (v) => set((state) => ({
+  setChatOpen: (v) => set(() => ({
     chatOpen: v,
-    phoneOpen: v ? false : state.phoneOpen,
-    smsOpen:  v ? false : state.smsOpen,
+    // Close all mini windows + exit maximized when chat panel closes
+    ...(!v ? { openChatWindows: [], chatWindowConvs: {}, chatMaximized: false } : {}),
   })),
   setPhoneOpen: (v) => set((state) => ({
     phoneOpen: v,
     phoneMinimized: v ? state.phoneMinimized : false,
-    chatOpen: v ? false : state.chatOpen,
-    smsOpen:  v ? false : state.smsOpen,
   })),
-  setSmsOpen: (v) => set((state) => ({
-    smsOpen:   v,
-    chatOpen:  v ? false : state.chatOpen,
-    phoneOpen: v ? false : state.phoneOpen,
-  })),
+  setSmsOpen: (v) => set({ smsOpen: v }),
   setPhoneMinimized: (v) => set({ phoneMinimized: v }),
+  chatMaximized: false,
+  setChatMaximized: (v) => set({ chatMaximized: v }),
 
   phoneFabBg: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
   phoneFabShadow: '0 6px 24px rgba(239,68,68,0.5)',
@@ -88,4 +96,72 @@ export const useFloatingStore = create<FloatingState>((set) => ({
 
   smsUnread: 0,
   setSmsUnread: (n) => set({ smsUnread: n }),
+
+  // ── Multi-window chat ──────────────────────────────────────────────────────
+  openChatWindows: [],
+  chatWindowConvs: {},
+
+  openChatWindow: (conv) => set((state) => {
+    const uuid = conv.uuid
+    // Already open -> just focus it (move to end)
+    if (state.openChatWindows.includes(uuid)) {
+      return {
+        openChatWindows: [...state.openChatWindows.filter(id => id !== uuid), uuid],
+      }
+    }
+    // Add to end
+    let windows = [...state.openChatWindows, uuid]
+    const convs = { ...state.chatWindowConvs, [uuid]: conv }
+    // Over limit -> evict oldest (first)
+    if (windows.length > MAX_CHAT_WINDOWS) {
+      const evicted = windows[0]
+      windows = windows.slice(1)
+      delete convs[evicted]
+    }
+    return { openChatWindows: windows, chatWindowConvs: convs }
+  }),
+
+  closeChatWindow: (uuid) => set((state) => {
+    const convs = { ...state.chatWindowConvs }
+    delete convs[uuid]
+    return {
+      openChatWindows: state.openChatWindows.filter(id => id !== uuid),
+      chatWindowConvs: convs,
+    }
+  }),
+
+  focusChatWindow: (uuid) => set((state) => {
+    if (!state.openChatWindows.includes(uuid)) return state
+    return {
+      openChatWindows: [...state.openChatWindows.filter(id => id !== uuid), uuid],
+    }
+  }),
 }))
+
+// ── Widget layout constants ─────────────────────────────────────────────────
+
+const BASE_RIGHT = 16
+const WIDGET_GAP = 12
+const PHONE_WIDTH = 320
+const SMS_WIDTH = 340
+const CHAT_WIDTH = 300
+const MINI_CHAT_WIDTH = 300
+
+/** Computes `right` offset for each widget based on which widgets are open */
+export function useWidgetPositions() {
+  const phoneOpen = useFloatingStore(s => s.phoneOpen)
+  const smsOpen = useFloatingStore(s => s.smsOpen)
+  const chatOpen = useFloatingStore(s => s.chatOpen)
+
+  const phoneRight = BASE_RIGHT
+  const smsRight = BASE_RIGHT + (phoneOpen ? PHONE_WIDTH + WIDGET_GAP : 0)
+  const chatRight = smsRight + (smsOpen ? SMS_WIDTH + WIDGET_GAP : 0)
+
+  return {
+    phoneRight,
+    smsRight,
+    chatRight,
+    miniChatRight: (index: number) =>
+      chatRight + (chatOpen ? CHAT_WIDTH + WIDGET_GAP : 0) + index * (MINI_CHAT_WIDTH + WIDGET_GAP),
+  }
+}

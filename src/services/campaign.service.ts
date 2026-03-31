@@ -58,4 +58,7 @@ export const campaignService = {
 
   getCallTimer: (id: number) =>
     api.get(`/call-timers/${id}`),
+
+  listCallTimers: () =>
+    api.get('/call-timers'),
 }

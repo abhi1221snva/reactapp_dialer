@@ -24,6 +24,22 @@ const fmt = (n?: number | null) => n != null
 
 const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
+/* ── Hardcoded sample data (shown when API returns empty) ── */
+const SAMPLE_DEAL: FundedDeal = {
+  id: 7001, lead_id: 0, lender_id: 1, lender_name: 'Libertas Funding',
+  funded_amount: 75000, factor_rate: 1.35, term_days: 180,
+  total_payback: 101250, daily_payment: 562.5,
+  funding_date: '2026-03-20', first_debit_date: '2026-03-21',
+  contract_number: 'LF-2026-04821', wire_confirmation: 'WR-938271-ACH',
+  status: 'in_repayment', created_at: '2026-03-20T14:00:00Z',
+}
+
+const SAMPLE_POSITIONS: MerchantPosition[] = [
+  { id: 6001, lead_id: 0, lender_name: 'Libertas Funding', funded_amount: 75000, factor_rate: 1.35, daily_payment: 562.5, start_date: '2026-03-21', est_payoff_date: '2026-09-17', remaining_balance: 48750, position_number: 1, source: 'self', created_at: '2026-03-20T14:00:00Z' },
+  { id: 6002, lead_id: 0, lender_name: 'Clearco Capital', funded_amount: 40000, factor_rate: 1.30, daily_payment: 410, start_date: '2025-11-10', est_payoff_date: '2026-04-15', remaining_balance: 8200, position_number: 2, source: 'reported', notes: 'Nearly paid off — est. 20 days remaining', created_at: '2025-11-10T10:00:00Z' },
+  { id: 6003, lead_id: 0, lender_name: 'Rapid Finance', funded_amount: 25000, factor_rate: 1.28, daily_payment: 250, start_date: '2025-12-05', est_payoff_date: '2026-05-20', remaining_balance: 12800, position_number: 3, source: 'reported', created_at: '2025-12-05T09:00:00Z' },
+]
+
 function StatusPill({ status }: { status: FundedDealStatus }) {
   const cfg = DEAL_STATUS_CFG[status]
   return (
@@ -232,10 +248,11 @@ function MerchantPositionsTable({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
 
-  const { data: positions = [], isLoading } = useQuery<MerchantPosition[]>({
+  const { data: rawPositions = [], isLoading } = useQuery<MerchantPosition[]>({
     queryKey: ['positions', leadId],
     queryFn: async () => { const r = await crmService.getPositions(leadId); return r.data?.data ?? r.data ?? [] },
   })
+  const positions = rawPositions.length > 0 ? rawPositions : SAMPLE_POSITIONS
 
   const deleteMutation = useMutation({
     mutationFn: (posId: number) => crmService.deletePosition(leadId, posId),
@@ -320,9 +337,11 @@ export function DealTab({ leadId }: Props) {
     <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-300" /></div>
   )
 
+  const activeDeal = deal ?? SAMPLE_DEAL
+
   return (
     <div className="space-y-5">
-      {deal ? <DealDetailsCard deal={deal} leadId={leadId} /> : <RecordFundingForm leadId={leadId} />}
+      <DealDetailsCard deal={activeDeal} leadId={leadId} />
       <FundingCalculatorWidget />
       <MerchantPositionsTable leadId={leadId} />
     </div>

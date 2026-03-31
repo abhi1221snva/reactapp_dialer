@@ -357,8 +357,14 @@ export const crmService = {
   deleteLeadDocument: (leadId: number, docId: number) =>
     api.delete(`/crm/lead/${leadId}/documents/${docId}`),
 
+  viewLeadDocument: (leadId: number, docId: number) =>
+    api.get(`/crm/lead/${leadId}/documents/${docId}/view`, { responseType: 'blob' }),
+
+  downloadLeadDocument: (leadId: number, docId: number) =>
+    api.get(`/crm/lead/${leadId}/documents/${docId}/download`, { responseType: 'blob' }),
+
   // ── Lenders ─────────────────────────────────────────────────────────────────
-  getLenders: (params?: { page?: number; per_page?: number; limit?: number; status?: number }) =>
+  getLenders: (params?: { page?: number; per_page?: number; limit?: number; status?: number; search?: string }) =>
     api.get('/lenders', { params }),
 
   getLender: (id: number) =>
@@ -403,7 +409,8 @@ export const crmService = {
 
   getLenderApiLogs: (params?: {
     lender_id?: number; lead_id?: number; crm_lender_api_id?: number;
-    status?: string; date_from?: string; date_to?: string; page?: number; per_page?: number
+    status?: string; date_from?: string; date_to?: string; page?: number; per_page?: number;
+    lender?: string; api_name?: string; lender_type?: string; search?: string;
   }) =>
     api.get('/crm/lender-api-logs', { params }),
 
@@ -427,8 +434,14 @@ export const crmService = {
   getLenderSubmissions: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/lender-submissions/enhanced`),
 
-  submitApplication: (leadId: number, data: import('../types/crm.types').SubmitApplicationPayload) =>
+  submitApplication: (leadId: number, data: import('../types/crm.types').SubmitApplicationPayload | import('../types/crm.types').EnhancedSubmitApplicationPayload) =>
     api.post(`/crm/lead/${leadId}/submit-application`, data),
+
+  validateSubmission: (leadId: number, lenderIds: number[]) =>
+    api.post(`/crm/lead/${leadId}/validate-submission`, { lender_ids: lenderIds }),
+
+  retryLenderSubmission: (leadId: number, lenderId: number, opts?: { document_ids?: number[]; email_html?: string; email_subject?: string }) =>
+    api.post(`/crm/lead/${leadId}/submit-application`, { lender_ids: [lenderId], ...opts }),
 
   updateSubmissionResponse: (leadId: number, subId: number, data: import('../types/crm.types').UpdateSubmissionResponsePayload) =>
     api.post(`/crm/lead/${leadId}/submissions/${subId}/response`, data),
@@ -524,7 +537,7 @@ export const crmService = {
 
   // ── Commissions ─────────────────────────────────────────────────────────────
   getCommissionRules: () =>
-    api.get('/crm/commission-rules'),
+    api.get('/crm/commission-rules', { _silent403: true } as never),
 
   createCommissionRule: (data: Partial<CommissionRule>) =>
     api.put('/crm/commission-rules', data),
@@ -536,17 +549,17 @@ export const crmService = {
     api.delete(`/crm/commission-rules/${id}`),
 
   getCommissions: (params?: { agent_id?: number; status?: string; date_from?: string; date_to?: string; page?: number }) =>
-    api.get('/crm/commissions', { params }),
+    api.get('/crm/commissions', { params, _silent403: true } as never),
 
   markCommissionPaid: (id: number) =>
     api.post(`/crm/commissions/${id}/mark-paid`, {}),
 
   getCommissionSummary: (period?: string) =>
-    api.get('/crm/commissions/summary', { params: { period } }),
+    api.get('/crm/commissions/summary', { params: { period }, _silent403: true } as never),
 
   // ── Renewals ────────────────────────────────────────────────────────────────
   getRenewalPipeline: (params?: { days?: number; lender_id?: number }) =>
-    api.get('/crm/renewals', { params }),
+    api.get('/crm/renewals', { params, _silent403: true } as never),
 
   markRenewed: (leadId: number, dealId: number) =>
     api.post(`/crm/lead/${leadId}/funded-deal/${dealId}/mark-renewed`, {}),
@@ -622,4 +635,42 @@ export const crmService = {
 
   resolveEmailTemplate: (leadId: number, templateId: number) =>
     api.get(`/crm/lead/${leadId}/resolve-email-template/${templateId}`),
+
+  // ── Agent Performance ──────────────────────────────────────────────────────
+  getAgentPerformanceSummary: () =>
+    api.get('/crm/agent-performance/summary', { _silent403: true } as never),
+
+  getLeaderboard: (params?: { metric?: string; period?: string }) =>
+    api.get('/crm/agent-performance/leaderboard', { params, _silent403: true } as never),
+
+  getAgentPerformanceDetail: (agentId: number) =>
+    api.get(`/crm/agent-performance/${agentId}`, { _silent403: true } as never),
+
+  calculateDealCommission: (dealId: number) =>
+    api.post(`/crm/deal/${dealId}/calculate-commission`, {}),
+
+  approveCommission: (id: number) =>
+    api.post(`/crm/commissions/${id}/approve`, {}),
+
+  clawbackCommission: (id: number, data: { notes?: string }) =>
+    api.post(`/crm/commissions/${id}/clawback`, data),
+
+  bulkApproveCommissions: (ids: number[]) =>
+    api.post('/crm/commissions/bulk-approve', { ids }),
+
+  bulkPayCommissions: (ids: number[]) =>
+    api.post('/crm/commissions/bulk-pay', { ids }),
+
+  // ── Agent Bonuses ──────────────────────────────────────────────────────────
+  getAgentBonuses: (params?: { agent_id?: number; status?: string }) =>
+    api.get('/crm/agent-bonuses', { params, _silent403: true } as never),
+
+  createAgentBonus: (data: { agent_id: number; bonus_type: string; amount: number; period?: string; description?: string }) =>
+    api.put('/crm/agent-bonuses', data),
+
+  updateAgentBonus: (id: number, data: Record<string, unknown>) =>
+    api.post(`/crm/agent-bonuses/${id}`, data),
+
+  deleteAgentBonus: (id: number) =>
+    api.delete(`/crm/agent-bonuses/${id}`),
 }

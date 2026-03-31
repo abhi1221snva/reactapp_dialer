@@ -74,7 +74,9 @@ api.interceptors.response.use(
         window.location.href = '/login'
       }
     } else if (status === 403) {
-      toast.error(safeMsg(message, 'You do not have permission to perform this action'))
+      if (!error.config?._silent403) {
+        toast.error(safeMsg(message, 'You do not have permission to perform this action'))
+      }
     } else if (status === 400 || status === 422) {
       // Skip generic toast for errors that the calling code handles with a custom modal
       const code: string = error.response?.data?.code ?? ''

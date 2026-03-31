@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Pencil, Trash2, ToggleLeft, ToggleRight, List } from 'lucide-react'
+import { Plus, Eye, Pencil, Trash2, List } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -82,9 +82,16 @@ export function Lists() {
     {
       key: 'is_active', header: 'Status',
       render: (row) => (
-        <Badge variant={row.is_active === 1 ? 'green' : 'gray'}>
-          {row.is_active === 1 ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={() => toggleMutation.mutate({ id: row.list_id ?? row.id, campaignId: row.campaign_id ?? 0, status: row.is_active })}
+          disabled={toggleMutation.isPending}
+          title={row.is_active === 1 ? 'Click to deactivate' : 'Click to activate'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={row.is_active === 1 ? 'green' : 'gray'}>
+            {row.is_active === 1 ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {
@@ -123,13 +130,6 @@ export function Lists() {
               icon: <Pencil size={13} />,
               variant: 'edit',
               onClick: () => navigate(`/lists/${id}/mapping`),
-            },
-            {
-              label: row.is_active === 1 ? 'Deactivate' : 'Activate',
-              icon: row.is_active === 1 ? <ToggleRight size={13} /> : <ToggleLeft size={13} />,
-              variant: row.is_active === 1 ? 'warning' : 'success',
-              onClick: () => toggleMutation.mutate({ id, campaignId: cid, status: row.is_active }),
-              disabled: toggleMutation.isPending,
             },
             {
               label: 'Delete',

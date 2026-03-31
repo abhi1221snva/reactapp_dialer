@@ -111,7 +111,7 @@ export function AddDncModal({ onClose, onSaved }: Props) {
               <option value="">None</option>
               {extensions.map(ext => (
                 <option key={ext.id} value={String(ext.extension)}>
-                  {ext.first_name} {ext.last_name} ({ext.extension})
+                  {[ext.first_name, ext.last_name].filter(Boolean).join(' ') || ext.extension}
                 </option>
               ))}
             </select>

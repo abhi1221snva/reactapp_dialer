@@ -225,8 +225,16 @@ export interface LenderSendRecord {
 
 // ─── Enhanced Lender Submission (crm_lender_submissions) ─────────────────────
 
-export type LenderSubmissionStatus = 'pending' | 'submitted' | 'viewed' | 'approved' | 'declined' | 'no_response'
+export type LenderSubmissionStatus = 'pending' | 'submitted' | 'failed' | 'viewed' | 'approved' | 'declined' | 'no_response'
 export type LenderResponseStatus   = 'pending' | 'approved' | 'declined' | 'needs_documents' | 'no_response'
+
+export interface MappedApiError {
+  label:    string
+  field:    string
+  message:  string
+  fix_type: string
+  expected?: string
+}
 
 export interface LenderSubmission {
   id: number
@@ -240,6 +248,10 @@ export interface LenderSubmission {
   response_status: LenderResponseStatus
   notes?: string
   response_note?: string
+  api_error?: string
+  error_messages?: MappedApiError[] | string | null
+  doc_upload_status?: 'none' | 'success' | 'partial' | 'failed'
+  doc_upload_notes?: string
   submitted_by?: number
   submitted_at?: string
   response_received_at?: string
@@ -349,6 +361,7 @@ export type ActivityType =
   | 'task_created'
   | 'task_completed'
   | 'lender_submitted'
+  | 'lender_api_result'
   | 'lender_response'
   | 'email_sent'
   | 'sms_sent'
@@ -867,4 +880,115 @@ export interface RenewalPipelineItem extends FundedDeal {
   company_name?: string
   first_name?: string
   last_name?: string
+}
+
+// ─── Agent Performance ───────────────────────────────────────────────────────
+
+export interface AgentPerformanceSummary {
+  total_funded_volume: number
+  total_deals: number
+  total_commissions: number
+  avg_deal_size: number
+  renewal_rate: number
+  default_rate: number
+}
+
+export interface AgentPerformanceRow {
+  agent_id: number
+  agent_name: string
+  deals: number
+  funded_volume: number
+  commission: number
+  conversion_rate: number
+  avg_deal_size: number
+  [key: string]: unknown
+}
+
+export interface AgentDealRecord {
+  deal_id: number
+  lead_id: number
+  company_name?: string
+  lender_name?: string
+  funded_amount: number
+  factor_rate?: number
+  commission: number
+  status: string
+  funding_date: string
+  [key: string]: unknown
+}
+
+export interface AgentMonthlyTrend {
+  month: string
+  deals: number
+  funded_volume: number
+  commission: number
+}
+
+export interface AgentDetailResponse {
+  agent_id: number
+  agent_name: string
+  summary: {
+    total_deals: number
+    funded_volume: number
+    total_commission: number
+    avg_deal_size: number
+    pipeline_value: number
+    conversion_rate: number
+  }
+  deals: AgentDealRecord[]
+  monthly_trend: AgentMonthlyTrend[]
+}
+
+export interface AgentBonus {
+  id: number
+  agent_id: number
+  agent_name?: string
+  bonus_type: string
+  description?: string
+  amount: number
+  period?: string
+  status: 'pending' | 'approved' | 'paid'
+  paid_at?: string
+  created_by?: number
+  created_at: string
+  [key: string]: unknown
+}
+
+export type LeaderboardMetric = 'funded_volume' | 'deals' | 'commission' | 'conversion_rate'
+
+// ─── Per-Lender Validation & Submission ─────────────────────────────────────
+
+/** Validation result for a single lender, used during pre-submit check */
+export interface LenderValidationResult {
+  lenderId: number
+  lenderName: string
+  isApiLender: boolean
+  isValid: boolean
+  missingFields: string[]
+  fieldLabels: Record<string, string>
+}
+
+/** Grouped validation state used by LendersPanel */
+export interface GroupedValidationState {
+  results: LenderValidationResult[]
+  validLenderIds: number[]
+  invalidLenderIds: number[]
+  emailOnlyIds: number[]
+  hasAnyErrors: boolean
+}
+
+/** Per-lender outcome after a submission attempt */
+export interface LenderSubmissionOutcome {
+  lenderId: number
+  lenderName: string
+  success: boolean
+  submissionType: 'api' | 'normal'
+  error?: string
+  submissionId?: number
+  validationErrors?: string[]
+}
+
+/** Enhanced submit payload with partial submission support */
+export interface EnhancedSubmitApplicationPayload extends SubmitApplicationPayload {
+  skip_invalid?: boolean
 }

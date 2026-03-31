@@ -4,7 +4,7 @@ import {
   Power, Delete, ExternalLink, ShieldAlert, Clock, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
-import { useFloatingStore } from '../../stores/floating.store'
+import { useFloatingStore, useWidgetPositions } from '../../stores/floating.store'
 import { DraggableWidget } from '../floating/DraggableWidget'
 import { DialPad }           from './DialPad'
 import { CallControls }      from './CallControls'
@@ -91,6 +91,7 @@ export function WebPhone() {
   const registerPhoneClick  = useFloatingStore(s => s.registerPhoneClick)
   const setPhoneRegistered  = useFloatingStore(s => s.setPhoneRegistered)
   const setIsOpen = setPhoneOpen
+  const { phoneRight } = useWidgetPositions()
 
   const [phoneState, setPhoneState]     = useState<PhoneState>('idle')
   const [number, setNumber]             = useState('')
@@ -408,7 +409,7 @@ export function WebPhone() {
         onClose={() => setPhoneOpen(false)}
         onMinimize={setPhoneMinimized}
         headerGradient="linear-gradient(160deg, #0a0f1e 0%, #111827 50%, #1c1854 100%)"
-        defaultRight={16}
+        defaultRight={phoneRight}
         defaultBottom={20}
         width={320}
         zIndex={62}
@@ -487,7 +488,7 @@ export function WebPhone() {
         onClose={() => setPhoneOpen(false)}
         onMinimize={setPhoneMinimized}
         headerGradient="linear-gradient(160deg, #0a0f1e 0%, #111827 50%, #1c1854 100%)"
-        defaultRight={16}
+        defaultRight={phoneRight}
         defaultBottom={20}
         width={320}
         zIndex={62}

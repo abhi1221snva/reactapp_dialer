@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, Trash2, ToggleLeft, ToggleRight,
+  Plus, Pencil, Trash2,
   GripVertical, Tag, Save, X, Check, ArrowLeft,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -294,9 +294,16 @@ export function Labels() {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <Badge variant={Number(row.status) === 1 ? 'green' : 'gray'}>
-          {Number(row.status) === 1 ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={() => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) })}
+          disabled={toggleMutation.isPending}
+          title={Number(row.status) === 1 ? 'Click to disable' : 'Click to enable'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={Number(row.status) === 1 ? 'green' : 'gray'}>
+            {Number(row.status) === 1 ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {
@@ -329,13 +336,6 @@ export function Labels() {
             icon: <Pencil size={13} />,
             variant: 'edit',
             onClick: () => setEditLabel(row),
-          },
-          {
-            label: Number(row.status) === 1 ? 'Disable' : 'Enable',
-            icon: Number(row.status) === 1 ? <ToggleRight size={13} /> : <ToggleLeft size={13} />,
-            variant: Number(row.status) === 1 ? 'warning' : 'success',
-            onClick: () => toggleMutation.mutate({ id: row.id, status: Number(row.status ?? 0) }),
-            disabled: toggleMutation.isPending,
           },
           {
             label: 'Delete',

@@ -350,7 +350,7 @@ export function DynamicFieldForm({
                 const fieldError = errors?.[label.field_key]
 
                 return (
-                  <div key={label.id}>
+                  <div key={label.id} data-field-key={label.field_key} id={`field-${label.field_key}`}>
                     {!isCheckbox && (
                       <label className="block text-xs font-medium mb-0.5" style={{ color: '#374151' }}>
                         {label.label_name}

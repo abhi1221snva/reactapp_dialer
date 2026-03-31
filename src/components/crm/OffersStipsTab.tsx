@@ -43,6 +43,40 @@ const fmt = (n: number) =>
 const fmtDec = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
+/* ── Hardcoded sample data (shown when API returns empty) ── */
+const SAMPLE_OFFERS: LenderOffer[] = [
+  {
+    id: 9001, lead_id: 0, lender_id: 1, lender_name: 'Libertas Funding', offered_amount: 75000,
+    factor_rate: 1.35, term_days: 180, daily_payment: 562.5, total_payback: 101250,
+    status: 'accepted', notes: 'Best rate offered — merchant accepted.', created_at: '2026-03-18T10:30:00Z',
+  },
+  {
+    id: 9002, lead_id: 0, lender_id: 2, lender_name: 'Clearco Capital', offered_amount: 50000,
+    factor_rate: 1.38, term_days: 150, daily_payment: 460, total_payback: 69000,
+    status: 'declined', decline_reason: 'Higher factor rate than competitor', notes: 'Declined in favor of Libertas offer.', created_at: '2026-03-17T14:15:00Z',
+  },
+  {
+    id: 9003, lead_id: 0, lender_id: 3, lender_name: 'Rapid Finance', offered_amount: 40000,
+    factor_rate: 1.28, term_days: 120, daily_payment: 426.67, total_payback: 51200,
+    status: 'expired', notes: 'Offer expired — 7-day window passed.', created_at: '2026-03-10T09:00:00Z',
+    offer_expires_at: '2026-03-17T09:00:00Z',
+  },
+  {
+    id: 9004, lead_id: 0, lender_id: 4, lender_name: 'OnDeck Capital', offered_amount: 60000,
+    factor_rate: 1.32, term_days: 160, daily_payment: 495, total_payback: 79200,
+    status: 'received', notes: 'Counter-offer received, pending merchant review.', created_at: '2026-03-28T16:45:00Z',
+  },
+]
+
+const SAMPLE_STIPS: DealStip[] = [
+  { id: 8001, lead_id: 0, stip_name: '3 Months Bank Statements', stip_type: 'bank_statement', status: 'approved', requested_by: 1, requested_at: '2026-03-15T10:00:00Z', uploaded_at: '2026-03-16T11:30:00Z', approved_at: '2026-03-17T09:00:00Z', created_at: '2026-03-15T10:00:00Z' },
+  { id: 8002, lead_id: 0, stip_name: 'Voided Check', stip_type: 'voided_check', status: 'approved', requested_by: 1, requested_at: '2026-03-15T10:00:00Z', uploaded_at: '2026-03-15T14:00:00Z', approved_at: '2026-03-16T08:00:00Z', created_at: '2026-03-15T10:00:00Z' },
+  { id: 8003, lead_id: 0, stip_name: 'Driver License (Front & Back)', stip_type: 'drivers_license', status: 'uploaded', requested_by: 1, requested_at: '2026-03-15T10:00:00Z', uploaded_at: '2026-03-18T13:20:00Z', created_at: '2026-03-15T10:00:00Z' },
+  { id: 8004, lead_id: 0, stip_name: '2024 & 2025 Tax Returns', stip_type: 'tax_return', status: 'requested', requested_by: 1, requested_at: '2026-03-18T09:00:00Z', created_at: '2026-03-18T09:00:00Z', notes: 'Merchant says CPA will send by end of week.' },
+  { id: 8005, lead_id: 0, stip_name: 'Business Lease Agreement', stip_type: 'lease_agreement', status: 'requested', requested_by: 1, requested_at: '2026-03-18T09:00:00Z', created_at: '2026-03-18T09:00:00Z' },
+  { id: 8006, lead_id: 0, stip_name: 'Articles of Incorporation', stip_type: 'articles_of_incorporation', status: 'approved', requested_by: 1, requested_at: '2026-03-15T10:00:00Z', uploaded_at: '2026-03-15T15:00:00Z', approved_at: '2026-03-16T08:30:00Z', created_at: '2026-03-15T10:00:00Z' },
+]
+
 function SectionHeader({ title, count, onAdd }: { title: string; count: number; onAdd: () => void }) {
   return (
     <div className="flex items-center justify-between mb-3">
@@ -335,8 +369,8 @@ export function OffersStipsTab({ leadId }: Props) {
     queryFn: async () => { const r = await crmService.getStips(leadId); return r.data?.data ?? r.data ?? [] },
   })
 
-  const offers: LenderOffer[] = offersQ.data ?? []
-  const stips:  DealStip[]   = stipsQ.data  ?? []
+  const offers: LenderOffer[] = (offersQ.data ?? []).length > 0 ? offersQ.data! : SAMPLE_OFFERS
+  const stips:  DealStip[]   = (stipsQ.data ?? []).length > 0  ? stipsQ.data!  : SAMPLE_STIPS
 
   return (
     <div className="space-y-6">

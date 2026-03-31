@@ -688,7 +688,8 @@ export function CrmDashboard() {
               <div className="space-y-3">
                 {agents.slice(0, 8).map((a, idx) => {
                   const funded   = (a.by_status?.funded ?? 0) + (a.by_status?.closed_won ?? 0)
-                  const convRate = a.total > 0 ? Math.round((funded / a.total) * 100) : 0
+                  const convRaw  = a.total > 0 ? (funded / a.total) * 100 : 0
+                  const convRate = convRaw > 0 && convRaw < 1 ? convRaw.toFixed(2) : convRaw.toFixed(1)
                   const medal    = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
 
                   // Build stacked segments sorted by count desc
@@ -718,9 +719,9 @@ export function CrmDashboard() {
                             <span className="text-[11px] font-bold text-slate-700 tabular-nums">{a.total.toLocaleString()} leads</span>
                             <span className={cn(
                               'text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full',
-                              convRate >= 15 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                              convRaw >= 15 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                             )}>
-                              {convRate}% funded
+                              {convRate}% funded ({funded}/{a.total})
                             </span>
                           </div>
                         </div>
@@ -741,13 +742,18 @@ export function CrmDashboard() {
 
                         {/* Status pills — top 5 statuses */}
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {segments.slice(0, 5).map(seg => (
-                            <span key={seg.slug} className="flex items-center gap-1 text-[10px] text-slate-500">
-                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: seg.color }} />
-                              {seg.name}
-                              <span className="font-semibold text-slate-700 tabular-nums">{seg.count}</span>
-                            </span>
-                          ))}
+                          {segments.slice(0, 5).map(seg => {
+                            const segPct = a.total > 0 ? ((seg.count / a.total) * 100) : 0
+                            const segPctStr = segPct > 0 && segPct < 1 ? segPct.toFixed(2) : segPct.toFixed(1)
+                            return (
+                              <span key={seg.slug} className="flex items-center gap-1 text-[10px] text-slate-500">
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: seg.color }} />
+                                {seg.name}
+                                <span className="font-semibold text-slate-700 tabular-nums">{seg.count}</span>
+                                <span className="text-slate-400 tabular-nums">({segPctStr}%)</span>
+                              </span>
+                            )
+                          })}
                           {segments.length > 5 && (
                             <span className="text-[10px] text-slate-400">+{segments.length - 5} more</span>
                           )}

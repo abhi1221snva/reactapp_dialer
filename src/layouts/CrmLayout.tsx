@@ -3,16 +3,23 @@ import { Outlet, useLocation } from 'react-router-dom'
 
 // ── Route → Page title ────────────────────────────────────────────────────────
 const CRM_TITLES: Record<string, string> = {
-  '/crm/dashboard':       'Dashboard',
-  '/crm/pipeline':        'Pipeline Board',
-  '/crm/leads':           'Leads',
-  '/crm/leads/create':    'Add Lead',
-  '/crm/lead-status':     'Lead Status',
-  '/crm/email-templates': 'Email Templates',
-  '/crm/sms-templates':   'SMS Templates',
-  '/crm/lenders':         'Lenders',
-  '/crm/affiliate-links': 'Affiliate Links',
-  '/crm/approvals':       'Approvals',
+  '/crm/dashboard':           'Dashboard',
+  '/crm/pipeline':            'Pipeline Board',
+  '/crm/leads':               'Leads',
+  '/crm/leads/create':        'Add Lead',
+  '/crm/lead-fields':         'Labels',
+  '/crm/lead-status':         'Lead Status',
+  '/crm/document-types':      'Document Types',
+  '/crm/email-settings':      'Email Settings',
+  '/crm/email-templates':     'Email Templates',
+  '/crm/sms-templates':       'SMS Templates',
+  '/crm/lenders':             'Lenders',
+  '/crm/affiliate-links':     'Affiliate Links',
+  '/crm/approvals':           'Approvals',
+  '/crm/agent-performance':   'Agent Performance',
+  '/crm/commissions':         'Commissions',
+  '/crm/renewals':            'Renewal Pipeline',
+  '/crm/integrations':        'API Integrations',
 }
 
 function titleFromPath(pathname: string): string {
@@ -57,7 +64,7 @@ export function CrmLayout() {
       <div className="space-y-4">
 
         {/* ── Page title row (hidden on pages with their own header) */}
-        {pathname !== '/crm/dashboard' && pathname !== '/crm/document-types' && pathname !== '/crm/sms-inbox' && (
+        {pathname !== '/crm/dashboard' && pathname !== '/crm/sms-inbox' && (
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-slate-900 leading-tight">{title}</h1>

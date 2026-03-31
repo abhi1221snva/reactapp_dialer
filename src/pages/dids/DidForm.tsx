@@ -291,7 +291,7 @@ function RoutingTarget({
 }) {
   const extLabel = (ext: ExtItem) => {
     const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
-    return name ? `${name}  (Ext ${ext.extension})` : `Ext ${ext.extension}`
+    return name || `Ext ${ext.extension}`
   }
 
   const rgLabel = (rg: RingItem) => {
@@ -891,7 +891,7 @@ export function DidForm() {
                   const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
                   return (
                     <option key={ext.id} value={String(ext.id)}>
-                      {name || `User #${ext.id}`}{ext.extension ? `  (Ext ${ext.extension})` : ''}
+                      {name || `User #${ext.id}`}
                     </option>
                   )
                 })}

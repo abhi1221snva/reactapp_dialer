@@ -546,35 +546,30 @@ export function CrmLeadStatus() {
   return (
     <div className="space-y-3">
 
-      {/* ── Toolbar (matches ServerDataTable layout) ── */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex flex-1 flex-wrap gap-2 items-center">
-          {/* Search */}
-          <div className="relative min-w-[220px] flex-1 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              className="input pl-9 pr-8 h-9 text-sm"
-              placeholder="Search statuses…"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
-            />
-            {search && (
-              <button onClick={() => { setSearch(''); setPage(1) }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X size={13} />
-              </button>
-            )}
-          </div>
+      {/* ── Toolbar ── */}
+      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+        <div className="relative min-w-[180px] flex-1 max-w-xs">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            className="input pl-8 pr-7 h-8 text-xs"
+            placeholder="Search statuses…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+          {search && (
+            <button onClick={() => { setSearch(''); setPage(1) }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X size={12} />
+            </button>
+          )}
         </div>
-
-        {/* Right-side actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <button onClick={() => refetch()} disabled={isFetching}
-            className="btn-ghost btn-sm p-2 h-9 w-9" title="Refresh">
-            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            className="btn-ghost btn-sm p-1.5 h-8 w-8" title="Refresh">
+            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
           </button>
-          <button onClick={openAdd} className="btn-primary">
-            <Plus size={15} /> Add Status
+          <button onClick={openAdd} className="btn-primary h-8 text-xs px-3 gap-1.5">
+            <Plus size={14} /> Add Status
           </button>
         </div>
       </div>
@@ -583,30 +578,29 @@ export function CrmLeadStatus() {
       <div className="table-wrapper bg-white">
 
         {/* Count bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
-          <span className="text-xs text-slate-500 font-medium flex items-center gap-2">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 bg-slate-50/60">
+          <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
             {isLoading ? 'Loading…' : `${total} record${total !== 1 ? 's' : ''}`}
             <span className="text-slate-300">·</span>
-            <GripVertical size={12} className="text-slate-300" />
-            <span className="text-slate-400">Drag rows to reorder</span>
+            <GripVertical size={10} className="text-slate-300" />
+            <span className="text-slate-400">Drag to reorder</span>
           </span>
           {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Updating…
+            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+              <RefreshCw size={10} className="animate-spin" /> Updating…
             </span>
           )}
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="table">
+          <table className="table table-sm">
             <thead>
               <tr>
-                <th className="w-10" />
-                <th>Title</th>
-                <th className="hidden sm:table-cell">Show On Dashboard</th>
-                <th>Status</th>
-                <th className="w-px whitespace-nowrap !text-right">Action</th>
+                <th className="w-8 px-2" />
+                <th className="text-xs">Title</th>
+                <th className="text-xs w-24">Status</th>
+                <th className="text-xs w-16 !text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -614,23 +608,23 @@ export function CrmLeadStatus() {
                 <>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <td key={j}><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 0 ? 24 : '60%' }} /></td>
+                      {Array.from({ length: 4 }).map((_, j) => (
+                        <td key={j} className="py-1.5"><div className="h-3 bg-slate-200 rounded animate-pulse" style={{ width: j === 0 ? 16 : '50%' }} /></td>
                       ))}
                     </tr>
                   ))}
                 </>
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                      <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-                        <Tag size={22} className="text-slate-300 opacity-60" />
+                  <td colSpan={4}>
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center mb-2">
+                        <Tag size={18} className="text-slate-300 opacity-60" />
                       </div>
-                      <p className="font-medium text-slate-500">
+                      <p className="text-xs font-medium text-slate-500">
                         {search ? 'No statuses match your search' : 'No statuses yet'}
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
+                      <p className="text-[11px] text-slate-400 mt-0.5">
                         {search ? 'Try a different search term' : 'Click "Add Status" to create your first pipeline stage'}
                       </p>
                     </div>
@@ -658,69 +652,44 @@ export function CrmLeadStatus() {
                       )}
                     >
                       {/* Drag handle */}
-                      <td className="w-10">
-                        <GripVertical size={16}
+                      <td className="w-8 px-2">
+                        <GripVertical size={14}
                           className="text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing transition-colors" />
                       </td>
 
                       {/* Title */}
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center shadow-sm"
-                            style={{ background: color + '18', border: `2px solid ${color}30` }}
-                          >
-                            <span className="w-3.5 h-3.5 rounded-full" style={{ background: color }} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{s.lead_title}</p>
-                          </div>
+                      <td className="py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                          <span className="text-xs font-semibold text-slate-900 truncate">{s.lead_title}</span>
                         </div>
                       </td>
 
-                      {/* Show On Dashboard */}
-                      <td className="hidden sm:table-cell">
-                        <button
-                          type="button"
-                          onClick={() => handleDashboardToggle(s.id)}
-                          className={cn(
-                            'relative inline-flex h-5 w-9 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
-                            dashboardToggles[s.id] ? 'bg-indigo-600' : 'bg-slate-200'
-                          )}
-                          title={dashboardToggles[s.id] ? 'Shown on dashboard' : 'Hidden from dashboard'}
-                        >
-                          <span className={cn(
-                            'inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-                            dashboardToggles[s.id] ? 'translate-x-4' : 'translate-x-0'
-                          )} />
-                        </button>
-                      </td>
-
                       {/* Status */}
-                      <td>
+                      <td className="py-1.5 w-24">
                         <button
                           onClick={() => toggleStatusMutation.mutate(s)}
                           disabled={toggleStatusMutation.isPending}
                           title="Click to toggle"
                         >
                           <Badge variant={active ? 'green' : 'gray'}>
-                            {active ? <><Check size={10} /> Active</> : 'Inactive'}
+                            {active ? <><Check size={9} /> Active</> : 'Inactive'}
                           </Badge>
                         </button>
                       </td>
 
                       {/* Action */}
-                      <td className="w-px whitespace-nowrap">
+                      <td className="w-16 py-1.5">
                         <RowActions actions={[
                           {
                             label: 'Edit',
-                            icon: <Pencil size={13} />,
+                            icon: <Pencil size={12} />,
                             variant: 'edit',
                             onClick: () => openEdit(s),
                           },
                           {
                             label: 'Delete',
-                            icon: <Trash2 size={13} />,
+                            icon: <Trash2 size={12} />,
                             variant: 'delete',
                             onClick: () => handleDelete(s),
                             disabled: deleteMutation.isPending,
