@@ -63,9 +63,12 @@ function StatusBadge({ status }: { status: string }) {
   const s = (status || '').toLowerCase().replace(/[\s]+/g, '_')
   const map: Record<string, string> = {
     funded:           'bg-emerald-100 text-emerald-700',
+    in_repayment:     'bg-sky-100 text-sky-700',
     active:           'bg-emerald-100 text-emerald-700',
     renewal_eligible: 'bg-indigo-100 text-indigo-700',
+    paid_off:         'bg-slate-100 text-slate-600',
     closed:           'bg-slate-100 text-slate-600',
+    defaulted:        'bg-red-100 text-red-600',
     declined:         'bg-red-100 text-red-600',
   }
   const cls = map[s] ?? 'bg-slate-100 text-slate-600'
@@ -92,9 +95,13 @@ export function CrmRenewals() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['renewal-pipeline', daysFilter],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await (crmService as any).getRenewalPipeline({ days: daysFilter })
-      return (res.data?.data ?? res.data) as RenewalPipelineItem[]
+      try {
+        const res = await crmService.getRenewalPipeline({ days: daysFilter })
+        const payload = res.data?.data?.pipeline ?? res.data?.data ?? []
+        return payload as RenewalPipelineItem[]
+      } catch {
+        return [] as RenewalPipelineItem[]
+      }
     },
     staleTime: 60 * 1000,
   })
@@ -239,11 +246,11 @@ export function CrmRenewals() {
                     <td>
                       <div className="space-y-1">
                         <div className="text-sm text-slate-700">{fmtDate(item.renewal_eligible_date)}</div>
-                        <DaysAwayBadge days={item.days_until_renewal} />
+                        <DaysAwayBadge days={Number(item.days_until_renewal ?? 0)} />
                       </div>
                     </td>
                     <td>
-                      <StatusBadge status={item.lead_status} />
+                      <StatusBadge status={item.lead_status || (item as Record<string, unknown>).status as string || '—'} />
                     </td>
                     <td className="text-right">
                       <button
