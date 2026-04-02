@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Check, MessageSquare,
   Search, Layers, ToggleLeft, ToggleRight, ChevronRight,
-  Smartphone, Copy, Inbox,
+  Smartphone, Copy, Inbox, Eye, Code,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { SmsTemplate } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { PlaceholderPicker, type PickerPlaceholder } from '../../components/crm/PlaceholderPicker'
 import { cn } from '../../utils/cn'
 
 // ─── Variable groups ──────────────────────────────────────────────────────────
@@ -18,6 +19,24 @@ const VARIABLE_GROUPS = [
   { label: 'Status',    vars: ['[[lead_status]]'] },
   { label: 'Legacy',    vars: ['[first_name]', '[last_name]'] },
 ]
+
+const SMS_PICKER_TIPS = [
+  "[[field_key]] — replaced with lead's value",
+  'Click a variable to insert at cursor',
+  'Both [[key]] and [key] formats work',
+]
+
+// Mock data for preview mode
+const PREVIEW_VARS: Record<string, string> = {
+  '[[first_name]]': 'John', '[[last_name]]': 'Smith', '[[phone_number]]': '(555) 123-4567',
+  '[[email]]': 'john.smith@example.com', '[[company_name]]': 'Acme Industries LLC',
+  '[[lead_status]]': 'Approved',
+  '[first_name]': 'John', '[last_name]': 'Smith',
+}
+
+function replaceVarsWithMock(text: string): string {
+  return text.replace(/\[?\[([^\]]+)\]\]?/g, (match) => PREVIEW_VARS[match] ?? match)
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FormState { sms_template_name: string; sms_template: string }
@@ -128,20 +147,45 @@ function SmsModal({ editing, onClose, onSaved }: {
   const qc     = useQueryClient()
   const isEdit = !!editing
   const taRef  = useRef<HTMLTextAreaElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+
   const [form, setForm] = useState<FormState>(
     editing
       ? { sms_template_name: editing.sms_template_name, sms_template: editing.sms_template }
       : EMPTY_FORM
   )
+  const [tab, setTab] = useState<'edit' | 'preview'>('edit')
+  const [activeField, setActiveField] = useState<'name' | 'body'>('body')
+
   const set = (k: keyof FormState, v: string) => setForm(f => ({ ...f, [k]: v }))
 
-  const insertVar = (v: string) => {
-    const ta = taRef.current
-    if (!ta) { set('sms_template', form.sms_template + v); return }
-    const s = ta.selectionStart, e = ta.selectionEnd
-    set('sms_template', form.sms_template.slice(0, s) + v + form.sms_template.slice(e))
-    setTimeout(() => { ta.focus(); ta.setSelectionRange(s + v.length, s + v.length) }, 10)
-  }
+  // Fetch dynamic placeholders from backend
+  const { data: placeholders, isLoading: placeholdersLoading } = useQuery({
+    queryKey: ['pdf-placeholders'],
+    queryFn: async () => {
+      const res = await crmService.getPdfPlaceholders()
+      const raw = (res.data?.data ?? res.data ?? []) as Array<{ key: string; label: string; section: string }>
+      return raw.map<PickerPlaceholder>(p => ({ key: `[[${p.key}]]`, label: p.label, section: p.section }))
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const insertVar = useCallback((v: string) => {
+    if (activeField === 'name' && nameRef.current) {
+      const el = nameRef.current
+      const s = el.selectionStart ?? form.sms_template_name.length
+      const e = el.selectionEnd ?? s
+      const newVal = form.sms_template_name.slice(0, s) + v + form.sms_template_name.slice(e)
+      set('sms_template_name', newVal)
+      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + v.length, s + v.length) })
+    } else {
+      const ta = taRef.current
+      if (!ta) { set('sms_template', form.sms_template + v); return }
+      const s = ta.selectionStart, e = ta.selectionEnd
+      set('sms_template', form.sms_template.slice(0, s) + v + form.sms_template.slice(e))
+      setTimeout(() => { ta.focus(); ta.setSelectionRange(s + v.length, s + v.length) }, 10)
+    }
+  }, [activeField, form.sms_template_name, form.sms_template])
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -160,87 +204,194 @@ function SmsModal({ editing, onClose, onSaved }: {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card flex flex-col" style={{ maxWidth: 860, width: '96vw', maxHeight: '92vh' }}>
+      <div className="modal-card flex flex-col" style={{ maxWidth: 1060, width: '96vw', maxHeight: '94vh' }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-              <MessageSquare size={15} className="text-emerald-600" />
-            </div>
-            <div>
-              <h2 className="text-[13px] font-semibold text-slate-900 leading-tight">
-                {isEdit ? editing!.sms_template_name : 'New SMS Template'}
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Use <code className="font-mono bg-slate-100 px-1 rounded text-slate-600 text-[10px]">{'[[variable]]'}</code> to personalize messages
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="action-btn"><X size={14} /></button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-hidden flex min-h-0">
-
-          {/* Left: form */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 min-w-0">
-            {/* Name */}
-            <div>
-              <label className="label">Template Name <span className="text-red-400">*</span></label>
-              <input className="input w-full text-sm" placeholder="e.g. Application Received"
-                value={form.sms_template_name} onChange={e => set('sms_template_name', e.target.value)} />
-            </div>
-
-            {/* Body */}
-            <div>
-              <label className="label">Message Body <span className="text-red-400">*</span></label>
-              <textarea
-                ref={taRef}
-                id="sms-body"
-                className="input w-full resize-none text-sm leading-relaxed"
-                rows={6}
-                value={form.sms_template}
-                onChange={e => set('sms_template', e.target.value)}
-                placeholder="Hi [[first_name]], your application has been received…"
-              />
-              <div className="mt-2">
-                <SegmentBar text={form.sms_template} />
+        {/* ── Sticky Header ── */}
+        <div className="flex-shrink-0 border-b border-slate-100 bg-white">
+          {/* Top row: title + tabs + close */}
+          <div className="flex items-center justify-between px-6 py-3.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <MessageSquare size={16} className="text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 leading-tight">
+                  {isEdit ? 'Edit SMS Template' : 'New SMS Template'}
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Use <code className="font-mono bg-slate-100 px-1 rounded text-slate-600 text-[10px]">{'[[variable]]'}</code> to personalize messages
+                </p>
               </div>
             </div>
-
-            {/* Variable chips */}
-            <div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Insert variable</p>
-              <div className="space-y-2.5">
-                {VARIABLE_GROUPS.map(group => (
-                  <div key={group.label}>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{group.label}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {group.vars.map(v => (
-                        <button key={v} onMouseDown={e => e.preventDefault()} onClick={() => insertVar(v)}
-                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 font-mono hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
-                          {v} <Copy size={8} className="text-slate-300" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+            <div className="flex items-center gap-3">
+              {/* Tab toggle */}
+              <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+                {[
+                  { key: 'edit' as const, label: 'Editor', icon: Pencil },
+                  { key: 'preview' as const, label: 'Preview', icon: Eye },
+                ].map(t => (
+                  <button key={t.key} onClick={() => setTab(t.key)}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all',
+                      tab === t.key ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    )}>
+                    <t.icon size={11} />
+                    {t.label}
+                  </button>
                 ))}
               </div>
+              <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                <X size={16} />
+              </button>
             </div>
           </div>
 
-          {/* Right: phone preview */}
-          <div className="w-56 border-l border-slate-100 bg-slate-50/70 flex-shrink-0 flex flex-col items-center justify-center p-4 gap-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              <Smartphone size={11} /> Live Preview
-            </div>
-            <PhoneMockup message={form.sms_template} compact />
+          {/* Sticky field row */}
+          <div className="px-6 pb-4">
+            <label className="label">Template Name <span className="text-red-400">*</span></label>
+            <input
+              ref={nameRef}
+              className="input w-full text-sm"
+              placeholder="e.g. Application Received"
+              value={form.sms_template_name}
+              onChange={e => set('sms_template_name', e.target.value)}
+              onFocus={() => setActiveField('name')}
+            />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-3 px-5 py-3 border-t border-slate-100 bg-white flex-shrink-0">
+        {/* ── Body ── */}
+        <div className="flex-1 overflow-hidden flex min-h-0">
+
+          {tab === 'edit' ? (
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              {/* Left: form */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 min-w-0" onFocus={() => setActiveField('body')}>
+                {/* Message Body */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="label mb-0">Message Body <span className="text-red-400">*</span></label>
+                  </div>
+                  <textarea
+                    ref={taRef}
+                    id="sms-body"
+                    className="input w-full resize-none text-sm leading-relaxed"
+                    rows={8}
+                    value={form.sms_template}
+                    onChange={e => set('sms_template', e.target.value)}
+                    placeholder="Hi [[first_name]], your application has been received…"
+                  />
+                  <div className="mt-2">
+                    <SegmentBar text={form.sms_template} />
+                  </div>
+                </div>
+
+                {/* Quick variable chips */}
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Quick Insert</p>
+                  <div className="space-y-2.5">
+                    {VARIABLE_GROUPS.map(group => (
+                      <div key={group.label}>
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{group.label}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {group.vars.map(v => (
+                            <button key={v} onMouseDown={e => e.preventDefault()} onClick={() => insertVar(v)}
+                              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 font-mono hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+                              {v} <Copy size={8} className="text-slate-300" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: placeholder picker + phone preview */}
+              <div className="w-64 border-l border-slate-100 flex-shrink-0 bg-slate-50/60 flex flex-col min-h-0">
+                {/* Mini phone preview */}
+                <div className="flex flex-col items-center py-4 px-3 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                    <Smartphone size={11} /> Live Preview
+                  </div>
+                  <PhoneMockup message={form.sms_template} compact />
+                </div>
+
+                {/* Placeholder picker */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  <PlaceholderPicker placeholders={placeholders ?? []} loading={placeholdersLoading} onInsert={insertVar} tipLines={SMS_PICKER_TIPS} />
+                </div>
+              </div>
+            </div>
+
+          ) : (
+            /* Preview tab */
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-slate-100/80">
+              <div className="max-w-2xl mx-auto py-8 px-5 space-y-4">
+
+                {/* Preview banner */}
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-sky-200 bg-sky-50">
+                  <Eye size={13} className="text-sky-500 flex-shrink-0" />
+                  <p className="text-xs text-sky-700">
+                    Preview mode — variables are replaced with sample data
+                  </p>
+                </div>
+
+                <div className="flex gap-6 items-start">
+                  {/* Phone mockup with mock data */}
+                  <div className="flex-shrink-0">
+                    <PhoneMockup message={replaceVarsWithMock(form.sms_template)} />
+                  </div>
+
+                  {/* Info panel */}
+                  <div className="flex-1 min-w-0 space-y-4">
+                    {/* Stats */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {(() => {
+                        const { len, segments, remaining } = smsStats(form.sms_template)
+                        const multi = segments > 1
+                        return [
+                          { label: 'Characters', value: len, color: 'text-slate-700' },
+                          { label: 'SMS Segments', value: segments, color: multi ? 'text-amber-600' : 'text-emerald-600' },
+                          { label: 'Chars remaining', value: remaining, color: 'text-slate-500' },
+                        ].map(s => (
+                          <div key={s.label} className="bg-white rounded-xl border border-slate-100 px-3 py-2.5">
+                            <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+
+                    {/* Segment warning */}
+                    {smsStats(form.sms_template).segments > 1 && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50">
+                        <span className="text-amber-500 text-[13px] mt-0.5">!</span>
+                        <p className="text-[12px] text-amber-700">
+                          This message will be sent as <strong>{smsStats(form.sms_template).segments} separate SMS messages</strong>. Consider shortening to reduce costs.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Full message card */}
+                    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Message content (with sample data)</p>
+                      </div>
+                      <div className="px-4 py-3">
+                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {replaceVarsWithMock(form.sms_template) || <span className="text-slate-400 italic">No content yet</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Sticky Footer ── */}
+        <div className="flex items-center gap-3 px-6 py-3.5 border-t border-slate-100 bg-white flex-shrink-0">
           <button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}
             className="btn-primary flex items-center gap-2 disabled:opacity-50">
             {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
@@ -365,7 +516,7 @@ function PreviewPanel({ t, onEdit, onToggle, onDelete, toggling, deleting }: {
             {/* Segment warning */}
             {multi && (
               <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50">
-                <span className="text-amber-500 text-[13px] mt-0.5">⚠</span>
+                <span className="text-amber-500 text-[13px] mt-0.5">!</span>
                 <p className="text-[12px] text-amber-700">
                   This message will be sent as <strong>{segments} separate SMS messages</strong>. Consider shortening it to reduce costs.
                 </p>
@@ -388,7 +539,7 @@ function PreviewPanel({ t, onEdit, onToggle, onDelete, toggling, deleting }: {
               <div className="bg-white rounded-xl border border-slate-100 px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[11px] font-semibold text-slate-500">Segment usage</p>
-                  <p className="text-[11px] text-slate-400">{segments} × 160 chars</p>
+                  <p className="text-[11px] text-slate-400">{segments} x 160 chars</p>
                 </div>
                 {Array.from({ length: segments }, (_, i) => {
                   const start = i * SEG
@@ -557,6 +708,13 @@ export function CrmSmsTemplates() {
             </div>
           </>
         )}
+
+        {/* New Template button - top right */}
+        <div className="ml-auto">
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+            <Plus size={14} /> New Template
+          </button>
+        </div>
       </div>
 
       {/* ── Main panel ──────────────────────────────────────────────────────── */}

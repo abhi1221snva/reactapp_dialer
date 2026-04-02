@@ -527,7 +527,7 @@ export function RinglessVoicemail() {
           page={table.page} limit={table.limit} onPageChange={table.setPage}
           headerActions={
             <button onClick={() => { setEditing(null); setModal(true) }} className="btn-primary">
-              <Plus size={15} /> New Campaign
+              <Plus size={15} /> Add Campaign
             </button>
           }
         />

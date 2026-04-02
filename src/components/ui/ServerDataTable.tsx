@@ -68,7 +68,7 @@ function SkeletonRows({ cols, rows = 8 }: { cols: number; rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <tr key={i}>
           {Array.from({ length: cols }).map((_, j) => (
-            <td key={j} className="px-4 py-3">
+            <td key={j} className="px-4 py-2">
               <div className={cn('h-4 bg-slate-200 rounded animate-pulse', j === 0 ? 'w-3/4' : 'w-1/2')} />
             </td>
           ))}
@@ -103,7 +103,7 @@ function Pagination({
   })()
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white">
+    <div className="flex items-center justify-between px-4 py-2 border-t border-slate-200 bg-white">
       <span className="text-xs text-slate-500">
         {total === 0 ? 'No results' : `${from}–${to} of ${total}`}
       </span>
@@ -189,9 +189,9 @@ export function ServerDataTable<T extends Record<string, unknown>>({
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
         <div className="flex flex-1 flex-wrap gap-2 items-center">
           {/* Search */}
           <div className="relative min-w-[220px] flex-1 max-w-sm">
@@ -254,21 +254,6 @@ export function ServerDataTable<T extends Record<string, unknown>>({
 
       {/* ── Table ── */}
       <div className="table-wrapper bg-white">
-        {/* Table count bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
-          <span className="text-xs text-slate-500 font-medium">
-            {isLoading ? 'Loading…' : `${total} record${total !== 1 ? 's' : ''}`}
-            {hasActiveFilters && !isLoading && (
-              <span className="ml-1.5 text-indigo-600">(filtered)</span>
-            )}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Updating…
-            </span>
-          )}
-        </div>
-
         <table className="table">
           <thead>
             <tr>

@@ -146,7 +146,7 @@ export function EditCampaignReview() {
       <div className="flex items-center gap-2 text-xs">
         <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
           <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">1</span>
-          Campaign Details
+          Details
           <CheckCircle2 size={13} className="text-emerald-500" />
         </span>
         <span className="w-6 h-px bg-slate-200" />

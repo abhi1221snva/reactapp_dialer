@@ -54,6 +54,20 @@ export interface ChatMessage {
   read_at: string | null
   read_by: number[]
   created_at: string
+  metadata?: SystemMessageMeta | Record<string, unknown>
+}
+
+/** Structured metadata attached to system‑channel broadcast messages. */
+export interface SystemMessageMeta {
+  event: 'submission' | 'response' | 'offer' | 'offer_accepted' | 'merchant_update' | 'new_application'
+  lead_id?: number
+  lender_id?: number
+  lender_name?: string
+  amount?: number
+  response_status?: string
+  affiliate_code?: string
+  merchant_id?: number
+  fields?: string[]
 }
 
 export interface SearchUser {

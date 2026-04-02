@@ -1,14 +1,17 @@
-import { CheckCircle, XCircle, SkipForward, RefreshCw, Loader2, X } from 'lucide-react'
+import { CheckCircle, XCircle, SkipForward, RefreshCw, Loader2, X, Eye } from 'lucide-react'
 import type { LenderSubmissionOutcome } from '../../types/crm.types'
 
 interface SubmissionResultSummaryProps {
   outcomes: LenderSubmissionOutcome[]
   onClose: () => void
   onRetry: (lenderId: number) => void
+  onRetryAllFailed?: () => void
+  onViewLog?: (lenderId: number, lenderName: string) => void
   isRetrying: number | null
+  isRetryingAll?: boolean
 }
 
-export function SubmissionResultSummary({ outcomes, onClose, onRetry, isRetrying }: SubmissionResultSummaryProps) {
+export function SubmissionResultSummary({ outcomes, onClose, onRetry, onRetryAllFailed, onViewLog, isRetrying, isRetryingAll }: SubmissionResultSummaryProps) {
   const succeeded = outcomes.filter(o => o.success && !o.validationErrors?.length)
   const failed    = outcomes.filter(o => !o.success && !o.validationErrors?.length)
   const skipped   = outcomes.filter(o => o.validationErrors?.length)
@@ -39,6 +42,15 @@ export function SubmissionResultSummary({ outcomes, onClose, onRetry, isRetrying
                 }`}>
                   {o.submissionType === 'api' ? 'API' : 'Email'}
                 </span>
+                {onViewLog && o.submissionType === 'api' && (
+                  <button
+                    onClick={() => onViewLog(o.lenderId, o.lenderName)}
+                    className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex-shrink-0"
+                    title="View API log"
+                  >
+                    <Eye size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -47,9 +59,21 @@ export function SubmissionResultSummary({ outcomes, onClose, onRetry, isRetrying
         {/* Failed */}
         {failed.length > 0 && (
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-red-600 uppercase tracking-wide flex items-center gap-1">
-              <XCircle size={10} /> Failed ({failed.length})
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-red-600 uppercase tracking-wide flex items-center gap-1">
+                <XCircle size={10} /> Failed ({failed.length})
+              </p>
+              {failed.length > 1 && onRetryAllFailed && (
+                <button
+                  onClick={onRetryAllFailed}
+                  disabled={isRetryingAll || isRetrying !== null}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                >
+                  {isRetryingAll ? <Loader2 size={9} className="animate-spin" /> : <RefreshCw size={9} />}
+                  Retry All Failed
+                </button>
+              )}
+            </div>
             {failed.map(o => (
               <div key={o.lenderId} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
                 <XCircle size={12} className="text-red-400 flex-shrink-0" />
@@ -57,6 +81,15 @@ export function SubmissionResultSummary({ outcomes, onClose, onRetry, isRetrying
                   <span className="text-xs font-medium text-slate-700">{o.lenderName}</span>
                   {o.error && <p className="text-[10px] text-red-500 truncate mt-0.5">{o.error}</p>}
                 </div>
+                {onViewLog && o.submissionType === 'api' && (
+                  <button
+                    onClick={() => onViewLog(o.lenderId, o.lenderName)}
+                    className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex-shrink-0"
+                    title="View API log"
+                  >
+                    <Eye size={12} />
+                  </button>
+                )}
                 <button
                   onClick={() => onRetry(o.lenderId)}
                   disabled={isRetrying === o.lenderId}

@@ -130,25 +130,29 @@ export function Holidays() {
     <div className="space-y-5">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="page-header">
         <div>
           <h1 className="page-title">Holiday Calendar</h1>
           <p className="page-subtitle">Define holidays so calls can be routed differently on those dates via the Holiday Calendar toggle on DIDs.</p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex-shrink-0 flex items-center gap-2">
-          <Plus size={15} /> Add Holiday
-        </button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        <input
-          className="input pl-9"
-          placeholder="Search holidays…"
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
-        />
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            className="input pl-9 h-9"
+            placeholder="Search holidays…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={openCreate} className="btn-primary">
+            <Plus size={15} /> Add Holiday
+          </button>
+        </div>
       </div>
 
       {/* Table */}

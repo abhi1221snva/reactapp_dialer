@@ -363,7 +363,7 @@ export function AdminClients() {
             <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
           </button>
           <button onClick={() => setShowForm(true)} className="btn-primary gap-2">
-            <Plus size={15} /> New Client
+            <Plus size={15} /> Add Client
           </button>
         </div>
       </div>

@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Check, Mail,
   Search, AtSign, Zap, FileText, Layers,
-  ToggleLeft, ToggleRight, ChevronRight, Inbox,
+  ToggleLeft, ToggleRight, ChevronRight, Inbox, Eye, Code,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
@@ -12,13 +12,28 @@ import type { EmailTemplate } from '../../types/crm.types'
 import { EMAIL_TYPES } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { PlaceholderPicker, type PickerPlaceholder } from '../../components/crm/PlaceholderPicker'
+import { RichEmailEditor, type RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import { cn } from '../../utils/cn'
 
 const EMAIL_PICKER_TIPS = [
   "[[field_key]] — replaced with lead's value",
   'Includes all custom CRM Labels',
-  'Both [[key]] and [key] formats work',
+  'Click a variable to insert at cursor',
 ]
+
+// Mock data for preview mode
+const PREVIEW_VARS: Record<string, string> = {
+  '[[first_name]]': 'John', '[[last_name]]': 'Smith', '[[email]]': 'john.smith@example.com',
+  '[[phone]]': '(555) 123-4567', '[[company_name]]': 'Acme Industries LLC',
+  '[[business_phone]]': '(555) 987-6543', '[[business_city]]': 'Miami',
+  '[[business_state]]': 'FL', '[[amount_requested]]': '$150,000',
+  '[[lead_status]]': 'Approved', '[[assigned_to]]': 'Jane Doe',
+  '[[dob]]': '01/15/1985', '[[city]]': 'Miami', '[[home_state]]': 'FL',
+}
+
+function replaceVarsWithMock(text: string): string {
+  return text.replace(/\[\[([^\]]+)\]\]/g, (match) => PREVIEW_VARS[match] ?? match)
+}
 
 // ─── Form types ───────────────────────────────────────────────────────────────
 interface FormState {
@@ -59,18 +74,55 @@ function TemplateModal({
       ? { template_name: editing.template_name, subject: editing.subject, template_html: editing.template_html, lead_status: editing.lead_status ?? '', send_bcc: editing.send_bcc ?? '0', email_type: editing.email_type ?? 'general' }
       : EMPTY_FORM
   )
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit')
-  const taRef = useRef<HTMLTextAreaElement>(null)
+  const [tab, setTab] = useState<'edit' | 'preview' | 'html'>('edit')
+
+  // Track which field was last focused: 'subject' or 'body'
+  const [activeField, setActiveField] = useState<'subject' | 'body'>('body')
+  const subjectRef = useRef<HTMLInputElement>(null)
+  const editorRef  = useRef<RichEmailEditorRef>(null)
 
   const set = (k: keyof FormState, v: string) => setForm(f => ({ ...f, [k]: v }))
 
-  const insertVar = (v: string) => {
-    const ta = taRef.current
-    if (!ta) { set('template_html', form.template_html + v); return }
-    const s = ta.selectionStart, e = ta.selectionEnd
-    set('template_html', form.template_html.slice(0, s) + v + form.template_html.slice(e))
-    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + v.length, s + v.length) })
-  }
+  // Smart variable insertion — insert into whichever field was last focused
+  const insertVar = useCallback((v: string) => {
+    if (activeField === 'subject' && subjectRef.current) {
+      const el = subjectRef.current
+      const s = el.selectionStart ?? form.subject.length
+      const e = el.selectionEnd ?? s
+      const newVal = form.subject.slice(0, s) + v + form.subject.slice(e)
+      set('subject', newVal)
+      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + v.length, s + v.length) })
+    } else {
+      // Insert into WYSIWYG editor
+      if (editorRef.current) {
+        editorRef.current.insertAtCursor(v)
+      } else {
+        set('template_html', form.template_html + v)
+      }
+    }
+  }, [activeField, form.subject, form.template_html])
+
+  // Sync editor content when switching tabs
+  const handleTabChange = useCallback((newTab: 'edit' | 'preview' | 'html') => {
+    // When leaving edit tab, reset init flag so editor gets content on re-mount
+    if (tab === 'edit' && newTab !== 'edit') {
+      editorInitialized.current = false
+    }
+    setTab(newTab)
+  }, [tab])
+
+  // Set initial content once editor mounts (or re-mounts after tab switch)
+  const editorInitialized = useRef(false)
+  const handleEditorChange = useCallback((html: string) => {
+    set('template_html', html)
+  }, [])
+
+  useEffect(() => {
+    if (editorRef.current && !editorInitialized.current) {
+      editorRef.current.setContent(form.template_html || '')
+      editorInitialized.current = true
+    }
+  })
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -90,37 +142,100 @@ function TemplateModal({
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card flex flex-col" style={{ maxWidth: 1040, width: '96vw', maxHeight: '92vh' }}>
+      <div className="modal-card flex flex-col" style={{ maxWidth: 1200, width: '96vw', maxHeight: '94vh' }}>
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <Mail size={15} className="text-indigo-500" />
+        {/* ── Sticky Header ── */}
+        <div className="flex-shrink-0 border-b border-slate-100 bg-white">
+          {/* Top row: title + close */}
+          <div className="flex items-center justify-between px-6 py-3.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <Mail size={16} className="text-indigo-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 leading-tight">
+                  {isEdit ? 'Edit Template' : 'New Email Template'}
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Use <code className="font-mono bg-slate-100 px-1 rounded text-slate-600 text-[10px]">{'[[variable]]'}</code> syntax to personalize
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-[13px] font-semibold text-slate-900 leading-tight">
-                {isEdit ? editing!.template_name : 'New Email Template'}
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Use <code className="font-mono bg-slate-100 px-1 rounded text-slate-600 text-[10px]">{'[[variable]]'}</code> syntax to personalize
-              </p>
+            <div className="flex items-center gap-3">
+              {/* Tab toggle */}
+              <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+                {[
+                  { key: 'edit' as const, label: 'Editor', icon: Pencil },
+                  { key: 'preview' as const, label: 'Preview', icon: Eye },
+                  { key: 'html' as const, label: 'HTML', icon: Code },
+                ].map(t => (
+                  <button key={t.key} onClick={() => handleTabChange(t.key)}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all',
+                      tab === t.key ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    )}>
+                    <t.icon size={11} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                <X size={16} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Tab toggle */}
-            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
-              {(['edit', 'preview'] as const).map(t => (
-                <button key={t} onClick={() => setTab(t)}
-                  className={cn('px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all capitalize',
-                    tab === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
+
+          {/* Sticky field row — always visible */}
+          <div className="px-6 pb-4 space-y-3">
+            {/* Row 1: name + type + trigger */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="label">Template Name <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <FileText size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input className="input w-full pl-8 text-sm" placeholder="e.g. Welcome Email"
+                    value={form.template_name} onChange={e => set('template_name', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="label">Template Type</label>
+                <select className="input w-full text-sm" value={form.email_type} onChange={e => set('email_type', e.target.value)}>
+                  {EMAIL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Lead Status Trigger <span className="text-slate-400 font-normal text-[11px]">(optional)</span></label>
+                <div className="relative">
+                  <Zap size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input className="input w-full pl-8 text-sm" placeholder="e.g. Approved, Funded…"
+                    value={form.lead_status} onChange={e => set('lead_status', e.target.value)} />
+                </div>
+              </div>
             </div>
-            <button onClick={onClose} className="action-btn"><X size={14} /></button>
+
+            {/* Row 2: subject + BCC */}
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <div>
+                <label className="label">Subject Line <span className="text-red-400">*</span></label>
+                <input
+                  ref={subjectRef}
+                  className="input w-full text-sm"
+                  placeholder="Hi [[first_name]], your application update…"
+                  value={form.subject}
+                  onChange={e => set('subject', e.target.value)}
+                  onFocus={() => setActiveField('subject')}
+                />
+              </div>
+              <div className="flex flex-col justify-end pb-0.5">
+                <label className="flex items-center gap-2.5 cursor-pointer py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
+                  <input type="checkbox" className="accent-indigo-600 w-4 h-4"
+                    checked={form.send_bcc === '1'} onChange={e => set('send_bcc', e.target.checked ? '1' : '0')} />
+                  <div>
+                    <p className="text-[13px] font-medium text-slate-700">Send BCC</p>
+                    <p className="text-[11px] text-slate-400">Agent gets a copy</p>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -129,85 +244,43 @@ function TemplateModal({
 
           {tab === 'edit' ? (
             <div className="flex flex-1 min-h-0 overflow-hidden">
-              {/* Left: form */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4 min-w-0">
+              {/* Left: WYSIWYG editor */}
+              <div className="flex-1 overflow-y-auto p-5 min-w-0" onFocus={() => setActiveField('body')}>
+                <RichEmailEditor
+                  ref={editorRef}
+                  onChange={handleEditorChange}
+                  placeholder="Start writing your email template..."
+                  minHeight="320px"
+                />
+              </div>
 
-                {/* Row 1: name + type + trigger */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="label">Template Name <span className="text-red-400">*</span></label>
-                    <div className="relative">
-                      <FileText size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input className="input w-full pl-8 text-sm" placeholder="e.g. Welcome Email"
-                        value={form.template_name} onChange={e => set('template_name', e.target.value)} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Template Type</label>
-                    <select
-                      className="input w-full text-sm"
-                      value={form.email_type}
-                      onChange={e => set('email_type', e.target.value)}
-                    >
-                      {EMAIL_TYPES.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Lead Status Trigger <span className="text-slate-400 font-normal text-[11px]">(optional)</span></label>
-                    <div className="relative">
-                      <Zap size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input className="input w-full pl-8 text-sm" placeholder="e.g. Approved, Funded…"
-                        value={form.lead_status} onChange={e => set('lead_status', e.target.value)} />
-                    </div>
-                  </div>
-                </div>
+              {/* Right: placeholder picker */}
+              <div className="w-60 border-l border-slate-100 flex-shrink-0 bg-slate-50/60 flex flex-col min-h-0">
+                <PlaceholderPicker placeholders={placeholders ?? []} loading={placeholdersLoading} onInsert={insertVar} tipLines={EMAIL_PICKER_TIPS} />
+              </div>
+            </div>
 
-                {/* Row 2: subject + BCC checkbox */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Subject Line <span className="text-red-400">*</span></label>
-                    <input className="input w-full text-sm" placeholder="Hi [[first_name]], your application update…"
-                      value={form.subject} onChange={e => set('subject', e.target.value)} />
-                  </div>
-                  <div className="flex flex-col justify-end pb-0.5">
-                    <label className="flex items-center gap-2.5 cursor-pointer py-2.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
-                      <input type="checkbox" className="accent-indigo-600 w-4 h-4"
-                        checked={form.send_bcc === '1'} onChange={e => set('send_bcc', e.target.checked ? '1' : '0')} />
-                      <div>
-                        <p className="text-[13px] font-medium text-slate-700">Send BCC copy</p>
-                        <p className="text-[11px] text-slate-400">Assigned agent receives a copy</p>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                {/* HTML editor */}
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="label mb-0">Email Body (HTML) <span className="text-red-400">*</span></label>
-                    <span className="text-[11px] text-slate-400 tabular-nums">
+          ) : tab === 'html' ? (
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              {/* Raw HTML editor */}
+              <div className="flex-1 overflow-y-auto p-5 min-w-0">
+                <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+                    <span className="w-2 h-2 rounded-full bg-red-400" />
+                    <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                    <span className="w-2 h-2 rounded-full bg-green-400" />
+                    <span className="text-[11px] text-slate-400 font-mono ml-1">HTML Source</span>
+                    <span className="ml-auto text-[11px] text-slate-400 tabular-nums">
                       {form.template_html.length > 0 ? `${form.template_html.length.toLocaleString()} chars` : ''}
                     </span>
                   </div>
-                  <div className="rounded-xl border border-slate-200 overflow-hidden">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
-                      <span className="w-2 h-2 rounded-full bg-red-400" />
-                      <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                      <span className="w-2 h-2 rounded-full bg-green-400" />
-                      <span className="text-[11px] text-slate-400 font-mono ml-1">HTML Editor</span>
-                    </div>
-                    <textarea
-                      ref={taRef}
-                      id="email-template-body"
-                      className="w-full font-mono text-[12px] p-4 resize-none outline-none bg-white text-slate-800 leading-relaxed"
-                      rows={16}
-                      value={form.template_html}
-                      onChange={e => set('template_html', e.target.value)}
-                      placeholder={'<p>Dear [[first_name]],</p>\n<p>Your application has been received.</p>\n<br>\n<p>Best regards,<br>The Team</p>'}
-                    />
-                  </div>
+                  <textarea
+                    className="w-full font-mono text-[12px] p-4 resize-none outline-none bg-white text-slate-800 leading-relaxed"
+                    rows={20}
+                    value={form.template_html}
+                    onChange={e => set('template_html', e.target.value)}
+                    placeholder={'<p>Dear [[first_name]],</p>\n<p>Your application has been received.</p>'}
+                  />
                 </div>
               </div>
 
@@ -219,8 +292,17 @@ function TemplateModal({
 
           ) : (
             /* Preview tab */
-            <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
-              <div className="max-w-2xl mx-auto space-y-3">
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-slate-100/80">
+              <div className="max-w-2xl mx-auto py-8 px-5 space-y-4">
+
+                {/* Preview banner */}
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-sky-200 bg-sky-50">
+                  <Eye size={13} className="text-sky-500 flex-shrink-0" />
+                  <p className="text-xs text-sky-700">
+                    Preview mode — variables are replaced with sample data
+                  </p>
+                </div>
+
                 {form.lead_status && (
                   <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50">
                     <Zap size={13} className="text-amber-500 flex-shrink-0" />
@@ -230,25 +312,41 @@ function TemplateModal({
                     </p>
                   </div>
                 )}
-                <div className="rounded-xl overflow-hidden shadow-sm border border-slate-200 bg-white">
-                  <div className="px-6 py-4 border-b border-slate-100 space-y-2.5">
+
+                {/* Email card preview */}
+                <div className="rounded-xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+                  {/* Accent bar */}
+                  <div className="h-1 bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400" />
+
+                  {/* Header */}
+                  <div className="px-6 py-4 border-b border-slate-100 space-y-2.5 bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-400 text-[11px] w-14 text-right flex-shrink-0 font-medium">From</span>
+                      <span className="text-slate-700 text-[12px] font-medium">Your Company &lt;noreply@company.com&gt;</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-400 text-[11px] w-14 text-right flex-shrink-0 font-medium">To</span>
+                      <span className="text-slate-700 text-[12px] font-medium">John Smith &lt;john.smith@example.com&gt;</span>
+                    </div>
                     {form.send_bcc === '1' && (
                       <div className="flex items-center gap-3">
-                        <span className="text-slate-400 text-[11px] w-12 text-right flex-shrink-0 font-medium">BCC</span>
+                        <span className="text-slate-400 text-[11px] w-14 text-right flex-shrink-0 font-medium">BCC</span>
                         <span className="text-slate-600 font-mono text-[11px]">Assigned agent (auto)</span>
                       </div>
                     )}
-                    <div className="flex items-start gap-3 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0">
-                      <span className="text-slate-400 text-[11px] w-12 text-right flex-shrink-0 mt-0.5 font-medium">Subject</span>
+                    <div className="flex items-start gap-3 border-t border-slate-200 pt-2.5">
+                      <span className="text-slate-400 text-[11px] w-14 text-right flex-shrink-0 mt-0.5 font-medium">Subject</span>
                       <span className="font-semibold text-slate-900 text-sm">
-                        {form.subject || <span className="text-slate-400 font-normal italic text-xs">No subject</span>}
+                        {replaceVarsWithMock(form.subject) || <span className="text-slate-400 font-normal italic text-xs">No subject</span>}
                       </span>
                     </div>
                   </div>
-                  <div className="p-8 min-h-40 text-sm"
+
+                  {/* Body */}
+                  <div className="px-8 py-8 min-h-[200px] text-sm text-slate-700 leading-relaxed"
                     dangerouslySetInnerHTML={{
-                      __html: form.template_html ||
-                        '<p style="color:#9CA3AF;font-style:italic;font-size:13px">No content yet — switch to Edit tab to write your email.</p>',
+                      __html: replaceVarsWithMock(form.template_html) ||
+                        '<p style="color:#9CA3AF;font-style:italic;font-size:13px">No content yet — switch to Editor tab to write your email.</p>',
                     }}
                   />
                 </div>
@@ -257,8 +355,8 @@ function TemplateModal({
           )}
         </div>
 
-        {/* ── Footer ── */}
-        <div className="flex items-center gap-3 px-5 py-3 border-t border-slate-100 bg-white flex-shrink-0">
+        {/* ── Sticky Footer ── */}
+        <div className="flex items-center gap-3 px-6 py-3.5 border-t border-slate-100 bg-white flex-shrink-0">
           <button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}
             className="btn-primary flex items-center gap-2 disabled:opacity-50">
             {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
@@ -568,6 +666,13 @@ export function CrmEmailTemplates() {
             </div>
           </>
         )}
+
+        {/* New Template button - top right */}
+        <div className="ml-auto">
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+            <Plus size={14} /> New Template
+          </button>
+        </div>
       </div>
 
       {/* ── Main panel ──────────────────────────────────────────────────────── */}

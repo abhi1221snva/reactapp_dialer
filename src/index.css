@@ -116,19 +116,19 @@
   .badge-orange { @apply badge bg-orange-50 text-orange-700;   box-shadow: inset 0 0 0 1px rgba(249,115,22,0.25); }
 
   /* === Page chrome === */
-  .page-header   { @apply flex items-center justify-between mb-6; }
-  .page-title    { @apply text-2xl font-bold text-slate-900 tracking-tight; }
-  .page-subtitle { @apply text-sm text-slate-500 mt-0.5; }
+  .page-header   { @apply flex items-center justify-between mb-2; }
+  .page-title    { @apply text-base font-bold text-slate-900 tracking-tight leading-tight; }
+  .page-subtitle { @apply text-[11px] text-slate-400 mt-0; }
   .section-title { @apply text-xs font-semibold text-slate-400 uppercase tracking-widest; }
   .form-group    { @apply flex flex-col gap-1.5; }
   .divider       { @apply border-t border-slate-100 my-5; }
 
   /* === Table === */
-  .table-wrapper { @apply overflow-hidden rounded-2xl border border-slate-200 bg-white; }
+  .table-wrapper { @apply overflow-hidden rounded-xl border border-slate-200 bg-white; }
   .table         { @apply w-full text-sm border-collapse; }
   .table thead   { @apply border-b border-slate-200; background: rgba(248,250,252,0.80); }
-  .table th      { @apply px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap; }
-  .table td      { @apply px-4 py-3 border-b border-slate-100; }
+  .table th      { @apply px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap; }
+  .table td      { @apply px-4 py-2 border-b border-slate-100; }
   .table tbody tr:last-child td { @apply border-b-0; }
   .table tbody tr { transition: background-color 0.12s ease; }
   .table tbody tr:hover { @apply bg-slate-50; }

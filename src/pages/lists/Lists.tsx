@@ -54,8 +54,8 @@ export function Lists() {
       key: 'name', header: 'List Name',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <List size={15} className="text-white" />
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
+            <List size={13} className="text-white" />
           </div>
           <div>
             <button
@@ -145,7 +145,7 @@ export function Lists() {
   ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-2">
       <div className="page-header">
         <div>
           <h1 className="page-title">Lists</h1>
@@ -185,7 +185,7 @@ export function Lists() {
         onPageChange={table.setPage}
         headerActions={
           <button onClick={() => navigate('/lists/create')} className="btn-primary">
-            <Plus size={15} /> New List
+            <Plus size={15} /> Add List
           </button>
         }
       />

@@ -40,6 +40,7 @@ import { CrmLeadFields } from './pages/crm/CrmLeadFields'
 import { CrmEmailTemplates } from './pages/crm/CrmEmailTemplates'
 import { CrmSmsTemplates } from './pages/crm/CrmSmsTemplates'
 import { CrmLenders } from './pages/crm/CrmLenders'
+import { CrmLenderPerformance } from './pages/crm/CrmLenderPerformance'
 import { CrmLenderForm } from './pages/crm/CrmLenderForm'
 import { CrmLenderApis } from './pages/crm/CrmLenderApis'
 import { CrmLenderApiLogs } from './pages/crm/CrmLenderApiLogs'
@@ -50,6 +51,7 @@ import { CrmDocumentTypes } from './pages/crm/CrmDocumentTypes'
 import { CrmEmailSettings } from './pages/crm/CrmEmailSettings'
 import { Campaigns } from './pages/campaigns/Campaigns'
 import { CampaignDetail } from './pages/campaigns/CampaignDetail'
+import { AgentStatus } from './pages/campaigns/AgentStatus'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
 import { EditCampaign } from './modules/campaigns/EditCampaign'
 import { AttachLeads } from './modules/campaigns/AttachLeads'
@@ -75,6 +77,11 @@ import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
 import { AiSettings } from './pages/ai/AiSettings'
 import { AiCoach } from './pages/ai/AiCoach'
 import { SMSCenter } from './pages/sms/SMSCenter'
+import { SmsAiDemo } from './pages/smsai/SmsAiDemo'
+import { SmsAiCampaigns } from './pages/smsai/SmsAiCampaigns'
+import { SmsAiLists } from './pages/smsai/SmsAiLists'
+import { SmsAiReports } from './pages/smsai/SmsAiReports'
+import { SmsAiTemplates } from './pages/smsai/SmsAiTemplates'
 import { TeamChat } from './pages/chat/TeamChat'
 import { AgentMonitoring } from './pages/monitoring/AgentMonitoring'
 import { Attendance } from './pages/attendance/Attendance'
@@ -82,6 +89,11 @@ import { Billing } from './pages/billing/Billing'
 import { TelecomPage } from './pages/telecom/TelecomPage'
 
 import { Labels } from './pages/settings/Labels'
+import { LeadSources } from './pages/settings/LeadSources'
+import { RecycleRules } from './pages/settings/RecycleRules'
+import { CustomFieldLabels } from './pages/settings/CustomFieldLabels'
+import { LeadActivity } from './pages/settings/LeadActivity'
+import { Leads } from './pages/leads/Leads'
 import { TwoFactorSetup } from './pages/settings/TwoFactorSetup'
 import { SecuritySettings } from './pages/settings/SecuritySettings'
 import { DispositionList } from './modules/dispositions/DispositionList'
@@ -96,6 +108,7 @@ import { ExtensionGroups } from './pages/extensiongroups/ExtensionGroups'
 import { VoicemailDrops } from './pages/voicemail/VoicemailDrops'
 import { Mailbox } from './pages/voicemail/Mailbox'
 import { GmailMailbox } from './pages/gmail/GmailMailbox'
+import EmailParser from './pages/email-parser/EmailParser'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
 import { SystemMonitor } from './pages/admin/SystemMonitor'
@@ -177,6 +190,7 @@ export default function App() {
           <Route path="/crm/sms-templates" element={<CrmSmsTemplates />} />
           <Route path="/crm/pdf-templates" element={<CrmPdfTemplates />} />
           <Route path="/crm/lenders" element={<CrmLenders />} />
+          <Route path="/crm/lender-performance" element={<CrmLenderPerformance />} />
           <Route path="/crm/lenders/create" element={<CrmLenderForm />} />
           <Route path="/crm/lenders/:id/edit" element={<CrmLenderForm />} />
           <Route path="/crm/lender-api-configs" element={<CrmLenderApis />} />
@@ -200,6 +214,7 @@ export default function App() {
         <Route path="/campaigns/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignLists /></ErrorBoundary>} />
         <Route path="/campaigns/:id/review" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignReview /></ErrorBoundary>} />
         <Route path="/campaigns/:id" element={<CampaignDetail />} />
+        <Route path="/agent-status" element={<AgentStatus />} />
 
         {/* Users */}
         <Route path="/users" element={<Users />} />
@@ -237,6 +252,13 @@ export default function App() {
         <Route path="/settings/security" element={<SecuritySettings />} />
         <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
 
+        {/* Lead Management */}
+        <Route path="/leads" element={<Leads />} />
+        <Route path="/settings/lead-sources" element={<LeadSources />} />
+        <Route path="/settings/recycle-rules" element={<RecycleRules />} />
+        <Route path="/settings/custom-field-labels" element={<CustomFieldLabels />} />
+        <Route path="/settings/lead-activity" element={<LeadActivity />} />
+
         {/* Profile */}
         <Route path="/profile" element={<Profile />} />
 
@@ -247,11 +269,19 @@ export default function App() {
         <Route path="/ai/settings" element={<AiSettings />} />
         <Route path="/ai/coach" element={<AiCoach />} />
 
+        {/* SMS AI */}
+        <Route path="/smsai/demo" element={<SmsAiDemo />} />
+        <Route path="/smsai/campaigns" element={<SmsAiCampaigns />} />
+        <Route path="/smsai/lists" element={<SmsAiLists />} />
+        <Route path="/smsai/reports" element={<SmsAiReports />} />
+        <Route path="/smsai/templates" element={<SmsAiTemplates />} />
+
         {/* IVR */}
         <Route path="/ivr" element={<Ivr />} />
 
         {/* Gmail Mailbox */}
         <Route path="/gmail-mailbox" element={<GmailMailbox />} />
+        <Route path="/email-parser" element={<EmailParser />} />
         <Route path="/google-calendar" element={<GoogleCalendar />} />
 
         {/* Voicemail */}

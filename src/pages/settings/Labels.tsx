@@ -307,15 +307,6 @@ export function Labels() {
       ),
     },
     {
-      key: 'display_order',
-      header: 'Order',
-      render: (row) => (
-        <span className="text-sm text-slate-500">
-          {row.display_order ?? '—'}
-        </span>
-      ),
-    },
-    {
       key: 'created_at',
       header: 'Created',
       render: (row) => (
@@ -368,34 +359,16 @@ export function Labels() {
         />
       )}
 
-      <div className="space-y-5">
+      <div className="space-y-2">
         {/* Page header */}
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/')} className="btn-ghost p-2 rounded-lg mt-0.5">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1">
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">Label Management</h1>
-                <p className="page-subtitle">Manage lead labels and their display order</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowReorder(true)}
-                  className="btn-outline"
-                >
-                  <GripVertical size={15} />
-                  Reorder
-                </button>
-                <button
-                  onClick={() => { setEditLabel(null); setShowCreate(true) }}
-                  className="btn-primary"
-                >
-                  <Plus size={15} />
-                  New Label
-                </button>
-              </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h1 className="page-title">Label Management</h1>
+              <p className="page-subtitle">Manage lead labels and their display order</p>
             </div>
           </div>
         </div>
@@ -432,6 +405,16 @@ export function Labels() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
+          headerActions={
+            <>
+              <button onClick={() => setShowReorder(true)} className="btn-outline">
+                <GripVertical size={15} /> Reorder
+              </button>
+              <button onClick={() => { setEditLabel(null); setShowCreate(true) }} className="btn-primary">
+                <Plus size={15} /> Add Label
+              </button>
+            </>
+          }
         />
       </div>
     </>

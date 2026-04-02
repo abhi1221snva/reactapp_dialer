@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Building2, User, BarChart2, DollarSign, Landmark, FileText,
+  Building2, User, Users, BarChart2, DollarSign, Landmark, FileText,
   Check, X, Upload, Eye, EyeOff, Printer,
   AlertCircle, CheckCircle2, ShieldCheck, ChevronRight,
   Edit3, ArrowLeft, ArrowRight, Phone, Mail, Clock,
@@ -491,13 +491,36 @@ export function ApplyPage() {
   const [submitting, setSub]    = useState(false)
   const [subErr, setSubErr]     = useState('')
   const [result, setResult]     = useState<SubmitResult | null>(null)
+  const [hasOwner2, setHasOwner2] = useState(false)
 
-  const allSteps = [...sections.map((s: PublicFormSection) => s.title), 'Digital Signature', 'Documents']
+  // Detect Owner 2 section
+  const owner2SecIdx = sections.findIndex((s: PublicFormSection) =>
+    s.title === 'Owner 2 Information' || s.title.toLowerCase().includes('owner 2')
+  )
+  const owner1SecIdx = owner2SecIdx >= 0
+    ? sections.findIndex((s: PublicFormSection) => s.title === 'Owner Information' || s.title.toLowerCase().includes('owner info'))
+    : -1
+
+  // Build step map — always exclude Owner 2 (shown inline on Owner 1 step)
+  type StepInfo = { type: 'section'; secIdx: number } | { type: 'sig' } | { type: 'doc' }
+  const stepMap: StepInfo[] = [
+    ...sections
+      .map((_: PublicFormSection, i: number) => ({ type: 'section' as const, secIdx: i }))
+      .filter((s: { type: 'section'; secIdx: number }) => s.secIdx !== owner2SecIdx),
+    { type: 'sig' },
+    { type: 'doc' },
+  ]
+  const allSteps = stepMap.map(s => s.type === 'section' ? sections[s.secIdx].title : s.type === 'sig' ? 'Digital Signature' : 'Documents')
   const TOTAL    = allSteps.length
-  const isSig    = step === sections.length
-  const isDoc    = step === sections.length + 1
+  const curStepInfo = stepMap[step]
+  const isSig    = curStepInfo?.type === 'sig'
+  const isDoc    = curStepInfo?.type === 'doc'
   const isLast   = step === TOTAL - 1
-  const curSec   = sections[step] as PublicFormSection | undefined
+  const curSecIdx = curStepInfo?.type === 'section' ? curStepInfo.secIdx : -1
+  const curSec   = curSecIdx >= 0 ? sections[curSecIdx] : undefined
+  const isOwner1Step = curSecIdx === owner1SecIdx && owner2SecIdx >= 0
+
+  const toggleOwner2 = (checked: boolean) => setHasOwner2(checked)
 
   const change = (k: string, v: string) => {
     setForm(f => ({ ...f, [k]: v }))
@@ -506,13 +529,17 @@ export function ApplyPage() {
 
   // ── Core validation — uses DB validation_rules when present, type fallback otherwise ──
   const runValidation = (): Record<string, string> => {
-    const sec = sections[step]
-    if (!sec || !sec.fields || sec.fields.length === 0) return {}
-    return validateSection(sec.fields, form)
+    if (!curSec || !curSec.fields || curSec.fields.length === 0) return {}
+    const errors = validateSection(curSec.fields, form)
+    // Also validate inline Owner 2 fields when on Owner 1 step
+    if (isOwner1Step && hasOwner2 && owner2SecIdx >= 0 && sections[owner2SecIdx]) {
+      Object.assign(errors, validateSection(sections[owner2SecIdx].fields, form))
+    }
+    return errors
   }
 
   const validate = (): boolean => {
-    if (step >= sections.length) return true   // sig/doc steps — no fields to check
+    if (isSig || isDoc) return true   // sig/doc steps — no fields to check
     const errors = runValidation()
     setErrs(errors)
     if (Object.keys(errors).length > 0) {
@@ -524,7 +551,7 @@ export function ApplyPage() {
 
   // Navigate forward — ALWAYS validates first. Step NEVER changes on failure.
   const handleNext = () => {
-    if (step >= sections.length) {
+    if (isSig || isDoc) {
       // Sig / Doc steps — no form fields, allow freely
       setStep(s => Math.min(s + 1, TOTAL - 1))
       return
@@ -555,7 +582,14 @@ export function ApplyPage() {
     try {
       const payload = { ...form }
       if (sig) payload['signature_image'] = sig
-      if (sig2) payload['owner_2_signature_image'] = sig2
+      // Only include Owner 2 data if toggle is checked
+      if (hasOwner2 && sig2) payload['owner_2_signature_image'] = sig2
+      if (!hasOwner2 && owner2SecIdx >= 0) {
+        // Strip Owner 2 field values from payload
+        const o2Fields = sections[owner2SecIdx]?.fields ?? []
+        for (const f of o2Fields) delete payload[f.key]
+        delete payload['owner_2_signature_image']
+      }
 
       const res = await publicAppService.submitApplication(affiliateCode!, payload)
       const out = (res.data as unknown as SubmitResult).lead_token
@@ -577,8 +611,9 @@ export function ApplyPage() {
         setErrs(flat)
         // Find the first section that contains an errored field and navigate to it
         const errorKeys = Object.keys(flat)
-        const targetStep = sections.findIndex(sec =>
-          sec.fields.some((f: PublicFormField) => errorKeys.includes(f.key))
+        // Find wizard step (not raw section index) that contains the errored field
+        const targetStep = stepMap.findIndex(s =>
+          s.type === 'section' && sections[s.secIdx]?.fields.some((f: PublicFormField) => errorKeys.includes(f.key))
         )
         if (targetStep >= 0) setStep(targetStep)
         setSubErr(resp.message || 'Please correct the highlighted fields.')
@@ -593,12 +628,15 @@ export function ApplyPage() {
   const curMeta  = stepMeta(allSteps[step] ?? '')
 
   const isStepDone = (i: number): boolean => {
-    if (i < sections.length) {
-      return sections[i].fields
+    const info = stepMap[i]
+    if (!info) return false
+    if (info.type === 'section') {
+      const sec = sections[info.secIdx]
+      return sec.fields
         .filter((f: PublicFormField) => f.required)
         .every((f: PublicFormField) => !!(form[f.key] || '').trim())
     }
-    if (i === sections.length) return sigSaved
+    if (info.type === 'sig') return sigSaved
     return docs.length > 0
   }
 
@@ -809,42 +847,87 @@ export function ApplyPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* ── Owner 2 toggle + inline fields (shown on Owner 1 step) ── */}
+                {isOwner1Step && (
+                  <>
+                    <div style={{ paddingTop: 12, borderTop: `1px dashed ${C.border}` }}>
+                      <label onClick={() => toggleOwner2(!hasOwner2)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${hasOwner2 ? '#0891b2' : C.border}`, background: hasOwner2 ? '#f0f9ff' : C.card2, transition: 'all .2s', userSelect: 'none' }}>
+                        <span style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${hasOwner2 ? '#0891b2' : C.border}`, background: hasOwner2 ? '#0891b2' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
+                          {hasOwner2 && <Check size={11} color="white" strokeWidth={3} />}
+                        </span>
+                        <span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: hasOwner2 ? '#0e7490' : C.text, display: 'block', lineHeight: 1.3 }}>
+                            This business has a second owner
+                          </span>
+                          <span style={{ fontSize: 11, color: C.muted }}>
+                            {hasOwner2 ? 'Owner 2 fields shown below' : 'Check to add Owner 2 information'}
+                          </span>
+                        </span>
+                        {hasOwner2 && (
+                          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, background: '#e0f2fe', color: '#0891b2', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20 }}>
+                            <Users size={11} /> Added
+                          </span>
+                        )}
+                      </label>
+                    </div>
+                    {/* Inline Owner 2 fields */}
+                    {hasOwner2 && owner2SecIdx >= 0 && sections[owner2SecIdx] && (
+                      <div style={{ paddingTop: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: '#0e749018', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Users size={13} color="#0e7490" />
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#0e7490' }}>Owner 2 Information</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
+                          {sections[owner2SecIdx].fields.map((f: PublicFormField) => (
+                            <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
+                              <FormField f={f} value={form[f.key] || ''} onChange={change} error={errs[f.key]} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ) : isSig ? (
-              /* ── Dual Signature step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved ? C.successBdr : C.border}`, height: '100%', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 0, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
-
-                {/* ── Signature 1: Applicant ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#7c3aed18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Edit3 size={13} color="#7c3aed" />
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Applicant Signature</span>
-                    <span style={{ fontSize: 11, color: C.error }}>*</span>
-                    {sigSaved && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
-                  </div>
-                  <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <ShieldCheck size={14} style={{ flexShrink: 0 }} />
-                    By signing, you certify that all information provided is accurate and complete.
-                  </div>
-                  <SigPad onSave={(d) => { setSig(d); setSigSaved(!!d) }} saved={sigSaved} />
+              /* ── Dual Signature step — side by side ── */
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+                <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                  <ShieldCheck size={14} style={{ flexShrink: 0 }} />
+                  By signing, you certify that all information provided is accurate and complete.
                 </div>
-
-                {/* ── Divider ── */}
-                <div style={{ borderTop: `1px dashed ${C.border}`, margin: '4px 0 20px' }} />
-
-                {/* ── Signature 2: Co-Applicant ── */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#0891b218', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Edit3 size={13} color="#0891b2" />
+                <div style={{ display: 'grid', gridTemplateColumns: hasOwner2 ? '1fr 1fr' : '1fr', gap: 20 }}>
+                  {/* ── Signature 1: Applicant ── */}
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: 6, background: '#7c3aed18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Edit3 size={12} color="#7c3aed" />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Applicant Signature</span>
+                      <span style={{ fontSize: 11, color: C.error }}>*</span>
+                      {sigSaved && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Co-Applicant Signature</span>
-                    <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
-                    {sigSaved2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
+                    <SigPad onSave={(d) => { setSig(d); setSigSaved(!!d) }} saved={sigSaved} />
                   </div>
-                  <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d) }} saved={sigSaved2} />
+
+                  {/* ── Signature 2: Co-Applicant (only when Owner 2 checked) ── */}
+                  {hasOwner2 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: `1px solid ${C.border}`, paddingLeft: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: 6, background: '#0891b218', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Edit3 size={12} color="#0891b2" />
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Co-Applicant Signature</span>
+                        <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
+                        {sigSaved2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
+                      </div>
+                      <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d) }} saved={sigSaved2} />
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

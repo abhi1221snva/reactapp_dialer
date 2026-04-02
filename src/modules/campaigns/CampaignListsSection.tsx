@@ -133,7 +133,7 @@ export function CampaignListsSection({ campaignId, onListsUpdated }: Props) {
       key: 'name', header: 'List Name',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
             <List size={15} className="text-white" />
           </div>
           <div>

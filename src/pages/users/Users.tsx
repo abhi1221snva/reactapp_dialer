@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, UserCircle, Eye, X,
-  Phone, Mail, Globe, Monitor, Clock, Voicemail,
-  PhoneForwarded, Shield, MessageSquare, Settings,
-  CheckCircle2, XCircle, Hash,
+  Phone, Globe,
+  PhoneForwarded, Shield,
+  CheckCircle2, XCircle,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -53,18 +53,11 @@ const STATUS_FILTERS = [
 // ---------------------------------------------------------------------------
 // ViewUserModal — redesigned
 // ---------------------------------------------------------------------------
-const ROLE_BG_GRADIENT: Record<string, string> = {
-  'Super Admin': 'from-violet-600 to-purple-700',
-  'Admin':       'from-indigo-500 to-blue-600',
-  'Manager':     'from-sky-500 to-cyan-600',
-  'Agent':       'from-slate-500 to-slate-600',
-}
-
 function OnOff({ val, label }: { val?: unknown; label: string }) {
   const on = val === 1 || val === '1' || val === true
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
       <span className={cn(
         'inline-flex items-center gap-1 text-xs font-semibold',
         on ? 'text-emerald-600' : 'text-slate-400'
@@ -78,14 +71,27 @@ function OnOff({ val, label }: { val?: unknown; label: string }) {
   )
 }
 
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value?: React.ReactNode }) {
+function ViewSectionCard({ icon: Icon, title, iconColor, children }: {
+  icon: React.ElementType; title: string; iconColor: string; children: React.ReactNode
+}) {
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-0">
-      <span className="text-slate-400 flex-shrink-0">{icon}</span>
-      <span className="text-xs text-slate-600 w-28 flex-shrink-0">{label}</span>
-      <span className="text-sm text-slate-800 font-medium truncate flex-1">
-        {value ?? <span className="text-slate-300 font-normal">—</span>}
-      </span>
+    <div className="card p-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
+        <Icon size={14} className={iconColor} />
+        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{title}</span>
+      </div>
+      <div className="px-4 py-1">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ViewDetailRow({ label, value }: { label: string; value?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
+      <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
+      <span className="text-xs text-right font-semibold text-slate-800">{value ?? '—'}</span>
     </div>
   )
 }
@@ -104,8 +110,6 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
 
   const lvl   = u ? Number(u.user_level || u.level || 1) : 1
   const label = levelLabel(lvl)
-  const bgGrad = ROLE_BG_GRADIENT[label] ?? 'from-slate-500 to-slate-600'
-  const avatarGrad = ROLE_COLORS[label] ?? 'from-slate-400 to-slate-500'
 
   const cliLabel = (v?: unknown) => {
     const n = Number(v)
@@ -124,13 +128,11 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
       {/* Panel */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
 
-        {/* ── Hero Banner ── */}
-        <div className={cn('bg-gradient-to-br relative overflow-hidden flex-shrink-0', bgGrad)}>
-          {/* decorative circles */}
+        {/* ── Blue Header Banner ── */}
+        <div className="bg-gradient-to-br from-indigo-500 to-blue-600 relative overflow-hidden flex-shrink-0">
           <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
           <div className="absolute top-6 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-          {/* close btn */}
           <button
             onClick={onClose}
             className="absolute top-4 right-4 z-10 p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white"
@@ -141,28 +143,20 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
           <div className="relative px-6 pt-6 pb-5">
             {isLoading ? (
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/20 animate-pulse" />
+                <div className="w-14 h-14 rounded-2xl bg-white/20 animate-pulse" />
                 <div className="space-y-2">
                   <div className="h-5 bg-white/30 rounded animate-pulse w-36" />
                   <div className="h-3.5 bg-white/20 rounded animate-pulse w-48" />
                 </div>
               </div>
             ) : (
-              <div className="flex items-end gap-4">
-                {/* Avatar */}
-                <div className={cn(
-                  'w-16 h-16 rounded-2xl bg-gradient-to-br border-2 border-white/30',
-                  'text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg',
-                  avatarGrad
-                )}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg">
                   {initials(fullName)}
                 </div>
-
-                {/* Name + email + badges */}
-                <div className="flex-1 min-w-0 pb-0.5">
+                <div className="flex-1 min-w-0">
                   <h2 className="text-xl font-bold text-white truncate leading-tight">{fullName}</h2>
-                  <p className="text-white/70 text-sm truncate mt-0.5">{u?.email as string}</p>
-                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/25">
                       {label}
                     </span>
@@ -180,51 +174,25 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
               </div>
             )}
           </div>
-
-          {/* Stat chips strip */}
-          {!isLoading && u && (
-            <div className="flex items-stretch divide-x divide-white/20 border-t border-white/20 bg-black/10">
-              {[
-                { icon: <Hash size={12} />, label: 'Extension', value: u.extension as string },
-                { icon: <Monitor size={12} />, label: 'Dialer Mode', value: (u.dialer_mode as string || '—') },
-                { icon: <Clock size={12} />, label: 'Timezone', value: (u.timezone as string || '—') },
-              ].map(chip => (
-                <div key={chip.label} className="flex-1 px-4 py-3 flex items-center gap-2">
-                  <span className="text-white/50">{chip.icon}</span>
-                  <div>
-                    <p className="text-white/75 text-[10px] uppercase tracking-wider leading-none">{chip.label}</p>
-                    <p className="text-white text-xs font-semibold mt-0.5 truncate">{chip.value || '—'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* ── Body ── */}
-        {isLoading ? (
-          <div className="p-6 space-y-3 overflow-y-auto">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="h-4 bg-slate-100 rounded animate-pulse" style={{ width: `${55 + (i % 4) * 12}%` }} />
-            ))}
-          </div>
-        ) : u ? (
-          <div className="overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* ── Body (scrollable) ── */}
+        <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+          {isLoading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-4 bg-slate-100 rounded animate-pulse" style={{ width: `${55 + (i % 4) * 12}%` }} />
+              ))}
+            </div>
+          ) : u ? (
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
 
-            {/* Personal Info */}
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center">
-                  <Globe size={12} className="text-indigo-600" />
-                </div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Personal Info</p>
-              </div>
-              <div>
-                <InfoRow icon={<Mail size={13} />}    label="Email"        value={u.email as string} />
-                <InfoRow icon={<Phone size={13} />}   label="Phone"        value={u.mobile as string} />
-                <InfoRow icon={<Globe size={13} />}   label="Country Code" value={u.country_code as string} />
-                <InfoRow
-                  icon={<Hash size={13} />}
+              {/* Personal Info */}
+              <ViewSectionCard icon={Globe} title="Personal Info" iconColor="text-indigo-500">
+                <ViewDetailRow label="Email" value={u.email as string} />
+                <ViewDetailRow label="Phone" value={u.mobile as string} />
+                <ViewDetailRow label="Country Code" value={u.country_code as string} />
+                <ViewDetailRow
                   label="Extension"
                   value={
                     u.extension
@@ -232,63 +200,39 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
                       : undefined
                   }
                 />
-              </div>
-            </div>
+              </ViewSectionCard>
 
-            {/* Phone System */}
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-sky-100 flex items-center justify-center">
-                  <Phone size={12} className="text-sky-600" />
-                </div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Phone System</p>
-              </div>
-              <div>
-                <InfoRow icon={<Monitor size={13} />}  label="Extension Type" value={u.extension_type as string} />
-                <InfoRow icon={<Monitor size={13} />}  label="Dialer Mode"    value={u.dialer_mode as string} />
-                <InfoRow icon={<Clock size={13} />}    label="Timezone"       value={u.timezone as string} />
-                <InfoRow icon={<Settings size={13} />} label="CLI Setting"    value={cliLabel(u.cli_setting)} />
-              </div>
-            </div>
+              {/* Phone System */}
+              <ViewSectionCard icon={Phone} title="Phone System" iconColor="text-sky-500">
+                <ViewDetailRow label="Extension Type" value={u.extension_type as string} />
+                <ViewDetailRow label="Dialer Mode" value={u.dialer_mode as string} />
+                <ViewDetailRow label="Timezone" value={u.timezone as string} />
+                <ViewDetailRow label="CLI Setting" value={cliLabel(u.cli_setting)} />
+              </ViewSectionCard>
 
-            {/* Call & Voicemail */}
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
-                  <PhoneForwarded size={12} className="text-violet-600" />
-                </div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Call & Voicemail</p>
-              </div>
-              <div>
+              {/* Call & Voicemail */}
+              <ViewSectionCard icon={PhoneForwarded} title="Call & Voicemail" iconColor="text-emerald-500">
                 <OnOff val={u.voicemail}    label="Voicemail" />
                 <OnOff val={u.voicemail_send_to_email} label="Voicemail to Email" />
                 <OnOff val={u.follow_me}    label="Follow Me" />
                 <OnOff val={u.call_forward} label="Call Forward" />
                 <OnOff val={u.twinning}     label="Twinning" />
-              </div>
-            </div>
+              </ViewSectionCard>
 
-            {/* Security & Messaging */}
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center">
-                  <Shield size={12} className="text-rose-600" />
-                </div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Security & Messaging</p>
-              </div>
-              <div>
+              {/* Security & Messaging */}
+              <ViewSectionCard icon={Shield} title="Security & Messaging" iconColor="text-violet-500">
                 <OnOff val={u.enable_2fa}          label="2FA Enabled" />
                 <OnOff val={u.app_status}           label="Mobile App Login" />
                 <OnOff val={u.ip_filtering}         label="IP Filtering" />
                 <OnOff val={u.receive_sms_on_email} label="SMS to Email" />
                 <OnOff val={u.receive_sms_on_mobile} label="SMS to Phone" />
-              </div>
-            </div>
+              </ViewSectionCard>
 
-          </div>
-        ) : (
-          <div className="p-10 text-center text-slate-400 text-sm">No data available</div>
-        )}
+            </div>
+          ) : (
+            <div className="p-10 text-center text-slate-400 text-sm">No data available</div>
+          )}
+        </div>
 
         {/* ── Footer ── */}
         <div className="flex-shrink-0 px-6 py-3 border-t border-slate-100 bg-slate-50/60 flex justify-end">

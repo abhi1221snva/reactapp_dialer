@@ -406,39 +406,28 @@ export function CrmLenderForm() {
 
   // ── API Config data ──────────────────────────────────────────────────────────
   const [apiForm, setApiForm] = useState<ApiFormState>(API_EMPTY_FORM)
-  const [apiConfigId, setApiConfigId] = useState<number | null>(null)
   const [apiSection, setApiSection] = useState<string | null>('basic')
   const [showPass, setShowPass] = useState(false)
 
-  const { data: existingApiConfig } = useQuery({
-    queryKey: ['lender-api-config-for-lender', id],
-    queryFn: async () => {
-      const res = await crmService.getLenderApiConfigs({ lender_id: Number(id) })
-      const list = (res.data?.data ?? []) as LenderApiConfig[]
-      return list[0] ?? null
-    },
-    enabled: isEdit,
-  })
-
   useEffect(() => {
-    if (existingApiConfig) {
-      setApiConfigId(existingApiConfig.id)
+    if (lenderData) {
+      const l = lenderData as Record<string, unknown>
       setApiForm({
-        api_name:             existingApiConfig.api_name ?? '',
-        auth_type:            existingApiConfig.auth_type ?? 'none',
-        base_url:             existingApiConfig.base_url ?? '',
-        endpoint_path:        existingApiConfig.endpoint_path ?? '',
-        request_method:       existingApiConfig.request_method ?? 'POST',
-        retry_attempts:       existingApiConfig.retry_attempts ?? 3,
-        timeout_seconds:      existingApiConfig.timeout_seconds ?? 30,
-        notes:                existingApiConfig.notes ?? '',
-        auth_credentials_str: JSON.stringify(existingApiConfig.auth_credentials ?? {}, null, 2),
-        default_headers_str:  JSON.stringify(existingApiConfig.default_headers ?? { 'Content-Type': 'application/json' }, null, 2),
-        payload_mapping_str:  JSON.stringify(existingApiConfig.payload_mapping ?? {}, null, 2),
-        response_mapping_str: JSON.stringify(existingApiConfig.response_mapping ?? {}, null, 2),
+        api_name:             String(l.api_name ?? ''),
+        auth_type:            (l.auth_type as ApiFormState['auth_type']) ?? 'none',
+        base_url:             String(l.base_url ?? ''),
+        endpoint_path:        String(l.endpoint_path ?? ''),
+        request_method:       (l.request_method as ApiFormState['request_method']) ?? 'POST',
+        retry_attempts:       Number(l.retry_attempts ?? 3),
+        timeout_seconds:      Number(l.timeout_seconds ?? 30),
+        notes:                String(l.api_notes ?? ''),
+        auth_credentials_str: JSON.stringify(l.auth_credentials ?? {}, null, 2),
+        default_headers_str:  JSON.stringify(l.default_headers ?? { 'Content-Type': 'application/json' }, null, 2),
+        payload_mapping_str:  JSON.stringify(l.payload_mapping ?? {}, null, 2),
+        response_mapping_str: JSON.stringify(l.response_mapping ?? {}, null, 2),
       })
     }
-  }, [existingApiConfig])
+  }, [lenderData])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const set = (k: keyof FormState, v: any) => setForm(f => ({ ...f, [k]: v }))
@@ -457,48 +446,34 @@ export function CrmLenderForm() {
   // ── Save mutation ─────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Step 1: save lender
       const lenderPayload: Record<string, unknown> = {
         ...form,
         prohibited_industry: form.prohibited_industry.join(','),
       }
-      const lenderRes = isEdit
-        ? await crmService.updateLender(Number(id), lenderPayload)
-        : await crmService.createLender(lenderPayload)
 
-      // Resolve the saved lender's ID
-      const savedId: number = isEdit
-        ? Number(id)
-        : (lenderRes.data?.data?.id ?? lenderRes.data?.id ?? 0)
-
-      // Step 2: save API config if enabled and base_url provided
-      if (apiEnabled && savedId && apiForm.base_url.trim()) {
-        const apiPayload: Record<string, unknown> = {
-          crm_lender_id:    savedId,
-          api_name:         apiForm.api_name.trim() || form.lender_name,
-          auth_type:        apiForm.auth_type,
-          base_url:         apiForm.base_url.trim(),
-          endpoint_path:    apiForm.endpoint_path.trim(),
-          request_method:   apiForm.request_method,
-          retry_attempts:   Number(apiForm.retry_attempts),
-          timeout_seconds:  Number(apiForm.timeout_seconds),
-          notes:            apiForm.notes.trim() || undefined,
-          auth_credentials: parseJson(apiForm.auth_credentials_str),
-          default_headers:  parseJson(apiForm.default_headers_str),
-          payload_mapping:  parseJson(apiForm.payload_mapping_str),
-          response_mapping: parseJson(apiForm.response_mapping_str),
-        }
-        if (apiConfigId) {
-          await crmService.updateLenderApiConfig(apiConfigId, apiPayload)
-        } else {
-          await crmService.createLenderApiConfig(apiPayload)
-        }
+      // Include API config fields directly in the lender payload
+      if (apiEnabled && apiForm.base_url.trim()) {
+        lenderPayload.api_name         = apiForm.api_name.trim() || form.lender_name
+        lenderPayload.auth_type        = apiForm.auth_type
+        lenderPayload.base_url         = apiForm.base_url.trim()
+        lenderPayload.endpoint_path    = apiForm.endpoint_path.trim()
+        lenderPayload.request_method   = apiForm.request_method
+        lenderPayload.retry_attempts   = Number(apiForm.retry_attempts)
+        lenderPayload.timeout_seconds  = Number(apiForm.timeout_seconds)
+        lenderPayload.api_notes        = apiForm.notes.trim() || undefined
+        lenderPayload.auth_credentials = parseJson(apiForm.auth_credentials_str)
+        lenderPayload.default_headers  = parseJson(apiForm.default_headers_str)
+        lenderPayload.payload_mapping  = parseJson(apiForm.payload_mapping_str)
+        lenderPayload.response_mapping = parseJson(apiForm.response_mapping_str)
       }
+
+      return isEdit
+        ? crmService.updateLender(Number(id), lenderPayload)
+        : crmService.createLender(lenderPayload)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Lender updated' : 'Lender created')
       qc.invalidateQueries({ queryKey: ['lenders'] })
-      qc.invalidateQueries({ queryKey: ['lender-api-configs'] })
       navigate('/crm/lenders')
     },
     onError: () => toast.error('Failed to save lender'),

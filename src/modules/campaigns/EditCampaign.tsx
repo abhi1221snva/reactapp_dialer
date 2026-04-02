@@ -7,14 +7,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, ArrowRight, Save, Phone, Clock, Tag,
   ChevronDown, X, Search, CheckCircle2, Zap, Mail,
+  Radio,
 } from 'lucide-react'
+import { List, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
 import { userService } from '../../services/user.service'
+import { listService } from '../../services/list.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
+import { CampaignListsSection } from './CampaignListsSection'
+import { Badge } from '../../components/ui/Badge'
 
 // ─────────────────────────────────────────────
 //  Week Schedule
@@ -219,10 +224,9 @@ function DispositionMultiSelect({
 
   return (
     <div className="relative" ref={ref}>
-      {/* Trigger — same height as normal inputs */}
       <button type="button" onClick={() => setOpen(o => !o)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 h-9 rounded-lg border text-sm transition-all text-left bg-white',
+          'w-full flex items-center gap-2 px-3 h-[38px] rounded-lg border text-sm transition-all text-left bg-white',
           open ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300',
         )}>
         {selected.length === 0 ? (
@@ -306,6 +310,9 @@ export function EditCampaign() {
   const [customTimerTitle, setCustomTimerTitle] = useState('')
   const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE)
   const [existingTimerId, setExistingTimerId] = useState<number | null>(null)
+
+  type StepKey = 'details' | 'lists' | 'review'
+  const [activeStep, setActiveStep] = useState<StepKey>('details')
 
   const {
     register, handleSubmit, control, watch, reset, setValue,
@@ -408,12 +415,19 @@ export function EditCampaign() {
     (Array.isArray((promptsData as { data?: { data?: unknown[] } })?.data?.data) ? (promptsData as { data: { data: Array<{ id: number; title: string }> } }).data.data : [])
 
   const { data: callTimersData } = useQuery({ queryKey: ['call-timers-list'], queryFn: () => campaignService.listCallTimers() })
-  // API: { data: { total_rows, data: [...timers] } }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const callTimers: Array<{ id: number; title: string }> = Array.isArray((callTimersData as any)?.data?.data?.data)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? (callTimersData as any).data.data.data
     : []
+
+  // Review tab: fetch lists attached to this campaign
+  const { data: listsData } = useQuery({
+    queryKey: ['campaign-lists-review', campaignId],
+    queryFn: () => listService.listByCampaign(campaignId, { page: 1, limit: 100, search: '', filters: {} }),
+    enabled: Boolean(campaignId) && activeStep === 'review',
+    staleTime: 0,
+  })
 
   // Populate form from API
   useEffect(() => {
@@ -538,7 +552,7 @@ export function EditCampaign() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] })
       toast.success('Campaign updated')
-      navigate(`/campaigns/${campaignId}/manage-lists`)
+      setActiveStep('lists')
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -552,479 +566,678 @@ export function EditCampaign() {
   const callRatioOptions = dialMode === 'predictive_dial' ? PREDICTIVE_CALL_RATIO : OUTBOUND_CALL_RATIO
   const durationOptions  = dialMode === 'predictive_dial' ? PREDICTIVE_DURATION   : OUTBOUND_DURATION
 
+  const STEPS: Array<{ key: StepKey; num: number; label: string; sub: string }> = [
+    { key: 'details', num: 1, label: 'Details', sub: 'Basic settings & configuration' },
+    { key: 'lists', num: 2, label: 'Manage Lists', sub: 'Add lead lists to campaign' },
+    { key: 'review', num: 3, label: 'Review', sub: 'Verify & launch campaign' },
+  ]
+
   // ─────────────────────────────────────────────
   //  Render
   // ─────────────────────────────────────────────
   return (
-    <div className="w-full animate-fadeIn space-y-5">
-      <form onSubmit={handleSubmit(
-      d => updateMutation.mutate(d),
-      (errs) => {
-        const msgs = Object.values(errs).map(e => e?.message).filter(Boolean)
-        toast.error((msgs[0] as string) || 'Please fix the highlighted fields before saving')
-      }
-    )} noValidate>
-        <input type="hidden" {...register('campaign_id', { valueAsNumber: true })} />
-
-        {/* ── Page Header ── */}
-        <div className="flex items-center gap-3 mb-4">
-          <button type="button" onClick={() => navigate('/campaigns')}
-            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex-shrink-0">
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-none">Edit Campaign</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Campaign #{campaignId}</p>
-          </div>
+    <div className="w-full animate-fadeIn space-y-6">
+      {/* ── Page Header ── */}
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => navigate('/campaigns')}
+          className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex-shrink-0">
+          <ArrowLeft size={16} />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 leading-none">Edit Campaign</h1>
+          <p className="text-xs text-slate-400 mt-0.5">Campaign #{campaignId}</p>
         </div>
+      </div>
 
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 text-xs mb-5">
-          <span className="flex items-center gap-1.5 text-indigo-600 font-semibold">
-            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">1</span>
-            Campaign Details
-          </span>
-          <span className="w-6 h-px bg-slate-200" />
-          <span className="flex items-center gap-1.5 text-slate-400 font-medium">
-            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] font-bold">2</span>
-            Manage Lead Lists
-          </span>
-          <span className="w-6 h-px bg-slate-200" />
-          <span className="flex items-center gap-1.5 text-slate-400 font-medium">
-            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] font-bold">3</span>
-            Review & Update
-          </span>
+      {/* ── Premium Step Tabs ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="flex divide-x divide-slate-100">
+          {STEPS.map(step => (
+            <button key={step.key} type="button" onClick={() => setActiveStep(step.key)}
+              className={cn(
+                'flex-1 relative px-5 py-4 text-left transition-all',
+                activeStep === step.key
+                  ? 'bg-gradient-to-b from-indigo-50/60 to-white'
+                  : 'hover:bg-slate-50/50',
+              )}>
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  'w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition-all',
+                  activeStep === step.key
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                    : 'bg-slate-100 text-slate-400',
+                )}>{step.num}</div>
+                <div>
+                  <p className={cn('text-sm font-semibold', activeStep === step.key ? 'text-slate-900' : 'text-slate-500')}>{step.label}</p>
+                  <p className={cn('text-[11px]', activeStep === step.key ? 'text-slate-400' : 'text-slate-300')}>{step.sub}</p>
+                </div>
+              </div>
+              {activeStep === step.key && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {/* ── Single unified card ── */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100">
+      {/* ═══ TAB 1: Campaign Details Form ═══ */}
+      {activeStep === 'details' && (
+        <form onSubmit={handleSubmit(
+          d => updateMutation.mutate(d),
+          (errs) => {
+            const msgs = Object.values(errs).map(e => e?.message).filter(Boolean)
+            toast.error((msgs[0] as string) || 'Please fix the highlighted fields before saving')
+          }
+        )} noValidate>
+          <input type="hidden" {...register('campaign_id', { valueAsNumber: true })} />
 
-          {/* Campaign Identity */}
-          <div className="px-6 py-5 space-y-4 bg-gradient-to-b from-slate-50/50 to-transparent">
-            <div className="grid grid-cols-3 gap-5">
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Name <span className="text-red-400">*</span></label>
-                <input {...register('title')} className={cn('input text-sm', errors.title && 'border-red-400')}
-                  placeholder="e.g. Summer Sales 2025" />
-                <FieldError message={errors.title?.message} />
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Description</label>
-                <input {...register('description')} className="input text-sm" placeholder="Optional description" />
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Status</label>
-                <Controller name="status" control={control}
-                  render={({ field }) => <StatusSelector value={field.value} onChange={field.onChange} />} />
-              </div>
-            </div>
-          </div>
+          <div className="space-y-5">
 
-          {/* Dialing Configuration */}
-          <div className="px-6 py-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-1 h-4 rounded-full bg-indigo-500" />
-              <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dialing Configuration</h3>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Dial Mode <span className="text-red-400">*</span></label>
-                <select {...register('dial_mode')} className={cn('input text-sm', errors.dial_mode && 'border-red-400')}>
-                  <option value="">— Select Mode —</option>
-                  {dialModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-                <FieldError message={errors.dial_mode?.message} />
+            {/* ── Card 1: Campaign Identity ── */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 to-transparent">
+                <h3 className="text-sm font-semibold text-slate-800">Campaign Identity</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Name your campaign and set its initial status</p>
               </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">
-                  Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}
-                </label>
-                <select {...register('group_id')} className={cn('input text-sm', errors.group_id && 'border-red-400')}>
-                  <option value="">— None —</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.group_name ?? g.title}</option>)}
-                </select>
-                <FieldError message={errors.group_id?.message as string} />
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Hopper Mode</label>
-                <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm">
-                  <option value="1">Linear</option>
-                  <option value="2">Random</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Row 2: Calls + Duration + mode-specific + AMD + sub-fields (single flowing grid) */}
-            {showCallRatioDuration && (
-              <div className="grid grid-cols-4 gap-4 pt-4 border-t border-slate-100">
-                <div className="form-group mb-0">
-                  <label className="label text-xs font-semibold text-slate-600 mb-1.5">{dialMode === 'predictive_dial' ? 'Call Ratio' : 'Simultaneous Calls'}</label>
-                  <select {...register('call_ratio')} className="input text-sm">
-                    <option value="">— Select —</option>
-                    {callRatioOptions.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </div>
-                <div className="form-group mb-0">
-                  <label className="label text-xs font-semibold text-slate-600 mb-1.5">{dialMode === 'predictive_dial' ? 'Duration (sec)' : 'Duration'}</label>
-                  <select {...register('duration')} className="input text-sm">
-                    <option value="">— Select —</option>
-                    {durationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                {showAutomatedDuration ? (
+              <div className="px-6 py-5">
+                <div className="grid grid-cols-3 gap-x-5 gap-y-5">
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Automated Duration</label>
-                    <select {...register('automated_duration')} className="input text-sm">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Campaign Name <span className="text-red-400">*</span></label>
+                    <input {...register('title')} className={cn('input', errors.title && 'border-red-400')}
+                      placeholder="e.g. Summer Sales 2025" />
+                    <FieldError message={errors.title?.message} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Description</label>
+                    <input {...register('description')} className="input" placeholder="Optional description" />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Status</label>
+                    <Controller name="status" control={control}
+                      render={({ field }) => <StatusSelector value={field.value} onChange={field.onChange} />} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Card 2: Dialing Configuration ── */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                  <Zap size={16} className="text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">Dialing Configuration</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Set up dial mode and call behavior</p>
+                </div>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                <div className="grid grid-cols-3 gap-x-5 gap-y-5">
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Dial Mode <span className="text-red-400">*</span></label>
+                    <select {...register('dial_mode')} className={cn('input', errors.dial_mode && 'border-red-400')}>
+                      <option value="">— Select Mode —</option>
+                      {dialModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                    <FieldError message={errors.dial_mode?.message} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">
+                      Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}
+                    </label>
+                    <select {...register('group_id')} className={cn('input', errors.group_id && 'border-red-400')}>
+                      <option value="">— None —</option>
+                      {groups.map(g => <option key={g.id} value={g.id}>{g.group_name ?? g.title}</option>)}
+                    </select>
+                    <FieldError message={errors.group_id?.message as string} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Hopper Mode</label>
+                    <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
+                      <option value="1">Linear</option>
+                      <option value="2">Random</option>
+                    </select>
+                  </div>
+                </div>
+
+                {showCallRatioDuration && (
+                  <div className="grid grid-cols-3 gap-x-5 gap-y-5 pt-5 border-t border-slate-100">
+                    <div className="form-group mb-0">
+                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">{dialMode === 'predictive_dial' ? 'Call Ratio' : 'Simultaneous Calls'}</label>
+                      <select {...register('call_ratio')} className="input">
+                        <option value="">— Select —</option>
+                        {callRatioOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group mb-0">
+                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">{dialMode === 'predictive_dial' ? 'Duration (sec)' : 'Duration'}</label>
+                      <select {...register('duration')} className="input">
+                        <option value="">— Select —</option>
+                        {durationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    {showAutomatedDuration ? (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Automated Duration</label>
+                        <select {...register('automated_duration')} className="input">
+                          <option value="0">No</option>
+                          <option value="1">Yes</option>
+                        </select>
+                      </div>
+                    ) : showRedirectTo ? (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Redirect To</label>
+                        <select {...register('redirect_to')} className="input">
+                          <option value="">— None —</option>
+                          <option value="1">Audio Message</option>
+                          <option value="2">Voice Template</option>
+                          <option value="3">Extension</option>
+                          <option value="4">Ring Group</option>
+                          <option value="5">IVR</option>
+                          <option value="6">Voice AI</option>
+                        </select>
+                      </div>
+                    ) : null}
+                    {showAmd && (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">AMD Detection</label>
+                        <select {...register('amd')} className="input">
+                          <option value="0">Off</option>
+                          <option value="1">On</option>
+                        </select>
+                      </div>
+                    )}
+                    {showAmd && amd === '1' && (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">AMD Drop Action</label>
+                        <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
+                          <option value="">— Select —</option>
+                          <option value="1">Hang Up</option>
+                          <option value="2">Audio Message</option>
+                          <option value="3">Voice Template</option>
+                        </select>
+                      </div>
+                    )}
+                    {showAmd && amd === '1' && amdDropAction === 2 && (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Audio Message</label>
+                        <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="">— Select —</option>
+                          {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {showAmd && amd === '1' && amdDropAction === 3 && (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Voice Template</label>
+                        <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="">— Select —</option>
+                          {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {showRedirectTo && redirectTo !== '' && (
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">
+                          {redirectTo === '1' ? 'Audio Message' : redirectTo === '2' ? 'Voice Template' : redirectTo === '3' ? 'Extension' : redirectTo === '4' ? 'Ring Group' : redirectTo === '5' ? 'IVR' : 'Voice AI Prompt'}
+                        </label>
+                        <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="">— Select —</option>
+                          {redirectTo === '1' && audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
+                          {redirectTo === '2' && voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
+                          {redirectTo === '3' && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
+                          {redirectTo === '4' && ringGroups.map(rg => <option key={rg.id} value={rg.id}>{rg.title}</option>)}
+                          {redirectTo === '5' && ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
+                          {redirectTo === '6' && prompts.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {showNoAgent && (
+                  <div className="grid grid-cols-3 gap-x-5 gap-y-5 pt-5 border-t border-slate-100">
+                    <div className="form-group mb-0">
+                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">No Agent Available</label>
+                      <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
+                        <option value="">— Select —</option>
+                        <option value="1">Hang Up</option>
+                        <option value="2">Voice Drop</option>
+                        <option value="3">Inbound IVR</option>
+                        <option value="4">Extension</option>
+                        <option value="5">Assistant AI</option>
+                      </select>
+                    </div>
+                    {noAgentAction === 2 && (
+                      <div className="form-group mb-0 col-span-2">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Voice Drop Target</label>
+                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="">— Select Extension —</option>
+                          {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {noAgentAction === 3 && (
+                      <div className="form-group mb-0 col-span-2">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Inbound IVR</label>
+                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="">— Select IVR —</option>
+                          {ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {noAgentAction === 4 && (
+                      <div className="form-group mb-0 col-span-2">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Extension</label>
+                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="">— Select Extension —</option>
+                          {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {noAgentAction === 5 && (
+                      <div className="form-group mb-0 col-span-2">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Assistant</label>
+                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
+                          <option value="123">Assistant</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Card 3: Caller ID & Routing ── */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0">
+                  <Phone size={16} className="text-sky-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">Caller ID & Routing</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Configure caller identification and call routing</p>
+                </div>
+              </div>
+              <div className="px-6 py-5">
+                <div className="grid grid-cols-4 gap-x-5 gap-y-5">
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Caller ID Type <span className="text-red-400">*</span></label>
+                    <select {...register('caller_id')} className="input">
+                      <option value="area_code">Area Code</option>
+                      <option value="area_code_random">Area Code &amp; Randomizer</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Custom DID {callerIdType === 'custom' && <span className="text-red-400">*</span>}</label>
+                    <select {...register('custom_caller_id')} disabled={callerIdType !== 'custom'}
+                      className={cn('input', callerIdType !== 'custom' && 'opacity-50', errors.custom_caller_id && 'border-red-400')}>
+                      <option value="">— Select DID —</option>
+                      {dids.map(d => <option key={d.cli} value={d.cli}>{d.cli}{d.cnam ? ` — ${d.cnam}` : ''}</option>)}
+                    </select>
+                    <FieldError message={errors.custom_caller_id?.message} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Country Code</label>
+                    <select {...register('country_code')} className="input">
+                      <option value="">— Select Country —</option>
+                      {countries.map(c => <option key={c.phonecode} value={c.phonecode}>{c.name} (+{c.phonecode})</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Call Transfer</label>
+                    <select {...register('call_transfer', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">Yes</option>
                     </select>
                   </div>
-                ) : showRedirectTo ? (
-                  <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Redirect To</label>
-                    <select {...register('redirect_to')} className="input text-sm">
-                      <option value="">— None —</option>
-                      <option value="1">Audio Message</option>
-                      <option value="2">Voice Template</option>
-                      <option value="3">Extension</option>
-                      <option value="4">Ring Group</option>
-                      <option value="5">IVR</option>
-                      <option value="6">Voice AI</option>
-                    </select>
-                  </div>
-                ) : null}
-                {showAmd && (
-                  <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">AMD Detection</label>
-                    <select {...register('amd')} className="input text-sm">
-                      <option value="0">Off</option>
-                      <option value="1">On</option>
-                    </select>
-                  </div>
-                )}
-                {/* AMD sub-fields inline */}
-                {showAmd && amd === '1' && (
-                  <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">AMD Drop Action</label>
-                    <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm">
-                      <option value="">— Select —</option>
-                      <option value="1">Hang Up</option>
-                      <option value="2">Audio Message</option>
-                      <option value="3">Voice Template</option>
-                    </select>
-                  </div>
-                )}
-                {showAmd && amd === '1' && amdDropAction === 2 && (
-                  <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Audio Message</label>
-                    <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="">— Select —</option>
-                      {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
-                    </select>
-                  </div>
-                )}
-                {showAmd && amd === '1' && amdDropAction === 3 && (
-                  <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Voice Template</label>
-                    <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="">— Select —</option>
-                      {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
-                    </select>
-                  </div>
-                )}
-                {/* Redirect target inline */}
-                {showRedirectTo && redirectTo !== '' && (
-                  <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">
-                      {redirectTo === '1' ? 'Audio Message' : redirectTo === '2' ? 'Voice Template' : redirectTo === '3' ? 'Extension' : redirectTo === '4' ? 'Ring Group' : redirectTo === '5' ? 'IVR' : 'Voice AI Prompt'}
-                    </label>
-                    <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="">— Select —</option>
-                      {redirectTo === '1' && audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
-                      {redirectTo === '2' && voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
-                      {redirectTo === '3' && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
-                      {redirectTo === '4' && ringGroups.map(rg => <option key={rg.id} value={rg.id}>{rg.title}</option>)}
-                      {redirectTo === '5' && ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
-                      {redirectTo === '6' && prompts.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Row 5: No Agent Available (predictive_dial only) */}
-            {showNoAgent && (
-              <div className="grid grid-cols-4 gap-4 pt-4 border-t border-slate-100">
-                <div className="form-group mb-0">
-                  <label className="label text-xs font-semibold text-slate-600 mb-1.5">No Agent Available</label>
-                  <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input text-sm">
-                    <option value="">— Select —</option>
-                    <option value="1">Hang Up</option>
-                    <option value="2">Voice Drop</option>
-                    <option value="3">Inbound IVR</option>
-                    <option value="4">Extension</option>
-                    <option value="5">Assistant AI</option>
-                  </select>
                 </div>
-                {noAgentAction === 2 && (
-                  <div className="form-group mb-0 col-span-2">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Voice Drop Target</label>
-                    <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="">— Select Extension —</option>
-                      {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
-                    </select>
-                  </div>
-                )}
-                {noAgentAction === 3 && (
-                  <div className="form-group mb-0 col-span-2">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Inbound IVR</label>
-                    <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="">— Select IVR —</option>
-                      {ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
-                    </select>
-                  </div>
-                )}
-                {noAgentAction === 4 && (
-                  <div className="form-group mb-0 col-span-2">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Extension</label>
-                    <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="">— Select Extension —</option>
-                      {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
-                    </select>
-                  </div>
-                )}
-                {noAgentAction === 5 && (
-                  <div className="form-group mb-0 col-span-2">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Assistant</label>
-                    <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input text-sm">
-                      <option value="123">Assistant</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
-
-          </div>
-
-          {/* Caller ID & Routing */}
-          <div className="px-6 py-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-1 h-4 rounded-full bg-sky-500" />
-              <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Caller ID & Routing</h3>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Caller ID Type <span className="text-red-400">*</span></label>
-                <select {...register('caller_id')} className="input text-sm">
-                  <option value="area_code">Area Code</option>
-                  <option value="area_code_random">Area Code &amp; Randomizer</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Custom DID {callerIdType === 'custom' && <span className="text-red-400">*</span>}</label>
-                <select {...register('custom_caller_id')} disabled={callerIdType !== 'custom'}
-                  className={cn('input text-sm', callerIdType !== 'custom' && 'opacity-50', errors.custom_caller_id && 'border-red-400')}>
-                  <option value="">— Select DID —</option>
-                  {dids.map(d => <option key={d.cli} value={d.cli}>{d.cli}{d.cnam ? ` — ${d.cnam}` : ''}</option>)}
-                </select>
-                <FieldError message={errors.custom_caller_id?.message} />
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Country Code</label>
-                <select {...register('country_code')} className="input text-sm">
-                  <option value="">— Select Country —</option>
-                  {countries.map(c => <option key={c.phonecode} value={c.phonecode}>{c.name} (+{c.phonecode})</option>)}
-                </select>
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Call Transfer</label>
-                <select {...register('call_transfer', { valueAsNumber: true })} className="input text-sm">
-                  <option value="0">No</option>
-                  <option value="1">Yes</option>
-                </select>
               </div>
             </div>
 
-          </div>
-
-          {/* Call Schedule */}
-          <div className="px-6 py-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-1 h-4 rounded-full bg-amber-500" />
-              <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Call Schedule</h3>
-            </div>
-            <div className={cn('grid gap-4', selectedTimerKey !== 'none' && selectedTimerKey !== 'custom' ? 'grid-cols-3' : 'grid-cols-2')}>
-              <div className="form-group mb-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="label text-xs font-semibold text-slate-600 mb-0">Call Timer</label>
-                  <button type="button"
-                    onClick={() => { setSelectedTimerKey('custom'); setExistingTimerId(null) }}
-                    className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md transition-colors">
-                    + Custom
-                  </button>
+            {/* ── Card 4: Call Schedule ── */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                  <Clock size={16} className="text-amber-600" />
                 </div>
-                <select
-                  className="input text-sm"
-                  value={selectedTimerKey === 'none' || selectedTimerKey === 'custom' ? '' : String(selectedTimerKey)}
-                  onChange={e => {
-                    const v = e.target.value
-                    if (v === '') setSelectedTimerKey('none')
-                    else setSelectedTimerKey(Number(v))
-                  }}
-                >
-                  <option value="">No Limit (calls anytime)</option>
-                  {callTimers.map(t => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
-                </select>
-              </div>
-              {selectedTimerKey !== 'none' && selectedTimerKey !== 'custom' && (
-                <div className="form-group mb-0">
-                  <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
-                  <select {...register('timezone')} className="input text-sm">
-                    <option value="America/New_York">New York (ET)</option>
-                    <option value="America/Chicago">Chicago (CT)</option>
-                    <option value="America/Denver">Denver (MT)</option>
-                    <option value="America/Los_Angeles">Los Angeles (PT)</option>
-                    <option value="America/Phoenix">Phoenix (AZ)</option>
-                    <option value="America/Anchorage">Anchorage (AK)</option>
-                    <option value="Pacific/Honolulu">Honolulu (HI)</option>
-                    <option value="UTC">UTC</option>
-                  </select>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">Call Schedule & Dispositions</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Set time-based calling rules, schedules and disposition mapping</p>
                 </div>
-              )}
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Time-Based Calling</label>
-                <select {...register('time_based_calling', { valueAsNumber: true })} className="input text-sm">
-                  <option value="0">No</option>
-                  <option value="1">Yes</option>
-                </select>
               </div>
-            </div>
-            {selectedTimerKey === 'custom' && (
-              <div className="border border-sky-100 bg-sky-50/40 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-sky-700">New Custom Timer</span>
-                  <button type="button" onClick={() => setSelectedTimerKey('none')}
-                    className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors rounded">
-                    <X size={13} />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="px-6 py-5 space-y-5">
+                <div className="grid grid-cols-3 gap-x-5 gap-y-5">
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timer Name</label>
-                    <input className="input text-sm" placeholder="e.g. Business Hours"
-                      value={customTimerTitle} onChange={e => setCustomTimerTitle(e.target.value)} />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="label text-xs font-semibold text-slate-600 mb-0">Call Timer</label>
+                      <button type="button"
+                        onClick={() => { setSelectedTimerKey('custom'); setExistingTimerId(null) }}
+                        className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md transition-colors">
+                        + Custom
+                      </button>
+                    </div>
+                    <select
+                      className="input"
+                      value={selectedTimerKey === 'none' || selectedTimerKey === 'custom' ? '' : String(selectedTimerKey)}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (v === '') setSelectedTimerKey('none')
+                        else setSelectedTimerKey(Number(v))
+                      }}
+                    >
+                      <option value="">No Limit (calls anytime)</option>
+                      {callTimers.map(t => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
+                    </select>
+                  </div>
+                  {selectedTimerKey !== 'none' && selectedTimerKey !== 'custom' && (
+                    <div className="form-group mb-0">
+                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
+                      <select {...register('timezone')} className="input">
+                        <option value="America/New_York">New York (ET)</option>
+                        <option value="America/Chicago">Chicago (CT)</option>
+                        <option value="America/Denver">Denver (MT)</option>
+                        <option value="America/Los_Angeles">Los Angeles (PT)</option>
+                        <option value="America/Phoenix">Phoenix (AZ)</option>
+                        <option value="America/Anchorage">Anchorage (AK)</option>
+                        <option value="Pacific/Honolulu">Honolulu (HI)</option>
+                        <option value="UTC">UTC</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Time-Based Calling</label>
+                    <select {...register('time_based_calling', { valueAsNumber: true })} className="input">
+                      <option value="0">No</option>
+                      <option value="1">Yes</option>
+                    </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
-                    <select {...register('timezone')} className="input text-sm">
-                      <option value="America/New_York">New York (ET)</option>
-                      <option value="America/Chicago">Chicago (CT)</option>
-                      <option value="America/Denver">Denver (MT)</option>
-                      <option value="America/Los_Angeles">Los Angeles (PT)</option>
-                      <option value="America/Phoenix">Phoenix (AZ)</option>
-                      <option value="America/Anchorage">Anchorage (AK)</option>
-                      <option value="Pacific/Honolulu">Honolulu (HI)</option>
-                      <option value="UTC">UTC</option>
-                    </select>
-                  </div>
-                </div>
-                <WeekScheduleGrid schedule={weekSchedule} onChange={setWeekSchedule} />
-              </div>
-            )}
-
-          </div>
-
-          {/* Communication & Dispositions */}
-          <div className="px-6 py-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-1 h-4 rounded-full bg-emerald-500" />
-              <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Communication & Dispositions</h3>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send Email</label>
-                <select {...register('email', { valueAsNumber: true })} className="input text-sm">
-                  <option value="0">No</option>
-                  <option value="1">User Email</option>
-                  <option value="2">Campaign Email</option>
-                  <option value="3">System Email</option>
-                </select>
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send SMS</label>
-                <select {...register('sms', { valueAsNumber: true })} className="input text-sm">
-                  <option value="0">No</option>
-                  <option value="1">User Phone</option>
-                </select>
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send to CRM</label>
-                <select {...register('send_crm', { valueAsNumber: true })} className="input text-sm">
-                  <option value="0">No</option>
-                  <option value="1">Yes</option>
-                </select>
-              </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send Report</label>
-                <select {...register('send_report', { valueAsNumber: true })} className="input text-sm">
-                  <option value="0">No</option>
-                  <option value="1">Yes</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-5">
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">Dispositions <span className="text-red-400">*</span></label>
-                {dispositionsLoading ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-400 h-9">
-                    <div className="w-3.5 h-3.5 border border-slate-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
-                    Loading dispositions…
-                  </div>
-                ) : (
-                  <Controller name="disposition_id" control={control}
-                    render={({ field }) => (
-                      <DispositionMultiSelect
-                        dispositions={dispositions}
-                        selected={field.value ?? []}
-                        onChange={field.onChange}
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Dispositions <span className="text-red-400">*</span></label>
+                    {dispositionsLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-400 h-[38px]">
+                        <div className="w-3.5 h-3.5 border border-slate-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
+                        Loading dispositions...
+                      </div>
+                    ) : (
+                      <Controller name="disposition_id" control={control}
+                        render={({ field }) => (
+                          <DispositionMultiSelect
+                            dispositions={dispositions}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                          />
+                        )}
                       />
                     )}
-                  />
+                  </div>
+                </div>
+                {selectedTimerKey === 'custom' && (
+                  <div className="border border-sky-100 bg-sky-50/40 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-sky-700">New Custom Timer</span>
+                      <button type="button" onClick={() => setSelectedTimerKey('none')}
+                        className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors rounded">
+                        <X size={13} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timer Name</label>
+                        <input className="input" placeholder="e.g. Business Hours"
+                          value={customTimerTitle} onChange={e => setCustomTimerTitle(e.target.value)} />
+                      </div>
+                      <div className="form-group mb-0">
+                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
+                        <select {...register('timezone')} className="input">
+                          <option value="America/New_York">New York (ET)</option>
+                          <option value="America/Chicago">Chicago (CT)</option>
+                          <option value="America/Denver">Denver (MT)</option>
+                          <option value="America/Los_Angeles">Los Angeles (PT)</option>
+                          <option value="America/Phoenix">Phoenix (AZ)</option>
+                          <option value="America/Anchorage">Anchorage (AK)</option>
+                          <option value="Pacific/Honolulu">Honolulu (HI)</option>
+                          <option value="UTC">UTC</option>
+                        </select>
+                      </div>
+                    </div>
+                    <WeekScheduleGrid schedule={weekSchedule} onChange={setWeekSchedule} />
+                  </div>
                 )}
               </div>
-              <div className="form-group mb-0">
-                <label className="label text-xs font-semibold text-slate-600 mb-1.5">CRM Integration</label>
-                <select {...register('crm_type')} className="input text-sm">
-                  <option value="">No CRM</option>
-                  <option value="hubspot">HubSpot</option>
-                  <option value="mca_crm">MCA CRM</option>
-                </select>
+            </div>
+
+            {/* ── Card 5: Communication ── */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <Mail size={16} className="text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">Communication</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Email, SMS and reporting preferences</p>
+                </div>
+              </div>
+              <div className="px-6 py-5">
+                <div className="grid grid-cols-4 gap-x-5 gap-y-5">
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send Email</label>
+                    <select {...register('email', { valueAsNumber: true })} className="input">
+                      <option value="0">No</option>
+                      <option value="1">User Email</option>
+                      <option value="2">Campaign Email</option>
+                      <option value="3">System Email</option>
+                    </select>
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send SMS</label>
+                    <select {...register('sms', { valueAsNumber: true })} className="input">
+                      <option value="0">No</option>
+                      <option value="1">User Phone</option>
+                    </select>
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send to CRM</label>
+                    <select {...register('send_crm', { valueAsNumber: true })} className="input">
+                      <option value="0">No</option>
+                      <option value="1">Yes</option>
+                    </select>
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send Report</label>
+                    <select {...register('send_report', { valueAsNumber: true })} className="input">
+                      <option value="0">No</option>
+                      <option value="1">Yes</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
+
           </div>
 
-        </div>
+          {/* Bottom actions for Tab 1 */}
+          <div className="flex justify-end gap-3 pt-6 pb-2">
+            <button type="button" onClick={() => navigate('/campaigns')} className="btn-outline px-6 py-2.5">Cancel</button>
+            <button type="submit" disabled={isPending}
+              className="btn-primary px-6 flex items-center gap-2">
+              {isPending ? (
+                <><Save size={15} /> Saving...</>
+              ) : (
+                <>Save & Continue <ArrowRight size={15} /></>
+              )}
+            </button>
+          </div>
+        </form>
+      )}
 
-        {/* ── Bottom actions ── */}
-        <div className="flex justify-end gap-3 pt-5 pb-2">
-          <button type="button" onClick={() => navigate('/campaigns')} className="btn-outline px-6 py-2.5">Cancel</button>
-          <button type="submit" disabled={isPending} className="btn-primary px-6">
-            {isPending ? (
-              <>
-                <Save size={15} />
-                Saving…
-              </>
-            ) : (
-              <>
-                Save & Continue
-                <ArrowRight size={15} />
-              </>
-            )}
-          </button>
+      {/* ═══ TAB 2: Manage Lists ═══ */}
+      {activeStep === 'lists' && (
+        <div className="space-y-4">
+          <CampaignListsSection campaignId={campaignId} />
+          <div className="flex justify-between pt-2 pb-2">
+            <button type="button" onClick={() => setActiveStep('details')} className="btn-outline px-5 flex items-center gap-2">
+              <ArrowLeft size={15} /> Back to Details
+            </button>
+            <button type="button" onClick={() => setActiveStep('review')} className="btn-primary px-6 flex items-center gap-2">
+              Next: Review <ArrowRight size={15} />
+            </button>
+          </div>
         </div>
-      </form>
+      )}
+
+      {/* ═══ TAB 3: Review ═══ */}
+      {activeStep === 'review' && (() => {
+        const c = (campaignData as { data?: { data?: Record<string, unknown> } })?.data?.data ?? {} as Record<string, unknown>
+        const attachedLists = (listsData as { data?: { data?: Array<Record<string, unknown>> } })?.data?.data ?? []
+        const getListName = (row: Record<string, unknown>) => (row.l_title ?? row.title ?? row.list_name ?? `List #${row.list_id ?? row.id}`) as string
+        const getLeadCount = (row: Record<string, unknown>) => Number(row.lead_count ?? row.rowListData ?? 0)
+        const totalLeads = attachedLists.reduce((sum, r) => sum + getLeadCount(r), 0)
+        const dialModeDisplay = c.dial_mode ? String(c.dial_mode).replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()) : '--'
+        const isActive = c.status === 1 || c.status === '1' || c.status === 'active'
+        const callerIdLabel: Record<string, string> = { area_code: 'Area Code', area_code_random: 'Area Code + Randomizer', custom: 'Custom DID' }
+        const emailLabel: Record<string, string> = { '0': 'Disabled', '1': 'User Email', '2': 'Campaign Email', '3': 'System Email' }
+
+        // Resolve dispositions
+        const rawDisps: unknown[] = (c.dispositions ?? c.disposition ?? []) as unknown[]
+        const campaignDispIds = rawDisps.map(d => typeof d === 'object' && d !== null && 'id' in d ? Number((d as {id:number}).id) : Number(d))
+        const resolvedDispositions = dispositions.filter(d => campaignDispIds.includes(d.id))
+
+        return (
+          <div className="space-y-5">
+            {/* Campaign Identity Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-5 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-md">
+                  <Radio size={22} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className="text-lg font-bold text-slate-900">{(c.title as string) || 'Untitled Campaign'}</h2>
+                    <Badge variant={isActive ? 'green' : 'gray'}>{isActive ? 'Active' : 'Inactive'}</Badge>
+                  </div>
+                  {c.description ? <p className="text-sm text-slate-500 mt-1">{String(c.description)}</p> : null}
+                  <div className="flex items-center gap-4 mt-3 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><List size={12} className="text-emerald-500" />{attachedLists.length} list{attachedLists.length !== 1 ? 's' : ''}</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><Users size={12} className="text-blue-500" />{totalLeads.toLocaleString()} total leads</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Configuration Grid */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-0 gap-y-1">
+                <div className="md:pr-6">
+                  <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Zap size={10} /> Dialing Setup</p>
+                  <div className="divide-y divide-slate-100">
+                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Dial Mode</span><span className="text-xs font-semibold text-slate-800 text-right">{dialModeDisplay}</span></div>
+                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Hopper Mode</span><span className="text-xs font-semibold text-slate-800 text-right">{Number(c.hopper_mode) === 2 ? 'Random' : 'Linear'}</span></div>
+                  </div>
+                </div>
+                <div className="md:border-l md:border-slate-100 md:px-6">
+                  <p className="text-[10px] font-bold text-sky-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Phone size={10} /> Caller ID & Transfer</p>
+                  <div className="divide-y divide-slate-100">
+                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Caller ID</span><span className="text-xs font-semibold text-slate-800 text-right">{callerIdLabel[c.caller_id as string ?? ''] ?? '--'}</span></div>
+                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Call Transfer</span><span className="text-xs font-semibold text-slate-800 text-right">{Number(c.call_transfer ?? 0) === 1 ? 'Enabled' : 'Disabled'}</span></div>
+                  </div>
+                </div>
+                <div className="md:border-l md:border-slate-100 md:pl-6">
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Clock size={10} /> Schedule & Communication</p>
+                  <div className="divide-y divide-slate-100">
+                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Timezone</span><span className="text-xs font-semibold text-slate-800 text-right">{(c.timezone as string) ?? 'America/New_York'}</span></div>
+                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Email</span><span className="text-xs font-semibold text-slate-800 text-right">{emailLabel[String(c.email ?? '0')] ?? '--'}</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Features & Dispositions row */}
+              {(String(c.amd ?? '0') === '1' || Number(c.time_based_calling ?? 0) === 1 || Number(c.sms ?? 0) === 1 || Number(c.send_report ?? 0) === 1 || Number(c.send_crm ?? 0) === 1 || resolvedDispositions.length > 0) && (
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-0">
+                  {(String(c.amd ?? '0') === '1' || Number(c.time_based_calling ?? 0) === 1 || Number(c.sms ?? 0) === 1 || Number(c.send_report ?? 0) === 1 || Number(c.send_crm ?? 0) === 1) && (
+                    <div className={cn("pr-5", resolvedDispositions.length > 0 && "md:border-r md:border-slate-100")}>
+                      <p className="text-[10px] font-bold text-slate-700 uppercase tracking-widest mb-2">Features</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {String(c.amd ?? '0') === '1' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />AMD Detection</span>}
+                        {Number(c.time_based_calling ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Time-Based Calling</span>}
+                        {Number(c.sms ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Send SMS</span>}
+                        {Number(c.send_report ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Send Report</span>}
+                        {Number(c.send_crm ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Send to CRM</span>}
+                      </div>
+                    </div>
+                  )}
+                  {resolvedDispositions.length > 0 && (
+                    <div className="pl-5 max-md:pt-4 max-md:mt-4 max-md:border-t max-md:border-slate-100 max-md:pl-0">
+                      <p className="text-[10px] font-bold text-violet-500 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Tag size={10} /> Dispositions ({resolvedDispositions.length})</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {resolvedDispositions.map(d => (
+                          <span key={d.id} className="inline-flex items-center px-2.5 py-1 bg-violet-50 text-violet-700 text-[11px] font-semibold rounded-lg border border-violet-200">{d.title}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Attached Lists Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-slate-50/80 to-transparent border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: '#3b82f618', color: '#3b82f6' }}>
+                    <List size={15} />
+                  </div>
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Attached Lists</span>
+                </div>
+                <span className="text-xs font-semibold text-slate-500">{attachedLists.length} list{attachedLists.length !== 1 ? 's' : ''} · {totalLeads.toLocaleString()} leads</span>
+              </div>
+              {attachedLists.length === 0 ? (
+                <div className="text-center py-12 px-6">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3"><List size={24} className="text-slate-300" /></div>
+                  <p className="text-sm font-medium text-slate-500">No lists attached</p>
+                  <p className="text-xs text-slate-400 mt-1">Go back to Manage Lists to add lead lists.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead><tr className="border-b border-slate-100">
+                      <th className="px-5 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12">#</th>
+                      <th className="px-5 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">List Name</th>
+                      <th className="px-5 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Leads</th>
+                      <th className="px-5 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {attachedLists.map((row, idx) => (
+                        <tr key={(row.list_id ?? row.id) as number} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-5 py-3.5 text-xs font-medium text-slate-400">{idx + 1}</td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm"><List size={13} className="text-white" /></div>
+                              <span className="text-sm font-semibold text-slate-800">{getListName(row)}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5 text-right"><span className="text-sm font-bold text-slate-700">{getLeadCount(row).toLocaleString()}</span></td>
+                          <td className="px-5 py-3.5 text-center"><Badge variant={(row.is_active as number) === 1 ? 'green' : 'gray'}>{(row.is_active as number) === 1 ? 'Active' : 'Inactive'}</Badge></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot><tr className="bg-slate-50/80 border-t border-slate-200">
+                      <td colSpan={2} className="px-5 py-3 text-xs font-bold text-slate-500 uppercase">Total</td>
+                      <td className="px-5 py-3 text-right text-sm font-bold text-slate-800">{totalLeads.toLocaleString()}</td>
+                      <td />
+                    </tr></tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions for Review */}
+            <div className="flex items-center justify-between pt-1 pb-4">
+              <button type="button" onClick={() => setActiveStep('lists')} className="btn-outline px-5 flex items-center gap-2"><ArrowLeft size={15} /> Back to Lists</button>
+              <button type="button" onClick={() => { toast.success('Campaign updated successfully'); navigate('/campaigns') }} className="btn-primary px-6 flex items-center gap-2"><Save size={15} /> Update Campaign</button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

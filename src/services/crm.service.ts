@@ -408,7 +408,7 @@ export const crmService = {
     api.post(`/crm/lender-api-configs/${id}/test`, { sample_data: sampleData }),
 
   getLenderApiLogs: (params?: {
-    lender_id?: number; lead_id?: number; crm_lender_api_id?: number;
+    lender_id?: number; lead_id?: number;
     status?: string; date_from?: string; date_to?: string; page?: number; per_page?: number;
     lender?: string; api_name?: string; lender_type?: string; search?: string;
   }) =>
@@ -445,6 +445,12 @@ export const crmService = {
 
   updateSubmissionResponse: (leadId: number, subId: number, data: import('../types/crm.types').UpdateSubmissionResponsePayload) =>
     api.post(`/crm/lead/${leadId}/submissions/${subId}/response`, data),
+
+  getSubmissionStatus: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/submission-status`),
+
+  fixAndResubmit: (leadId: number, data: import('../types/crm.types').FixAndResubmitPayload) =>
+    api.post(`/crm/lead/${leadId}/fix-and-resubmit`, data),
 
   // ── PDF Application Generator ─────────────────────────────────────────────────
   renderLeadPdf: (leadId: number) =>

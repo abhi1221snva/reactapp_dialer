@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Phone, LayoutDashboard, Users, BarChart3, MessageSquare,
   ChevronRight, Activity,
   CreditCard, Radio, MessagesSquare, Hash, UserCog, List, Tag, ListChecks, FileText, ChevronUp,
   PhoneCall, Voicemail, Layers, Link2, ShieldCheck, PieChart, MinusCircle,
-  Mail, Building2, X, ChevronDown,
+  Mail, Building2, X, ChevronDown, ArrowLeftToLine, ArrowRightFromLine,
   Headphones, Globe, Bot, Calendar,
   Mic, Inbox, BrainCircuit, Settings2, User,
   Wifi, DollarSign, BookMarked, Plug2,
-  Target, CheckCircle2, Zap, Clock, CalendarDays, RefreshCw,
+  Target, CheckCircle2, Zap, Clock, CalendarDays, RefreshCw, FileSearch,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
@@ -143,9 +144,21 @@ const DIALER_SECTIONS: NavSection[] = [
     label: 'CAMPAIGN MANAGEMENT',
     items: [
       { to: '/campaigns',             label: 'Campaigns',    icon: Radio,      minLevel: LEVELS.MANAGER },
-      { to: '/lists',                 label: 'Lists',        icon: List,       minLevel: LEVELS.MANAGER },
-      { to: '/settings/labels',       label: 'Labels',       icon: Tag,        minLevel: LEVELS.MANAGER },
       { to: '/settings/dispositions', label: 'Dispositions', icon: ListChecks, minLevel: LEVELS.ADMIN },
+      { to: '/agent-status',          label: 'Agent Status', icon: Users,      minLevel: LEVELS.MANAGER },
+    ],
+  },
+  {
+    label: 'LEAD MANAGEMENT',
+    minLevel: LEVELS.MANAGER,
+    items: [
+      { to: '/settings/labels',              label: 'Labels',              icon: Tag,       minLevel: LEVELS.MANAGER },
+      { to: '/leads',                        label: 'Leads',               icon: Target,    minLevel: LEVELS.MANAGER },
+      { to: '/lists',                        label: 'Lists',               icon: List,      minLevel: LEVELS.MANAGER },
+      { to: '/settings/recycle-rules',       label: 'Recycle Rules',       icon: RefreshCw, minLevel: LEVELS.ADMIN },
+      { to: '/settings/lead-activity',       label: 'Lead Activity',       icon: Activity,  minLevel: LEVELS.MANAGER },
+      { to: '/settings/custom-field-labels', label: 'Custom Field Labels', icon: Settings2, minLevel: LEVELS.ADMIN },
+      { to: '/settings/lead-sources',        label: 'Lead Sources',        icon: Globe,     minLevel: LEVELS.ADMIN },
     ],
   },
   {
@@ -178,6 +191,17 @@ const DIALER_SECTIONS: NavSection[] = [
       { to: '/ai/settings', label: 'AI Settings',        icon: Bot,        minLevel: LEVELS.ADMIN },
       { to: '/ai/coach',    label: 'AI Coach',           icon: Headphones, minLevel: LEVELS.ADMIN },
       { to: '/ringless',    label: 'Ringless Voicemail', icon: Voicemail,  minLevel: LEVELS.ADMIN },
+    ],
+  },
+  {
+    label: 'SMS AI',
+    minLevel: LEVELS.ADMIN,
+    items: [
+      { to: '/smsai/demo',      label: 'AI Demo',          icon: BrainCircuit, minLevel: LEVELS.ADMIN },
+      { to: '/smsai/campaigns', label: 'Campaigns',         icon: Radio,        minLevel: LEVELS.ADMIN },
+      { to: '/smsai/lists',     label: 'Lists',             icon: List,         minLevel: LEVELS.ADMIN },
+      { to: '/smsai/reports',   label: 'Reports',           icon: BarChart3,    minLevel: LEVELS.ADMIN },
+      { to: '/smsai/templates', label: 'SMS AI Templates',  icon: FileText,     minLevel: LEVELS.ADMIN },
     ],
   },
   {
@@ -244,6 +268,7 @@ const CRM_SECTIONS: NavSection[] = [
       { to: '/chat',          label: 'Chat',   icon: MessagesSquare,minLevel: 1 },
       { to: '/crm/sms-inbox', label: 'SMS',   icon: MessageSquare, minLevel: 1 },
       { to: '/gmail-mailbox', label: 'Gmail Inbox',  icon: Inbox,   minLevel: 1 },
+      { to: '/email-parser',  label: 'Email Parser', icon: FileSearch, minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -354,7 +379,7 @@ function NavSubGroup({
 
 // ─── Expandable group component ───────────────────────────────────────────────
 function NavGroup({
-  section, collapsed, canAccess, unreadSms, onItemClick, accent,
+  section, collapsed, canAccess, unreadSms, onItemClick, accent, showTooltip, hideTooltip,
 }: {
   section: NavSection
   collapsed: boolean
@@ -362,6 +387,8 @@ function NavGroup({
   unreadSms: number
   onItemClick: () => void
   accent: AccentSet
+  showTooltip: (label: string, el: HTMLElement) => void
+  hideTooltip: () => void
 }) {
   const location = useLocation()
   const visibleItems = (section.items ?? []).filter(item => canAccess(item.minLevel))
@@ -383,16 +410,18 @@ function NavGroup({
     return (
       <div className="mb-1">
         {collapsedItems.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} onClick={onItemClick} title={label}
+          <NavLink key={to} to={to} onClick={onItemClick}
+            onMouseEnter={(e) => showTooltip(label, e.currentTarget)}
+            onMouseLeave={hideTooltip}
             className={({ isActive }) => cn(
-              'group relative flex items-center justify-center rounded-lg p-2.5 my-0.5 transition-all duration-150',
+              'group/nav relative flex items-center justify-center rounded-lg p-2.5 my-0.5 transition-all duration-150',
               isActive ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
             )}
           >
             {({ isActive }) => (
               <>
                 {isActive && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
-                <Icon size={17} className={cn(isActive ? accent.activeIcon : 'text-slate-400 group-hover:text-slate-600')} />
+                <Icon size={17} className={cn(isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
                 {label === 'SMS Center' && unreadSms > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center font-bold leading-none">
                     {unreadSms > 9 ? '9+' : unreadSms}
@@ -459,6 +488,14 @@ export function Sidebar() {
 
   const accent = ACCENT[engine]
 
+  // Fixed-position tooltip state for collapsed sidebar
+  const [tooltip, setTooltip] = useState<{ label: string; top: number } | null>(null)
+  const showTooltip = useCallback((label: string, el: HTMLElement) => {
+    const rect = el.getBoundingClientRect()
+    setTooltip({ label, top: rect.top + rect.height / 2 })
+  }, [])
+  const hideTooltip = useCallback(() => setTooltip(null), [])
+
   function handleNav(to: string) { navigate(to); closeMobileSidebar() }
 
   const rawSections = engine === 'dialer' ? DIALER_SECTIONS : CRM_SECTIONS
@@ -471,6 +508,7 @@ export function Sidebar() {
     ? '0 2px 10px rgba(99,102,241,0.35)'
     : '0 2px 10px rgba(16,185,129,0.35)'
   return (
+    <>
     <div
       className={cn(
         'flex flex-col h-full flex-shrink-0 border-r border-slate-200 overflow-visible bg-white',
@@ -481,21 +519,43 @@ export function Sidebar() {
         sidebarCollapsed ? 'lg:w-[60px] w-64' : 'w-64'
       )}
     >
-      {/* ── Logo ─────────────────────────────────────────────────────────── */}
+      {/* ── Logo + Collapse toggle ──────────────────────────────────────── */}
       <div className={cn(
         'flex items-center gap-3 px-4 py-4 flex-shrink-0 border-b border-slate-200',
-        sidebarCollapsed && 'lg:justify-center lg:px-2'
+        sidebarCollapsed && 'lg:flex-col lg:gap-2 lg:px-2 lg:py-3'
       )}>
-        <div
-          className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300"
-          style={{ background: logoGradient, boxShadow: logoShadow }}
-        >
-          {engine === 'dialer' ? <Phone size={17} className="text-white" /> : <Target size={17} className="text-white" />}
+        <div className={cn('flex items-center gap-3', sidebarCollapsed && 'lg:justify-center')}>
+          <div
+            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300"
+            style={{ background: logoGradient, boxShadow: logoShadow }}
+          >
+            {engine === 'dialer' ? <Phone size={17} className="text-white" /> : <Target size={17} className="text-white" />}
+          </div>
+          {!sidebarCollapsed && (
+            <span className="font-bold text-[15px] tracking-tight text-slate-900 flex-1">
+              {engine === 'dialer' ? 'Phone System' : 'CRM'}
+            </span>
+          )}
         </div>
+        {/* Collapse button — expanded state */}
         {!sidebarCollapsed && (
-          <span className="font-bold text-[15px] tracking-tight text-slate-900">
-            {engine === 'dialer' ? 'Phone System' : 'CRM'}
-          </span>
+          <button
+            onClick={toggleSidebar}
+            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-500 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all duration-200 ml-auto flex-shrink-0 shadow-sm"
+            title="Collapse sidebar"
+          >
+            <ArrowLeftToLine size={15} />
+          </button>
+        )}
+        {/* Expand button — collapsed state */}
+        {sidebarCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            className="hidden lg:flex items-center justify-center w-9 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-500 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all duration-200 shadow-sm"
+            title="Expand sidebar"
+          >
+            <ArrowRightFromLine size={15} />
+          </button>
         )}
         <button
           onClick={closeMobileSidebar}
@@ -540,6 +600,8 @@ export function Sidebar() {
                   unreadSms={unreadSms}
                   onItemClick={() => { closeMobileSidebar() }}
                   accent={accent}
+                  showTooltip={showTooltip}
+                  hideTooltip={hideTooltip}
                 />
               ) : (
                 <div className={cn('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
@@ -548,9 +610,10 @@ export function Sidebar() {
                       key={to}
                       to={to}
                       onClick={() => { closeMobileSidebar() }}
-                      title={sidebarCollapsed ? label : undefined}
+                      onMouseEnter={sidebarCollapsed ? (e) => showTooltip(label, e.currentTarget) : undefined}
+                      onMouseLeave={sidebarCollapsed ? hideTooltip : undefined}
                       className={({ isActive }) => cn(
-                        'group relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
+                        'group/nav relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
                         'transition-all duration-150',
                         sidebarCollapsed && 'lg:justify-center lg:px-2.5 w-full',
                         isActive ? accent.active : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -560,7 +623,7 @@ export function Sidebar() {
                         <>
                           {isActive && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
                           <div className="relative flex-shrink-0">
-                            <Icon size={17} className={cn('transition-colors duration-150', isActive ? accent.activeIcon : 'text-slate-400 group-hover:text-slate-600')} />
+                            <Icon size={17} className={cn('transition-colors duration-150', isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
                             {label === 'SMS Center' && unreadSms > 0 && (
                               <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
                                 {unreadSms > 9 ? '9+' : unreadSms}
@@ -588,16 +651,20 @@ export function Sidebar() {
         })}
       </nav>
 
-
-      {/* ── Collapse toggle (desktop only) ────────────────────────────────── */}
-      <button
-        onClick={toggleSidebar}
-        className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-all duration-150"
-        style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
-        aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      >
-        {sidebarCollapsed ? <ChevronRight size={11} /> : <ChevronRight size={11} className="rotate-180" />}
-      </button>
     </div>
+    {/* ── Tooltip portal — rendered on document.body so it's always on top ── */}
+    {sidebarCollapsed && tooltip && createPortal(
+      <div
+        className="pointer-events-none"
+        style={{ position: 'fixed', left: 68, top: tooltip.top, transform: 'translateY(-50%)', zIndex: 99999 }}
+      >
+        <div className="relative px-3 py-1.5 rounded-md bg-indigo-600 text-white text-[11px] font-semibold whitespace-nowrap shadow-2xl border border-indigo-500">
+          {tooltip.label}
+          <span className="absolute top-1/2 -translate-y-1/2 -left-[5px] w-2.5 h-2.5 bg-indigo-600 border-l border-b border-indigo-500 rotate-45" />
+        </div>
+      </div>,
+      document.body,
+    )}
+    </>
   )
 }

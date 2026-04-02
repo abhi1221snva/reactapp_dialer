@@ -257,7 +257,6 @@ export function EditMapping() {
                     <p className={`text-sm font-medium truncate ${row.isDial ? 'text-indigo-800' : 'text-slate-800'}`}>
                       {row.header}
                     </p>
-                    <p className="text-xs text-slate-400">{row.column_name}</p>
                   </div>
 
                   <div className="flex justify-center">

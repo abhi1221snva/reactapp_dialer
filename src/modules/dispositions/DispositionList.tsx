@@ -14,10 +14,10 @@ import { EditDispositionModal, type DispositionItem } from './EditDispositionMod
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 
-const D_TYPE_LABELS: Record<string, string> = {
-  '1': 'Standard',
-  '2': 'Callback',
-  '3': 'DNC',
+const D_TYPE_LABELS: Record<string, { label: string; variant: 'blue' | 'red' | 'green' }> = {
+  '1': { label: 'Status', variant: 'green' },
+  '2': { label: 'Callback', variant: 'blue' },
+  '3': { label: 'DNC', variant: 'red' },
 }
 
 export function DispositionList() {
@@ -33,8 +33,27 @@ export function DispositionList() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: number }) =>
       dispositionService.toggleStatus(id, Number(status) === 1 ? 0 : 1),
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ['dispositions'] })
+      const prev = qc.getQueriesData({ queryKey: ['dispositions'] })
+      qc.setQueriesData({ queryKey: ['dispositions'] }, (old: unknown) => {
+        if (!old) return old
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const o = old as any
+        const data = o?.data?.data
+        if (Array.isArray(data)) {
+          const newStatus = Number(status) === 1 ? 0 : 1
+          return { ...o, data: { ...o.data, data: data.map((d: DispositionItem) => d.id === id ? { ...d, status: newStatus } : d) } }
+        }
+        return old
+      })
+      return { prev }
+    },
     onSuccess: () => { toast.success('Status updated'); invalidate() },
-    onError: (err: unknown) => {
+    onError: (err: unknown, _vars, context) => {
+      if (context?.prev) {
+        context.prev.forEach(([key, data]) => qc.setQueryData(key, data))
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const msg = (err as any)?.response?.data?.message
       toast.error(msg || 'Failed to update status')
@@ -66,27 +85,25 @@ export function DispositionList() {
     },
     {
       key: 'd_type',
-      header: 'Disposition Type',
-      render: (row) => (
-        <span className="text-sm text-slate-600">
-          {D_TYPE_LABELS[String(row.d_type ?? '1')] ?? String(row.d_type ?? '—')}
-        </span>
-      ),
+      header: 'Type',
+      render: (row) => {
+        const cfg = D_TYPE_LABELS[String(row.d_type)]
+        if (!cfg) return <span className="text-sm text-slate-400">—</span>
+        return <Badge variant={cfg.variant}>{cfg.label}</Badge>
+      },
     },
     {
       key: 'enable_sms',
-      header: 'SMS Enabled',
-      render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <MessageSquare
-            size={13}
-            className={Number(row.enable_sms) === 1 ? 'text-indigo-500' : 'text-slate-300'}
-          />
-          <span className={`text-sm ${Number(row.enable_sms) === 1 ? 'text-indigo-600 font-medium' : 'text-slate-400'}`}>
-            {Number(row.enable_sms) === 1 ? 'Yes' : 'No'}
-          </span>
-        </div>
-      ),
+      header: 'SMS',
+      render: (row) => {
+        const enabled = Number(row.enable_sms) === 1
+        return (
+          <Badge variant={enabled ? 'green' : 'gray'}>
+            <MessageSquare size={11} className="mr-1" />
+            {enabled ? 'Yes' : 'No'}
+          </Badge>
+        )
+      },
     },
     {
       key: 'status',
@@ -149,22 +166,16 @@ export function DispositionList() {
         />
       )}
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         {/* Page header */}
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/')} className="btn-ghost p-2 rounded-lg mt-0.5">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1">
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">Disposition Management</h1>
-                <p className="page-subtitle">Manage call dispositions used by agents</p>
-              </div>
-              <button onClick={() => setShowCreate(true)} className="btn-primary">
-                <Plus size={15} />
-                New Disposition
-              </button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">Dispositions</h1>
+              <p className="text-[11px] text-slate-400">Manage call dispositions used by agents</p>
             </div>
           </div>
         </div>
@@ -201,6 +212,11 @@ export function DispositionList() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
+          headerActions={
+            <button onClick={() => setShowCreate(true)} className="btn-primary">
+              <Plus size={15} /> Add Disposition
+            </button>
+          }
         />
       </div>
     </>

@@ -166,24 +166,22 @@ export function FaxList() {
         />
       )}
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         {/* Page header */}
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/')} className="btn-ghost p-2 rounded-lg mt-0.5">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1">
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">Fax Management</h1>
-                <p className="page-subtitle">View and manage sent and received faxes</p>
-              </div>
-              <button onClick={() => setShowCreate(true)} className="btn-primary">
-                <Plus size={15} />
-                Send Fax
-              </button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h1 className="page-title">Fax Management</h1>
+              <p className="page-subtitle">View and manage sent and received faxes</p>
             </div>
           </div>
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            <Plus size={15} />
+            Send Fax
+          </button>
         </div>
 
         <ServerDataTable<FaxItem>

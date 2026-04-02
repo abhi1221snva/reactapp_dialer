@@ -141,6 +141,7 @@ export interface CrmDocument {
 
 // ─── Lender ───────────────────────────────────────────────────────────────────
 
+/** @deprecated Use Lender interface directly — API credentials are now on crm_lender */
 export interface LenderApiCredentials {
   id?: number
   crm_lender_id?: number
@@ -207,6 +208,34 @@ export interface Lender {
   restricted_state_note?: string
   guideline_file?: string
   lender_api_type?: string
+  // ── API config (merged from crm_lender_apis) ────────────────────────
+  api_username?: string
+  api_password?: string
+  api_key?: string
+  api_url?: string
+  sales_rep_email?: string
+  partner_api_key?: string
+  api_client_id?: string
+  auth_url?: string
+  api_name?: string
+  auth_type?: 'bearer' | 'basic' | 'api_key' | 'oauth2' | 'none'
+  auth_credentials?: Record<string, unknown> | null
+  base_url?: string
+  endpoint_path?: string
+  request_method?: 'GET' | 'POST' | 'PUT' | 'PATCH'
+  default_headers?: Record<string, string> | null
+  payload_mapping?: Record<string, unknown> | null
+  response_mapping?: Record<string, unknown> | null
+  required_fields?: string[] | null
+  retry_attempts?: number
+  timeout_seconds?: number
+  api_notes?: string
+  resubmit_method?: string
+  resubmit_endpoint_path?: string
+  document_upload_enabled?: boolean
+  document_upload_endpoint?: string
+  document_upload_method?: string
+  document_upload_field_name?: string
   created_at?: string
   updated_at?: string
 }
@@ -227,6 +256,7 @@ export interface LenderSendRecord {
 
 export type LenderSubmissionStatus = 'pending' | 'submitted' | 'failed' | 'viewed' | 'approved' | 'declined' | 'no_response'
 export type LenderResponseStatus   = 'pending' | 'approved' | 'declined' | 'needs_documents' | 'no_response'
+export type EmailDeliveryStatus    = 'sent' | 'delivered' | 'opened' | 'failed'
 
 export interface MappedApiError {
   label:    string
@@ -250,6 +280,8 @@ export interface LenderSubmission {
   response_note?: string
   api_error?: string
   error_messages?: MappedApiError[] | string | null
+  email_status?: EmailDeliveryStatus | null
+  email_status_at?: string | null
   doc_upload_status?: 'none' | 'success' | 'partial' | 'failed'
   doc_upload_notes?: string
   submitted_by?: number
@@ -991,4 +1023,28 @@ export interface LenderSubmissionOutcome {
 /** Enhanced submit payload with partial submission support */
 export interface EnhancedSubmitApplicationPayload extends SubmitApplicationPayload {
   skip_invalid?: boolean
+}
+
+/** Lightweight submission status row returned by GET /submission-status */
+export interface SubmissionStatusRow {
+  id: number
+  lender_id: number
+  lender_name: string
+  submission_status: LenderSubmissionStatus
+  submission_type?: 'normal' | 'api'
+  api_error?: string | null
+  error_messages?: string | null
+  doc_upload_status?: string | null
+  doc_upload_notes?: string | null
+  response_status?: LenderResponseStatus
+  response_note?: string | null
+  submitted_at?: string | null
+  updated_at?: string | null
+}
+
+/** Payload for POST /fix-and-resubmit */
+export interface FixAndResubmitPayload {
+  lender_id: number
+  field_updates: Record<string, string>
+  document_ids?: number[]
 }

@@ -10,19 +10,24 @@ import {
   ClipboardList, Zap, MessageSquare, FileDown, Plus, ExternalLink, Printer,
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
   Activity, Search, Wrench, RefreshCw, AlertTriangle, CheckCircle,
+  ArrowDownLeft, ArrowUpRight, Paperclip, Users, SlidersHorizontal, ArrowUpDown,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
+import { emailParserService, type LenderConversation } from '../../services/emailParser.service'
 import { ActivityTimeline } from '../../components/crm/ActivityTimeline'
 import { LenderErrorList, ErrorFixModal, describeApiError } from '../../components/crm/LenderApiFixModal'
 import { LenderValidationPanel } from '../../components/crm/LenderValidationPanel'
 import { SubmissionResultSummary } from '../../components/crm/SubmissionResultSummary'
+import { ApiLogDrawer } from '../../components/crm/ApiLogDrawer'
+import type { ApiLog as DrawerApiLog } from '../../components/crm/ApiLogDrawer'
 import { MerchantPortalSection } from '../../components/crm/MerchantPortalSection'
 import { OffersStipsTab } from '../../components/crm/OffersStipsTab'
 import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
+import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { OnDeckPanel } from '../../components/crm/OnDeckPanel'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDocumentTypesManager'
@@ -32,11 +37,12 @@ import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { ErrorBoundary } from '../../components/ui/ErrorBoundary'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, MappedApiError, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload, GroupedValidationState, LenderValidationResult, LenderSubmissionOutcome } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, MappedApiError, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload, GroupedValidationState, LenderValidationResult, LenderSubmissionOutcome, SubmissionStatusRow } from '../../types/crm.types'
 import { CRM_FIELD_LABELS, COMPUTED_FIELDS, autoLabel as sharedAutoLabel } from '../../constants/crmFieldLabels'
+import { useUIStore } from '../../stores/ui.store'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
-type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance'
+type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance' | 'approvals'
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'details',   label: 'Lead Info',       icon: Hash         },
@@ -48,6 +54,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'offers',     label: 'Offers & Stips',  icon: DollarSign    },
   { id: 'deal',       label: 'Deal',             icon: TrendingUp    },
   { id: 'compliance', label: 'Compliance',       icon: ShieldCheck   },
+  { id: 'approvals',  label: 'Approvals',        icon: CheckCircle   },
 ]
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -565,11 +572,11 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
                       {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
                     <button
                       disabled={!doc.file_path}
-                      className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-30"
+                      className="p-1.5 rounded-md bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-30"
                       title="Download"
                       onClick={async () => {
                         if (!doc.file_path) return
@@ -582,7 +589,7 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
                         } catch { toast.error('Download failed') }
                       }}
                     ><Download size={13} /></button>
-                    <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={13} /></button>
+                    <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Delete"><Trash2 size={13} /></button>
                   </div>
                 </div>
               )
@@ -600,7 +607,7 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
           </button>
         </div>
 
-        {/* Type selects */}
+        {/* Type + conditional sub-type */}
         <div className="space-y-2 mb-3">
           <select value={selectedTypeId} onChange={e => { setSelectedTypeId(e.target.value); setSubValue('') }} className="input text-sm w-full">
             <option value="">— Document type —</option>
@@ -608,7 +615,7 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
           </select>
           {subValues.length > 0 && (
             <select value={subValue} onChange={e => setSubValue(e.target.value)} className="input text-sm w-full">
-              <option value="">— Sub-type —</option>
+              <option value="">Select {selectedType?.title} month</option>
               {subValues.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           )}
@@ -800,12 +807,14 @@ function parseErrorMessages(raw: LenderSubmission['error_messages']): MappedApiE
 // ── Quick Fix Modal — edit error fields in a popup ─────────────────────────────
 function QuickFixModal({
   leadId,
+  lenderId,
   lenderName,
   errors,
   leadData,
   onClose,
 }: {
   leadId: number
+  lenderId: number
   lenderName: string
   errors: MappedApiError[]
   leadData: Record<string, unknown>
@@ -866,13 +875,17 @@ function QuickFixModal({
     return null
   }
 
+  const getChangedFields = (): Record<string, string> => {
+    const changed: Record<string, string> = {}
+    for (const [k, v] of Object.entries(values)) {
+      if (v !== String(leadData[k] ?? '')) changed[k] = v
+    }
+    return changed
+  }
+
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Only send fields that actually changed
-      const changed: Record<string, string> = {}
-      for (const [k, v] of Object.entries(values)) {
-        if (v !== String(leadData[k] ?? '')) changed[k] = v
-      }
+      const changed = getChangedFields()
       if (Object.keys(changed).length === 0) throw new Error('No changes')
       return leadService.update(leadId, changed)
     },
@@ -886,6 +899,31 @@ function QuickFixModal({
       const msg = (err as Error)?.message === 'No changes'
         ? 'No fields were changed'
         : 'Failed to save'
+      toast.error(msg)
+    },
+  })
+
+  const resubmitMutation = useMutation({
+    mutationFn: async () => {
+      const changed = getChangedFields()
+      if (Object.keys(changed).length === 0) throw new Error('No changes')
+      return crmService.fixAndResubmit(leadId, {
+        lender_id: lenderId,
+        field_updates: changed,
+      })
+    },
+    onSuccess: () => {
+      toast.success('Lead updated & resubmission dispatched')
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['lead-detail', leadId] })
+      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+      qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as Error)?.message === 'No changes'
+        ? 'No fields were changed'
+        : 'Failed to save & resubmit'
       toast.error(msg)
     },
   })
@@ -974,13 +1012,23 @@ function QuickFixModal({
         {/* Footer */}
         <div className="px-5 py-3.5 border-t border-slate-100 flex items-center gap-2.5 flex-shrink-0 bg-slate-50/80 rounded-b-2xl">
           <button
+            onClick={() => resubmitMutation.mutate()}
+            disabled={resubmitMutation.isPending || saveMutation.isPending}
+            className="flex-1 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            {resubmitMutation.isPending
+              ? <><Loader2 size={12} className="animate-spin" /> Resubmitting…</>
+              : <><RefreshCw size={12} /> Save & Resubmit</>
+            }
+          </button>
+          <button
             onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="flex-1 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+            disabled={saveMutation.isPending || resubmitMutation.isPending}
+            className="px-4 py-2 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
           >
             {saveMutation.isPending
               ? <><Loader2 size={12} className="animate-spin" /> Saving…</>
-              : <><Check size={12} /> Save & Close</>
+              : <><Check size={12} /> Save Only</>
             }
           </button>
           <button
@@ -995,7 +1043,12 @@ function QuickFixModal({
   )
 }
 
-function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number }) {
+function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting }: {
+  sub: LenderSubmission; leadId: number
+  onViewLog: (lenderId: number, lenderName: string) => void
+  onResubmit?: (lenderId: number) => void
+  isResubmitting?: boolean
+}) {
   const qc = useQueryClient()
   const [editing,  setEditing]  = useState(false)
   const [errorsExpanded, setErrorsExpanded] = useState(sub.submission_status === 'failed')
@@ -1078,12 +1131,49 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
                 <Mail size={8} /> Email
               </span>
             )}
-            {/* Submission status badge */}
+            {/* Submission status badge — clickable for API submissions */}
             {sub.submission_type === 'api' && submissionBadge[sub.submission_status] && (
-              <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${submissionBadge[sub.submission_status].color}`}>
+              <button
+                onClick={() => onViewLog(sub.lender_id, sub.lender_name ?? `Lender #${sub.lender_id}`)}
+                className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 cursor-pointer hover:brightness-110 hover:scale-105 transition-all ${submissionBadge[sub.submission_status].color}`}
+                title="Click to view API response"
+              >
                 {sub.submission_status === 'failed' && <AlertCircle size={8} />}
                 {sub.submission_status === 'submitted' && <CheckCircle size={8} />}
                 {submissionBadge[sub.submission_status].label}
+              </button>
+            )}
+            {/* Email delivery status badge — for email submissions only */}
+            {sub.submission_type !== 'api' && sub.email_status && (() => {
+              const emailBadge: Record<string, { color: string; label: string; icon: ReactNode }> = {
+                sent:      { color: 'text-blue-700 bg-blue-50 border-blue-200',       label: 'Sent',      icon: <Send size={8} /> },
+                delivered: { color: 'text-emerald-700 bg-emerald-50 border-emerald-200', label: 'Delivered', icon: <CheckCircle size={8} /> },
+                opened:    { color: 'text-purple-700 bg-purple-50 border-purple-200',   label: 'Opened',    icon: <Eye size={8} /> },
+                failed:    { color: 'text-red-700 bg-red-50 border-red-200',            label: 'Failed',    icon: <AlertCircle size={8} /> },
+              }
+              const badge = emailBadge[sub.email_status]
+              if (!badge) return null
+              return (
+                <span
+                  className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${badge.color}`}
+                  title={`Email ${badge.label}${sub.email_status_at ? ` at ${new Date(sub.email_status_at).toLocaleString()}` : ''}`}
+                >
+                  {badge.icon} {badge.label}
+                </span>
+              )
+            })()}
+            {/* Doc upload status indicator */}
+            {sub.doc_upload_status && sub.doc_upload_status !== 'none' && (
+              <span
+                className={`inline-flex items-center text-[9px] font-bold px-1 py-0.5 rounded-full flex-shrink-0 ${
+                  sub.doc_upload_status === 'success' ? 'text-emerald-600' :
+                  sub.doc_upload_status === 'partial' ? 'text-orange-500' : 'text-red-500'
+                }`}
+                title={`Docs: ${sub.doc_upload_status}${sub.doc_upload_notes ? ` — ${sub.doc_upload_notes}` : ''}`}
+              >
+                {sub.doc_upload_status === 'success' ? <CheckCircle size={9} /> :
+                 sub.doc_upload_status === 'partial' ? <AlertTriangle size={9} /> :
+                 <AlertCircle size={9} />}
               </span>
             )}
           </div>
@@ -1103,6 +1193,25 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
             title={errorsExpanded ? 'Hide errors' : 'Show errors'}
           >
             {errorsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        )}
+        {sub.submission_type === 'api' && (
+          <button
+            onClick={() => onViewLog(sub.lender_id, sub.lender_name ?? `Lender #${sub.lender_id}`)}
+            className="p-1 rounded flex-shrink-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+            title="View API log"
+          >
+            <Eye size={12} />
+          </button>
+        )}
+        {onResubmit && (
+          <button
+            onClick={e => { e.stopPropagation(); onResubmit(sub.lender_id) }}
+            disabled={isResubmitting}
+            className="p-1 rounded flex-shrink-0 text-slate-400 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-50 transition-colors"
+            title="Resubmit to this lender"
+          >
+            {isResubmitting ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
           </button>
         )}
         <button
@@ -1184,6 +1293,7 @@ function SubmissionRow({ sub, leadId }: { sub: LenderSubmission; leadId: number 
         <ErrorBoundary fallbackTitle="Error loading fix modal">
           <QuickFixModal
             leadId={leadId}
+            lenderId={sub.lender_id}
             lenderName={sub.lender_name ?? `Lender #${sub.lender_id}`}
             errors={errorMessages}
             leadData={leadDataForFix as unknown as Record<string, unknown>}
@@ -1290,7 +1400,7 @@ function fillPlaceholders(html: string, lead: Record<string, unknown>): string {
     .replace(/\{\{(\w+)\}\}/g, resolve)
 }
 
-interface LenderApiCfg { id: number; crm_lender_id: number; lender_name?: string; api_name: string; status: boolean | number; required_fields?: string[] | null; payload_mapping?: Record<string, string | string[]> | string | null }
+interface LenderApiCfg { id: number; lender_name?: string; api_name: string; api_status: string | number; required_fields?: string[] | null; payload_mapping?: Record<string, string | string[]> | string | null }
 
 // ── Extended ApiLog type (includes structured error analysis) ──────────────────
 interface ApiLog {
@@ -1307,6 +1417,152 @@ interface ApiLog {
 
 // ErrorFixModal, LenderErrorList, describeApiError imported from LenderApiFixModal.tsx
 
+// ── Lender Email History (inside LendersPanel) ────────────────────────────────
+function LenderEmailHistory({ leadId }: { leadId: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const [openEmailId, setOpenEmailId] = useState<number | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['lead-lender-emails', leadId],
+    queryFn: async () => {
+      try {
+        const res = await emailParserService.getLeadLenderConversations(leadId)
+        const d = res.data?.data?.conversations ?? res.data?.data ?? []
+        return Array.isArray(d) ? d as LenderConversation[] : []
+      } catch {
+        return []
+      }
+    },
+    staleTime: 60_000,
+  })
+
+  const conversations = data ?? []
+  if (conversations.length === 0 && !isLoading) return null
+
+  // Group by lender_id
+  const grouped: Record<number, LenderConversation[]> = {}
+  for (const c of conversations) {
+    if (!grouped[c.lender_id]) grouped[c.lender_id] = []
+    grouped[c.lender_id].push(c)
+  }
+
+  const lenderIds = Object.keys(grouped).map(Number)
+
+  return (
+    <div className="mt-4">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full text-left"
+      >
+        <Mail size={13} className="text-indigo-500" />
+        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+          Email History
+        </span>
+        <span className="text-[10px] font-medium text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-full">
+          {conversations.length}
+        </span>
+        <ChevronDown size={12} className={`text-slate-400 transition-transform ml-auto ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-3">
+          {isLoading ? (
+            <div className="flex justify-center py-4"><Loader2 size={14} className="animate-spin text-slate-400" /></div>
+          ) : lenderIds.map(lid => {
+            const items = grouped[lid]
+            const lenderName = items[0]?.from_email?.split('<')[0]?.trim() || `Lender #${lid}`
+            return (
+              <div key={lid} className="rounded-lg border border-slate-100 bg-slate-50/50 overflow-hidden">
+                <div className="px-3 py-2 bg-slate-100/50 border-b border-slate-100">
+                  <span className="text-xs font-semibold text-slate-600">{lenderName}</span>
+                  <span className="ml-2 text-[10px] text-slate-400">{items.length} email{items.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {items.map(c => (
+                    <div key={c.id}>
+                      <div
+                        className={`px-3 py-2.5 flex items-start gap-2 cursor-pointer hover:bg-slate-100/50 transition-colors ${openEmailId === c.id ? 'bg-indigo-50/30' : ''}`}
+                        onClick={() => setOpenEmailId(openEmailId === c.id ? null : c.id)}
+                      >
+                        {c.direction === 'inbound' ? (
+                          <ArrowDownLeft size={12} className="text-blue-500 mt-0.5 shrink-0" />
+                        ) : (
+                          <ArrowUpRight size={12} className="text-emerald-500 mt-0.5 shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium text-slate-700">{c.subject || '(no subject)'}</span>
+                            {c.offer_detected && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-green-100 text-green-700">
+                                <DollarSign size={8} /> Offer
+                              </span>
+                            )}
+                            {c.has_attachments && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-400">
+                                <Paperclip size={9} /> {c.attachment_count}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                            <span>{c.from_email}</span>
+                            <span>-</span>
+                            <span>{c.conversation_date ? new Date(c.conversation_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                          </div>
+                        </div>
+                        <ChevronDown size={12} className={`text-slate-400 transition-transform shrink-0 mt-1 ${openEmailId === c.id ? 'rotate-180' : ''}`} />
+                      </div>
+                      {/* Expanded full email content */}
+                      {openEmailId === c.id && (
+                        <div className="px-3 pb-3">
+                          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                            {/* Email header */}
+                            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 space-y-1">
+                              <div className="text-[11px] text-slate-500"><span className="font-semibold text-slate-600">From:</span> {c.from_email}</div>
+                              <div className="text-[11px] text-slate-500"><span className="font-semibold text-slate-600">To:</span> {c.to_email || '—'}</div>
+                              <div className="text-[11px] text-slate-500"><span className="font-semibold text-slate-600">Subject:</span> {c.subject || '(no subject)'}</div>
+                              <div className="text-[11px] text-slate-500"><span className="font-semibold text-slate-600">Date:</span> {c.conversation_date ? new Date(c.conversation_date).toLocaleString() : '—'}</div>
+                              {c.detected_merchant_name && (
+                                <div className="text-[11px] text-slate-500"><span className="font-semibold text-slate-600">Matched Merchant:</span> {c.detected_merchant_name} <span className="text-slate-400">({c.detection_source})</span></div>
+                              )}
+                            </div>
+                            {/* Offer details */}
+                            {c.offer_detected && c.offer_details && (
+                              <div className="px-4 py-2 bg-green-50 border-b border-green-200">
+                                <span className="text-[10px] font-semibold text-green-700">Offer Detected: </span>
+                                {c.offer_details.amount && <span className="text-[11px] text-green-800 mr-3">Amount: <strong>${Number(c.offer_details.amount).toLocaleString()}</strong></span>}
+                                {c.offer_details.factor_rate && <span className="text-[11px] text-green-800 mr-3">Rate: <strong>{String(c.offer_details.factor_rate)}</strong></span>}
+                                {c.offer_details.term && <span className="text-[11px] text-green-800 mr-3">Term: <strong>{String(c.offer_details.term)}</strong></span>}
+                                {c.offer_details.daily_payment && <span className="text-[11px] text-green-800">Daily: <strong>${Number(c.offer_details.daily_payment).toLocaleString()}</strong></span>}
+                              </div>
+                            )}
+                            {/* Attachments */}
+                            {c.has_attachments && c.attachment_filenames && c.attachment_filenames.length > 0 && (
+                              <div className="px-4 py-2 border-b border-slate-200 flex items-center gap-2 flex-wrap">
+                                <Paperclip size={10} className="text-slate-400" />
+                                {c.attachment_filenames.map((f, i) => (
+                                  <span key={i} className="px-2 py-0.5 rounded bg-slate-100 text-[10px] text-slate-600">{f}</span>
+                                ))}
+                              </div>
+                            )}
+                            {/* Full email body */}
+                            <div className="px-4 py-3 max-h-[400px] overflow-y-auto">
+                              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{c.body_preview || '(no content)'}</pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LendersPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
 
@@ -1317,6 +1573,12 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [previewExpanded, setPreviewExpanded] = useState(false)
+  const [focusedLenderId, setFocusedLenderId] = useState<number | null>(null)
+  const [lenderSearch, setLenderSearch]       = useState('')
+  const [lenderStatusFilter, setLenderStatusFilter] = useState<string>('all')
+  const [lenderSort, setLenderSort]           = useState<'latest' | 'az' | 'za'>('latest')
+  const lenderSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   // Re-use cached lead data (already fetched by parent — no extra request)
   const { data: leadData } = useQuery({
@@ -1407,6 +1669,64 @@ function LendersPanel({ leadId }: { leadId: number }) {
   const [retryingLenderId, setRetryingLenderId] = useState<number | null>(null)
   const [isValidating, setIsValidating] = useState(false)
 
+  // ── Submission Status Polling ─────────────────────────────────────────────────
+  // After submitMutation succeeds, poll every 2s to update in-flight API submissions.
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    // Only poll when we have outcomes with at least one API submission in 'submitted' status
+    const hasInFlight = submissionOutcomes?.some(
+      o => o.submissionType === 'api' && o.success && !o.error
+    )
+    if (!hasInFlight || !submissionOutcomes) {
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+      return
+    }
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await crmService.getSubmissionStatus(leadId)
+        const rows: SubmissionStatusRow[] = res.data?.data ?? []
+        if (!rows.length) return
+
+        setSubmissionOutcomes(prev => {
+          if (!prev) return prev
+          return prev.map(o => {
+            const row = rows.find(r => r.lender_id === o.lenderId)
+            if (!row) return o
+            const isTerminal = ['approved', 'declined', 'failed'].includes(row.submission_status)
+            const isFailed = row.submission_status === 'failed' || row.submission_status === 'declined'
+            return {
+              ...o,
+              success: !isFailed,
+              error: isFailed ? (row.api_error ?? 'Submission failed') : undefined,
+              submissionType: row.submission_type === 'api' ? 'api' : o.submissionType,
+              _terminal: isTerminal,
+            } as LenderSubmissionOutcome
+          })
+        })
+
+        // Stop polling once all API submissions reached a terminal state
+        const allTerminal = rows.every(r =>
+          ['approved', 'declined', 'failed'].includes(r.submission_status) || r.submission_type !== 'api'
+        )
+        if (allTerminal && pollingRef.current) {
+          clearInterval(pollingRef.current)
+          pollingRef.current = null
+          // Refresh submission history + logs
+          qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+          qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+        }
+      } catch {
+        // Silently ignore polling errors — not critical
+      }
+    }, 2000)
+
+    return () => {
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+    }
+  }, [submissionOutcomes, leadId, qc])
+
   // API logs query — only used when fix modal needs log context.
   // Disabled refetchInterval to prevent unnecessary re-renders of the entire panel.
   const { data: apiLogs } = useQuery({
@@ -1424,6 +1744,18 @@ function LendersPanel({ leadId }: { leadId: number }) {
     staleTime: 30_000,
   })
 
+  // ── API Log Drawer state ──────────────────────────────────────────────────
+  const [logDrawer, setLogDrawer] = useState<{ open: boolean; lenderId: number | null; lenderName: string }>({
+    open: false, lenderId: null, lenderName: '',
+  })
+  const handleViewLog = (lenderId: number, lenderName: string) => {
+    setLogDrawer({ open: true, lenderId, lenderName })
+  }
+  const drawerLog: DrawerApiLog | null = logDrawer.lenderId && apiLogs
+    ? (apiLogs as DrawerApiLog[])
+        .filter(l => l.lender_id === logDrawer.lenderId)
+        .sort((a, b) => b.id - a.id)[0] ?? null
+    : null
 
   const activeLenders = (lendersData ?? []).filter(l => Number(l.status) === 1)
   // Deduplicate by lender_id — keep the latest submission per lender
@@ -1439,6 +1771,86 @@ function LendersPanel({ leadId }: { leadId: number }) {
     return acc
   }, {})
   const docs          = leadDocs ?? []
+
+  // ── Debounced search for lender list ─────────────────────────────────────────
+  useEffect(() => {
+    if (lenderSearchTimer.current) clearTimeout(lenderSearchTimer.current)
+    lenderSearchTimer.current = setTimeout(() => setDebouncedSearch(lenderSearch), 300)
+    return () => { if (lenderSearchTimer.current) clearTimeout(lenderSearchTimer.current) }
+  }, [lenderSearch])
+
+  // ── Helper: compute combined status key for a lender ─────────────────────────
+  function getLenderStatusKey(lenderId: number): string {
+    const sub = submittedLenderMap[lenderId]
+    if (!sub) return 'none'
+    const ss = sub.submission_status
+    const rs = sub.response_status
+    if (ss === 'failed') return 'failed'
+    if (rs === 'declined' || ss === 'declined') return 'declined'
+    if (rs === 'needs_documents') return 'missing_docs'
+    if (rs === 'approved' || ss === 'approved') return 'approved'
+    if (ss === 'pending') return 'processing'
+    if ((ss === 'submitted' || ss === 'viewed') && rs === 'pending') return 'pending'
+    if (ss === 'submitted' || ss === 'viewed') return 'sent'
+    if (ss === 'no_response') return 'no_response'
+    return 'sent'
+  }
+
+  // ── Filtered + sorted lender list ────────────────────────────────────────────
+  const displayLenders = (() => {
+    let list = [...activeLenders]
+    // Search filter (name + type)
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase()
+      list = list.filter(l => {
+        const isApi = !!(l.api_status && l.api_status !== '0' && Number(l.api_status) !== 0)
+        const typeLbl = isApi ? 'api' : 'email'
+        return l.lender_name.toLowerCase().includes(q) || typeLbl.includes(q)
+      })
+    }
+    // Status filter
+    if (lenderStatusFilter !== 'all') {
+      list = list.filter(l => getLenderStatusKey(l.id) === lenderStatusFilter)
+    }
+    // Sort
+    if (lenderSort === 'az') {
+      list.sort((a, b) => a.lender_name.localeCompare(b.lender_name))
+    } else if (lenderSort === 'za') {
+      list.sort((a, b) => b.lender_name.localeCompare(a.lender_name))
+    } else {
+      // latest activity — lenders with recent submissions first, then alphabetical
+      list.sort((a, b) => {
+        const aSub = submittedLenderMap[a.id]
+        const bSub = submittedLenderMap[b.id]
+        const aTime = aSub?.submitted_at ? new Date(aSub.submitted_at).getTime() : 0
+        const bTime = bSub?.submitted_at ? new Date(bSub.submitted_at).getTime() : 0
+        if (bTime !== aTime) return bTime - aTime
+        return a.lender_name.localeCompare(b.lender_name)
+      })
+    }
+    return list
+  })()
+
+  // Filtered submission list for right panel
+  const filteredSubList = focusedLenderId !== null
+    ? subList.filter(s => s.lender_id === focusedLenderId)
+    : subList
+  const focusedLenderName = focusedLenderId !== null
+    ? (activeLenders.find(l => l.id === focusedLenderId)?.lender_name
+       ?? subList.find(s => s.lender_id === focusedLenderId)?.lender_name
+       ?? `Lender #${focusedLenderId}`)
+    : ''
+
+  // No auto-focus — show all submissions by default on page load
+
+  // Scroll to focused lender's submission row
+  useEffect(() => {
+    if (focusedLenderId !== null) {
+      setTimeout(() => {
+        document.getElementById(`sub-row-${focusedLenderId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 50)
+    }
+  }, [focusedLenderId])
 
   // Compute preview template object (used for subject/name display)
   const previewTemplate = templateId !== ''
@@ -1572,7 +1984,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
         if (!lender) continue
 
         const isApi = !!(lender.api_status && lender.api_status !== '0')
-        const cfg = isApi ? configs.find(c => c.crm_lender_id === lenderId && (c.status === true || c.status === 1)) : null
+        const cfg = isApi ? configs.find(c => c.id === lenderId && (c.api_status === '1' || c.api_status === 1)) : null
 
         if (!isApi || !cfg) {
           results.push({ lenderId, lenderName: lender.lender_name, isApiLender: false, isValid: true, missingFields: [], fieldLabels: {} })
@@ -1740,62 +2152,46 @@ function LendersPanel({ leadId }: { leadId: number }) {
     },
   })
 
+  const [isRetryingAll, setIsRetryingAll] = useState(false)
+  const retryAllFailed = async () => {
+    if (!submissionOutcomes) return
+    const failedIds = submissionOutcomes
+      .filter(o => !o.success && !o.validationErrors?.length)
+      .map(o => o.lenderId)
+    if (!failedIds.length) return
+    setIsRetryingAll(true)
+    try {
+      await submitMutation.mutateAsync(failedIds)
+    } catch {
+      // Error handling is in submitMutation.onError
+    } finally {
+      setIsRetryingAll(false)
+    }
+  }
+
+  // Quick resubmit from history row — reuses submitMutation with single lender
+  const [quickResubmitId, setQuickResubmitId] = useState<number | null>(null)
+  const handleQuickResubmit = async (lenderId: number) => {
+    setQuickResubmitId(lenderId)
+    try {
+      await submitMutation.mutateAsync([lenderId])
+    } catch {
+      // Error already handled by submitMutation.onError
+    } finally {
+      setQuickResubmitId(null)
+    }
+  }
+
+  const showPreview = previewExpanded && !!previewTemplate
+
   return (
-    <div className="flex gap-5 items-start">
+    <div className="flex flex-col lg:flex-row gap-5 items-start" style={{ transition: 'all 0.3s ease' }}>
 
-      {/* ═══ Left column — History & Logs ════════════════════════════════════ */}
+      {/* ═══ Col 1 — Submit Application (4/12) ═════════════════════════════ */}
       <div
-        className="space-y-5 min-w-0"
-        style={{ flex: previewExpanded ? '4 4 0%' : '6 6 0%', transition: 'flex 0.3s ease' }}
+        className="w-full lg:w-auto min-w-0 order-1"
+        style={{ flex: '4 4 0%', transition: 'flex 0.3s ease' }}
       >
-
-        {/* ── Submission History ── */}
-        <div>
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
-            Submission History {subList.length > 0 && <span className="font-normal">({subList.length})</span>}
-          </p>
-          {subsLoading ? (
-            <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
-          ) : subList.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-6">No submissions yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {subList.map(s => (
-                <ErrorBoundary key={s.id} fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
-                  <SubmissionRow sub={s} leadId={leadId} />
-                </ErrorBoundary>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Error Fix Modal ── */}
-        {fixModal && (
-          <ErrorBoundary fallbackTitle="Error loading fix modal">
-            <ErrorFixModal
-              leadId={leadId}
-              lenderId={fixModal.log.lender_id}
-              error={fixModal.error}
-              onClose={() => setFixModal(null)}
-              onFixed={() => {
-                setFixModal(null)
-                qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
-              }}
-            />
-          </ErrorBoundary>
-        )}
-
-      </div>
-
-      {/* ═══ Right column — Submit Form + Preview ════════════════════════════ */}
-      <div
-        className="min-w-0"
-        style={{ flex: previewExpanded ? '8 8 0%' : '6 6 0%', transition: 'flex 0.3s ease' }}
-      >
-        <div className={previewExpanded && !!previewTemplate ? 'flex gap-5 items-start' : ''}>
-
-          {/* ── Submit Form card ── */}
-          <div className={previewExpanded && !!previewTemplate ? 'flex-1 min-w-0' : ''}>
             <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden sticky top-4">
 
               {/* Gradient accent bar */}
@@ -1819,7 +2215,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
 
                   {/* ── Select Lenders ── */}
                   <div>
-                    <div className="flex items-center justify-between mb-3">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center">
                           <Building2 size={11} className="text-emerald-600" />
@@ -1833,13 +2230,85 @@ function LendersPanel({ leadId }: { leadId: number }) {
                       </div>
                       {activeLenders.length > 0 && (
                         <button
-                          onClick={() => setSelectedIds(selectedIds.size === activeLenders.length ? new Set() : new Set(activeLenders.map(l => l.id)))}
+                          onClick={() => setSelectedIds(prev => prev.size === displayLenders.length ? new Set() : new Set(displayLenders.map(l => l.id)))}
                           className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
                         >
-                          {selectedIds.size === activeLenders.length ? 'Deselect all' : 'Select all'}
+                          {selectedIds.size === displayLenders.length && displayLenders.length > 0 ? 'Deselect all' : 'Select all'}
                         </button>
                       )}
                     </div>
+
+                    {/* Search + Filter + Sort — compact single-row toolbar */}
+                    {activeLenders.length > 0 && (
+                      <div className="sticky top-0 z-10 bg-white pb-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Search */}
+                          <div className="relative flex-1 min-w-[110px]">
+                            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              value={lenderSearch}
+                              onChange={e => setLenderSearch(e.target.value)}
+                              placeholder="Search..."
+                              className="w-full pl-6 pr-6 py-[5px] text-[11px] rounded-md border border-slate-200 bg-slate-50/80 focus:bg-white focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 outline-none transition-all placeholder:text-slate-400"
+                            />
+                            {lenderSearch && (
+                              <button
+                                onClick={() => { setLenderSearch(''); setDebouncedSearch('') }}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                              >
+                                <X size={10} />
+                              </button>
+                            )}
+                          </div>
+                          {/* Status filter */}
+                          <div className="relative flex-shrink-0">
+                            <SlidersHorizontal size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <select
+                              value={lenderStatusFilter}
+                              onChange={e => setLenderStatusFilter(e.target.value)}
+                              className={`pl-5 pr-4 py-[5px] text-[11px] font-medium rounded-md border bg-slate-50/80 outline-none appearance-none cursor-pointer transition-colors ${
+                                lenderStatusFilter !== 'all'
+                                  ? 'border-indigo-300 text-indigo-700 bg-indigo-50/60'
+                                  : 'border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              <option value="all">All</option>
+                              <option value="sent">Sent</option>
+                              <option value="pending">Pending</option>
+                              <option value="approved">Approved</option>
+                              <option value="missing_docs">Docs</option>
+                              <option value="declined">Declined</option>
+                              <option value="failed">Failed</option>
+                              <option value="no_response">No Reply</option>
+                              <option value="none">New</option>
+                            </select>
+                          </div>
+                          {/* Sort */}
+                          <div className="relative flex-shrink-0">
+                            <ArrowUpDown size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <select
+                              value={lenderSort}
+                              onChange={e => setLenderSort(e.target.value as 'latest' | 'az' | 'za')}
+                              className="pl-5 pr-4 py-[5px] text-[11px] font-medium rounded-md border border-slate-200 bg-slate-50/80 text-slate-600 outline-none appearance-none cursor-pointer"
+                            >
+                              <option value="latest">Recent</option>
+                              <option value="az">A–Z</option>
+                              <option value="za">Z–A</option>
+                            </select>
+                          </div>
+                          {/* Clear all — only when filters active */}
+                          {(debouncedSearch || lenderStatusFilter !== 'all') && (
+                            <button
+                              onClick={() => { setLenderSearch(''); setDebouncedSearch(''); setLenderStatusFilter('all'); setLenderSort('latest') }}
+                              className="flex-shrink-0 text-[10px] text-slate-400 hover:text-red-500 transition-colors"
+                              title={`${displayLenders.length} of ${activeLenders.length} shown — click to reset`}
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {activeLenders.length === 0 ? (
                       <div className="flex flex-col items-center py-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
@@ -1847,49 +2316,103 @@ function LendersPanel({ leadId }: { leadId: number }) {
                         <p className="text-xs font-medium text-slate-500">No active lenders configured</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">Add lenders from the Lenders menu first</p>
                       </div>
+                    ) : displayLenders.length === 0 ? (
+                      <div className="flex flex-col items-center py-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                        <Search size={18} className="text-slate-300 mb-1.5" />
+                        <p className="text-xs font-medium text-slate-500">No lenders found</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Try adjusting your search or filter</p>
+                      </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
-                        {activeLenders.map(l => {
+                      <div className="space-y-1.5 max-h-60 overflow-y-auto pr-0.5">
+                        {displayLenders.map(l => {
                           const on = selectedIds.has(l.id)
                           const prevSub = submittedLenderMap[l.id]
                           const alreadySent = !!prevSub
+                          const isApiLender = !!(l.api_status && l.api_status !== '0' && Number(l.api_status) !== 0)
                           const vResult = validationState?.results.find(r => r.lenderId === l.id)
                           const hasErrors = vResult && !vResult.isValid && vResult.isApiLender
+
+                          // Combined status badge — considers both submission_status AND response_status
+                          const subStatusBadge = prevSub ? (() => {
+                            const ss = prevSub.submission_status
+                            const rs = prevSub.response_status
+                            if (ss === 'failed')
+                              return { icon: <AlertCircle size={8} />, label: 'Failed', cls: 'bg-red-100 text-red-600 border-red-200' }
+                            if (rs === 'declined' || ss === 'declined')
+                              return { icon: <AlertCircle size={8} />, label: 'Declined', cls: 'bg-red-100 text-red-600 border-red-200' }
+                            if (rs === 'needs_documents')
+                              return { icon: <FileText size={8} />, label: 'Missing Docs', cls: 'bg-orange-100 text-orange-700 border-orange-200' }
+                            if (rs === 'approved' || ss === 'approved')
+                              return { icon: <CheckCircle size={8} />, label: 'Approved', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                            if (ss === 'pending')
+                              return { icon: <Clock size={8} />, label: 'Processing', cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+                            if ((ss === 'submitted' || ss === 'viewed') && rs === 'pending')
+                              return { icon: <Clock size={8} />, label: 'Pending', cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+                            if (ss === 'submitted' || ss === 'viewed')
+                              return { icon: <CheckCircle size={8} />, label: 'Sent', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                            if (ss === 'no_response')
+                              return { icon: <Clock size={8} />, label: 'No Response', cls: 'bg-slate-100 text-slate-600 border-slate-200' }
+                            return { icon: <CheckCircle size={8} />, label: 'Sent', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                          })() : null
+
+                          const isFocused = focusedLenderId === l.id
+
                           return (
                             <div
                               key={l.id}
-                              role="checkbox"
-                              aria-checked={on}
                               tabIndex={0}
-                              onClick={() => toggleLender(l.id)}
                               onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleLender(l.id) } }}
                               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
                                 hasErrors
                                   ? 'border-red-300 bg-red-50'
-                                  : on
-                                    ? 'border-emerald-300 bg-emerald-50 shadow-sm'
-                                    : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50'
+                                  : isFocused
+                                    ? 'border-indigo-300 bg-indigo-50 shadow-sm ring-1 ring-indigo-200'
+                                    : on
+                                      ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                               }`}
                             >
-                              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
-                                on ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'
-                              }`}>
+                              {/* Checkbox zone — toggles selection */}
+                              <div
+                                role="checkbox"
+                                aria-checked={on}
+                                onClick={e => { e.stopPropagation(); toggleLender(l.id) }}
+                                className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                                  on ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white hover:border-emerald-400'
+                                }`}
+                              >
                                 {on && <Check size={10} className="text-white" strokeWidth={3} />}
                               </div>
-                              <span className="text-sm font-medium text-slate-700 truncate flex-1">{l.lender_name}</span>
-                              {hasErrors && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200 flex-shrink-0">
-                                  {vResult.missingFields.length} missing
-                                </span>
-                              )}
-                              {alreadySent && !hasErrors && (
-                                <span
-                                  title={`Previously sent on ${prevSub.submitted_at ? new Date(prevSub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : 'unknown date'}`}
-                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0"
-                                >
-                                  <CheckCircle size={8} /> Sent
-                                </span>
-                              )}
+                              {/* Clickable body — sets focus for right panel */}
+                              <div
+                                className="flex items-center gap-3 flex-1 min-w-0"
+                                onClick={() => setFocusedLenderId(isFocused ? null : l.id)}
+                              >
+                                {/* API / Email type indicator */}
+                                {isApiLender ? (
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-indigo-50 border border-indigo-200 flex-shrink-0" title="API submission">
+                                    <Zap size={10} className="text-indigo-500" />
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-sky-50 border border-sky-200 flex-shrink-0" title="Email submission">
+                                    <Mail size={10} className="text-sky-500" />
+                                  </span>
+                                )}
+                                <span className={`text-sm font-medium truncate flex-1 ${isFocused ? 'text-indigo-700' : 'text-slate-700'}`}>{l.lender_name}</span>
+                                {hasErrors && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200 flex-shrink-0">
+                                    {vResult.missingFields.length} missing
+                                  </span>
+                                )}
+                                {alreadySent && !hasErrors && subStatusBadge && (
+                                  <span
+                                    title={`${subStatusBadge.label} — ${prevSub.submitted_at ? new Date(prevSub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : 'unknown date'}`}
+                                    className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${subStatusBadge.cls}`}
+                                  >
+                                    {subStatusBadge.icon} {subStatusBadge.label}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -1938,7 +2461,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
                     </select>
                     {previewTemplate && (
                       <p className="text-[11px] text-emerald-600 flex items-center gap-1 mt-1.5">
-                        <Eye size={10} /> Preview expanded to the right
+                        <Eye size={10} /> Preview visible in center column
                       </p>
                     )}
                   </div>
@@ -2086,7 +2609,10 @@ function LendersPanel({ leadId }: { leadId: number }) {
                     outcomes={submissionOutcomes}
                     onClose={() => { setSubmissionOutcomes(null); resetForm() }}
                     onRetry={(id) => retryMutation.mutate(id)}
+                    onRetryAllFailed={retryAllFailed}
+                    onViewLog={handleViewLog}
                     isRetrying={retryingLenderId}
+                    isRetryingAll={isRetryingAll}
                   />
                 </div>
               )}
@@ -2122,97 +2648,225 @@ function LendersPanel({ leadId }: { leadId: number }) {
                 <button onClick={resetForm} className="btn-outline px-4 flex-shrink-0">Reset</button>
               </div>
 
+
             </div>
-          </div>
+      </div>
 
-          {/* ── Email preview card (expanded to the right when template selected) ── */}
-          {previewExpanded && previewTemplate && (
-            <div className="flex-1 min-w-0 sticky top-4" style={{ animation: 'fadeIn 0.25s ease' }}>
-              <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+      {/* ═══ Col 2 — Email Preview (4/12, visible when template selected) ══ */}
+      {showPreview && previewTemplate && (
+        <div
+          className="w-full lg:w-auto min-w-0 order-2"
+          style={{ flex: '4 4 0%', transition: 'flex 0.3s ease', animation: 'fadeIn 0.25s ease' }}
+        >
+          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden sticky top-4">
 
-                {/* macOS-style chrome bar */}
-                <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: '#1e293b' }}>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                  </div>
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-md text-slate-400 text-[11px]" style={{ background: '#334155' }}>
-                      <Mail size={10} />
-                      <span>Email Preview</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setTemplateId(''); setPreviewExpanded(false) }}
-                    className="text-slate-500 hover:text-slate-200 transition-colors text-[11px] flex-shrink-0"
-                    title="Close preview"
-                  >
-                    \u2715
-                  </button>
+            {/* macOS-style chrome bar */}
+            <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: '#1e293b' }}>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+              </div>
+              <div className="flex-1 flex items-center justify-center">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-md text-slate-400 text-[11px]" style={{ background: '#334155' }}>
+                  <Mail size={10} />
+                  <span>Email Preview</span>
                 </div>
+              </div>
+              <button
+                onClick={() => { setTemplateId(''); setPreviewExpanded(false) }}
+                className="text-slate-500 hover:text-slate-200 transition-colors text-[11px] flex-shrink-0"
+                title="Close preview"
+              >
+                {'\u2715'}
+              </button>
+            </div>
 
-                {/* Email meta */}
-                <div className="px-4 pt-3 pb-2.5 border-b border-slate-200 bg-white">
-                  <h3 className="text-sm font-bold text-slate-900 leading-snug mb-2 truncate">
-                    {resolvedSubject || previewTemplate.template_name}
-                  </h3>
-                  <div className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-                      style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
-                      <Mail size={12} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-slate-800">Submission Email</span>
-                        <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
-                      </div>
-                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                        <span className="text-[11px] text-slate-500">to</span>
-                        {selectedIds.size > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
-                            <Building2 size={9} className="text-slate-500" />
-                            {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
-                        )}
-                      </div>
-                    </div>
+            {/* Email meta */}
+            <div className="px-4 pt-3 pb-2.5 border-b border-slate-200 bg-white">
+              <h3 className="text-sm font-bold text-slate-900 leading-snug mb-2 truncate">
+                {resolvedSubject || previewTemplate.template_name}
+              </h3>
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+                  style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}>
+                  <Mail size={12} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800">Submission Email</span>
+                    <span className="text-[11px] text-slate-400 flex-shrink-0">Just now</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
-                      style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
-                      <Check size={9} /> {previewTemplate.template_name}
-                    </span>
-                    {selectedDocIds.size > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
-                        <FileText size={9} /> {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
+                  <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                    <span className="text-[11px] text-slate-500">to</span>
+                    {selectedIds.size > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                        <Building2 size={9} className="text-slate-500" />
+                        {selectedIds.size} lender{selectedIds.size !== 1 ? 's' : ''}
                       </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic">no lenders selected</span>
                     )}
                   </div>
                 </div>
-
-                {/* Email iframe */}
-                <div className="p-3">
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" style={{ minHeight: 420 }}>
-                    <iframe
-                      key={previewTemplate.id}
-                      srcDoc={previewHtml}
-                      className="w-full border-0 block"
-                      style={{ minHeight: 420, height: '100%' }}
-                      sandbox="allow-same-origin"
-                      title="Email body preview"
-                    />
-                  </div>
-                </div>
-
+              </div>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border"
+                  style={{ color: '#059669', borderColor: '#a7f3d0', background: '#f0fdf4' }}>
+                  <Check size={9} /> {previewTemplate.template_name}
+                </span>
+                {selectedDocIds.size > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border text-slate-500 border-slate-200 bg-slate-50">
+                    <FileText size={9} /> {selectedDocIds.size} attachment{selectedDocIds.size !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
             </div>
-          )}
 
+            {/* Email iframe — scrollable */}
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <div className="p-3">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" style={{ minHeight: 420 }}>
+                  <iframe
+                    key={previewTemplate.id}
+                    srcDoc={previewHtml}
+                    className="w-full border-0 block"
+                    style={{ minHeight: 420, height: '100%' }}
+                    sandbox="allow-same-origin"
+                    title="Email body preview"
+                  />
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
+      )}
+
+      {/* ═══ Col 3 — Submission History & Logs (8/12 default, 4/12 with preview) */}
+      <div
+        className={`w-full lg:w-auto space-y-5 min-w-0 ${showPreview ? 'order-3' : 'order-2'}`}
+        style={{ flex: showPreview ? '4 4 0%' : '8 8 0%', transition: 'flex 0.3s ease' }}
+      >
+
+        {/* ── Submission History ── */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+              Submission History {filteredSubList.length > 0 && <span className="font-normal">({filteredSubList.length}{focusedLenderId !== null ? ` of ${subList.length}` : ''})</span>}
+            </p>
+            <div className="flex items-center gap-1.5">
+              {focusedLenderId !== null && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                  <Building2 size={10} />
+                  <span className="truncate max-w-[120px]">{focusedLenderName}</span>
+                  <button
+                    onClick={() => setFocusedLenderId(null)}
+                    className="ml-0.5 hover:text-indigo-900 transition-colors"
+                    title="Show all submissions"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={() => setFocusedLenderId(null)}
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border transition-all ${
+                  focusedLenderId === null
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                Show All
+              </button>
+            </div>
+          </div>
+
+          {/* Stats bar */}
+          {filteredSubList.length > 0 && (() => {
+            const total = filteredSubList.length
+            const success = filteredSubList.filter(s => s.submission_status === 'submitted' || s.submission_status === 'approved' || s.submission_status === 'viewed').length
+            const failed = filteredSubList.filter(s => s.submission_status === 'failed' || s.submission_status === 'declined').length
+            const processing = filteredSubList.filter(s => s.submission_status === 'pending').length
+            return (
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-50 border border-slate-100 mb-3">
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {total} Total
+                </span>
+                <span className="w-px h-3.5 bg-slate-200" />
+                {success > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {success} Sent
+                  </span>
+                )}
+                {failed > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    {failed} Failed
+                  </span>
+                )}
+                {processing > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    {processing} Processing
+                  </span>
+                )}
+              </div>
+            )
+          })()}
+
+          {subsLoading ? (
+            <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
+          ) : filteredSubList.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-6">
+              {focusedLenderId !== null ? 'No submissions for this lender yet.' : 'No submissions yet.'}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {filteredSubList.map(s => (
+                <div key={s.id} id={`sub-row-${s.lender_id}`}>
+                  <ErrorBoundary fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
+                    <SubmissionRow sub={s} leadId={leadId} onViewLog={handleViewLog} onResubmit={handleQuickResubmit} isResubmitting={quickResubmitId === s.lender_id} />
+                  </ErrorBoundary>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Error Fix Modal ── */}
+        {fixModal && (
+          <ErrorBoundary fallbackTitle="Error loading fix modal">
+            <ErrorFixModal
+              leadId={leadId}
+              lenderId={fixModal.log.lender_id}
+              error={fixModal.error}
+              onClose={() => setFixModal(null)}
+              onFixed={() => {
+                setFixModal(null)
+                qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+              }}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* ── Lender Email History ── */}
+        <LenderEmailHistory leadId={leadId} />
+
       </div>
+
+      {/* ── API Log Drawer ── */}
+      <ApiLogDrawer
+        open={logDrawer.open}
+        onClose={() => setLogDrawer({ open: false, lenderId: null, lenderName: '' })}
+        log={drawerLog}
+        lenderName={logDrawer.lenderName}
+        onFixError={(error) => {
+          setLogDrawer(prev => ({ ...prev, open: false }))
+          if (drawerLog) setFixModal({ log: drawerLog as unknown as ApiLog, error })
+        }}
+      />
 
     </div>
   )
@@ -3363,6 +4017,27 @@ export function CrmLeadDetail() {
   const [showPdfModal,       setShowPdfModal]       = useState(false)
   const [showEmailModal,     setShowEmailModal]     = useState(false)
   const [showSmsModal,       setShowSmsModal]       = useState(false)
+  const [showOwner2,         setShowOwner2]         = useState(false)
+
+  // Auto-collapse sidebar on this page to maximise content width
+  const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
+  useEffect(() => {
+    const wasPreviouslyCollapsed = sidebarCollapsed
+    if (!wasPreviouslyCollapsed) setSidebarCollapsed(true)
+    return () => { if (!wasPreviouslyCollapsed) setSidebarCollapsed(false) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Click-outside handler for dropdowns
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (showStatusDropdown && !t.closest('[data-dropdown="status"]')) setShowStatusDropdown(false)
+      if (showMoreMenu && !t.closest('[data-dropdown="more"]')) setShowMoreMenu(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showStatusDropdown, showMoreMenu])
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -3405,6 +4080,19 @@ export function CrmLeadDetail() {
   const docBadgeCount = docsForBadge?.length ?? 0
   const subBadgeCount = subsForBadge?.length ?? 0
 
+  // Auto-detect if lead has Owner 2 data populated
+  useEffect(() => {
+    if (!lead || !leadFields) return
+    const owner2Fields = leadFields.filter(f => f.section === 'second_owner')
+    if (owner2Fields.length === 0) return
+    const leadData = lead as Record<string, unknown>
+    const hasData = owner2Fields.some(f => {
+      const val = leadData[f.field_key]
+      return val !== null && val !== undefined && String(val).trim() !== ''
+    })
+    if (hasData) setShowOwner2(true)
+  }, [lead, leadFields])
+
   const updateStatus = useMutation({
     mutationFn: (status: string) => leadService.update(leadId, { lead_status: status }),
     onSuccess: () => {
@@ -3446,7 +4134,7 @@ export function CrmLeadDetail() {
   const tempStyle = leadTemp ? TEMP_STYLES[leadTemp] : null
 
   async function handleDeleteLead() {
-    if (!window.confirm(`Delete lead "${fullName}"? This cannot be undone.`)) return
+    if (!await confirmDelete(fullName)) return
     try {
       await leadService.delete(leadId)
       toast.success('Lead deleted')
@@ -3462,169 +4150,158 @@ export function CrmLeadDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/40 -mx-5 -mt-5">
+    <div className="min-h-screen bg-slate-50/40 -mx-5 -mt-5" style={{ WebkitFontSmoothing: 'antialiased' }}>
 
       {/* ── HEADER ── */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, #059669, #10b981, #34d399)' }} />
-        <div className="max-w-[1800px] mx-auto px-5 py-2 flex flex-col gap-1.5">
+      <div className="bg-white border-b border-slate-200/80" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div className="max-w-[1800px] mx-auto px-5 pt-2 pb-2">
 
-          {/* ── Row 1: nav + name + status + actions ── */}
-          <div className="flex items-center gap-3">
+          {/* ── Row 1: Back + Avatar + Name/Meta  |  Status + Actions ── */}
+          <div className="flex items-center gap-3 min-h-[44px]">
 
-          {/* Back */}
-          <button onClick={() => navigate('/crm/leads')} className="flex items-center gap-1 text-slate-400 hover:text-slate-700 text-xs font-medium transition-colors flex-shrink-0">
-            <ArrowLeft size={13} />
-            <span className="hidden sm:inline">Leads</span>
-          </button>
-          <span className="text-slate-200 flex-shrink-0">/</span>
-
-          {/* Avatar */}
-          <div className={`w-8 h-8 rounded-lg ${avatarBg} flex items-center justify-center flex-shrink-0`}>
-            <span className="text-xs font-bold text-white leading-none">{leadInits}</span>
-          </div>
-
-          {/* Name */}
-          <h1 className="text-sm font-bold text-slate-900 truncate leading-tight flex-shrink-0 max-w-[180px] sm:max-w-xs">{fullName}</h1>
-
-          {/* Status dropdown */}
-          <div className="relative flex-shrink-0">
-            <button
-              onClick={() => { setShowStatusDropdown(s => !s); setShowMoreMenu(false) }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-all hover:opacity-80"
-              style={{ background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}35` }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-              {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              <ChevronDown size={9} className="opacity-60" />
+            {/* Back button */}
+            <button onClick={() => navigate('/crm/leads')} className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all flex-shrink-0" title="Back to Leads">
+              <ArrowLeft size={14} />
             </button>
-            {showStatusDropdown && statuses && (
-              <div className="absolute top-full left-0 mt-1 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1 min-w-[200px]" onMouseLeave={() => setShowStatusDropdown(false)}>
-                {statuses.map((s: LeadStatus) => {
-                  const isCurrent = s.lead_title_url === String(lead.lead_status)
-                  const dotColor  = s.color_code ?? s.color ?? '#94a3b8'
-                  return (
-                    <button key={s.id}
-                      onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
-                      disabled={isCurrent || updateStatus.isPending}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-                    >
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-                      <span className="flex-1">{s.lead_title}</span>
-                      {isCurrent && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>}
-                    </button>
-                  )
-                })}
+
+            {/* Avatar */}
+            <div className={`w-9 h-9 rounded-lg ${avatarBg} flex items-center justify-center flex-shrink-0`}>
+              <span className="text-xs font-bold text-white leading-none">{leadInits}</span>
+            </div>
+
+            {/* Name + Meta stacked */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-[15px] font-bold text-slate-900 truncate leading-tight" style={{ maxWidth: 320 }}>{fullName}</h1>
+                {tempStyle && (
+                  <span className={`hidden sm:inline-flex items-center gap-1 h-[18px] px-1.5 rounded-full text-[9px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
+                    <span className="w-1 h-1 rounded-full" style={{ background: tempStyle.dot }} />
+                    {tempStyle.label}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
+              {/* Contact + meta inline */}
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {lead.company_name && (
+                  <>
+                    <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                      <Briefcase size={9} className="text-slate-400" />
+                      <span className="truncate max-w-[160px]">{String(lead.company_name)}</span>
+                    </span>
+                    <span className="text-slate-300 select-none text-[10px]">·</span>
+                  </>
+                )}
+                {lead.phone_number && (
+                  <>
+                    <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-emerald-600 transition-colors whitespace-nowrap">
+                      <Phone size={9} className="text-slate-400" />
+                      {formatPhoneNumber(String(lead.phone_number))}
+                    </a>
+                    <span className="text-slate-300 select-none text-[10px]">·</span>
+                  </>
+                )}
+                {lead.email && (
+                  <>
+                    <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-sky-600 transition-colors truncate max-w-[200px]">
+                      <Mail size={9} className="text-slate-400" />
+                      {String(lead.email)}
+                    </a>
+                    <span className="hidden lg:inline text-slate-300 select-none text-[10px]">·</span>
+                  </>
+                )}
+                {/* Meta items */}
+                {[
+                  (lead.assigned_name as string | undefined) || null,
+                  lead.lead_type ? toTitleCase(String(lead.lead_type)) : null,
+                  loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` : null,
+                  lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null,
+                  `${daysInSystem}d`,
+                ].filter(Boolean).map((v, i, arr) => (
+                  <span key={i} className="hidden lg:inline text-[11px] text-slate-400 whitespace-nowrap">
+                    {v}{i < arr.length - 1 && <span className="mx-1 text-slate-300 select-none">·</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
 
-          {/* Temperature badge */}
-          {tempStyle && (
-            <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
-              <span className="w-1 h-1 rounded-full" style={{ background: tempStyle.dot }} />
-              {tempStyle.label}
-            </span>
-          )}
+            {/* Right: Status dropdown + Action buttons */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Status dropdown */}
+              <div className="relative flex-shrink-0" data-dropdown="status">
+                <button
+                  onClick={() => setShowStatusDropdown(s => !s)}
+                  className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-80"
+                  style={{ background: `${statusColor}12`, color: statusColor, border: `1px solid ${statusColor}28` }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                  {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  <ChevronDown size={9} className="opacity-60" />
+                </button>
+                {showStatusDropdown && statuses && (
+                  <div className="absolute top-full right-0 mt-1 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1 min-w-[200px]">
+                    {statuses.map((s: LeadStatus) => {
+                      const isCurrent = s.lead_title_url === String(lead.lead_status)
+                      const dotColor  = s.color_code ?? s.color ?? '#94a3b8'
+                      return (
+                        <button key={s.id}
+                          onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
+                          disabled={isCurrent || updateStatus.isPending}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                        >
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+                          <span className="flex-1">{s.lead_title}</span>
+                          {isCurrent && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
 
-          <div className="flex-1" />
+              <span className="w-px h-4 bg-slate-200 mx-0.5 flex-shrink-0" />
 
-          {/* Actions */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => setShowEmailModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors"
-            >
-              <Mail size={11} /> Send Email
-            </button>
-            <button
-              onClick={() => setShowSmsModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors"
-            >
-              <MessageSquare size={11} /> Send Text
-            </button>
-            <button
-              onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-            >
-              <Pencil size={11} /> Edit
-            </button>
-            <div className="relative">
               <button
-                onClick={() => { setShowMoreMenu(s => !s); setShowStatusDropdown(false) }}
-                className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 transition-colors"
+                onClick={() => setShowEmailModal(true)}
+                className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-sky-50 text-sky-700 border border-sky-200/70 hover:bg-sky-100 hover:border-sky-300 transition-all"
               >
-                <MoreVertical size={15} />
+                <Mail size={11} /> <span className="hidden sm:inline">Email</span>
               </button>
-              {showMoreMenu && (
-                <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden z-20 py-1" onMouseLeave={() => setShowMoreMenu(false)}>
-                  <button onClick={() => { setShowMoreMenu(false); setShowPdfModal(true) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Printer size={13} /> Generate PDF</button>
-                  <button onClick={() => { setShowMoreMenu(false); setActiveTab('lenders') }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><Send size={13} /> Send to Lender</button>
-                  <button onClick={() => toast('Export coming soon', { icon: 'ℹ️' })} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 transition-colors"><FileDown size={13} /> Download Lead</button>
-                  <div className="h-px bg-slate-100 my-1" />
-                  <button onClick={handleDeleteLead} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={13} /> Delete Lead</button>
-                </div>
-              )}
+              <button
+                onClick={() => setShowSmsModal(true)}
+                className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200/70 hover:bg-violet-100 hover:border-violet-300 transition-all"
+              >
+                <MessageSquare size={11} /> <span className="hidden sm:inline">SMS</span>
+              </button>
+              <button
+                onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
+                className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70 hover:bg-emerald-100 hover:border-emerald-300 transition-all"
+              >
+                <Pencil size={11} /> <span className="hidden sm:inline">Edit</span>
+              </button>
+              <button
+                onClick={handleDeleteLead}
+                className="h-7 inline-flex items-center justify-center w-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all"
+                title="Delete Lead"
+              >
+                <Trash2 size={11} />
+              </button>
             </div>
-          </div>
-          </div>{/* end row 1 */}
 
-          {/* ── Row 2: contact info ── */}
-          {(lead.company_name || lead.phone_number || lead.email) && (
-            <div className="flex items-center gap-3 pl-1">
-              {lead.company_name && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-slate-700 truncate max-w-[180px]">
-                  <Briefcase size={10} className="flex-shrink-0 text-slate-500" />
-                  {String(lead.company_name)}
-                </span>
-              )}
-              {lead.phone_number && (
-                <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-emerald-600 transition-colors whitespace-nowrap">
-                  <Phone size={10} className="flex-shrink-0" />
-                  {formatPhoneNumber(String(lead.phone_number))}
-                </a>
-              )}
-              {lead.email && (
-                <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-sky-600 transition-colors truncate max-w-[220px]">
-                  <Mail size={10} className="flex-shrink-0" />
-                  {String(lead.email)}
-                </a>
-              )}
-            </div>
-          )}
-
-        </div>
-
-        {/* ── Stat strip ── */}
-        <div className="border-t border-slate-100">
-          <div className="max-w-[1800px] mx-auto px-5 py-2 flex items-center gap-5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {[
-              { label: 'Lead type',   value: lead.lead_type ? toTitleCase(String(lead.lead_type)) : null },
-              { label: 'Assigned to', value: (lead.assigned_name as string | undefined) || null },
-              { label: 'Loan amount', value: loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` : null },
-              { label: 'Created',     value: lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null },
-              { label: 'In pipeline', value: `${daysInSystem} day${daysInSystem === 1 ? '' : 's'}` },
-            ].map(({ label, value }, i, arr) => (
-              <div key={label} className="flex items-center gap-5 flex-shrink-0">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[10px] text-slate-400 whitespace-nowrap">{label}:</span>
-                  <span className={`text-[11px] font-semibold whitespace-nowrap ${value ? 'text-slate-700' : 'text-slate-300'}`}>{value ?? '—'}</span>
-                </div>
-                {i < arr.length - 1 && <span className="text-slate-200 text-xs select-none">·</span>}
-              </div>
-            ))}
           </div>
         </div>
+
+        {/* ── Accent separator ── */}
+        <div className="h-[2px] w-full" style={{ background: 'linear-gradient(90deg, transparent 5%, #86efac 30%, #4ade80 50%, #86efac 70%, transparent 95%)' }} />
 
       </div>
 
       {/* ── SINGLE CARD ── */}
       <div className="max-w-[1800px] mx-auto px-5 py-4 pb-8">
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 130px)' }}>
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 140px)' }}>
 
           {/* Unified tab bar */}
           <div className="relative flex-shrink-0">
-            <div ref={tabBarRef} className="flex items-center border-b border-slate-100 bg-slate-50/40 overflow-x-auto scrollbar-hide">
+            <div ref={tabBarRef} className="flex items-center border-b border-slate-200/60 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
             {TABS.map(tab => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -3634,28 +4311,22 @@ export function CrmLeadDetail() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={[
-                    'flex items-center gap-1.5 px-5 py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition-all flex-shrink-0',
+                    'relative flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] font-semibold whitespace-nowrap transition-all flex-shrink-0',
                     isActive
-                      ? 'border-emerald-500 text-emerald-700 bg-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
+                      ? 'text-emerald-700'
+                      : 'text-slate-400 hover:text-slate-600',
                   ].join(' ')}
                 >
-                  <Icon size={13} className="flex-shrink-0" />
+                  <Icon size={12} className="flex-shrink-0" />
                   {tab.label}
                   {badge > 0 && (
-                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{badge}</span>
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{badge}</span>
                   )}
+                  {isActive && <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-emerald-500" />}
                 </button>
               )
             })}
             <div className="flex-1" />
-            </div>
-            {/* Fade + scroll-right hint for overflowing tabs */}
-            <div
-              className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 flex items-center justify-end pr-1"
-              style={{ background: 'linear-gradient(to right, transparent, rgba(248,250,252,0.95))' }}
-            >
-              <ChevronRight size={14} className="text-slate-400" />
             </div>
           </div>
 
@@ -3716,7 +4387,7 @@ export function CrmLeadDetail() {
               }
 
               // ── Preferred section rendering order ────────────────────────────
-              const PREF_ORDER = ['owner', 'contact', 'business', 'general', 'address', 'financial', 'legal', 'compliance', 'deal', 'marketing', 'custom']
+              const PREF_ORDER = ['owner', 'second_owner', 'contact', 'business', 'general', 'address', 'financial', 'legal', 'compliance', 'deal', 'marketing', 'custom']
               const orderedSections = [
                 ...PREF_ORDER.filter(s => sectionMap.has(s)),
                 ...[...sectionMap.keys()].filter(s => !PREF_ORDER.includes(s)),
@@ -3738,7 +4409,7 @@ export function CrmLeadDetail() {
               // ── Section icon map ─────────────────────────────────────────────
               const ICON_MAP: Record<string, LucideIcon> = {
                 contact: User, business: Briefcase, address: MapPin,
-                owner: UserCheck, general: ClipboardList,
+                owner: UserCheck, second_owner: Users, general: ClipboardList,
                 financial: DollarSign, legal: FileText,
                 compliance: ShieldCheck, deal: TrendingUp,
                 marketing: Tag, custom: Hash,
@@ -3746,8 +4417,9 @@ export function CrmLeadDetail() {
 
               // ── Section label map ────────────────────────────────────────────
               const SECTION_LABELS: Record<string, string> = {
-                owner:      'Owner Information',
-                contact:    'Contact Information',
+                owner:        'Owner Information',
+                second_owner: 'Owner 2 Information',
+                contact:      'Contact Information',
                 business:   'Business Information',
                 general:    'General Information',
                 address:    'Address Information',
@@ -3767,24 +4439,24 @@ export function CrmLeadDetail() {
                   ?? (secKey.charAt(0).toUpperCase() + secKey.slice(1) + ' Information')
                 const SecIcon   = ICON_MAP[secKey] ?? Settings2
                 return (
-                  <div key={secKey} className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                      <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                        <SecIcon size={11} className="text-emerald-600" />
+                  <div key={secKey} className="rounded-xl border border-slate-200/70 bg-white overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
+                      <div className="w-4.5 h-4.5 rounded bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                        <SecIcon size={10} className="text-emerald-600" />
                       </div>
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{title}</h3>
-                      <span className="ml-auto text-[10px] text-slate-400">{fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+                      <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{title}</h3>
+                      <span className="ml-auto text-[10px] text-slate-400 tabular-nums">{fields.length}</span>
                     </div>
                     <div className="p-4 divide-y divide-slate-50">
                       {fields.map(f => {
                         const raw     = (lead as Record<string, unknown>)[f.field_key]
                         const display = fmtVal(f.field_type, raw)
                         return (
-                          <div key={f.field_key} className="flex items-start gap-4 py-2.5">
-                            <span className="text-xs text-slate-400 w-28 flex-shrink-0 pt-0.5 leading-tight">
+                          <div key={f.field_key} className="flex items-start gap-3 py-2">
+                            <span className="text-[11px] text-slate-400 w-[120px] flex-shrink-0 pt-0.5 leading-tight truncate" title={f.label_name}>
                               {f.label_name}
                             </span>
-                            <span className={`text-sm font-medium flex-1 leading-tight break-words ${display ? 'text-slate-800' : 'text-slate-300'}`}>
+                            <span className={`text-[13px] font-medium flex-1 leading-tight break-words min-w-0 ${display ? 'text-slate-800' : 'text-slate-300'}`}>
                               {display || '—'}
                             </span>
                           </div>
@@ -3795,9 +4467,36 @@ export function CrmLeadDetail() {
                 )
               }
 
+              // Separate second_owner from regular sections
+              const regularSections = orderedSections.filter(s => s !== 'second_owner')
+              const hasOwner2Section = sectionMap.has('second_owner') && (sectionMap.get('second_owner')?.length ?? 0) > 0
+
               return (
-                <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start overflow-y-auto">
-                  {orderedSections.map(sec => renderSection(sec))}
+                <div className="px-4 py-4 space-y-3 overflow-y-auto">
+                  {/* Regular sections grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+                    {regularSections.map(sec => renderSection(sec))}
+                  </div>
+
+                  {/* Owner 2 — full-width toggle + section */}
+                  {hasOwner2Section && (
+                    <div>
+                      <label className="flex items-center gap-2.5 py-2 cursor-pointer select-none w-fit">
+                        <input
+                          type="checkbox"
+                          checked={showOwner2}
+                          onChange={e => setShowOwner2(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-slate-600">This lead has a second owner / co-applicant</span>
+                      </label>
+                      {showOwner2 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start mt-1">
+                          {renderSection('second_owner')}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })()}
@@ -3810,6 +4509,7 @@ export function CrmLeadDetail() {
             {activeTab === 'offers'     && <ErrorBoundary fallbackTitle="Offers failed to load"><div className="p-5"><OffersStipsTab leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'deal'       && <ErrorBoundary fallbackTitle="Deal failed to load"><div className="p-5"><DealTab leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'compliance' && <ErrorBoundary fallbackTitle="Compliance failed to load"><div className="p-5"><ComplianceTab leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'approvals' && <ErrorBoundary fallbackTitle="Approvals failed to load"><div className="p-5"><ApprovalsSection leadId={leadId} /></div></ErrorBoundary>}
 
           </div>
 

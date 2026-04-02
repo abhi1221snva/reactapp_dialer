@@ -7,6 +7,8 @@ import {
   CheckCheck, Check, MoreVertical, X, Download, Image,
   FileText, MessagesSquare, Phone, Video, ChevronDown,
   PhoneOff, Mic, MicOff, VideoOff, UserPlus, Building2, Store,
+  ArrowUpRight, DollarSign, ClipboardCheck, MailCheck,
+  ShieldCheck, RefreshCw, FilePlus2, ExternalLink,
 } from 'lucide-react'
 import { chatService } from '../../services/chat.service'
 import { useAuthStore } from '../../stores/auth.store'
@@ -18,7 +20,9 @@ import type {
   PusherNewMessageEvent, PusherMessageReadEvent,
   PusherTypingEvent, PusherPresenceEvent,
   CallData, CallSignalData, CallAcceptedData, CallEndedData,
+  SystemMessageMeta,
 } from '../../types/chat.types'
+import { useNavigate } from 'react-router-dom'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -124,6 +128,235 @@ function TypingDots() {
   )
 }
 
+// ─── System Message Card (rich cards for #Lender / #Merchant channels) ───────
+
+interface SystemMessageCardProps {
+  msg: ChatMessage
+  channelSlug?: string | null
+}
+
+const EVENT_CONFIG: Record<string, {
+  icon: React.ReactNode
+  label: string
+  accent: string
+  bg: string
+  border: string
+  iconBg: string
+}> = {
+  submission: {
+    icon: <ArrowUpRight className="w-4 h-4" />,
+    label: 'Application Submitted',
+    accent: 'text-violet-700',
+    bg: 'bg-violet-50',
+    border: 'border-violet-200',
+    iconBg: 'bg-violet-100 text-violet-600',
+  },
+  response: {
+    icon: <MailCheck className="w-4 h-4" />,
+    label: 'Lender Response',
+    accent: 'text-violet-700',
+    bg: 'bg-violet-50',
+    border: 'border-violet-200',
+    iconBg: 'bg-violet-100 text-violet-600',
+  },
+  offer: {
+    icon: <DollarSign className="w-4 h-4" />,
+    label: 'New Offer Received',
+    accent: 'text-amber-700',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    iconBg: 'bg-amber-100 text-amber-600',
+  },
+  offer_accepted: {
+    icon: <ShieldCheck className="w-4 h-4" />,
+    label: 'Offer Accepted',
+    accent: 'text-emerald-700',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    iconBg: 'bg-emerald-100 text-emerald-600',
+  },
+  merchant_update: {
+    icon: <RefreshCw className="w-4 h-4" />,
+    label: 'Merchant Updated',
+    accent: 'text-sky-700',
+    bg: 'bg-sky-50',
+    border: 'border-sky-200',
+    iconBg: 'bg-sky-100 text-sky-600',
+  },
+  new_application: {
+    icon: <FilePlus2 className="w-4 h-4" />,
+    label: 'New Application',
+    accent: 'text-emerald-700',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    iconBg: 'bg-emerald-100 text-emerald-600',
+  },
+}
+
+const RESPONSE_BADGES: Record<string, { cls: string; text: string }> = {
+  approved:  { cls: 'bg-emerald-100 text-emerald-700', text: 'Approved' },
+  declined:  { cls: 'bg-rose-100 text-rose-700',       text: 'Declined' },
+  pending:   { cls: 'bg-amber-100 text-amber-700',     text: 'Pending' },
+  review:    { cls: 'bg-sky-100 text-sky-700',          text: 'In Review' },
+  countered: { cls: 'bg-violet-100 text-violet-700',    text: 'Countered' },
+}
+
+/**
+ * Parse structured data from system message body text.
+ * Handles both legacy messages (emoji-prefixed strings) and new ones.
+ */
+function parseSystemBody(body: string): SystemMessageMeta | null {
+  // 📤 Application submitted to {lender} for Lead #{id} ({business}) by {user}
+  const subMatch = body.match(/Application submitted to (.+?) for Lead #(\d+)(?:\s*\((.+?)\))?(?:\s*by (.+))?$/i)
+  if (subMatch) {
+    return { event: 'submission', lender_name: subMatch[1], lead_id: +subMatch[2] }
+  }
+
+  // 📩 {lender} responded '{status}' for Lead #{id} — {note}
+  const respMatch = body.match(/(.+?) responded '?(\w+)'? for Lead #(\d+)/i)
+  if (respMatch) {
+    return { event: 'response', lender_name: respMatch[1].replace(/^📩\s*/, ''), response_status: respMatch[2].toLowerCase(), lead_id: +respMatch[3] }
+  }
+
+  // 💰 New offer from {lender}: ${amount} at {rate}x for {days} days (Lead #{id})
+  const offerMatch = body.match(/New offer from (.+?):\s*\$?([\d,.]+).*?Lead #(\d+)/i)
+  if (offerMatch) {
+    return { event: 'offer', lender_name: offerMatch[1], amount: parseFloat(offerMatch[2].replace(/,/g, '')), lead_id: +offerMatch[3] }
+  }
+
+  // ✅ Offer from {lender} accepted for Lead #{id} — ${amount}
+  const acceptMatch = body.match(/Offer from (.+?) accepted for Lead #(\d+)(?:.*?\$?([\d,.]+))?/i)
+  if (acceptMatch) {
+    return { event: 'offer_accepted', lender_name: acceptMatch[1], lead_id: +acceptMatch[2], amount: acceptMatch[3] ? parseFloat(acceptMatch[3].replace(/,/g, '')) : undefined }
+  }
+
+  // 🔄 Merchant updated Lead #{id} — Fields: {fields}
+  const merchMatch = body.match(/Merchant updated Lead #(\d+).*?Fields:\s*(.+)/i)
+  if (merchMatch) {
+    return { event: 'merchant_update', lead_id: +merchMatch[1], fields: merchMatch[2].split(',').map(s => s.trim()) }
+  }
+
+  // 📋 New application submitted for {business} via {code} (Lead #{id})
+  const appMatch = body.match(/New application submitted for .+? via (.+?) \(Lead #(\d+)\)/i)
+  if (appMatch) {
+    return { event: 'new_application', affiliate_code: appMatch[1], lead_id: +appMatch[2] }
+  }
+
+  return null
+}
+
+/** Build a clean description line from the body — strips leading emojis */
+function cleanBody(body: string): string {
+  return body.replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\s]+/u, '').trim()
+}
+
+const SystemMessageCard = memo(function SystemMessageCard({ msg, channelSlug }: SystemMessageCardProps) {
+  const navigate = useNavigate()
+
+  // Use metadata if present, otherwise parse from body text
+  const rawMeta = msg.metadata as SystemMessageMeta | undefined
+  const meta = (rawMeta?.event ? rawMeta : null) ?? parseSystemBody(msg.body)
+  const event = meta?.event
+  const config = event ? EVENT_CONFIG[event] : null
+
+  // Fallback: plain pill for truly unstructured messages (e.g. "channel created")
+  if (!config || !meta) {
+    return (
+      <div className="flex justify-center my-2">
+        <span className="text-sm text-slate-500 bg-slate-100 px-4 py-1.5 rounded-full">
+          {msg.body}
+        </span>
+      </div>
+    )
+  }
+
+  const leadId = meta.lead_id
+  const body = cleanBody(msg.body)
+  const handleViewLead = () => {
+    if (leadId) navigate(`/crm/leads/${leadId}`)
+  }
+
+  return (
+    <div className="my-1.5">
+      <div
+        className={cn(
+          'w-full rounded-lg border flex items-center gap-3 px-3 py-2',
+          config.bg, config.border,
+        )}
+      >
+        {/* Icon */}
+        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', config.iconBg)}>
+          {config.icon}
+        </div>
+
+        {/* Content — single row with label, description, badges */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn('text-[11px] font-bold uppercase tracking-wide flex-shrink-0', config.accent)}>
+              {config.label}
+            </span>
+            <span className="text-xs text-slate-600 truncate">{body}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {leadId && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[10px] font-semibold bg-white/80 border border-slate-200 rounded text-slate-600">
+                Lead #{leadId}
+              </span>
+            )}
+            {meta.lender_name && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[10px] font-medium bg-white/80 border border-slate-200 rounded text-slate-600">
+                <Building2 className="w-2.5 h-2.5" /> {meta.lender_name}
+              </span>
+            )}
+            {meta.amount != null && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[10px] font-bold bg-white/80 border border-slate-200 rounded text-slate-700">
+                <DollarSign className="w-2.5 h-2.5" />
+                {Number(meta.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
+            )}
+            {meta.response_status && (() => {
+              const badge = RESPONSE_BADGES[meta.response_status] ?? { cls: 'bg-slate-100 text-slate-600', text: meta.response_status }
+              return (
+                <span className={cn('inline-flex items-center px-1.5 py-px text-[10px] font-bold rounded', badge.cls)}>
+                  {badge.text}
+                </span>
+              )
+            })()}
+            {meta.affiliate_code && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[10px] font-medium bg-white/80 border border-slate-200 rounded text-slate-600">
+                Affiliate: {meta.affiliate_code}
+              </span>
+            )}
+            {meta.fields && meta.fields.length > 0 && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[10px] font-medium bg-white/80 border border-slate-200 rounded text-slate-600">
+                {meta.fields.length} field{meta.fields.length > 1 ? 's' : ''} updated
+              </span>
+            )}
+            <span className="text-[10px] text-slate-400">{formatFullTime(msg.created_at)}</span>
+          </div>
+        </div>
+
+        {/* View Lead CTA */}
+        {leadId && (
+          <button
+            onClick={handleViewLead}
+            className={cn(
+              'inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex-shrink-0',
+              'hover:shadow-sm active:scale-[0.98]',
+              channelSlug === 'lender'
+                ? 'bg-violet-600 text-white hover:bg-violet-700'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700',
+            )}
+          >
+            <ExternalLink className="w-3 h-3" />
+            View Lead
+          </button>
+        )}
+      </div>
+    </div>
+  )
+})
+
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 
 interface BubbleProps {
@@ -132,19 +365,16 @@ interface BubbleProps {
   showAvatar: boolean
   isGrouped: boolean
   onDownload: (id: number, name: string) => void
+  channelSlug?: string | null
 }
 
 const MessageBubble = memo(function MessageBubble({
-  msg, showSender, showAvatar, isGrouped, onDownload,
+  msg, showSender, showAvatar, isGrouped, onDownload, channelSlug,
 }: BubbleProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   if (msg.message_type === 'system') {
-    return (
-      <div className="flex justify-center my-1">
-        <span className="text-sm text-black bg-slate-100 px-3 py-1 rounded-full">{msg.body}</span>
-      </div>
-    )
+    return <SystemMessageCard msg={msg} channelSlug={channelSlug} />
   }
 
   return (
@@ -1575,38 +1805,71 @@ export function TeamChat() {
         {/* Sidebar list */}
         <div className="flex-1 overflow-y-auto pb-4 space-y-0.5 px-2">
 
-          {/* Channels (system) */}
+          {/* Channels (system) — always highlighted */}
           {systemConvs.length > 0 && (
             <div>
               <div className="flex items-center px-2 pt-3 pb-1.5">
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Channels</p>
               </div>
-              {systemConvs.map(conv => (
-                <button
-                  key={conv.uuid}
-                  onClick={() => selectConversation(conv.uuid)}
-                  className={cn(
-                    'w-full flex items-start gap-2.5 px-2 py-2 rounded-xl transition-all text-left',
-                    selectedUuid === conv.uuid ? 'bg-indigo-50' : 'hover:bg-slate-50',
-                  )}
-                >
-                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5', conv.system_slug === 'lender' ? 'bg-violet-500' : 'bg-emerald-500')}>
-                    {conv.system_slug === 'lender' ? <Building2 className="w-4 h-4" /> : conv.system_slug === 'merchant' ? <Store className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className={cn('text-sm truncate font-medium', selectedUuid === conv.uuid ? 'text-indigo-700' : 'text-slate-700')}>{conv.name}</p>
-                      {(conv.unread_count ?? 0) > 0 && (
-                        <span className="min-w-[18px] h-[18px] px-1 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
-                          {conv.unread_count > 9 ? '9+' : conv.unread_count}
-                        </span>
+              <div className="space-y-0.5">
+                {systemConvs.map(conv => {
+                  const isActive = selectedUuid === conv.uuid
+                  const isLender = conv.system_slug === 'lender'
+                  const isMerchant = conv.system_slug === 'merchant'
+                  const hasUnread = (conv.unread_count ?? 0) > 0
+                  return (
+                    <button
+                      key={conv.uuid}
+                      onClick={() => selectConversation(conv.uuid)}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 px-2 py-2.5 rounded-xl transition-all text-left relative',
+                        isActive
+                          ? isLender ? 'bg-violet-50' : isMerchant ? 'bg-emerald-50' : 'bg-indigo-50'
+                          : 'hover:bg-slate-50',
                       )}
-                    </div>
-                    {conv.last_message && <p className="text-xs text-slate-400 truncate mt-0.5">{conv.last_message.body}</p>}
-                    {!conv.last_message && <p className="text-xs text-slate-400 mt-0.5">Broadcast channel</p>}
-                  </div>
-                </button>
-              ))}
+                    >
+                      {isActive && (
+                        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full" style={{ background: isLender ? '#7c3aed' : isMerchant ? '#059669' : '#6366f1' }} />
+                      )}
+                      <div className={cn(
+                        'w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0',
+                        isLender ? 'bg-violet-500' : isMerchant ? 'bg-emerald-500' : 'bg-indigo-500',
+                      )}>
+                        {isLender ? <Building2 className="w-4 h-4" /> : isMerchant ? <Store className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className={cn(
+                            'text-sm truncate font-semibold',
+                            isActive
+                              ? isLender ? 'text-violet-700' : isMerchant ? 'text-emerald-700' : 'text-indigo-700'
+                              : 'text-slate-700',
+                          )}>
+                            {conv.name}
+                          </p>
+                          {hasUnread && (
+                            <span className={cn(
+                              'min-w-[18px] h-[18px] px-1 text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0',
+                              isLender ? 'bg-violet-500' : isMerchant ? 'bg-emerald-500' : 'bg-indigo-600',
+                            )}>
+                              {(conv.unread_count ?? 0) > 9 ? '9+' : conv.unread_count}
+                            </span>
+                          )}
+                        </div>
+                        {conv.last_message ? (
+                          <p className={cn('text-xs truncate mt-0.5', hasUnread ? 'text-slate-600 font-medium' : 'text-slate-400')}>
+                            {conv.last_message.body}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {isLender ? 'Lender activity feed' : isMerchant ? 'Merchant activity feed' : 'Broadcast channel'}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -1763,7 +2026,14 @@ export function TeamChat() {
             />
 
             {/* Messages area */}
-            <div className="flex-1 overflow-y-auto px-6 py-4" id="messages-container">
+            <div
+              className={cn(
+                'flex-1 overflow-y-auto px-6 py-4',
+                selectedConv?.is_system && selectedConv.system_slug === 'lender' && 'bg-violet-50/30',
+                selectedConv?.is_system && selectedConv.system_slug === 'merchant' && 'bg-emerald-50/30',
+              )}
+              id="messages-container"
+            >
               {/* Load more sentinel */}
               <div ref={loadMoreRef} className="h-1" />
               {loadingMore && (
@@ -1803,6 +2073,7 @@ export function TeamChat() {
                       showAvatar={showAvatar}
                       isGrouped={!!isGrouped}
                       onDownload={handleDownload}
+                      channelSlug={selectedConv?.system_slug}
                     />
                   </div>
                 )
@@ -1826,8 +2097,26 @@ export function TeamChat() {
 
             {/* Input area / read-only notice */}
             {selectedConv?.is_system ? (
-              <div className="flex-shrink-0 px-4 py-3 border-t border-slate-100 bg-slate-50 text-center">
-                <p className="text-xs text-slate-400">This is a read-only broadcast channel</p>
+              <div className={cn(
+                'flex-shrink-0 px-4 py-3 border-t text-center',
+                selectedConv.system_slug === 'lender'
+                  ? 'bg-violet-50 border-violet-100'
+                  : selectedConv.system_slug === 'merchant'
+                  ? 'bg-emerald-50 border-emerald-100'
+                  : 'bg-slate-50 border-slate-100',
+              )}>
+                <p className={cn(
+                  'text-xs font-medium',
+                  selectedConv.system_slug === 'lender' ? 'text-violet-400'
+                    : selectedConv.system_slug === 'merchant' ? 'text-emerald-400'
+                    : 'text-slate-400',
+                )}>
+                  {selectedConv.system_slug === 'lender'
+                    ? 'Broadcast channel — Lender activity updates appear here automatically'
+                    : selectedConv.system_slug === 'merchant'
+                    ? 'Broadcast channel — Merchant & application updates appear here automatically'
+                    : 'This is a read-only broadcast channel'}
+                </p>
               </div>
             ) : (
             <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-slate-100 bg-white">
@@ -2061,6 +2350,42 @@ const ChatHeader = memo(function ChatHeader({ conv, currentUserId, onlineStatus,
     : status === 'away' ? 'Away'
     : status === 'busy' ? 'Busy'
     : 'Offline'
+
+  const isSystem = conv.is_system
+  const slug = conv.system_slug
+
+  // Themed header for system channels
+  const channelTheme = slug === 'lender'
+    ? { bg: 'bg-violet-600', iconBg: 'bg-violet-500', icon: <Building2 className="w-4 h-4 text-white" />, desc: 'Lender submissions, responses & offers', accent: 'text-violet-100' }
+    : slug === 'merchant'
+    ? { bg: 'bg-emerald-600', iconBg: 'bg-emerald-500', icon: <Store className="w-4 h-4 text-white" />, desc: 'Merchant applications & updates', accent: 'text-emerald-100' }
+    : null
+
+  if (isSystem && channelTheme) {
+    return (
+      <div
+        className="flex-shrink-0 px-5 py-3 border-b flex items-center gap-3"
+        style={{ background: `linear-gradient(135deg, ${slug === 'lender' ? '#7c3aed' : '#059669'} 0%, ${slug === 'lender' ? '#6d28d9' : '#047857'} 100%)` }}
+      >
+        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', channelTheme.iconBg)}>
+          {channelTheme.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white truncate">{conv.name}</p>
+          <p className={cn('text-xs', channelTheme.accent)}>{channelTheme.desc}</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/15 text-[11px] font-medium text-white/80">
+            <Users className="w-3 h-3" />
+            {conv.participants.length}
+          </span>
+          <span className="inline-flex items-center px-2 py-1 rounded-lg bg-white/15 text-[11px] font-medium text-white/80">
+            Read-only
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex-shrink-0 px-5 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">

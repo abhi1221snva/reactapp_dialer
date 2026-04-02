@@ -133,28 +133,26 @@ export function ExcludeList() {
         />
       )}
 
-      <div className="space-y-2">
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/')} className="btn-ghost p-2 rounded-lg mt-0.5">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1">
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">Exclude From List</h1>
-                <p className="page-subtitle">Numbers excluded from dialing campaigns</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowUpload(true)} className="btn-outline">
-                  <Upload size={15} />
-                  Upload Excel
-                </button>
-                <button onClick={() => setShowAdd(true)} className="btn-primary">
-                  <Plus size={15} />
-                  Add Number
-                </button>
-              </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h1 className="page-title">Exclude From List</h1>
+              <p className="page-subtitle">Numbers excluded from dialing campaigns</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowUpload(true)} className="btn-outline">
+              <Upload size={15} />
+              Upload Excel
+            </button>
+            <button onClick={() => setShowAdd(true)} className="btn-primary">
+              <Plus size={15} />
+              Add Number
+            </button>
           </div>
         </div>
 

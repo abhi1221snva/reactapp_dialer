@@ -617,7 +617,7 @@ export function CrmDashboard() {
             title="Lender Performance"
             sub="Approval & funding rates"
             right={
-              <button onClick={() => navigate('/crm/lenders')}
+              <button onClick={() => navigate('/crm/lender-performance')}
                 className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
                 View all <ArrowRight size={12} />
               </button>

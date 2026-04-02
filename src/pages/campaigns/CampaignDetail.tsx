@@ -3,13 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Radio, Pencil, Play, Pause, Copy,
   Users, LayoutList, Phone, Clock, Globe, Tag,
-  ToggleRight, ToggleLeft, ChevronRight,
+  ChevronRight, X, Mail,
+  CheckCircle2, XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
 import { campaignService } from '../../services/campaign.service'
+import { cn } from '../../utils/cn'
 
-interface CampaignDetail {
+interface CampaignDetailData {
   id?: number; title?: string; description?: string; status?: number | string
   dial_mode?: string; call_ratio?: string | null
   duration?: string | null; hopper_mode?: number | null
@@ -37,7 +39,25 @@ function formatTime(t?: string | null): string {
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
-function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
+function OnOff({ val, label }: { val?: unknown; label: string }) {
+  const on = val === 1 || val === '1' || val === true || Number(val) === 1
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <span className={cn(
+        'inline-flex items-center gap-1 text-xs font-semibold',
+        on ? 'text-emerald-600' : 'text-slate-400'
+      )}>
+        {on
+          ? <><CheckCircle2 size={13} className="text-emerald-500" /> Enabled</>
+          : <><XCircle size={13} className="text-slate-300" /> Disabled</>
+        }
+      </span>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
       <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
@@ -73,7 +93,7 @@ export function CampaignDetail() {
     enabled: !!id,
   })
 
-  const d: CampaignDetail = (data as { data?: { data?: CampaignDetail } })?.data?.data ?? {}
+  const d: CampaignDetailData = (data as { data?: { data?: CampaignDetailData } })?.data?.data ?? {}
 
   const toggleMutation = useMutation({
     mutationFn: () =>
@@ -149,56 +169,62 @@ export function CampaignDetail() {
         <span className="text-slate-900 font-medium truncate">{d.title || `Campaign #${id}`}</span>
       </div>
 
-      {/* Header */}
-      <div className="card">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Radio size={22} className="text-indigo-600" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 leading-tight">
-                {d.title || `Campaign #${id}`}
-              </h1>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <Badge variant={isActive(d.status) ? 'green' : 'gray'}>
-                  {isActive(d.status) ? 'Active' : 'Inactive'}
-                </Badge>
-                {d.dial_mode && (
-                  <span className="text-xs text-slate-500 capitalize">{dialModeDisplay}</span>
-                )}
-                {String(d.amd) === '1' && <Badge variant="blue">AMD</Badge>}
-                {Number(d.call_metric) === 1 && <Badge variant="purple">Metrics</Badge>}
-              </div>
-              {d.description && (
-                <p className="text-sm text-slate-500 mt-2 max-w-xl">{d.description}</p>
-              )}
-            </div>
-          </div>
+      {/* ── Header Banner (matches User View style) ── */}
+      <div className="bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl relative overflow-hidden shadow-sm">
+        <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
+        <div className="absolute top-6 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => toggleMutation.mutate()}
-              disabled={toggleMutation.isPending}
-              className={`btn-sm gap-1.5 ${isActive(d.status) ? 'btn-outline text-amber-600 border-amber-200 hover:bg-amber-50' : 'btn-primary'}`}
-            >
-              {isActive(d.status) ? <Pause size={13} /> : <Play size={13} />}
-              {isActive(d.status) ? 'Pause' : 'Activate'}
-            </button>
-            <button
-              onClick={() => navigate(`/campaigns/${id}/edit`)}
-              className="btn-outline btn-sm gap-1.5"
-            >
-              <Pencil size={13} /> Edit
-            </button>
-            <button
-              onClick={() => copyMutation.mutate()}
-              disabled={copyMutation.isPending}
-              className="btn-ghost btn-sm gap-1.5"
-            >
-              <Copy size={13} /> Duplicate
-            </button>
+        <div className="relative px-6 py-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg">
+                <Radio size={24} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xl font-bold text-white truncate leading-tight">
+                  {d.title || `Campaign #${id}`}
+                </h1>
+                {d.description && (
+                  <p className="text-white/70 text-sm truncate mt-0.5">{d.description}</p>
+                )}
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={cn(
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border',
+                    isActive(d.status)
+                      ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
+                      : 'bg-white/10 border-white/20 text-white/60'
+                  )}>
+                    <span className={cn('w-1.5 h-1.5 rounded-full', isActive(d.status) ? 'bg-emerald-300' : 'bg-white/40')} />
+                    {isActive(d.status) ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => toggleMutation.mutate()}
+                disabled={toggleMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white/20 hover:bg-white/30 text-white border border-white/25 transition-colors"
+              >
+                {isActive(d.status) ? <Pause size={13} /> : <Play size={13} />}
+                {isActive(d.status) ? 'Pause' : 'Activate'}
+              </button>
+              <button
+                onClick={() => navigate(`/campaigns/${id}/edit`)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white/20 hover:bg-white/30 text-white border border-white/25 transition-colors"
+              >
+                <Pencil size={13} /> Edit
+              </button>
+              <button
+                onClick={() => copyMutation.mutate()}
+                disabled={copyMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/80 border border-white/15 transition-colors"
+              >
+                <Copy size={13} /> Duplicate
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -218,14 +244,14 @@ export function CampaignDetail() {
 
         <div className="card">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <Phone size={16} className="text-emerald-600" />
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+              <Phone size={16} className="text-blue-600" />
             </div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Progress</span>
           </div>
           <p className="text-2xl font-bold text-slate-900">{pct}%</p>
           <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2">
-            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
 
@@ -241,30 +267,30 @@ export function CampaignDetail() {
         </div>
       </div>
 
-      {/* Detail sections */}
+      {/* Detail sections — 2-col grid matching User View */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <SectionCard icon={Phone} title="Dialing" iconColor="text-indigo-500">
-          <DetailRow label="Mode" value={dialModeDisplay} />
+        <SectionCard icon={Phone} title="Dialing Configuration" iconColor="text-indigo-500">
+          <DetailRow label="Dial Mode" value={dialModeDisplay} />
           <DetailRow label="Hopper Mode" value={hopperModeLabel} />
-
-          {d.duration && d.duration !== '0' && <DetailRow label="Duration" value={d.duration} />}
-          <DetailRow label="Max Lead Temp" value={d.max_lead_temp} />
-          <DetailRow label="Min Lead Temp" value={d.min_lead_temp} />
-          <DetailRow label="AMD" value={String(d.amd) === '1' ? 'Enabled' : 'Disabled'} />
+          {!!d.duration && String(d.duration) !== '0' && <DetailRow label="Duration" value={String(d.duration)} />}
+          <DetailRow label="Max Lead Temp" value={String(d.max_lead_temp ?? '—')} />
+          <DetailRow label="Min Lead Temp" value={String(d.min_lead_temp ?? '—')} />
+          <OnOff val={d.amd} label="AMD Detection" />
         </SectionCard>
 
-        <SectionCard icon={Clock} title="Schedule" iconColor="text-sky-500">
+        <SectionCard icon={Clock} title="Schedule & Caller ID" iconColor="text-sky-500">
           <DetailRow label="Call Times" value={callTimeDisplay} />
+          <DetailRow label="Time-Based Calling" value={timeBased ? 'Enabled' : 'Disabled'} />
           <DetailRow label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
-          <DetailRow label="Call Transfer" value={Number(d.call_transfer) === 1 ? 'Yes' : 'No'} />
-          <DetailRow label="Metrics" value={Number(d.call_metric) === 1 ? 'Enabled' : 'Disabled'} />
+          <OnOff val={d.call_transfer} label="Call Transfer" />
+          <OnOff val={d.call_metric} label="Call Metrics" />
         </SectionCard>
 
-        <SectionCard icon={Globe} title="Communication" iconColor="text-emerald-500">
+        <SectionCard icon={Mail} title="Communication" iconColor="text-emerald-500">
           <DetailRow label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
-          <DetailRow label="SMS" value={Number(d.sms) === 1 ? 'With User Phone' : 'No'} />
-          <DetailRow label="Send to CRM" value={Number(d.send_crm) === 1 ? 'Yes' : 'No'} />
-          <DetailRow label="Send Report" value={Number(d.send_report) === 1 ? 'Yes' : 'No'} />
+          <OnOff val={d.sms} label="Send SMS" />
+          <OnOff val={d.send_crm} label="Send to CRM" />
+          <OnOff val={d.send_report} label="Send Report" />
         </SectionCard>
 
         <SectionCard icon={Tag} title="Dispositions" iconColor="text-violet-500">
@@ -274,7 +300,7 @@ export function CampaignDetail() {
                 {d.disposition.map(disp => (
                   <span
                     key={disp.id}
-                    className="inline-flex items-center px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[11px] font-semibold rounded-lg border border-indigo-200"
+                    className="inline-flex items-center px-2.5 py-1 bg-violet-50 text-violet-700 text-[11px] font-semibold rounded-lg border border-violet-200"
                   >
                     {disp.title}
                   </span>
@@ -285,28 +311,6 @@ export function CampaignDetail() {
             )}
           </div>
         </SectionCard>
-      </div>
-
-      {/* Status indicators */}
-      <div className="flex flex-wrap gap-2">
-        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${
-          isActive(d.status)
-            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-            : 'bg-slate-50 text-slate-500 border-slate-200'
-        }`}>
-          {isActive(d.status) ? <ToggleRight size={12} /> : <ToggleLeft size={12} />}
-          {isActive(d.status) ? 'Campaign Active' : 'Campaign Inactive'}
-        </span>
-        {String(d.amd) === '1' && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-blue-50 text-blue-700 border-blue-200">
-            AMD Enabled
-          </span>
-        )}
-        {Number(d.call_metric) === 1 && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200">
-            Metrics On
-          </span>
-        )}
       </div>
     </div>
   )

@@ -63,7 +63,7 @@ export function AppLayout() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <ImpersonationBanner />
         <TopHeader />
-        <main className="flex-1 overflow-y-auto px-6 py-4">
+        <main className="flex-1 overflow-y-auto px-5 py-3">
           <Outlet />
         </main>
       </div>

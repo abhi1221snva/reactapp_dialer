@@ -80,7 +80,7 @@ export function TopHeader() {
     : 'linear-gradient(135deg, #059669 0%, #10B981 100%)'
 
   return (
-    <header className="h-14 flex-shrink-0 bg-white border-b border-slate-200 flex items-center gap-3 px-4 lg:px-5 z-10">
+    <header className="h-11 flex-shrink-0 bg-white border-b border-slate-200 flex items-center gap-3 px-4 lg:px-5 z-10">
 
       {/* Mobile hamburger */}
       <button

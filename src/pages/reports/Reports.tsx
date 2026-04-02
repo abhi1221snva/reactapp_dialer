@@ -11,6 +11,7 @@ import {
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
 import { reportService } from '../../services/report.service'
+import { extensiongroupService } from '../../services/extensiongroup.service'
 import { formatDateTime, formatDuration } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import toast from 'react-hot-toast'
@@ -39,6 +40,7 @@ interface CdrRow {
 }
 
 interface Campaign { id: number; title: string; [key: string]: unknown }
+interface ExtItem { id: number; extension: string; first_name?: string; last_name?: string }
 
 const DATE_PRESETS = [
   { label: 'Today',   days: 0  },
@@ -165,6 +167,21 @@ export function Reports() {
     staleTime: 5 * 60_000,
   })
   const campaigns: Campaign[] = campaignsData?.data?.data || campaignsData?.data || []
+
+  // Extensions dropdown
+  const { data: extensionsData } = useQuery({
+    queryKey: ['extensions-list'],
+    queryFn:  () => extensiongroupService.getExtensions(),
+    staleTime: 5 * 60_000,
+  })
+  const extensionsRaw = extensionsData?.data?.data || extensionsData?.data || []
+  const extensions: ExtItem[] = (Array.isArray(extensionsRaw) ? extensionsRaw : [])
+    .slice()
+    .sort((a: ExtItem, b: ExtItem) => {
+      const nameA = [a.first_name, a.last_name].filter(Boolean).join(' ').toLowerCase()
+      const nameB = [b.first_name, b.last_name].filter(Boolean).join(' ').toLowerCase()
+      return nameA.localeCompare(nameB) || String(a.extension).localeCompare(String(b.extension))
+    })
 
   // Dispositions dropdown
   const { data: dispositionsData } = useQuery({
@@ -624,10 +641,18 @@ export function Reports() {
           </div>
           <div className="form-group">
             <label className="label">Extension</label>
-            <input
-              className="input font-mono" placeholder="e.g. 1001" value={filters.extension}
-              onChange={(e) => { setFilters((f) => ({ ...f, extension: e.target.value })); setPage(1) }}
-            />
+            <select className="input" value={filters.extension}
+              onChange={(e) => { setFilters((f) => ({ ...f, extension: e.target.value })); setPage(1) }}>
+              <option value="">All Extensions</option>
+              {extensions.map((ext) => {
+                const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
+                return (
+                  <option key={ext.id} value={String(ext.extension)}>
+                    {name ? `${name} (${ext.extension})` : `Ext ${ext.extension}`}
+                  </option>
+                )
+              })}
+            </select>
           </div>
           <div className="form-group">
             <label className="label">Phone Number</label>

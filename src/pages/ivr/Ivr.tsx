@@ -873,7 +873,7 @@ function AudioMessagesTab() {
         headerActions={
           <button onClick={() => { setEditing(null); setShowModal(true) }}
             className="btn-primary flex items-center gap-1.5 text-sm">
-            <Plus size={14} /> New Audio Message
+            <Plus size={14} /> Add Audio Message
           </button>
         }
         emptyText="No audio messages yet"
@@ -1722,7 +1722,7 @@ function IvrTab() {
         headerActions={
           <button onClick={() => { setEditing(null); setShowModal(true) }}
             className="btn-primary flex items-center gap-1.5 text-sm">
-            <Plus size={14} /> New IVR
+            <Plus size={14} /> Add IVR
           </button>
         }
         emptyText="No IVRs yet — create your first IVR to build an automated phone menu"

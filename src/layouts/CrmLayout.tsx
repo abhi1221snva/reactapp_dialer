@@ -64,7 +64,7 @@ export function CrmLayout() {
       <div className="space-y-4">
 
         {/* ── Page title row (hidden on pages with their own header) */}
-        {pathname !== '/crm/dashboard' && pathname !== '/crm/sms-inbox' && (
+        {pathname !== '/crm/dashboard' && pathname !== '/crm/sms-inbox' && !/^\/crm\/leads\/\d+$/.test(pathname) && (
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-slate-900 leading-tight">{title}</h1>

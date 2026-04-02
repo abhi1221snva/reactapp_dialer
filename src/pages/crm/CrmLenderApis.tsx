@@ -15,7 +15,6 @@ import { cn } from '../../utils/cn'
 
 interface LenderApiConfig {
   id: number
-  crm_lender_id: number
   lender_name?: string
   api_name: string
   auth_type: 'bearer' | 'basic' | 'api_key' | 'oauth2' | 'none'
@@ -28,8 +27,8 @@ interface LenderApiConfig {
   response_mapping?: Record<string, string>
   retry_attempts: number
   timeout_seconds: number
-  status: boolean
-  notes?: string
+  api_status: string
+  api_notes?: string
   log_count?: number
   success_count?: number
   last_called_at?: string
@@ -49,7 +48,7 @@ const AUTH_TYPES = [
 const HTTP_METHODS = ['POST', 'GET', 'PUT', 'PATCH']
 
 const EMPTY_FORM = {
-  crm_lender_id: '',
+  lender_id: '',
   api_name: '',
   auth_type: 'none' as LenderApiConfig['auth_type'],
   base_url: '',
@@ -57,7 +56,7 @@ const EMPTY_FORM = {
   request_method: 'POST' as LenderApiConfig['request_method'],
   retry_attempts: 3,
   timeout_seconds: 30,
-  notes: '',
+  api_notes: '',
   // JSON editor strings
   auth_credentials_str: '{}',
   default_headers_str: '{\n  "Content-Type": "application/json",\n  "Accept": "application/json"\n}',
@@ -146,7 +145,7 @@ function ConfigModal({
   useEffect(() => {
     if (editing) {
       setForm({
-        crm_lender_id:        String(editing.crm_lender_id),
+        lender_id:            String(editing.id),
         api_name:             editing.api_name ?? '',
         auth_type:            editing.auth_type ?? 'none',
         base_url:             editing.base_url ?? '',
@@ -154,7 +153,7 @@ function ConfigModal({
         request_method:       editing.request_method ?? 'POST',
         retry_attempts:       editing.retry_attempts ?? 3,
         timeout_seconds:      editing.timeout_seconds ?? 30,
-        notes:                editing.notes ?? '',
+        api_notes:            String(editing.api_notes ?? ''),
         auth_credentials_str: JSON.stringify(editing.auth_credentials ?? {}, null, 2),
         default_headers_str:  JSON.stringify(editing.default_headers ?? { 'Content-Type': 'application/json' }, null, 2),
         payload_mapping_str:  JSON.stringify(editing.payload_mapping ?? {}, null, 2),
@@ -172,7 +171,7 @@ function ConfigModal({
   const saveMutation = useMutation({
     mutationFn: () => {
       const payload: Record<string, unknown> = {
-        crm_lender_id:    Number(form.crm_lender_id),
+        lender_id:        Number(form.lender_id),
         api_name:         form.api_name.trim(),
         auth_type:        form.auth_type,
         base_url:         form.base_url.trim(),
@@ -180,7 +179,7 @@ function ConfigModal({
         request_method:   form.request_method,
         retry_attempts:   Number(form.retry_attempts),
         timeout_seconds:  Number(form.timeout_seconds),
-        notes:            form.notes.trim() || undefined,
+        api_notes:        form.api_notes.trim() || undefined,
         auth_credentials: parseJson(form.auth_credentials_str),
         default_headers:  parseJson(form.default_headers_str),
         payload_mapping:  parseJson(form.payload_mapping_str),
@@ -201,7 +200,7 @@ function ConfigModal({
     },
   })
 
-  const canSave = form.crm_lender_id && form.api_name.trim() && form.base_url.trim()
+  const canSave = form.lender_id && form.api_name.trim() && form.base_url.trim()
 
   const Section = ({ id, title, children }: { id: string; title: string; children: React.ReactNode }) => {
     const open = activeSection === id
@@ -256,8 +255,8 @@ function ConfigModal({
                 <label className="label">Lender <span className="text-red-500">*</span></label>
                 <select
                   className="input w-full"
-                  value={form.crm_lender_id}
-                  onChange={e => set('crm_lender_id', e.target.value)}
+                  value={form.lender_id}
+                  onChange={e => set('lender_id', e.target.value)}
                 >
                   <option value="">Select lender…</option>
                   {lenders.map(l => (
@@ -398,8 +397,8 @@ function ConfigModal({
               className="input w-full resize-none"
               rows={3}
               placeholder="Internal notes about this API configuration…"
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
+              value={form.api_notes}
+              onChange={e => set('api_notes', e.target.value)}
             />
           </Section>
         </div>
@@ -538,9 +537,9 @@ export function CrmLenderApis() {
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                          cfg.status ? 'bg-indigo-50' : 'bg-slate-100',
+                          cfg.api_status === '1' ? 'bg-indigo-50' : 'bg-slate-100',
                         )}>
-                          <Zap size={14} className={cfg.status ? 'text-indigo-500' : 'text-slate-400'} />
+                          <Zap size={14} className={cfg.api_status === '1' ? 'text-indigo-500' : 'text-slate-400'} />
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-900">{cfg.api_name}</p>
@@ -549,7 +548,7 @@ export function CrmLenderApis() {
                       </div>
                     </td>
                     <td>
-                      <span className="text-sm text-slate-700">{cfg.lender_name ?? `Lender #${cfg.crm_lender_id}`}</span>
+                      <span className="text-sm text-slate-700">{cfg.lender_name ?? `Lender #${cfg.id}`}</span>
                     </td>
                     <td className="hidden md:table-cell">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-600 capitalize">
@@ -591,7 +590,7 @@ export function CrmLenderApis() {
                         disabled={toggleMutation.isPending}
                         title="Click to toggle"
                       >
-                        {cfg.status ? (
+                        {cfg.api_status === '1' ? (
                           <span className="badge badge-green flex items-center gap-1">
                             <Check size={10} /> Active
                           </span>

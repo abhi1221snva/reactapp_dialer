@@ -2,7 +2,9 @@ import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Trash2, Pencil, Radio, Eye, Clock,
-  LayoutList, X, Globe, Tag, Settings2, Users, Zap,
+  LayoutList, X, Globe, Tag, Users, Zap,
+  Phone, Mail,
+  CheckCircle2, XCircle,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -13,6 +15,7 @@ import { dispositionService } from '../../services/disposition.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { cn } from '../../utils/cn'
 
 interface Campaign {
   id: number
@@ -73,34 +76,47 @@ function formatDialMode(mode?: string): string {
 }
 
 // ─────────────────────────────────────────────
-//  Info Row — modal detail item
+//  View helpers (matching User Management View)
 // ─────────────────────────────────────────────
-function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
+function CampaignOnOff({ val, label }: { val?: unknown; label: string }) {
+  const on = val === 1 || val === '1' || val === true || Number(val) === 1
   return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0 gap-3">
-      <span className="text-xs text-slate-500 shrink-0">{label}</span>
-      <span className="text-xs font-semibold text-slate-800 text-right">{value ?? '—'}</span>
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <span className={cn(
+        'inline-flex items-center gap-1 text-xs font-semibold',
+        on ? 'text-emerald-600' : 'text-slate-400'
+      )}>
+        {on
+          ? <><CheckCircle2 size={13} className="text-emerald-500" /> Enabled</>
+          : <><XCircle size={13} className="text-slate-300" /> Disabled</>
+        }
+      </span>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────
-//  Detail Section Card — modal
-// ─────────────────────────────────────────────
-function DetailCard({ icon: Icon, title, color, children }: {
-  icon: React.ElementType; title: string; color: string; children: React.ReactNode
+function CampaignSectionCard({ icon: Icon, title, iconColor, children }: {
+  icon: React.ElementType; title: string; iconColor: string; children: React.ReactNode
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-100"
-        style={{ backgroundColor: `${color}09` }}>
-        <div className="w-6 h-6 rounded-md flex items-center justify-center"
-          style={{ background: `${color}18`, color }}>
-          <Icon size={12} />
-        </div>
-        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{title}</span>
+    <div className="card p-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
+        <Icon size={14} className={iconColor} />
+        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{title}</span>
       </div>
-      <div className="px-4 py-1">{children}</div>
+      <div className="px-4 py-1">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function CampaignDetailRow({ label, value }: { label: string; value?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
+      <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
+      <span className="text-xs text-right font-semibold text-slate-800">{value ?? '—'}</span>
     </div>
   )
 }
@@ -156,170 +172,139 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
   const dialModeDisplay = formatDialMode(d.dial_mode || campaign.dial_mode)
   const campaignName = d.title || campaign.title || campaign.campaign_name || '—'
 
+  const totalLeads = Number(d.total_leads ?? campaign.total_leads ?? 0)
+  const dialedLeads = Number(d.called_leads ?? 0)
+  const listsCount = Number(d.lists_associated ?? campaign.lists_associated ?? 0)
+  const hopperCount = Number(d.hopper_count ?? campaign.hopper_count ?? 0)
+
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div
-        className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-fadeIn"
-        style={{ maxHeight: '90vh' }}
-      >
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
 
-        {/* Close — at panel level so overflow-hidden on hero cannot block it */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 z-20 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white transition-all"
-        >
-          <X size={15} />
-        </button>
+        {/* ── Blue Header Banner ── */}
+        <div className="bg-gradient-to-br from-indigo-500 to-blue-600 relative overflow-hidden flex-shrink-0">
+          <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
+          <div className="absolute top-6 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-        {/* ── Hero Banner ── */}
-        <div className="relative px-6 pt-5 pb-5 bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 overflow-hidden flex-shrink-0">
-          {/* Decorative blobs */}
-          <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/5 pointer-events-none" />
-          <div className="absolute -bottom-12 -left-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
-          <div className="absolute top-3 right-16 w-10 h-10 rounded-full bg-white/5 pointer-events-none" />
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white"
+          >
+            <X size={16} />
+          </button>
 
-          {/* Identity */}
-          <div className="flex items-center gap-4 relative">
-            <div className="w-14 h-14 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center flex-shrink-0 shadow-lg">
-              <Radio size={24} className="text-white" />
-            </div>
-            <div className="min-w-0 flex-1 pr-10">
-              <h2 className="text-lg font-bold text-white leading-tight truncate">{campaignName}</h2>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                  active
-                    ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
-                    : 'bg-white/10 text-white/60 border-white/20'
-                }`}>
-                  <span className="w-1.5 h-1.5 rounded-full inline-block"
-                    style={{ background: active ? '#6ee7b7' : 'rgba(255,255,255,0.4)' }} />
-                  {active ? 'Active' : 'Inactive'}
-                </span>
-                {dialModeDisplay !== '—' && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-indigo-100 border border-white/15">
-                    {dialModeDisplay}
-                  </span>
-                )}
-                {d.description && (
-                  <span className="text-indigo-200/70 text-[11px] truncate max-w-[200px]">{d.description}</span>
-                )}
+          <div className="relative px-6 pt-6 pb-5">
+            {isLoading ? (
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 animate-pulse" />
+                <div className="space-y-2">
+                  <div className="h-5 bg-white/30 rounded animate-pulse w-36" />
+                  <div className="h-3.5 bg-white/20 rounded animate-pulse w-48" />
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Stats Strip ── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/70">
-          <div className="grid grid-cols-3 divide-x divide-slate-200">
-            {[
-              {
-                icon: Users, label: 'Total Leads',
-                value: isLoading ? '—' : Number(d.total_leads ?? campaign.total_leads ?? 0).toLocaleString(),
-                sub: isLoading ? '' : (Number(d.called_leads ?? 0) > 0 ? `${Number(d.called_leads ?? 0).toLocaleString()} dialed` : ''),
-                color: '#6366f1',
-              },
-              {
-                icon: LayoutList, label: 'Lists',
-                value: isLoading ? '—' : String(d.lists_associated ?? campaign.lists_associated ?? 0),
-                sub: 'attached',
-                color: '#10b981',
-              },
-              {
-                icon: Settings2, label: 'Hopper',
-                value: isLoading ? '—' : Number(d.hopper_count ?? campaign.hopper_count ?? 0).toLocaleString(),
-                sub: isLoading ? '' : hopperModeLabel,
-                color: '#f59e0b',
-              },
-            ].map((stat) => (
-              <div key={stat.label} className="px-5 py-3.5">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${stat.color}15`, outline: `1px solid ${stat.color}25` }}>
-                    <stat.icon size={12} style={{ color: stat.color }} />
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <Radio size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl font-bold text-white truncate leading-tight">{campaignName}</h2>
+                  {d.description && (
+                    <p className="text-white/70 text-sm truncate mt-0.5">{d.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border',
+                      active
+                        ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
+                        : 'bg-white/10 border-white/20 text-white/60'
+                    )}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/40')} />
+                      {active ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stat.label}</span>
-                </div>
-                <div className="pl-8 flex items-baseline gap-1.5">
-                  <span className="text-base font-bold text-slate-800">{stat.value}</span>
-                  {stat.sub && <span className="text-xs text-slate-400">{stat.sub}</span>}
                 </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
-        {/* ── Scrollable Content ── */}
-        <div className="overflow-y-auto flex-1">
+        {/* ── Body (scrollable) ── */}
+        <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
           {isLoading ? (
-            <div className="py-16 text-center">
-              <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-slate-400">Loading campaign details…</p>
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-4 bg-slate-100 rounded animate-pulse" style={{ width: `${55 + (i % 4) * 12}%` }} />
+              ))}
             </div>
           ) : (
-            <div className="p-5 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                {/* Dialing */}
-                <DetailCard icon={Zap} title="Dialing Configuration" color="#6366f1">
-                  <InfoRow label="Mode" value={dialModeDisplay} />
-                  <InfoRow label="Hopper Mode" value={hopperModeLabel} />
+              {/* Dialing Configuration */}
+              <CampaignSectionCard icon={Zap} title="Dialing Configuration" iconColor="text-indigo-500">
+                <CampaignDetailRow label="Dial Mode" value={dialModeDisplay} />
+                <CampaignDetailRow label="Hopper Mode" value={hopperModeLabel} />
+                <CampaignDetailRow label="Hopper Count" value={String(hopperCount)} />
+                {!!d.call_ratio && String(d.call_ratio) !== '1' && (
+                  <CampaignDetailRow label="Call Ratio" value={`${d.call_ratio}:1`} />
+                )}
+                {!!d.duration && String(d.duration) !== '0' && <CampaignDetailRow label="Duration" value={`${d.duration}s`} />}
+                <CampaignOnOff val={d.amd} label="AMD Detection" />
+              </CampaignSectionCard>
 
-                  {d.duration && d.duration !== '0' && <InfoRow label="Duration" value={`${d.duration}s`} />}
-                </DetailCard>
+              {/* Schedule & Caller ID */}
+              <CampaignSectionCard icon={Clock} title="Schedule & Caller ID" iconColor="text-sky-500">
+                <CampaignDetailRow label="Call Times" value={callTimeDisplay} />
+                {timeBased && <CampaignDetailRow label="Timezone" value={d.timezone || 'America/New_York'} />}
+                <CampaignOnOff val={d.time_based_calling} label="Time-Based Calling" />
+                <CampaignDetailRow label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
+                <CampaignOnOff val={d.call_transfer} label="Call Transfer" />
+                <CampaignOnOff val={d.call_metric} label="Call Metrics" />
+              </CampaignSectionCard>
 
-                {/* Schedule */}
-                <DetailCard icon={Clock} title="Call Schedule" color="#0ea5e9">
-                  <InfoRow label="Call Times" value={callTimeDisplay} />
-                  {timeBased && <InfoRow label="Timezone" value={d.timezone || 'America/New_York'} />}
-                  <InfoRow label="Time-Based Calling" value={timeBased ? 'Yes' : 'No'} />
-                  <InfoRow label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
-                  <InfoRow label="Call Transfer" value={Number(d.call_transfer) === 1 ? 'Yes' : 'No'} />
-                  <InfoRow label="AMD Detection" value={String(d.amd) === '1' ? 'Enabled' : 'Disabled'} />
-                </DetailCard>
+              {/* Leads & Lists */}
+              <CampaignSectionCard icon={Users} title="Leads & Lists" iconColor="text-emerald-500">
+                <CampaignDetailRow label="Total Leads" value={totalLeads.toLocaleString()} />
+                <CampaignDetailRow label="Dialed Leads" value={dialedLeads.toLocaleString()} />
+                <CampaignDetailRow label="Attached Lists" value={String(listsCount)} />
+              </CampaignSectionCard>
 
-                {/* Communication */}
-                <DetailCard icon={Globe} title="Communication" color="#10b981">
-                  <InfoRow label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
-                  <InfoRow label="SMS" value={Number(d.sms) === 1 ? 'User Phone' : 'No'} />
-                  <InfoRow label="Send to CRM" value={Number(d.send_crm) === 1 ? 'Yes' : 'No'} />
-                  <InfoRow label="Send Report" value={Number(d.send_report) === 1 ? 'Yes' : 'No'} />
-                </DetailCard>
+              {/* Communication */}
+              <CampaignSectionCard icon={Mail} title="Communication" iconColor="text-violet-500">
+                <CampaignDetailRow label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
+                <CampaignOnOff val={d.sms} label="Send SMS" />
+                <CampaignOnOff val={d.send_crm} label="Send to CRM" />
+                <CampaignOnOff val={d.send_report} label="Send Report" />
+              </CampaignSectionCard>
 
-                {/* Dispositions */}
-                <DetailCard icon={Tag} title="Dispositions" color="#8b5cf6">
-                  {displayDispositions.length > 0 ? (
-                    <div className="py-2.5 flex flex-wrap gap-1.5">
-                      {displayDispositions.map(disp => (
-                        <span
-                          key={disp.id}
-                          className="inline-flex items-center px-2 py-0.5 bg-violet-50 text-violet-700 text-[11px] font-semibold rounded-lg border border-violet-200"
-                        >
-                          {disp.title}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-3.5">
+              {/* Dispositions — full width */}
+              <div className="md:col-span-2">
+                <CampaignSectionCard icon={Tag} title="Dispositions" iconColor="text-violet-500">
+                  <div className="py-3">
+                    {displayDispositions.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {displayDispositions.map(disp => (
+                          <span
+                            key={disp.id}
+                            className="inline-flex items-center px-2.5 py-1 bg-violet-50 text-violet-700 text-[11px] font-semibold rounded-lg border border-violet-200"
+                          >
+                            {disp.title}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
                       <p className="text-xs text-slate-400 italic">No dispositions assigned</p>
-                    </div>
-                  )}
-                </DetailCard>
-
+                    )}
+                  </div>
+                </CampaignSectionCard>
               </div>
+
             </div>
           )}
-        </div>
-
-        {/* ── Footer ── */}
-        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-slate-50/60 flex-shrink-0">
-          <button type="button" onClick={onClose} className="btn-outline text-sm px-5">
-            Close
-          </button>
         </div>
       </div>
     </div>
@@ -518,7 +503,7 @@ export function Campaigns() {
           onPageChange={table.setPage}
           headerActions={
             <button onClick={() => navigate('/campaigns/create')} className="btn-primary">
-              <Plus size={15} /> New Campaign
+              <Plus size={15} /> Add Campaign
             </button>
           }
         />

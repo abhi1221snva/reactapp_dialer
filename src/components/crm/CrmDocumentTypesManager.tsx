@@ -16,7 +16,13 @@ export interface DocumentType {
 
 export function parseValues(raw: string | null | undefined): string[] {
   if (!raw) return []
-  try { return JSON.parse(raw) as string[] } catch { /* fall through */ }
+  // Runtime safety: API may return actual array instead of JSON string
+  if (Array.isArray(raw)) return (raw as unknown as string[]).filter(Boolean)
+  if (typeof raw !== 'string') return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+  } catch { /* fall through */ }
   return raw.split(',').map(s => s.trim()).filter(Boolean)
 }
 
