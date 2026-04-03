@@ -7,12 +7,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Loader2, AlertCircle, Save,
   Thermometer, Snowflake, Flame, Clock,
-  UserCheck, Zap, User, Building2, Users,
+  UserCheck, Zap, User,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
+import { scrollToFirstError } from '../../utils/publicFormValidation'
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
 
 const schema = z.object({
@@ -28,8 +29,6 @@ const schema = z.object({
   address:      z.string().optional(),
   city:         z.string().optional(),
   state:        z.string().optional(),
-  zip:          z.string().optional(),
-  loan_amount:  z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -53,18 +52,19 @@ const LEAD_TYPE_OPTIONS = [
 ]
 
 // ── Core fields (static — defined outside component so reference is stable) ──
-const CORE_FIELD_DEFS: { key: string; label: string; type?: string; placeholder?: string; colSpan?: boolean; maxLength?: number }[] = [
-  { key: 'first_name',   label: 'First Name',    placeholder: 'First name' },
-  { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name' },
-  { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address' },
-  { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone' },
-  { key: 'company_name', label: 'Company Name',   placeholder: 'Business / DBA name' },
-  { key: 'loan_amount',  label: 'Loan Amount',    placeholder: 'e.g. 50000' },
-  { key: 'address',      label: 'Address',        placeholder: 'Street address', colSpan: true },
-  { key: 'city',         label: 'City',           placeholder: 'City' },
-  { key: 'state',        label: 'State',          placeholder: 'State', maxLength: 2 },
-  { key: 'zip',          label: 'ZIP',            placeholder: 'ZIP' },
+const CORE_FIELD_DEFS: { key: string; label: string; type?: string; placeholder?: string; span?: number; maxLength?: number }[] = [
+  { key: 'first_name',   label: 'First Name',    placeholder: 'First name',           span: 3 },
+  { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name',            span: 3 },
+  { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address', span: 3 },
+  { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone', span: 3 },
+  { key: 'company_name', label: 'Company Name',   placeholder: 'Business / DBA name',  span: 6 },
+  { key: 'address',      label: 'Address',        placeholder: 'Street address',       span: 6 },
+  { key: 'city',         label: 'City',           placeholder: 'City',                 span: 3 },
+  { key: 'state',        label: 'State',          placeholder: 'State', maxLength: 2,  span: 3 },
 ]
+
+// Field grid columns — 4 per row on desktop, 2 on tablet, 1 on mobile
+const FIELD_GRID = 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3'
 
 // ── Section category buckets ────────────────────────────────────────────────
 const PERSONAL_SECTIONS  = new Set(['owner', 'contact', 'address', 'general', 'other'])
@@ -93,10 +93,12 @@ export function CrmLeadCreate() {
   const leadId    = id ? Number(id) : undefined
   const qc = useQueryClient()
   const [apiError,         setApiError]         = useState<string | null>(null)
-  const [activeTab,        setActiveTab]        = useState<'personal' | 'business' | 'second_owner'>('personal')
   const [hasSecondOwner,   setHasSecondOwner]   = useState(false)
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
+  const formScrollRef    = useRef<HTMLDivElement>(null)
+  const owner2Ref        = useRef<HTMLElement>(null)
+  const [formErrorCount, setFormErrorCount] = useState(0)
 
   const {
     register, handleSubmit, setValue, watch, getValues, setError,
@@ -154,6 +156,10 @@ export function CrmLeadCreate() {
     [labelKeys],
   )
 
+  const hasOwnerSection   = visibleCoreFields.length > 0 || personal.length > 0
+  const hasBusinessSection = business.length > 0
+  const hasOwner2Section   = secondOwner.length > 0
+
   // Auto-enable second owner in edit mode if that data is populated
   useEffect(() => {
     if (existing && secondOwner.length > 0) {
@@ -163,7 +169,6 @@ export function CrmLeadCreate() {
       })
       if (hasData) {
         setHasSecondOwner(true)
-        setActiveTab('second_owner')
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,7 +181,7 @@ export function CrmLeadCreate() {
     setValue('lead_type',    existing.lead_type   ? String(existing.lead_type)   : '')
     setValue('assigned_to',  existing.assigned_to ? String(existing.assigned_to) : '')
     // Core fields
-    const coreKeys = ['first_name','last_name','email','phone_number','company_name','address','city','state','zip','loan_amount'] as const
+    const coreKeys = ['first_name','last_name','email','phone_number','company_name','address','city','state'] as const
     for (const k of coreKeys) {
       const v = ex[k]
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -265,14 +270,26 @@ export function CrmLeadCreate() {
       payload[k] = v === true ? '1' : v === false ? '0' : v
     })
 
+    // Build set of second-owner field keys to skip when checkbox is off
+    const secondOwnerKeys = new Set(secondOwner.map(f => f.field_key))
+
+    // Clear second-owner values when unchecked (send empty strings so backend wipes them)
+    if (!hasSecondOwner) {
+      for (const k of secondOwnerKeys) {
+        payload[k] = ''
+      }
+    }
+
     if (leadFields && leadFields.length > 0) {
       const activeFields = leadFields.filter(
         f => f.status === true || (f.status as unknown) == 1,
       )
-      let hasErrors = false
+      const errorKeys: string[] = []
 
       for (const field of activeFields) {
         if (field.field_type === 'checkbox') continue
+        // Skip validation for second-owner fields when unchecked
+        if (!hasSecondOwner && secondOwnerKeys.has(field.field_key)) continue
 
         const rawVal = payload[field.field_key]
         const strVal = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : ''
@@ -283,7 +300,7 @@ export function CrmLeadCreate() {
             type: 'manual',
             message: `${field.label_name} is required`,
           })
-          hasErrors = true
+          errorKeys.push(field.field_key)
           continue
         }
 
@@ -308,12 +325,18 @@ export function CrmLeadCreate() {
 
         if (fieldError) {
           setError(field.field_key as keyof FormData, { type: 'manual', message: fieldError })
-          hasErrors = true
+          errorKeys.push(field.field_key)
         }
       }
 
-      if (hasErrors) return
+      if (errorKeys.length > 0) {
+        setFormErrorCount(errorKeys.length)
+        scrollToFirstError(errorKeys, formScrollRef.current)
+        return
+      }
     }
+
+    setFormErrorCount(0)
 
     if (isEdit) updateMutation.mutate(payload)
     else createMutation.mutate(payload)
@@ -371,158 +394,152 @@ export function CrmLeadCreate() {
         </div>
       </div>
 
+      {/* ── Green separator ───────────────────────────────────────────────── */}
+      <div style={{ height: 2, background: '#16a34a', margin: '0' }} />
+
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
         <form id="lead-form" onSubmit={handleSubmit(onSubmit)} className="h-full">
           <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_300px] gap-0">
 
-            {/* ── LEFT: tabbed field panel ───────────────────────── */}
-            <div className="flex flex-col overflow-hidden border-r border-slate-200 bg-white">
+            {/* ── LEFT: multi-column section form ────────────────── */}
+            <div ref={formScrollRef} className="overflow-y-auto scroll-smooth border-r border-slate-200 bg-white">
+              <div className="p-5">
 
-              {/* Tab bar */}
-              {(personal.length > 0 || business.length > 0 || secondOwner.length > 0) && (
-                <div className="flex items-stretch border-b border-slate-200 bg-slate-50/70 flex-shrink-0 px-4 pt-3 gap-1">
-                  {personal.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('personal')}
-                      className={[
-                        'flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition-all -mb-px',
-                        activeTab === 'personal'
-                          ? 'bg-white border-slate-200 text-blue-600 shadow-sm'
-                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
-                      ].join(' ')}
-                    >
-                      <User size={13} className={activeTab === 'personal' ? 'text-blue-500' : 'text-slate-400'} />
-                      Personal
-                    </button>
-                  )}
-                  {business.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('business')}
-                      className={[
-                        'flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition-all -mb-px',
-                        activeTab === 'business'
-                          ? 'bg-white border-slate-200 text-emerald-600 shadow-sm'
-                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
-                      ].join(' ')}
-                    >
-                      <Building2 size={13} className={activeTab === 'business' ? 'text-emerald-500' : 'text-slate-400'} />
-                      Business
-                    </button>
-                  )}
-                  {secondOwner.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('second_owner')}
-                      className={[
-                        'flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition-all -mb-px',
-                        activeTab === 'second_owner'
-                          ? 'bg-white border-slate-200 text-violet-600 shadow-sm'
-                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60',
-                      ].join(' ')}
-                    >
-                      <Users size={13} className={activeTab === 'second_owner' ? 'text-violet-500' : 'text-slate-400'} />
-                      2nd Owner
-                      {hasSecondOwner && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-violet-500 flex-shrink-0" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
+                {formErrorCount > 0 && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    Please fix {formErrorCount} error{formErrorCount > 1 ? 's' : ''} before saving.
+                  </div>
+                )}
+                {apiError && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    {apiError}
+                  </div>
+                )}
 
-              {/* Tab content — scrollable, includes both core fields and dynamic fields */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="p-4">
+                <div className="space-y-8">
 
-                  {apiError && (
-                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 mb-4">
-                      <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-red-500" />
-                      <p className="text-sm text-red-700">{apiError}</p>
-                    </div>
-                  )}
-
-                  {/* Core fields not covered by crm_labels — shown here to ensure they're always editable */}
-                  {visibleCoreFields.length > 0 && (
-                    <div className="mb-5 pb-5 border-b border-slate-100">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Lead Information</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
-                        {visibleCoreFields.map(f => (
-                          <div key={f.key} className={f.colSpan ? 'sm:col-span-2' : ''}>
-                            <label className="block text-xs font-medium text-slate-600 mb-0.5">{f.label}</label>
-                            <input
-                              type={f.type ?? 'text'}
-                              {...register(f.key as keyof FormData)}
-                              className="input w-full"
-                              placeholder={f.placeholder}
-                              maxLength={f.maxLength}
-                              autoComplete={f.type === 'email' ? 'email' : undefined}
-                            />
-                          </div>
-                        ))}
+                  {/* ═══ Section: Owner Information ═══ */}
+                  {hasOwnerSection && (
+                    <section>
+                      <div style={{ marginBottom: 16 }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3 }}>
+                          Owner Information
+                        </h3>
+                        <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
                       </div>
-                    </div>
-                  )}
 
-                  {(personal.length > 0 || business.length > 0 || secondOwner.length > 0) ? (
-                    <>
-                      {activeTab === 'personal' && personal.length > 0 && (
-                        <DynamicFieldForm
-                          register={register}
-                          setValue={setValue}
-                          defaultValues={existing as Record<string, unknown> | undefined}
-                          labels={personal}
-                          errors={errors}
-                          formValues={watch() as Record<string, unknown>}
-                        />
-                      )}
-                      {activeTab === 'business' && business.length > 0 && (
-                        <DynamicFieldForm
-                          register={register}
-                          setValue={setValue}
-                          defaultValues={existing as Record<string, unknown> | undefined}
-                          labels={business}
-                          errors={errors}
-                          formValues={watch() as Record<string, unknown>}
-                        />
-                      )}
-                      {activeTab === 'second_owner' && secondOwner.length > 0 && (
-                        <div>
-                          {/* Toggle */}
-                          <label className="flex items-center gap-2.5 mb-4 cursor-pointer select-none w-fit">
-                            <input
-                              type="checkbox"
-                              checked={hasSecondOwner}
-                              onChange={e => setHasSecondOwner(e.target.checked)}
-                              className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
-                            />
-                            <span className="text-xs font-medium text-slate-700">This lead has a second owner</span>
-                          </label>
-
-                          {hasSecondOwner ? (
-                            <DynamicFieldForm
-                              register={register}
-                              setValue={setValue}
-                              defaultValues={existing as Record<string, unknown> | undefined}
-                              labels={secondOwner}
-                              errors={errors}
-                              formValues={watch() as Record<string, unknown>}
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
-                              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
-                                <Users size={18} className="text-slate-400" />
+                      {/* Core system fields */}
+                      {visibleCoreFields.length > 0 && (
+                        <div className={FIELD_GRID}>
+                          {visibleCoreFields.map(f => {
+                            const isWide = f.key === 'company_name' || f.key === 'address'
+                            return (
+                              <div key={f.key} className={isWide ? 'sm:col-span-2' : ''} data-field-key={f.key}>
+                                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{f.label}</label>
+                                <input
+                                  type={f.type ?? 'text'}
+                                  {...register(f.key as keyof FormData)}
+                                  className="crm-fi"
+                                  placeholder={f.placeholder}
+                                  maxLength={f.maxLength}
+                                  autoComplete={f.type === 'email' ? 'email' : undefined}
+                                />
+                                {errors[f.key as keyof FormData]?.message && (
+                                  <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                                    <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-xs text-slate-400">Check the box above to add a second owner</p>
-                            </div>
-                          )}
+                            )
+                          })}
                         </div>
                       )}
-                    </>
-                  ) : (
-                    /* Fallback: no section metadata on fields */
+
+                      {/* Dynamic owner/personal fields */}
+                      {personal.length > 0 && (
+                        <div className={visibleCoreFields.length > 0 ? 'mt-4' : ''}>
+                          <DynamicFieldForm
+                            register={register}
+                            setValue={setValue}
+                            defaultValues={existing as Record<string, unknown> | undefined}
+                            labels={personal}
+                            errors={errors}
+                            formValues={watch() as Record<string, unknown>}
+                            columns={4}
+                            hideSectionHeaders
+                          />
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {/* ═══ Section: Business Information ═══ */}
+                  {hasBusinessSection && (
+                    <section>
+                      <DynamicFieldForm
+                        register={register}
+                        setValue={setValue}
+                        defaultValues={existing as Record<string, unknown> | undefined}
+                        labels={business}
+                        errors={errors}
+                        formValues={watch() as Record<string, unknown>}
+                        columns={4}
+                      />
+                    </section>
+                  )}
+
+                  {/* ═══ Section: Owner2 Information ═══ */}
+                  {hasOwner2Section && (
+                    <section ref={owner2Ref}>
+                      <label className="flex items-center gap-2 cursor-pointer select-none w-fit mb-3" title="Enable second owner fields">
+                        <input
+                          type="checkbox"
+                          checked={hasSecondOwner}
+                          onChange={e => {
+                            const checked = e.target.checked
+                            setHasSecondOwner(checked)
+                            setTimeout(() => {
+                              if (checked) {
+                                // Scroll down to show the Owner2 fields
+                                owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              } else {
+                                // Scroll back up to show the Owner2 heading at top
+                                owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              }
+                            }, 50)
+                          }}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                        />
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', lineHeight: 1 }}>
+                          Owner2 Information
+                        </span>
+                      </label>
+                      <div
+                        className="overflow-hidden transition-all duration-200 ease-in-out"
+                        style={{
+                          maxHeight: hasSecondOwner ? '2000px' : '0',
+                          opacity: hasSecondOwner ? 1 : 0,
+                        }}
+                      >
+                        <DynamicFieldForm
+                          register={register}
+                          setValue={setValue}
+                          defaultValues={existing as Record<string, unknown> | undefined}
+                          labels={secondOwner}
+                          errors={errors}
+                          formValues={watch() as Record<string, unknown>}
+                          columns={4}
+                          hideSectionHeaders
+                        />
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Fallback: no section metadata on fields */}
+                  {!hasOwnerSection && !hasBusinessSection && !hasOwner2Section && (
                     <DynamicFieldForm
                       register={register}
                       setValue={setValue}
@@ -530,98 +547,79 @@ export function CrmLeadCreate() {
                       labels={leadFields}
                       errors={errors}
                       formValues={watch() as Record<string, unknown>}
+                      columns={4}
                     />
                   )}
 
                 </div>
-              </div>
 
+              </div>
             </div>
 
             {/* ── RIGHT: metadata sidebar ──────────────────────────── */}
             <div className="overflow-y-auto bg-white">
-              <div className="p-4 space-y-3">
+              <div className="p-4 space-y-2.5">
 
                 {/* Status */}
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-violet-50/80 to-white">
-                    <div className="w-5 h-5 rounded-md bg-violet-50 border border-violet-100 flex items-center justify-center flex-shrink-0">
-                      <Zap size={11} className="text-violet-600" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Lead Status</span>
-                    <span className="ml-auto text-red-400 text-xs font-bold">*</span>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Zap size={10} className="text-slate-400" />
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Lead Status</span>
+                    <span className="text-red-400 text-[10px]">*</span>
                   </div>
-                  <div className="p-3">
-                    {errors.lead_status && (
-                      <p className="flex items-center gap-1 text-xs text-red-500 mb-2">
-                        <AlertCircle size={10} /> {errors.lead_status.message}
-                      </p>
+                  {errors.lead_status && (
+                    <p className="flex items-center gap-1 text-[11px] text-red-500 mb-1">
+                      <AlertCircle size={9} /> {errors.lead_status.message}
+                    </p>
+                  )}
+                  <div className="relative">
+                    {currentStatus && (
+                      <span
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10"
+                        style={{ background: currentStatus.color_code ?? currentStatus.color ?? '#6366f1' }}
+                      />
                     )}
-                    <div className="relative">
-                      {currentStatus && (
-                        <span
-                          className="absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10"
-                          style={{ background: currentStatus.color_code ?? currentStatus.color ?? '#6366f1' }}
-                        />
-                      )}
-                      <select
-                        value={leadStatus}
-                        onChange={e => setValue('lead_status', e.target.value, { shouldValidate: true })}
-                        className={`input w-full text-xs ${currentStatus ? 'pl-7' : ''}`}
-                      >
-                        <option value="">— Select status —</option>
-                        {(statuses ?? []).map(s => (
-                          <option key={s.id} value={s.lead_title_url}>{s.lead_title}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <select
+                      value={leadStatus}
+                      onChange={e => setValue('lead_status', e.target.value, { shouldValidate: true })}
+                      className={`input w-full text-xs ${currentStatus ? 'pl-7' : ''}`}
+                    >
+                      <option value="">— Select status —</option>
+                      {(statuses ?? []).map(s => (
+                        <option key={s.id} value={s.lead_title_url}>{s.lead_title}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                {/* Temperature */}
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-orange-50/60 to-white">
-                    <div className="w-5 h-5 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
-                      <Thermometer size={11} className="text-orange-500" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Temperature</span>
-                  </div>
-                  <div className="p-3">
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {LEAD_TYPE_OPTIONS.map(({ value, label, Icon, idle, active }) => {
-                        const isSelected = leadType === value
-                        return (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => setValue('lead_type', isSelected ? '' : value)}
-                            className={[
-                              'flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all',
-                              isSelected ? active : idle,
-                            ].join(' ')}
-                          >
-                            <Icon size={16} />
-                            <span className="text-xs font-semibold">{label}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {!leadType && (
-                      <p className="text-xs text-slate-400 text-center mt-1.5">No temperature selected</p>
-                    )}
-                  </div>
+                {/* Temperature — inline chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  {LEAD_TYPE_OPTIONS.map(({ value, label, Icon, idle, active }) => {
+                    const isSelected = leadType === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setValue('lead_type', isSelected ? '' : value)}
+                        className={[
+                          'inline-flex items-center gap-1 px-3 py-1.5 rounded-full border-2 text-xs font-semibold transition-all',
+                          isSelected ? active : idle,
+                        ].join(' ')}
+                      >
+                        <Icon size={12} />
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {/* Assigned Agent */}
-                <div className="rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-sky-50/60 to-white rounded-t-xl">
-                    <div className="w-5 h-5 rounded-md bg-sky-50 border border-sky-100 flex items-center justify-center flex-shrink-0">
-                      <UserCheck size={11} className="text-sky-600" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Assigned To</span>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <UserCheck size={10} className="text-slate-400" />
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Assigned To</span>
                   </div>
-                  <div className="p-3">
-                    <div className="relative" ref={agentDropdownRef}>
+                  <div className="relative" ref={agentDropdownRef}>
                       {/* Clickable card — shows selected agent or unassigned placeholder */}
                       <button
                         type="button"
@@ -712,19 +710,16 @@ export function CrmLeadCreate() {
                         </div>
                       )}
                     </div>
-                  </div>
                 </div>
 
                 {/* Audit Trail (edit mode) */}
                 {isEdit && existing && (
-                  <div className="rounded-xl border border-slate-200 overflow-hidden">
-                    <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-                      <div className="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
-                        <Clock size={11} className="text-slate-500" />
-                      </div>
-                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Audit Trail</span>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Clock size={10} className="text-slate-400" />
+                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Audit Trail</span>
                     </div>
-                    <div className="p-3 space-y-2">
+                    <div className="space-y-1.5">
                       {[
                         { label: 'Created by', value: existing.created_by_name as string | undefined },
                         {
@@ -744,8 +739,8 @@ export function CrmLeadCreate() {
                         .filter(r => r.value)
                         .map(row => (
                           <div key={row.label} className="flex items-start justify-between gap-2">
-                            <span className="text-xs text-slate-400 flex-shrink-0">{row.label}</span>
-                            <span className="text-xs font-medium text-slate-700 text-right leading-relaxed">{row.value}</span>
+                            <span className="text-[11px] text-slate-400 flex-shrink-0">{row.label}</span>
+                            <span className="text-[11px] font-medium text-slate-600 text-right">{row.value}</span>
                           </div>
                         ))}
                     </div>

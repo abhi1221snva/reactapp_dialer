@@ -45,6 +45,32 @@ const TYPE_COLORS: Record<string, string> = {
   status_change: 'bg-slate-50 text-slate-600 border-slate-200',
 }
 
+/** Strip all non-digit characters */
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '')
+}
+
+/** Format digits to US phone: (XXX) XXX-XXXX */
+function formatUsPhone(digits: string): string {
+  const d = digits.slice(0, 10)
+  if (d.length === 0) return ''
+  if (d.length <= 3) return `(${d}`
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+}
+
+/** Display a phone number in US format */
+function displayUsPhone(phone?: string): string {
+  if (!phone) return ''
+  const d = digitsOnly(phone)
+  // Handle 11-digit numbers starting with 1
+  const normalized = d.length === 11 && d.startsWith('1') ? d.slice(1) : d
+  if (normalized.length === 10) {
+    return `(${normalized.slice(0, 3)}) ${normalized.slice(3, 6)}-${normalized.slice(6)}`
+  }
+  return phone
+}
+
 function formatTimestamp(ts?: string): string {
   if (!ts) return ''
   try {
@@ -60,8 +86,9 @@ function formatTimestamp(ts?: string): string {
 
 export function LeadActivity() {
   const navigate = useNavigate()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [rawDigits, setRawDigits] = useState('')
+  const [displayValue, setDisplayValue] = useState('')
+  const [debouncedDigits, setDebouncedDigits] = useState('')
   const [selectedLead, setSelectedLead] = useState<LeadOption | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -69,9 +96,9 @@ export function LeadActivity() {
 
   // Debounce search
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm), 400)
+    const t = setTimeout(() => setDebouncedDigits(rawDigits), 400)
     return () => clearTimeout(t)
-  }, [searchTerm])
+  }, [rawDigits])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -84,14 +111,23 @@ export function LeadActivity() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Search leads
+  // Handle phone input with formatting
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value
+    const digits = digitsOnly(input).slice(0, 10)
+    setRawDigits(digits)
+    setDisplayValue(formatUsPhone(digits))
+    setShowDropdown(true)
+    if (!digits) setSelectedLead(null)
+  }
+
+  // Search leads by phone number only
   const { data: searchResults, isLoading: searching } = useQuery({
-    queryKey: ['lead-search', debouncedSearch],
-    queryFn: () => leadService.list({ page: 1, limit: 10, search: debouncedSearch, filters: {} }),
-    enabled: debouncedSearch.length >= 2,
+    queryKey: ['lead-phone-search', debouncedDigits],
+    queryFn: () => leadService.list({ page: 1, limit: 10, search: debouncedDigits, filters: {} }),
+    enabled: debouncedDigits.length >= 3,
   })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const leads: LeadOption[] = (() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = searchResults as any
@@ -106,18 +142,17 @@ export function LeadActivity() {
     enabled: !!selectedLead,
   })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activities: ActivityEntry[] = (() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = activityData as any
-    const arr = r?.data?.data ?? r?.data
-    return Array.isArray(arr) ? arr : []
+    const items = r?.data?.items ?? r?.data?.data ?? r?.data
+    return Array.isArray(items) ? items : []
   })()
 
   const selectLead = (lead: LeadOption) => {
     setSelectedLead(lead)
-    const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.phone_number || `Lead #${lead.id}`
-    setSearchTerm(name)
+    setDisplayValue(displayUsPhone(lead.phone_number))
+    setRawDigits(digitsOnly(lead.phone_number || '').slice(0, 10))
     setShowDropdown(false)
   }
 
@@ -130,32 +165,29 @@ export function LeadActivity() {
         </button>
         <div>
           <h1 className="page-title">Lead Activity</h1>
-          <p className="page-subtitle">View activity timeline for individual leads</p>
+          <p className="page-subtitle">Search by mobile number to view lead activity timeline</p>
         </div>
       </div>
 
-      {/* Search bar */}
+      {/* Phone search bar */}
       <div className="card" ref={dropdownRef}>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search size={16} className="text-slate-400" />
+            <Phone size={16} className="text-slate-400" />
           </div>
           <input
             ref={searchRef}
             className="input pl-10"
-            placeholder="Search leads by name, phone, or email…"
-            value={searchTerm}
-            onChange={e => {
-              setSearchTerm(e.target.value)
-              setShowDropdown(true)
-              if (!e.target.value) setSelectedLead(null)
-            }}
-            onFocus={() => { if (searchTerm.length >= 2) setShowDropdown(true) }}
+            placeholder="(555) 123-4567"
+            value={displayValue}
+            onChange={handlePhoneChange}
+            onFocus={() => { if (rawDigits.length >= 3) setShowDropdown(true) }}
+            inputMode="tel"
           />
         </div>
 
         {/* Dropdown */}
-        {showDropdown && debouncedSearch.length >= 2 && (
+        {showDropdown && debouncedDigits.length >= 3 && (
           <div className="absolute z-30 mt-1 w-full max-w-xl bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
             {searching ? (
               <div className="px-4 py-3 text-sm text-slate-400">Searching…</div>
@@ -176,7 +208,8 @@ export function LeadActivity() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
                       <p className="text-[11px] text-slate-500">
-                        {[lead.phone_number, lead.email].filter(Boolean).join(' · ')}
+                        {displayUsPhone(lead.phone_number)}
+                        {lead.email ? ` · ${lead.email}` : ''}
                       </p>
                     </div>
                   </button>
@@ -187,15 +220,41 @@ export function LeadActivity() {
         )}
       </div>
 
+      {/* Selected lead info */}
+      {selectedLead && (
+        <div className="card p-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+              <User size={18} className="text-indigo-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">
+                {[selectedLead.first_name, selectedLead.last_name].filter(Boolean).join(' ') || 'Unknown'}
+              </p>
+              <p className="text-xs text-slate-500">
+                {displayUsPhone(selectedLead.phone_number)}
+                {selectedLead.email ? ` · ${selectedLead.email}` : ''}
+              </p>
+            </div>
+            <button
+              onClick={() => { setSelectedLead(null); setRawDigits(''); setDisplayValue('') }}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Timeline */}
       {!selectedLead ? (
         <div className="card">
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-              <Activity size={28} className="text-slate-300" />
+              <Phone size={28} className="text-slate-300" />
             </div>
-            <h3 className="text-base font-semibold text-slate-600">Select a Lead</h3>
-            <p className="text-sm text-slate-400 mt-1">Search and select a lead above to view their activity timeline</p>
+            <h3 className="text-base font-semibold text-slate-600">Enter a Mobile Number</h3>
+            <p className="text-sm text-slate-400 mt-1">Type a phone number above to find leads and view their activity</p>
           </div>
         </div>
       ) : loadingActivity ? (
@@ -218,7 +277,7 @@ export function LeadActivity() {
       ) : (
         <div className="space-y-2">
           {activities.map((entry, idx) => {
-            const type = (entry.type || 'note').toLowerCase()
+            const type = (entry.type || entry.activity_type || 'note').toLowerCase()
             const IconComponent = TYPE_ICONS[type] || Activity
             const colorClass = TYPE_COLORS[type] || TYPE_COLORS.note
             const content = entry.body || entry.description || entry.note || entry.subject || ''
@@ -241,7 +300,7 @@ export function LeadActivity() {
                       }>
                         {type.replace(/_/g, ' ')}
                       </Badge>
-                      {entry.pinned && <Badge variant="yellow">Pinned</Badge>}
+                      {(entry.pinned || entry.is_pinned) && <Badge variant="yellow">Pinned</Badge>}
                     </div>
                     {content && (
                       <p className="text-sm text-slate-600 mt-1 line-clamp-3">{content}</p>

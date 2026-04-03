@@ -1,62 +1,106 @@
 import { useState, useEffect, useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Globe, Save, X, ArrowLeft } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Pencil, Trash2, Globe, Save, X, ArrowLeft, Key, Copy, Check, List } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
-import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
-import { leadSourceService } from '../../services/leadSource.service'
-import { useServerTable } from '../../hooks/useServerTable'
-import { formatDateTime } from '../../utils/format'
+import { DataTable, type Column } from '../../components/ui/DataTable'
+import { Badge } from '../../components/ui/Badge'
 import { RowActions } from '../../components/ui/RowActions'
+import { leadSourceService } from '../../services/leadSource.service'
+import { showConfirm } from '../../utils/confirmDelete'
+import { useAuthStore } from '../../stores/auth.store'
+import { formatDateTime } from '../../utils/format'
 
-interface LeadSourceItem {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface LeadSourceConfig {
   id: number
-  source_title: string
-  url: string
-  unique_id?: string | number
+  api_key: string
+  title: string
+  description: string
+  list_id: number
   created_at?: string
   updated_at?: string
   [key: string]: unknown
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+interface CrmList {
+  id: number
+  title?: string
+  name?: string
+  list_name?: string
+  [key: string]: unknown
+}
+
+// ─── Generate UUID-like key ──────────────────────────────────────────────────
+
+function generateApiKey(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let key = ''
+  for (let i = 0; i < 30; i++) key += chars.charAt(Math.floor(Math.random() * chars.length))
+  return key
+}
+
+// ─── Modal ───────────────────────────────────────────────────────────────────
+
 function LeadSourceModal({
   source,
+  lists,
   onClose,
   onSaved,
 }: {
-  source: LeadSourceItem | null
+  source: LeadSourceConfig | null // null = create mode
+  lists: CrmList[]
   onClose: () => void
   onSaved: () => void
 }) {
-  const [sourceTitle, setSourceTitle] = useState(source?.source_title ?? '')
-  const [url, setUrl] = useState(source?.url ?? '')
+  const user = useAuthStore((s) => s.user)
+  const [title, setTitle] = useState(source?.title ?? '')
+  const [description, setDescription] = useState(source?.description ?? '')
+  const [listId, setListId] = useState<number | ''>(source?.list_id ?? '')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const baseUrl = (import.meta.env.VITE_API_URL as string) || window.location.origin
+  const apiKey = source?.api_key ?? ''
+  const apiUrl = apiKey ? `${baseUrl}/insert-lead-source?token=${apiKey}` : ''
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50)
   }, [])
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      source
-        ? leadSourceService.update(source.id, { url: url.trim(), source_title: sourceTitle.trim() })
-        : leadSourceService.create({ url: url.trim(), source_title: sourceTitle.trim() }),
+    mutationFn: () => {
+      if (source) {
+        return leadSourceService.update(source.id, {
+          title: title.trim(),
+          description: description.trim(),
+          list_id: listId as number,
+        })
+      }
+      const newKey = generateApiKey()
+      return leadSourceService.create({
+        title: title.trim(),
+        description: description.trim(),
+        list_id: listId as number,
+        api_key: newKey,
+        client_id: user?.parent_id ?? 0,
+      })
+    },
     onSuccess: () => {
       toast.success(source ? 'Lead source updated' : 'Lead source created')
       onSaved()
     },
-    onError: () => toast.error(source ? 'Failed to update lead source' : 'Failed to create lead source'),
+    onError: () => toast.error(source ? 'Failed to update' : 'Failed to create'),
   })
 
-  const isValid = sourceTitle.trim().length > 0 && url.trim().length > 0
+  const isValid = title.trim().length > 0 && description.trim().length > 0 && listId !== ''
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-slate-900 text-base">
-            {source ? 'Edit Lead Source' : 'New Lead Source'}
+            {source ? 'Edit Lead Source' : 'Add Lead Source'}
           </h3>
           <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600">
             <X size={16} />
@@ -64,26 +108,66 @@ function LeadSourceModal({
         </div>
 
         <div className="form-group">
-          <label className="label">Source Title *</label>
+          <label className="label">Title *</label>
           <input
             ref={inputRef}
             className="input"
-            placeholder="e.g. Facebook, Google Ads, Referral"
-            value={sourceTitle}
-            onChange={e => setSourceTitle(e.target.value)}
+            placeholder="e.g. Google Ads, Facebook"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
           />
         </div>
 
         <div className="form-group">
-          <label className="label">URL *</label>
+          <label className="label">Description *</label>
           <input
             className="input"
-            placeholder="https://example.com"
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && isValid) saveMutation.mutate() }}
+            placeholder="Brief description of this lead source"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
           />
         </div>
+
+        <div className="form-group">
+          <label className="label">Select List *</label>
+          <select
+            className="input"
+            value={listId}
+            onChange={(e) => setListId(e.target.value ? Number(e.target.value) : '')}
+          >
+            <option value="">Choose a list…</option>
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.title || l.name || l.list_name || `List #${l.id}`}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Show API URL only in edit mode (key already exists) */}
+        {source && apiUrl && (
+          <div className="form-group">
+            <label className="label">API URL</label>
+            <div className="flex gap-2">
+              <input
+                className="input flex-1 text-xs font-mono bg-slate-50"
+                value={apiUrl}
+                readOnly
+              />
+              <button
+                type="button"
+                className="btn-outline px-2.5 flex-shrink-0"
+                onClick={() => {
+                  navigator.clipboard.writeText(apiUrl)
+                  toast.success('API URL copied')
+                }}
+                title="Copy URL"
+              >
+                <Copy size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-1">
           <button onClick={onClose} className="btn-outline flex-1">Cancel</button>
@@ -101,44 +185,135 @@ function LeadSourceModal({
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
 export function LeadSources() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const table = useServerTable({ defaultLimit: 15 })
 
-  const [showCreate, setShowCreate] = useState(false)
-  const [editSource, setEditSource] = useState<LeadSourceItem | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [editSource, setEditSource] = useState<LeadSourceConfig | null>(null)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['lead-sources'] })
+  // Fetch lead source configs
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['lead-source-configs'],
+    queryFn: () => leadSourceService.list({ page: 1, limit: 500, search: '', filters: {} }),
+  })
 
-  const columns: Column<LeadSourceItem>[] = [
+  const rawConfigs = (() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = data as any
+    const nested = r?.data?.data?.data
+    if (Array.isArray(nested)) return nested
+    const d = r?.data?.data
+    if (Array.isArray(d)) return d
+    return []
+  })() as LeadSourceConfig[]
+
+  // Fetch CRM lists for the dropdown
+  const { data: listsData } = useQuery({
+    queryKey: ['crm-lists-dropdown'],
+    queryFn: () => leadSourceService.getLists(),
+    staleTime: 5 * 60_000,
+  })
+
+  const lists: CrmList[] = (() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = listsData as any
+    const d = r?.data?.data
+    return Array.isArray(d) ? d : []
+  })()
+
+  // Build list id → name map
+  const listMap = new Map<number, string>()
+  lists.forEach((l) => {
+    listMap.set(l.id, l.title || l.name || l.list_name || `List #${l.id}`)
+  })
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => leadSourceService.delete(id),
+    onSuccess: () => {
+      toast.success('Lead source deleted')
+      qc.invalidateQueries({ queryKey: ['lead-source-configs'] })
+    },
+    onError: () => toast.error('Failed to delete'),
+  })
+
+  const handleDelete = async (row: LeadSourceConfig) => {
+    if (!await showConfirm({
+      title: 'Delete Lead Source?',
+      message: `Are you sure you want to delete "${row.title}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      danger: true,
+    })) return
+    deleteMutation.mutate(row.id)
+  }
+
+  const handleCopyKey = (row: LeadSourceConfig) => {
+    navigator.clipboard.writeText(row.api_key)
+    setCopiedId(row.id)
+    toast.success('API key copied')
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  const handleSaved = () => {
+    setShowModal(false)
+    setEditSource(null)
+    qc.invalidateQueries({ queryKey: ['lead-source-configs'] })
+  }
+
+  const columns: Column<LeadSourceConfig>[] = [
     {
-      key: 'source_title',
-      header: 'Source Title',
+      key: 'title',
+      header: 'Title',
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
             <Globe size={13} className="text-indigo-600" />
           </div>
-          <span className="text-sm font-medium text-slate-900">{row.source_title}</span>
+          <span className="text-sm font-medium text-slate-900">{row.title}</span>
         </div>
       ),
     },
     {
-      key: 'url',
-      header: 'URL',
+      key: 'description',
+      header: 'Description',
       render: (row) => (
-        <span className="text-sm text-slate-600 truncate max-w-[300px] block">{row.url || '—'}</span>
+        <span className="text-sm text-slate-600 truncate max-w-[250px] block">
+          {row.description || '—'}
+        </span>
       ),
     },
     {
-      key: 'created_at',
-      header: 'Created',
+      key: 'api_key',
+      header: 'API Key',
       render: (row) => (
-        <span className="text-xs text-slate-500">
-          {row.created_at ? formatDateTime(row.created_at as string) : '—'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <code className="text-xs font-mono bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600 truncate max-w-[180px]">
+            {row.api_key}
+          </code>
+          <button
+            onClick={() => handleCopyKey(row)}
+            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            title="Copy API key"
+          >
+            {copiedId === row.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+          </button>
+        </div>
+      ),
+    },
+    {
+      key: 'list_id',
+      header: 'List',
+      render: (row) => (
+        <div className="flex items-center gap-1.5">
+          <List size={12} className="text-slate-400 flex-shrink-0" />
+          <span className="text-sm text-slate-700">
+            {listMap.get(row.list_id) || `#${row.list_id}`}
+          </span>
+        </div>
       ),
     },
     {
@@ -152,7 +327,13 @@ export function LeadSources() {
             label: 'Edit',
             icon: <Pencil size={13} />,
             variant: 'edit',
-            onClick: () => setEditSource(row),
+            onClick: () => { setEditSource(row); setShowModal(true) },
+          },
+          {
+            label: 'Delete',
+            icon: <Trash2 size={13} />,
+            variant: 'delete',
+            onClick: () => handleDelete(row),
           },
         ]} />
       ),
@@ -161,11 +342,12 @@ export function LeadSources() {
 
   return (
     <>
-      {(showCreate || editSource) && (
+      {showModal && (
         <LeadSourceModal
           source={editSource}
-          onClose={() => { setShowCreate(false); setEditSource(null) }}
-          onSaved={() => { setShowCreate(false); setEditSource(null); invalidate() }}
+          lists={lists}
+          onClose={() => { setShowModal(false); setEditSource(null) }}
+          onSaved={handleSaved}
         />
       )}
 
@@ -177,46 +359,26 @@ export function LeadSources() {
             </button>
             <div>
               <h1 className="page-title">Lead Sources</h1>
-              <p className="page-subtitle">Manage where your leads come from</p>
+              <p className="page-subtitle">Manage API lead source configurations</p>
             </div>
           </div>
+          <button
+            onClick={() => { setEditSource(null); setShowModal(true) }}
+            className="btn-primary"
+          >
+            <Plus size={15} /> Add Lead Source
+          </button>
         </div>
 
-        <ServerDataTable<LeadSourceItem>
-          queryKey={['lead-sources']}
-          queryFn={(params) => leadSourceService.list(params)}
-          dataExtractor={(res: unknown) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const r = res as any
-            const nested = r?.data?.data
-            if (Array.isArray(nested)) return nested
-            const flat = r?.data
-            return Array.isArray(flat) ? flat : []
-          }}
-          totalExtractor={(res: unknown) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const r = res as any
-            return r?.data?.total ?? r?.data?.data?.length ?? 0
-          }}
-          columns={columns}
-          searchPlaceholder="Search lead sources…"
-          emptyText="No lead sources found"
-          emptyIcon={<Globe size={40} />}
-          search={table.search}
-          onSearchChange={table.setSearch}
-          activeFilters={table.filters}
-          onFilterChange={table.setFilter}
-          onResetFilters={table.resetFilters}
-          hasActiveFilters={table.hasActiveFilters}
-          page={table.page}
-          limit={table.limit}
-          onPageChange={table.setPage}
-          headerActions={
-            <button onClick={() => { setEditSource(null); setShowCreate(true) }} className="btn-primary">
-              <Plus size={15} /> Add Lead Source
-            </button>
-          }
-        />
+        <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+          <DataTable
+            columns={columns}
+            data={rawConfigs}
+            loading={isLoading}
+            keyField="id"
+            emptyText="No lead sources configured yet"
+          />
+        </div>
       </div>
     </>
   )

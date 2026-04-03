@@ -202,16 +202,26 @@ const EMPTY_FORM: FieldFormState = {
   validation_rules: [],
 }
 
-function parseValuesToLines(v?: string | null): string {
+function parseValuesToCommas(v?: string | null): string {
   if (!v) return ''
   try {
     const arr = JSON.parse(v) as string[]
-    return Array.isArray(arr) ? arr.join('\n') : v
-  } catch { return v }
+    if (Array.isArray(arr)) return arr.join(', ')
+  } catch { /* fall through */ }
+  // Legacy: could be newline-separated or pipe-separated
+  return v.split(/[\n|]/).map(s => s.trim()).filter(Boolean).join(', ')
 }
 
-function buildOptionsArray(lines: string): string[] {
-  return lines.split('\n').map(s => s.trim()).filter(Boolean)
+function buildOptionsArray(raw: string): string[] {
+  const seen = new Set<string>()
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => {
+      if (!s || seen.has(s)) return false
+      seen.add(s)
+      return true
+    })
 }
 
 // ── Validation Rule Row ────────────────────────────────────────────────────────
@@ -380,7 +390,7 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
         required_in:      resolvedRequiredIn,
         apply_to:         editing.apply_to ?? '',
         status:           editing.status === true || (editing.status as unknown) == 1,
-        values:           parseValuesToLines(editing.options),
+        values:           parseValuesToCommas(editing.options),
         validation_rules: parsed,
       })
       // Auto-suggest for existing fields that have no rules yet
@@ -473,7 +483,8 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
     },
   })
 
-  const canSave = form.label_name.trim().length > 0
+  const optionsValid = !hasOptions || buildOptionsArray(form.values).length > 0
+  const canSave = form.label_name.trim().length > 0 && optionsValid
 
   return (
     <div
@@ -638,13 +649,25 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
             <div>
               <label className="label">Options <span className="text-red-500">*</span></label>
               <textarea
-                className="input w-full resize-none font-mono text-sm"
-                rows={4}
+                className="input w-full resize-none text-sm"
+                rows={3}
                 value={form.values}
                 onChange={e => set('values', e.target.value)}
-                placeholder={"Option 1\nOption 2\nOption 3"}
+                placeholder="Enter options separated by commas (e.g., New York, California, Texas)"
               />
-              <p className="text-[11px] text-slate-400 mt-1">One option per line</p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Separate each option with a comma. Spaces will be trimmed automatically.
+              </p>
+              {form.values.trim().length > 0 && buildOptionsArray(form.values).length === 0 && (
+                <p className="text-[11px] text-red-500 mt-0.5">
+                  Please enter valid options separated by commas
+                </p>
+              )}
+              {buildOptionsArray(form.values).length > 0 && (
+                <p className="text-[11px] text-emerald-500 mt-0.5">
+                  {buildOptionsArray(form.values).length} option{buildOptionsArray(form.values).length !== 1 ? 's' : ''} detected
+                </p>
+              )}
             </div>
           )}
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Trash2, Pencil, Radio, Eye, Clock,
-  LayoutList, X, Globe, Tag, Users, Zap,
+  LayoutList, X, Tag, Users, Zap, Activity,
   Phone, Mail,
   CheckCircle2, XCircle,
 } from 'lucide-react'
@@ -183,7 +183,7 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden">
 
         {/* ── Blue Header Banner ── */}
         <div className="bg-gradient-to-br from-indigo-500 to-blue-600 relative overflow-hidden flex-shrink-0">
@@ -197,38 +197,60 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
             <X size={16} />
           </button>
 
-          <div className="relative px-6 pt-6 pb-5">
+          <div className="relative px-5 pt-4 pb-3">
             {isLoading ? (
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 animate-pulse" />
-                <div className="space-y-2">
-                  <div className="h-5 bg-white/30 rounded animate-pulse w-36" />
-                  <div className="h-3.5 bg-white/20 rounded animate-pulse w-48" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 animate-pulse" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 bg-white/30 rounded animate-pulse w-36" />
+                  <div className="h-3 bg-white/20 rounded animate-pulse w-48" />
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg">
-                  <Radio size={24} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl font-bold text-white truncate leading-tight">{campaignName}</h2>
-                  {d.description && (
-                    <p className="text-white/70 text-sm truncate mt-0.5">{d.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className={cn(
-                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border',
-                      active
-                        ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
-                        : 'bg-white/10 border-white/20 text-white/60'
-                    )}>
-                      <span className={cn('w-1.5 h-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/40')} />
-                      {active ? 'Active' : 'Inactive'}
-                    </span>
+              <>
+                {/* Title + badges + stats all compact */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 text-white flex items-center justify-center flex-shrink-0">
+                    <Radio size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-base font-bold text-white truncate leading-tight">{campaignName}</h2>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                        active
+                          ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
+                          : 'bg-white/10 border-white/20 text-white/60'
+                      )}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/40')} />
+                        {active ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 border border-white/20 text-white/80">
+                        <Radio size={9} />
+                        {dialModeDisplay}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+
+                {/* Compact stats strip */}
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/15 flex-wrap">
+                  {[
+                    { icon: Users, val: totalLeads.toLocaleString(), lbl: 'Leads' },
+                    { icon: Phone, val: dialedLeads.toLocaleString(), lbl: 'Dialed' },
+                    { icon: Activity, val: `${totalLeads > 0 ? Math.min(100, Math.round((dialedLeads / totalLeads) * 100)) : 0}%`, lbl: 'Progress' },
+                    { icon: LayoutList, val: String(listsCount), lbl: 'Lists' },
+                    { icon: Tag, val: String(hopperCount), lbl: 'Hopper' },
+                    { icon: Zap, val: hopperModeLabel, lbl: 'Mode' },
+                  ].map(({ icon: SIcon, val, lbl }) => (
+                    <div key={lbl} className="flex items-center gap-1.5 bg-white/10 rounded-lg px-2.5 py-1.5">
+                      <SIcon size={12} className="text-white/60" />
+                      <span className="text-xs font-bold text-white leading-none">{val}</span>
+                      <span className="text-[9px] text-white/50 font-medium leading-none">{lbl}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -242,19 +264,7 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
               ))}
             </div>
           ) : (
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-
-              {/* Dialing Configuration */}
-              <CampaignSectionCard icon={Zap} title="Dialing Configuration" iconColor="text-indigo-500">
-                <CampaignDetailRow label="Dial Mode" value={dialModeDisplay} />
-                <CampaignDetailRow label="Hopper Mode" value={hopperModeLabel} />
-                <CampaignDetailRow label="Hopper Count" value={String(hopperCount)} />
-                {!!d.call_ratio && String(d.call_ratio) !== '1' && (
-                  <CampaignDetailRow label="Call Ratio" value={`${d.call_ratio}:1`} />
-                )}
-                {!!d.duration && String(d.duration) !== '0' && <CampaignDetailRow label="Duration" value={`${d.duration}s`} />}
-                <CampaignOnOff val={d.amd} label="AMD Detection" />
-              </CampaignSectionCard>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
 
               {/* Schedule & Caller ID */}
               <CampaignSectionCard icon={Clock} title="Schedule & Caller ID" iconColor="text-sky-500">
@@ -264,13 +274,6 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
                 <CampaignDetailRow label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
                 <CampaignOnOff val={d.call_transfer} label="Call Transfer" />
                 <CampaignOnOff val={d.call_metric} label="Call Metrics" />
-              </CampaignSectionCard>
-
-              {/* Leads & Lists */}
-              <CampaignSectionCard icon={Users} title="Leads & Lists" iconColor="text-emerald-500">
-                <CampaignDetailRow label="Total Leads" value={totalLeads.toLocaleString()} />
-                <CampaignDetailRow label="Dialed Leads" value={dialedLeads.toLocaleString()} />
-                <CampaignDetailRow label="Attached Lists" value={String(listsCount)} />
               </CampaignSectionCard>
 
               {/* Communication */}

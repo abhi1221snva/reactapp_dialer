@@ -62,7 +62,7 @@ export function ListForm() {
                 step === s
                   ? 'bg-indigo-600 text-white'
                   : (s === 'upload' && step === 'mapping')
-                    ? 'bg-emerald-100 text-emerald-700'
+                    ? 'bg-indigo-100 text-indigo-700'
                     : 'bg-slate-100 text-slate-400'
               }`}>
                 {STEP_LABELS[s]}

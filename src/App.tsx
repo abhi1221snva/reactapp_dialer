@@ -72,6 +72,8 @@ import { Reports } from './pages/reports/Reports'
 import { AgentSummary } from './pages/reports/AgentSummary'
 import { DispositionReport } from './pages/reports/DispositionReport'
 import { CampaignPerformance } from './pages/reports/CampaignPerformance'
+import { DailyReport } from './pages/reports/DailyReport'
+import { LiveCalls } from './pages/reports/LiveCalls'
 import { Profile } from './pages/profile/Profile'
 import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
 import { AiSettings } from './pages/ai/AiSettings'
@@ -235,9 +237,11 @@ export default function App() {
         <Route path="/lists/:id/leads" element={<ListLeads />} />
 
         <Route path="/reports" element={<Reports />} />
+        <Route path="/reports/daily" element={<DailyReport />} />
         <Route path="/reports/agent-summary" element={<AgentSummary />} />
         <Route path="/reports/disposition" element={<DispositionReport />} />
         <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
+        <Route path="/reports/live" element={<LiveCalls />} />
         <Route path="/sms" element={<SMSCenter />} />
         <Route path="/chat" element={<TeamChat />} />
         <Route path="/monitoring" element={<AgentMonitoring />} />

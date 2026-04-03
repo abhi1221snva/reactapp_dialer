@@ -166,9 +166,11 @@ const DIALER_SECTIONS: NavSection[] = [
     minLevel: LEVELS.MANAGER,
     items: [
       { to: '/reports',                      label: 'CDR Report',           icon: BarChart3,  minLevel: LEVELS.MANAGER },
+      { to: '/reports/daily',              label: 'Daily Report',         icon: Calendar,   minLevel: LEVELS.MANAGER },
       { to: '/reports/agent-summary',        label: 'Agent Summary',        icon: Users,      minLevel: LEVELS.MANAGER },
       { to: '/reports/disposition',          label: 'Disposition Report',   icon: ListChecks, minLevel: LEVELS.MANAGER },
       { to: '/reports/campaign-performance', label: 'Campaign Performance', icon: PieChart,   minLevel: LEVELS.MANAGER },
+      { to: '/reports/live',               label: 'Live Calls',           icon: Radio,      minLevel: LEVELS.MANAGER },
     ],
   },
   {

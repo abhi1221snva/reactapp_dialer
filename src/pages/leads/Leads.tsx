@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Target, Trash2, Eye, ArrowLeft, Search, Filter, X, ChevronLeft, ChevronRight,
+  Target, Trash2, Eye, Search, X, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, RefreshCw, ListFilter, ChevronDown, Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -304,33 +304,18 @@ export function Leads() {
   })()
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-4">
       {/* Page header */}
-      <div className="flex items-start gap-3">
-        <button onClick={() => navigate('/')} className="btn-ghost p-2 rounded-lg mt-0.5">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex-1">
-          <div className="page-header">
-            <div>
-              <h1 className="page-title">Leads</h1>
-              <p className="page-subtitle">Search and manage leads across your lists</p>
-            </div>
-          </div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Leads</h1>
+          <p className="page-subtitle">Search and manage leads across your lists</p>
         </div>
       </div>
 
       {/* Filter Card */}
-      <div className="card">
-        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <Filter size={13} className="text-indigo-600" />
-            </div>
-            <h3 className="text-sm font-semibold text-slate-700">Search Filters</h3>
-          </div>
-        </div>
-        <div className="px-5 py-4">
+      <div className="card !p-0">
+        <div className="px-2.5 py-3">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             {/* List Dropdown — searchable */}
             <div className="md:col-span-3">
@@ -399,9 +384,9 @@ export function Leads() {
       {/* Results Section — only shown after search */}
       {!appliedFilters ? (
         <div className="table-wrapper bg-white">
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-4">
-              <ListFilter size={32} className="text-slate-300" />
+          <div className="flex flex-col items-center justify-center py-14 text-slate-400">
+            <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
+              <ListFilter size={28} className="text-slate-300" />
             </div>
             <p className="text-sm font-medium text-slate-500">Select a list and click Search to view leads</p>
             <p className="text-xs text-slate-400 mt-1">Use the filters above to find specific leads</p>

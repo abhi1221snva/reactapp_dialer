@@ -576,18 +576,22 @@ export function EditCampaign() {
   //  Render
   // ─────────────────────────────────────────────
   return (
-    <div className="w-full animate-fadeIn space-y-6">
-      {/* ── Page Header ── */}
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={() => navigate('/campaigns')}
-          className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex-shrink-0">
-          <ArrowLeft size={16} />
-        </button>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 leading-none">Edit Campaign</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Campaign #{campaignId}</p>
+    <div className="w-full animate-fadeIn -mx-5 -mt-3" style={{ minHeight: 'calc(100vh - 70px)' }}>
+      {/* ── Compact Header Bar ── */}
+      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate('/campaigns')}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50 transition-all">
+            <ArrowLeft size={15} />
+          </button>
+          <div>
+            <h1 className="text-sm font-semibold text-slate-800 leading-tight">Edit Campaign</h1>
+            <p className="text-[11px] text-slate-400 mt-0.5">Campaign #{campaignId}</p>
+          </div>
         </div>
       </div>
+
+      <div className="px-5 py-5 space-y-5">
 
       {/* ── Premium Step Tabs ── */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
@@ -620,7 +624,7 @@ export function EditCampaign() {
 
       {/* ═══ TAB 1: Campaign Details Form ═══ */}
       {activeStep === 'details' && (
-        <form onSubmit={handleSubmit(
+        <form id="edit-campaign-form" onSubmit={handleSubmit(
           d => updateMutation.mutate(d),
           (errs) => {
             const msgs = Object.values(errs).map(e => e?.message).filter(Boolean)
@@ -629,50 +633,33 @@ export function EditCampaign() {
         )} noValidate>
           <input type="hidden" {...register('campaign_id', { valueAsNumber: true })} />
 
-          <div className="space-y-5">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
 
-            {/* ── Card 1: Campaign Identity ── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 to-transparent">
-                <h3 className="text-sm font-semibold text-slate-800">Campaign Identity</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Name your campaign and set its initial status</p>
-              </div>
-              <div className="px-6 py-5">
-                <div className="grid grid-cols-3 gap-x-5 gap-y-5">
+            <section>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Campaign Name <span className="text-red-400">*</span></label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Campaign Name <span className="text-red-400">*</span></label>
                     <input {...register('title')} className={cn('input', errors.title && 'border-red-400')}
                       placeholder="e.g. Summer Sales 2025" />
                     <FieldError message={errors.title?.message} />
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Description</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Description</label>
                     <input {...register('description')} className="input" placeholder="Optional description" />
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Status</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Status</label>
                     <Controller name="status" control={control}
                       render={({ field }) => <StatusSelector value={field.value} onChange={field.onChange} />} />
                   </div>
                 </div>
-              </div>
-            </div>
+            </section>
 
-            {/* ── Card 2: Dialing Configuration ── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                  <Zap size={16} className="text-indigo-600" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Dialing Configuration</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Set up dial mode and call behavior</p>
-                </div>
-              </div>
-              <div className="px-6 py-5 space-y-5">
-                <div className="grid grid-cols-3 gap-x-5 gap-y-5">
+            <section>
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Dial Mode <span className="text-red-400">*</span></label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Dial Mode <span className="text-red-400">*</span></label>
                     <select {...register('dial_mode')} className={cn('input', errors.dial_mode && 'border-red-400')}>
                       <option value="">— Select Mode —</option>
                       {dialModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -680,7 +667,7 @@ export function EditCampaign() {
                     <FieldError message={errors.dial_mode?.message} />
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
                       Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}
                     </label>
                     <select {...register('group_id')} className={cn('input', errors.group_id && 'border-red-400')}>
@@ -690,7 +677,7 @@ export function EditCampaign() {
                     <FieldError message={errors.group_id?.message as string} />
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Hopper Mode</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Hopper Mode</label>
                     <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
                       <option value="1">Linear</option>
                       <option value="2">Random</option>
@@ -699,16 +686,16 @@ export function EditCampaign() {
                 </div>
 
                 {showCallRatioDuration && (
-                  <div className="grid grid-cols-3 gap-x-5 gap-y-5 pt-5 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3 pt-3">
                     <div className="form-group mb-0">
-                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">{dialMode === 'predictive_dial' ? 'Call Ratio' : 'Simultaneous Calls'}</label>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{dialMode === 'predictive_dial' ? 'Call Ratio' : 'Simultaneous Calls'}</label>
                       <select {...register('call_ratio')} className="input">
                         <option value="">— Select —</option>
                         {callRatioOptions.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div className="form-group mb-0">
-                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">{dialMode === 'predictive_dial' ? 'Duration (sec)' : 'Duration'}</label>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{dialMode === 'predictive_dial' ? 'Duration (sec)' : 'Duration'}</label>
                       <select {...register('duration')} className="input">
                         <option value="">— Select —</option>
                         {durationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -716,7 +703,7 @@ export function EditCampaign() {
                     </div>
                     {showAutomatedDuration ? (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Automated Duration</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Automated Duration</label>
                         <select {...register('automated_duration')} className="input">
                           <option value="0">No</option>
                           <option value="1">Yes</option>
@@ -724,7 +711,7 @@ export function EditCampaign() {
                       </div>
                     ) : showRedirectTo ? (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Redirect To</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Redirect To</label>
                         <select {...register('redirect_to')} className="input">
                           <option value="">— None —</option>
                           <option value="1">Audio Message</option>
@@ -738,7 +725,7 @@ export function EditCampaign() {
                     ) : null}
                     {showAmd && (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">AMD Detection</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>AMD Detection</label>
                         <select {...register('amd')} className="input">
                           <option value="0">Off</option>
                           <option value="1">On</option>
@@ -747,7 +734,7 @@ export function EditCampaign() {
                     )}
                     {showAmd && amd === '1' && (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">AMD Drop Action</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>AMD Drop Action</label>
                         <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
                           <option value="">— Select —</option>
                           <option value="1">Hang Up</option>
@@ -758,7 +745,7 @@ export function EditCampaign() {
                     )}
                     {showAmd && amd === '1' && amdDropAction === 2 && (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Audio Message</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Audio Message</label>
                         <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="input">
                           <option value="">— Select —</option>
                           {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
@@ -767,7 +754,7 @@ export function EditCampaign() {
                     )}
                     {showAmd && amd === '1' && amdDropAction === 3 && (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Voice Template</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Voice Template</label>
                         <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="input">
                           <option value="">— Select —</option>
                           {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
@@ -776,7 +763,7 @@ export function EditCampaign() {
                     )}
                     {showRedirectTo && redirectTo !== '' && (
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
                           {redirectTo === '1' ? 'Audio Message' : redirectTo === '2' ? 'Voice Template' : redirectTo === '3' ? 'Extension' : redirectTo === '4' ? 'Ring Group' : redirectTo === '5' ? 'IVR' : 'Voice AI Prompt'}
                         </label>
                         <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input">
@@ -794,9 +781,9 @@ export function EditCampaign() {
                 )}
 
                 {showNoAgent && (
-                  <div className="grid grid-cols-3 gap-x-5 gap-y-5 pt-5 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3 pt-3">
                     <div className="form-group mb-0">
-                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">No Agent Available</label>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>No Agent Available</label>
                       <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
                         <option value="">— Select —</option>
                         <option value="1">Hang Up</option>
@@ -808,7 +795,7 @@ export function EditCampaign() {
                     </div>
                     {noAgentAction === 2 && (
                       <div className="form-group mb-0 col-span-2">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Voice Drop Target</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Voice Drop Target</label>
                         <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
                           <option value="">— Select Extension —</option>
                           {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
@@ -817,7 +804,7 @@ export function EditCampaign() {
                     )}
                     {noAgentAction === 3 && (
                       <div className="form-group mb-0 col-span-2">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Inbound IVR</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Inbound IVR</label>
                         <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
                           <option value="">— Select IVR —</option>
                           {ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
@@ -826,7 +813,7 @@ export function EditCampaign() {
                     )}
                     {noAgentAction === 4 && (
                       <div className="form-group mb-0 col-span-2">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Extension</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Extension</label>
                         <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
                           <option value="">— Select Extension —</option>
                           {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
@@ -835,7 +822,7 @@ export function EditCampaign() {
                     )}
                     {noAgentAction === 5 && (
                       <div className="form-group mb-0 col-span-2">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Assistant</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Assistant</label>
                         <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
                           <option value="123">Assistant</option>
                         </select>
@@ -844,23 +831,12 @@ export function EditCampaign() {
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* ── Card 3: Caller ID & Routing ── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0">
-                  <Phone size={16} className="text-sky-600" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Caller ID & Routing</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Configure caller identification and call routing</p>
-                </div>
-              </div>
-              <div className="px-6 py-5">
-                <div className="grid grid-cols-4 gap-x-5 gap-y-5">
+            <section>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Caller ID Type <span className="text-red-400">*</span></label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Caller ID Type <span className="text-red-400">*</span></label>
                     <select {...register('caller_id')} className="input">
                       <option value="area_code">Area Code</option>
                       <option value="area_code_random">Area Code &amp; Randomizer</option>
@@ -868,7 +844,7 @@ export function EditCampaign() {
                     </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Custom DID {callerIdType === 'custom' && <span className="text-red-400">*</span>}</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Custom DID {callerIdType === 'custom' && <span className="text-red-400">*</span>}</label>
                     <select {...register('custom_caller_id')} disabled={callerIdType !== 'custom'}
                       className={cn('input', callerIdType !== 'custom' && 'opacity-50', errors.custom_caller_id && 'border-red-400')}>
                       <option value="">— Select DID —</option>
@@ -877,39 +853,28 @@ export function EditCampaign() {
                     <FieldError message={errors.custom_caller_id?.message} />
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Country Code</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Country Code</label>
                     <select {...register('country_code')} className="input">
                       <option value="">— Select Country —</option>
                       {countries.map(c => <option key={c.phonecode} value={c.phonecode}>{c.name} (+{c.phonecode})</option>)}
                     </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Call Transfer</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Call Transfer</label>
                     <select {...register('call_transfer', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">Yes</option>
                     </select>
                   </div>
                 </div>
-              </div>
-            </div>
+            </section>
 
-            {/* ── Card 4: Call Schedule ── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                  <Clock size={16} className="text-amber-600" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Call Schedule & Dispositions</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Set time-based calling rules, schedules and disposition mapping</p>
-                </div>
-              </div>
-              <div className="px-6 py-5 space-y-5">
-                <div className="grid grid-cols-3 gap-x-5 gap-y-5">
+            <section>
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
                   <div className="form-group mb-0">
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="label text-xs font-semibold text-slate-600 mb-0">Call Timer</label>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Call Timer</label>
                       <button type="button"
                         onClick={() => { setSelectedTimerKey('custom'); setExistingTimerId(null) }}
                         className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md transition-colors">
@@ -931,7 +896,7 @@ export function EditCampaign() {
                   </div>
                   {selectedTimerKey !== 'none' && selectedTimerKey !== 'custom' && (
                     <div className="form-group mb-0">
-                      <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Timezone</label>
                       <select {...register('timezone')} className="input">
                         <option value="America/New_York">New York (ET)</option>
                         <option value="America/Chicago">Chicago (CT)</option>
@@ -945,14 +910,14 @@ export function EditCampaign() {
                     </div>
                   )}
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Time-Based Calling</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Time-Based Calling</label>
                     <select {...register('time_based_calling', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">Yes</option>
                     </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Dispositions <span className="text-red-400">*</span></label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Dispositions <span className="text-red-400">*</span></label>
                     {dispositionsLoading ? (
                       <div className="flex items-center gap-2 text-xs text-slate-400 h-[38px]">
                         <div className="w-3.5 h-3.5 border border-slate-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
@@ -982,12 +947,12 @@ export function EditCampaign() {
                     </div>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timer Name</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Timer Name</label>
                         <input className="input" placeholder="e.g. Business Hours"
                           value={customTimerTitle} onChange={e => setCustomTimerTitle(e.target.value)} />
                       </div>
                       <div className="form-group mb-0">
-                        <label className="label text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Timezone</label>
                         <select {...register('timezone')} className="input">
                           <option value="America/New_York">New York (ET)</option>
                           <option value="America/Chicago">Chicago (CT)</option>
@@ -1004,23 +969,12 @@ export function EditCampaign() {
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* ── Card 5: Communication ── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <Mail size={16} className="text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Communication</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Email, SMS and reporting preferences</p>
-                </div>
-              </div>
-              <div className="px-6 py-5">
-                <div className="grid grid-cols-4 gap-x-5 gap-y-5">
+            <section>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send Email</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send Email</label>
                     <select {...register('email', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">User Email</option>
@@ -1029,29 +983,28 @@ export function EditCampaign() {
                     </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send SMS</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send SMS</label>
                     <select {...register('sms', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">User Phone</option>
                     </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send to CRM</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send to CRM</label>
                     <select {...register('send_crm', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">Yes</option>
                     </select>
                   </div>
                   <div className="form-group mb-0">
-                    <label className="label text-xs font-semibold text-slate-600 mb-1.5">Send Report</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send Report</label>
                     <select {...register('send_report', { valueAsNumber: true })} className="input">
                       <option value="0">No</option>
                       <option value="1">Yes</option>
                     </select>
                   </div>
                 </div>
-              </div>
-            </div>
+            </section>
 
           </div>
 
@@ -1103,7 +1056,7 @@ export function EditCampaign() {
         const resolvedDispositions = dispositions.filter(d => campaignDispIds.includes(d.id))
 
         return (
-          <div className="space-y-5">
+          <div className="space-y-3">
             {/* Campaign Identity Card */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-5 flex items-start gap-4">
@@ -1238,6 +1191,7 @@ export function EditCampaign() {
           </div>
         )
       })()}
+      </div>
     </div>
   )
 }

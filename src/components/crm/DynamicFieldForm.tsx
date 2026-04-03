@@ -23,6 +23,12 @@ interface Props {
    */
   formValues?: Record<string, unknown>
   readOnly?: boolean
+  /** Number of grid columns for field layout. Default 2. */
+  columns?: 1 | 2 | 4
+  /** @deprecated Use columns={1} instead */
+  singleColumn?: boolean
+  /** Hide section header labels above field groups */
+  hideSectionHeaders?: boolean
 }
 
 // ── Section header humanizer ──────────────────────────────────────────────────
@@ -78,7 +84,7 @@ function renderInput(
 ) {
   const { field_key, field_type, options, placeholder, label_name } = label
   const ph = placeholder || label_name
-  const baseClass = 'input w-full'
+  const baseClass = 'crm-fi'
 
   const rules = buildFieldRules(label)
 
@@ -195,7 +201,7 @@ function renderInput(
     return (
       <textarea
         {...register(field_key, rules)}
-        className={baseClass + ' resize-none'}
+        className={baseClass}
         rows={3}
         placeholder={ph}
         defaultValue={defaultValue as string ?? ''}
@@ -239,8 +245,10 @@ function DisplayValue({ value, dataType }: { value: unknown; dataType: string })
 // ── Main component ────────────────────────────────────────────────────────────
 export function DynamicFieldForm({
   register, setValue, defaultValues = {}, errors,
-  labels: labelsProp, formValues = {}, readOnly,
+  labels: labelsProp, formValues = {}, readOnly, columns, singleColumn, hideSectionHeaders,
 }: Props) {
+  // Resolve effective column count (singleColumn is deprecated alias for columns=1)
+  const cols = columns ?? (singleColumn ? 1 : 2)
   // Only fetch if labels not provided by parent
   const { data: fetchedLabels, isLoading } = useQuery({
     queryKey: ['crm-lead-fields'],
@@ -331,38 +339,58 @@ export function DynamicFieldForm({
 
   // ── Edit mode: form inputs ────────────────────────────────────────────────
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <style>{`
+        .crm-fi{width:100%;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .12s,box-shadow .12s}
+        .crm-fi:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+        .crm-fi::placeholder{color:#94a3b8}
+        select.crm-fi{appearance:none;cursor:pointer;padding-right:32px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:14px}
+        textarea.crm-fi{resize:none;line-height:1.5}
+        .field-has-error .crm-fi{border-color:#ef4444}
+        .field-has-error .crm-fi:focus{box-shadow:0 0 0 3px rgba(239,68,68,.1)}
+      `}</style>
       {Object.entries(groups).map(([section, fields]) => {
         const visible = fields.filter(f => isVisible(f.conditions, formValues))
         if (visible.length === 0) return null
         return (
           <div key={section}>
-            <h4
-              className="text-[11px] font-semibold uppercase mb-2"
-              style={{ color: '#6B7280', letterSpacing: '0.06em' }}
-            >
-              {humanizeSection(section)}
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+            {!hideSectionHeaders && (
+              <div style={{ marginBottom: 12 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3 }}>
+                  {humanizeSection(section)}
+                </h4>
+                <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+              </div>
+            )}
+            <div className={[
+              'grid grid-cols-1 gap-x-3 gap-y-2',
+              cols >= 2 ? 'sm:grid-cols-2' : '',
+              cols >= 4 ? 'xl:grid-cols-4' : '',
+            ].join(' ')}>
               {visible.map(label => {
                 const isRequired = label.required === true || (label.required as unknown) == 1
                 const isCheckbox = label.field_type === 'checkbox'
                 const fieldError = errors?.[label.field_key]
+                const k = label.field_key.toLowerCase()
+                const isWide = cols > 1 && (label.field_type === 'textarea' || label.field_type === 'text_area'
+                  || (k.includes('address') && !k.includes('email'))
+                  || k.includes('notes') || k.includes('description'))
+                // Wide fields span 2 cols; on a 4-col grid that's half-width, on 2-col that's full-width
+                const spanClass = isWide ? 'sm:col-span-2' : ''
 
                 return (
-                  <div key={label.id} data-field-key={label.field_key} id={`field-${label.field_key}`}>
+                  <div key={label.id} className={`${spanClass}${fieldError ? ' field-has-error' : ''}`} data-field-key={label.field_key} id={`field-${label.field_key}`}>
                     {!isCheckbox && (
-                      <label className="block text-xs font-medium mb-0.5" style={{ color: '#374151' }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: fieldError ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
                         {label.label_name}
-                        {isRequired && <span className="ml-0.5 text-red-500">*</span>}
+                        {isRequired && <span style={{ color: '#ef4444', fontSize: 13, marginLeft: 3 }}>*</span>}
                       </label>
                     )}
                     {renderInput(label, register, defaultValues[label.field_key])}
                     {fieldError?.message && (
-                      <p className="flex items-center gap-1 text-[11px] mt-0.5 text-red-500">
-                        <AlertCircle size={10} />
-                        {String(fieldError.message)}
-                      </p>
+                      <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                        <AlertCircle size={11} />{String(fieldError.message)}
+                      </span>
                     )}
                   </div>
                 )

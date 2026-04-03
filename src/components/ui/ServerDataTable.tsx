@@ -219,7 +219,7 @@ export function ServerDataTable<T extends Record<string, unknown>>({
               {filters.map(f => (
                 <select
                   key={f.key}
-                  className="input h-9 text-sm w-auto pr-8 min-w-[120px]"
+                  className="input h-9 text-sm w-auto pr-8 min-w-[120px] py-1.5"
                   value={activeFilters[f.key] ?? ''}
                   onChange={e => onFilterChange(f.key, e.target.value)}
                 >

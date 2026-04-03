@@ -17,4 +17,8 @@ export const recycleRuleService = {
 
   delete: (ruleId: number) =>
     api.post('/delete-leads-rule', { rule_id: ruleId }),
+
+  /** Soft-delete a rule by marking is_deleted = 1 */
+  softDelete: (ruleId: number) =>
+    api.post('/edit-recycle-rule', { recycle_rule_id: ruleId, is_deleted: 1 }),
 }

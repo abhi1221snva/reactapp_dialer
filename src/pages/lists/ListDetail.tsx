@@ -132,7 +132,7 @@ export function ListDetail() {
         </div>
 
         <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
             <Activity size={18} className="text-white" />
           </div>
           <div>
@@ -176,7 +176,7 @@ export function ListDetail() {
                   title="Toggle Status"
                 >
                   {list.is_active === 1
-                    ? <ToggleRight size={18} className="text-emerald-500" />
+                    ? <ToggleRight size={18} className="text-indigo-500" />
                     : <ToggleLeft size={18} />}
                 </button>
               </div>

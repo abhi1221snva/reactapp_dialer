@@ -33,11 +33,14 @@ function titleFromPath(pathname: string): string {
 interface CrmHeaderCtx {
   setDescription: (d: ReactNode) => void
   setActions:     (a: ReactNode) => void
+  /** Incremented on every route change — include in useEffect deps to guarantee re-run after layout clears header. */
+  headerKey:      number
 }
 
 const CrmHeaderContext = createContext<CrmHeaderCtx>({
   setDescription: () => {},
   setActions:     () => {},
+  headerKey:      0,
 })
 
 /** Call inside any CRM page to push description text and/or action buttons into the page header. */
@@ -53,18 +56,20 @@ export function CrmLayout() {
   const [description, setDescription] = useState<ReactNode>(undefined)
   const [actions,     setActions    ] = useState<ReactNode>(undefined)
 
-  // Clear injected content on every route change
+  // Bump a counter on route change so children can re-run their header effects
+  const [headerKey, setHeaderKey] = useState(0)
   useEffect(() => {
     setDescription(undefined)
     setActions(undefined)
+    setHeaderKey(k => k + 1)
   }, [pathname])
 
   return (
-    <CrmHeaderContext.Provider value={{ setDescription, setActions }}>
+    <CrmHeaderContext.Provider value={{ setDescription, setActions, headerKey }}>
       <div className="space-y-4">
 
         {/* ── Page title row (hidden on pages with their own header) */}
-        {pathname !== '/crm/dashboard' && pathname !== '/crm/sms-inbox' && !/^\/crm\/leads\/\d+$/.test(pathname) && (
+        {pathname !== '/crm/dashboard' && pathname !== '/crm/sms-inbox' && pathname !== '/crm/leads/create' && !/^\/crm\/leads\/\d+$/.test(pathname) && !/^\/crm\/leads\/\d+\/edit$/.test(pathname) && (
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-slate-900 leading-tight">{title}</h1>

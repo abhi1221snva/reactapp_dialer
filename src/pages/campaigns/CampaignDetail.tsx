@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Radio, Pencil, Play, Pause, Copy,
   Users, LayoutList, Phone, Clock, Globe, Tag,
-  ChevronRight, X, Mail,
-  CheckCircle2, XCircle,
+  ChevronRight, X, Mail, Zap, Shield, MessageSquare,
+  CheckCircle2, XCircle, Activity,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
@@ -62,6 +62,29 @@ function DetailRow({ label, value }: { label: string; value?: React.ReactNode })
     <div className="flex items-start justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
       <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
       <span className="text-xs text-right font-semibold text-slate-800">{value ?? '—'}</span>
+    </div>
+  )
+}
+
+function FeatureRow({ icon: Icon, label, value, on }: {
+  icon: React.ElementType; label: string; value?: string; on?: boolean
+}) {
+  const hasToggle = on !== undefined
+  return (
+    <div className="flex items-center gap-2.5 py-1">
+      <Icon size={13} className="text-white/50 flex-shrink-0" />
+      <span className="text-[11px] text-white/70 font-medium flex-1 min-w-0 truncate">{label}</span>
+      {hasToggle ? (
+        <span className={cn(
+          'text-[11px] font-semibold flex items-center gap-1',
+          on ? 'text-emerald-300' : 'text-white/40'
+        )}>
+          {on ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
+          {on ? 'On' : 'Off'}
+        </span>
+      ) : (
+        <span className="text-[11px] font-semibold text-white/90 text-right truncate max-w-[140px]">{value}</span>
+      )}
     </div>
   )
 }
@@ -169,12 +192,13 @@ export function CampaignDetail() {
         <span className="text-slate-900 font-medium truncate">{d.title || `Campaign #${id}`}</span>
       </div>
 
-      {/* ── Header Banner (matches User View style) ── */}
+      {/* ── Header Banner ── */}
       <div className="bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl relative overflow-hidden shadow-sm">
         <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
         <div className="absolute top-6 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
         <div className="relative px-6 py-5">
+          {/* Top row: title + actions */}
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg">
@@ -196,6 +220,10 @@ export function CampaignDetail() {
                   )}>
                     <span className={cn('w-1.5 h-1.5 rounded-full', isActive(d.status) ? 'bg-emerald-300' : 'bg-white/40')} />
                     {isActive(d.status) ? 'Active' : 'Inactive'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 border border-white/20 text-white/80">
+                    <Radio size={11} />
+                    {dialModeDisplay}
                   </span>
                 </div>
               </div>
@@ -226,44 +254,93 @@ export function CampaignDetail() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
-              <Users size={16} className="text-indigo-600" />
-            </div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Leads</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{total.toLocaleString()}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{dialed.toLocaleString()} dialed</p>
-        </div>
+          {/* Two-column: Stats (left) + Feature Highlights (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mt-5 pt-4 border-t border-white/15">
+            {/* Left — Key numeric stats (3 cols) */}
+            <div className="lg:col-span-3 grid grid-cols-3 sm:grid-cols-3 gap-3">
+              {/* Total Leads */}
+              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <Users size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-white leading-tight">{total.toLocaleString()}</p>
+                  <p className="text-[10px] font-medium text-white/60 uppercase tracking-wide">Total Leads</p>
+                </div>
+              </div>
 
-        <div className="card">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-              <Phone size={16} className="text-blue-600" />
-            </div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Progress</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{pct}%</p>
-          <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2">
-            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
+              {/* Dialed Leads */}
+              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <Phone size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-white leading-tight">{dialed.toLocaleString()}</p>
+                  <p className="text-[10px] font-medium text-white/60 uppercase tracking-wide">Dialed</p>
+                </div>
+              </div>
 
-        <div className="card">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-              <LayoutList size={16} className="text-blue-600" />
+              {/* Progress */}
+              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <Activity size={16} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xl font-bold text-white leading-tight">{pct}%</p>
+                  <div className="w-full max-w-[80px] h-1.5 bg-white/20 rounded-full mt-1">
+                    <div className="h-full bg-emerald-300 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Lists */}
+              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <LayoutList size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-white leading-tight">{d.lists_associated ?? 0}</p>
+                  <p className="text-[10px] font-medium text-white/60 uppercase tracking-wide">Lists</p>
+                </div>
+              </div>
+
+              {/* Hopper Count */}
+              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <Tag size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-white leading-tight">{d.hopper_count ?? 0}</p>
+                  <p className="text-[10px] font-medium text-white/60 uppercase tracking-wide">Hopper</p>
+                </div>
+              </div>
+
+              {/* Hopper Mode */}
+              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <Zap size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white leading-tight">{hopperModeLabel}</p>
+                  <p className="text-[10px] font-medium text-white/60 uppercase tracking-wide">Hopper Mode</p>
+                </div>
+              </div>
             </div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Lists</span>
+
+            {/* Right — Feature highlights (2 cols) */}
+            <div className="lg:col-span-2 bg-white/8 rounded-xl px-4 py-3">
+              <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2.5">Feature Highlights</p>
+              <div className="space-y-2">
+                <FeatureRow icon={Clock} label="Call Times" value={callTimeDisplay} />
+                <FeatureRow icon={Phone} label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
+                <FeatureRow icon={Shield} label="AMD Detection" on={Number(d.amd) === 1} />
+                <FeatureRow icon={Globe} label="Call Transfer" on={Number(d.call_transfer) === 1} />
+                <FeatureRow icon={MessageSquare} label="SMS" on={Number(d.sms) === 1} />
+                <FeatureRow icon={Mail} label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
+              </div>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900">{d.lists_associated ?? 0}</p>
-          <p className="text-xs text-slate-400 mt-0.5">attached lists</p>
         </div>
       </div>
 

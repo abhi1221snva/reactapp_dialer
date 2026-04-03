@@ -11,6 +11,7 @@ import {
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
   Activity, Search, Wrench, RefreshCw, AlertTriangle, CheckCircle,
   ArrowDownLeft, ArrowUpRight, Paperclip, Users, SlidersHorizontal, ArrowUpDown,
+  Copy,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -1831,15 +1832,43 @@ function LendersPanel({ leadId }: { leadId: number }) {
     return list
   })()
 
-  // Filtered submission list for right panel
+  // Full submission list sorted newest first (for grouped "all" view)
+  const allSubmissions = [...(submissions ?? [])].sort((a, b) => {
+    const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : new Date(a.created_at).getTime()
+    const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : new Date(b.created_at).getTime()
+    return bTime - aTime
+  })
+
+  // Filtered submission list for right panel — uses ALL submissions (not deduplicated)
   const filteredSubList = focusedLenderId !== null
-    ? subList.filter(s => s.lender_id === focusedLenderId)
-    : subList
+    ? allSubmissions.filter(s => s.lender_id === focusedLenderId)
+    : allSubmissions
   const focusedLenderName = focusedLenderId !== null
     ? (activeLenders.find(l => l.id === focusedLenderId)?.lender_name
-       ?? subList.find(s => s.lender_id === focusedLenderId)?.lender_name
+       ?? allSubmissions.find(s => s.lender_id === focusedLenderId)?.lender_name
        ?? `Lender #${focusedLenderId}`)
     : ''
+
+  // Group submissions by lender for "all" view
+  const groupedSubmissions = focusedLenderId === null
+    ? (() => {
+        const groups: { lenderId: number; lenderName: string; submissions: LenderSubmission[] }[] = []
+        const map = new Map<number, LenderSubmission[]>()
+        const nameMap = new Map<number, string>()
+        for (const s of allSubmissions) {
+          if (!map.has(s.lender_id)) {
+            map.set(s.lender_id, [])
+            nameMap.set(s.lender_id, s.lender_name ?? `Lender #${s.lender_id}`)
+          }
+          map.get(s.lender_id)!.push(s)
+        }
+        // Order groups by most recent submission first
+        for (const [lenderId, subs] of map) {
+          groups.push({ lenderId, lenderName: nameMap.get(lenderId)!, submissions: subs })
+        }
+        return groups
+      })()
+    : null
 
   // No auto-focus — show all submissions by default on page load
 
@@ -2753,7 +2782,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
-              Submission History {filteredSubList.length > 0 && <span className="font-normal">({filteredSubList.length}{focusedLenderId !== null ? ` of ${subList.length}` : ''})</span>}
+              Submission History {filteredSubList.length > 0 && <span className="font-normal">({filteredSubList.length}{focusedLenderId !== null ? ` of ${allSubmissions.length}` : ''})</span>}
             </p>
             <div className="flex items-center gap-1.5">
               {focusedLenderId !== null && (
@@ -2788,12 +2817,19 @@ function LendersPanel({ leadId }: { leadId: number }) {
             const success = filteredSubList.filter(s => s.submission_status === 'submitted' || s.submission_status === 'approved' || s.submission_status === 'viewed').length
             const failed = filteredSubList.filter(s => s.submission_status === 'failed' || s.submission_status === 'declined').length
             const processing = filteredSubList.filter(s => s.submission_status === 'pending').length
+            const lenderCount = groupedSubmissions?.length ?? 0
             return (
               <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-50 border border-slate-100 mb-3">
                 <span className="text-[11px] font-semibold text-slate-500">
                   {total} Total
                 </span>
                 <span className="w-px h-3.5 bg-slate-200" />
+                {focusedLenderId === null && lenderCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600">
+                    <Building2 size={10} />
+                    {lenderCount} Lender{lenderCount !== 1 ? 's' : ''}
+                  </span>
+                )}
                 {success > 0 && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -2822,8 +2858,43 @@ function LendersPanel({ leadId }: { leadId: number }) {
             <p className="text-xs text-slate-400 text-center py-6">
               {focusedLenderId !== null ? 'No submissions for this lender yet.' : 'No submissions yet.'}
             </p>
+          ) : groupedSubmissions && focusedLenderId === null ? (
+            /* ── Grouped "All" view ── */
+            <div className="space-y-4" style={{ transition: 'all 0.3s ease' }}>
+              {groupedSubmissions.map(group => (
+                <div key={group.lenderId} id={`sub-row-${group.lenderId}`}>
+                  {/* Lender group header */}
+                  <button
+                    onClick={() => setFocusedLenderId(group.lenderId)}
+                    className="flex items-center gap-2 mb-2 group cursor-pointer w-full text-left"
+                  >
+                    <Building2 size={12} className="text-slate-400 group-hover:text-indigo-500 transition-colors flex-shrink-0" />
+                    <span className="text-[11px] font-bold text-slate-600 group-hover:text-indigo-600 transition-colors truncate">
+                      {group.lenderName}
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-400 flex-shrink-0">
+                      ({group.submissions.length})
+                    </span>
+                    <span className="flex-1 border-b border-dashed border-slate-200 min-w-[20px]" />
+                    <span className="text-[10px] text-slate-400 group-hover:text-indigo-500 transition-colors flex-shrink-0">
+                      Focus &rarr;
+                    </span>
+                  </button>
+                  <div className="space-y-2 pl-0">
+                    {group.submissions.map(s => (
+                      <div key={s.id}>
+                        <ErrorBoundary fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
+                          <SubmissionRow sub={s} leadId={leadId} onViewLog={handleViewLog} onResubmit={handleQuickResubmit} isResubmitting={quickResubmitId === s.lender_id} />
+                        </ErrorBoundary>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <div className="space-y-2">
+            /* ── Single-lender view ── */
+            <div className="space-y-2" style={{ transition: 'all 0.3s ease' }}>
               {filteredSubList.map(s => (
                 <div key={s.id} id={`sub-row-${s.lender_id}`}>
                   <ErrorBoundary fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
@@ -4154,9 +4225,9 @@ export function CrmLeadDetail() {
 
       {/* ── HEADER ── */}
       <div className="bg-white border-b border-slate-200/80" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-        <div className="max-w-[1800px] mx-auto px-5 pt-2 pb-2">
+        <div className="max-w-[1800px] mx-auto px-5 py-3">
 
-          {/* ── Row 1: Back + Avatar + Name/Meta  |  Status + Actions ── */}
+          {/* ── Row 1: Back + Avatar + Name/Status/Meta  |  Actions ── */}
           <div className="flex items-center gap-3 min-h-[44px]">
 
             {/* Back button */}
@@ -4165,101 +4236,77 @@ export function CrmLeadDetail() {
             </button>
 
             {/* Avatar */}
-            <div className={`w-9 h-9 rounded-lg ${avatarBg} flex items-center justify-center flex-shrink-0`}>
-              <span className="text-xs font-bold text-white leading-none">{leadInits}</span>
+            <div className={`w-10 h-10 rounded-xl ${avatarBg} flex items-center justify-center flex-shrink-0`}>
+              <span className="text-sm font-bold text-white leading-none">{leadInits}</span>
             </div>
 
-            {/* Name + Meta stacked */}
+            {/* Name + Status badge + Meta stacked */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-[15px] font-bold text-slate-900 truncate leading-tight" style={{ maxWidth: 320 }}>{fullName}</h1>
+              <div className="flex items-center gap-2.5">
+                <h1 style={{ fontSize: 18, fontWeight: 700, color: '#111827', lineHeight: 1.2, maxWidth: 360 }} className="truncate">{fullName}</h1>
+                {/* Status label (non-editable) */}
+                <span
+                  className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-full text-[11px] font-semibold flex-shrink-0 select-none"
+                  style={{ background: `${statusColor}14`, color: statusColor, border: `1px solid ${statusColor}30` }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                  {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </span>
                 {tempStyle && (
-                  <span className={`hidden sm:inline-flex items-center gap-1 h-[18px] px-1.5 rounded-full text-[9px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
-                    <span className="w-1 h-1 rounded-full" style={{ background: tempStyle.dot }} />
+                  <span className={`hidden sm:inline-flex items-center gap-1 h-[20px] px-2 rounded-full text-[10px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: tempStyle.dot }} />
                     {tempStyle.label}
                   </span>
                 )}
               </div>
               {/* Contact + meta inline */}
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {lead.company_name && (
                   <>
-                    <span className="flex items-center gap-1 text-[11px] text-slate-500">
-                      <Briefcase size={9} className="text-slate-400" />
-                      <span className="truncate max-w-[160px]">{String(lead.company_name)}</span>
+                    <span className="flex items-center gap-1 text-[13px] text-slate-600">
+                      <Briefcase size={11} className="text-slate-400" />
+                      <span className="truncate max-w-[180px]">{String(lead.company_name)}</span>
                     </span>
-                    <span className="text-slate-300 select-none text-[10px]">·</span>
+                    <span className="text-slate-300 select-none text-[11px]">•</span>
                   </>
                 )}
                 {lead.phone_number && (
                   <>
-                    <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-emerald-600 transition-colors whitespace-nowrap">
-                      <Phone size={9} className="text-slate-400" />
+                    <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-[13px] font-medium hover:text-emerald-600 transition-colors whitespace-nowrap" style={{ color: '#374151' }}>
+                      <Phone size={11} className="text-slate-400" />
                       {formatPhoneNumber(String(lead.phone_number))}
                     </a>
-                    <span className="text-slate-300 select-none text-[10px]">·</span>
+                    <span className="text-slate-300 select-none text-[11px]">•</span>
                   </>
                 )}
                 {lead.email && (
                   <>
-                    <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-sky-600 transition-colors truncate max-w-[200px]">
-                      <Mail size={9} className="text-slate-400" />
+                    <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-[13px] font-medium hover:text-sky-600 transition-colors truncate max-w-[220px]" style={{ color: '#374151' }}>
+                      <Mail size={11} className="text-slate-400" />
                       {String(lead.email)}
                     </a>
-                    <span className="hidden lg:inline text-slate-300 select-none text-[10px]">·</span>
+                    <span className="hidden lg:inline text-slate-300 select-none text-[11px]">•</span>
                   </>
                 )}
-                {/* Meta items */}
-                {[
-                  (lead.assigned_name as string | undefined) || null,
-                  lead.lead_type ? toTitleCase(String(lead.lead_type)) : null,
-                  loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` : null,
-                  lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null,
-                  `${daysInSystem}d`,
-                ].filter(Boolean).map((v, i, arr) => (
-                  <span key={i} className="hidden lg:inline text-[11px] text-slate-400 whitespace-nowrap">
-                    {v}{i < arr.length - 1 && <span className="mx-1 text-slate-300 select-none">·</span>}
+                {/* Meta items – labeled for clarity */}
+                {([
+                  (lead.assigned_name as string | undefined) ? { label: 'Agent', value: lead.assigned_name as string } : null,
+                  lead.lead_type ? { label: 'Type', value: toTitleCase(String(lead.lead_type)) } : null,
+                  loanAmount ? { label: 'Amount', value: `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` } : null,
+                  lead.created_at ? { label: 'Created', value: new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) } : null,
+                  { label: 'Pipeline', value: `${daysInSystem}d` },
+                ].filter(Boolean) as { label: string; value: string }[]).map((item, i, arr) => (
+                  <span key={i} className="hidden lg:inline text-[13px] whitespace-nowrap">
+                    <span className="text-slate-400 font-medium">{item.label}:</span>{' '}
+                    <span style={{ color: '#374151' }}>{item.value}</span>
+                    {i < arr.length - 1 && <span className="mx-1.5 text-slate-300 select-none">•</span>}
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* Right: Status dropdown + Action buttons */}
+            {/* Right: Action buttons only (status removed — edit via Edit button) */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {/* Status dropdown */}
-              <div className="relative flex-shrink-0" data-dropdown="status">
-                <button
-                  onClick={() => setShowStatusDropdown(s => !s)}
-                  className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-80"
-                  style={{ background: `${statusColor}12`, color: statusColor, border: `1px solid ${statusColor}28` }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                  {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                  <ChevronDown size={9} className="opacity-60" />
-                </button>
-                {showStatusDropdown && statuses && (
-                  <div className="absolute top-full right-0 mt-1 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1 min-w-[200px]">
-                    {statuses.map((s: LeadStatus) => {
-                      const isCurrent = s.lead_title_url === String(lead.lead_status)
-                      const dotColor  = s.color_code ?? s.color ?? '#94a3b8'
-                      return (
-                        <button key={s.id}
-                          onClick={() => { updateStatus.mutate(s.lead_title_url); setShowStatusDropdown(false) }}
-                          disabled={isCurrent || updateStatus.isPending}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-                        >
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-                          <span className="flex-1">{s.lead_title}</span>
-                          {isCurrent && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Current</span>}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <span className="w-px h-4 bg-slate-200 mx-0.5 flex-shrink-0" />
-
               <button
                 onClick={() => setShowEmailModal(true)}
                 className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-sky-50 text-sky-700 border border-sky-200/70 hover:bg-sky-100 hover:border-sky-300 transition-all"
@@ -4291,12 +4338,12 @@ export function CrmLeadDetail() {
         </div>
 
         {/* ── Accent separator ── */}
-        <div className="h-[2px] w-full" style={{ background: 'linear-gradient(90deg, transparent 5%, #86efac 30%, #4ade80 50%, #86efac 70%, transparent 95%)' }} />
+        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent 5%, #86efac 35%, #4ade80 50%, #86efac 65%, transparent 95%)' }} />
 
       </div>
 
       {/* ── SINGLE CARD ── */}
-      <div className="max-w-[1800px] mx-auto px-5 py-4 pb-8">
+      <div className="max-w-[1800px] mx-auto px-5 pt-3 pb-8">
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 140px)' }}>
 
           {/* Unified tab bar */}
@@ -4431,34 +4478,64 @@ export function CrmLeadDetail() {
                 custom:     'Custom Information',
               }
 
-              // ── Section card ─────────────────────────────────────────────────
+              // ── Copy helper ───────────────────────────────────────────────────
+              const copyToClipboard = (text: string) => {
+                navigator.clipboard.writeText(text).then(() => toast.success('Copied to clipboard'))
+              }
+
+              // ── Render a single field value ────────────────────────────────────
+              const renderFieldValue = (f: FieldDef, raw: unknown, display: string) => {
+                const isEmpty = !display
+                if (isEmpty) return <span style={{ fontSize: 14, color: '#9ca3af', fontStyle: 'italic' }}>Not Provided</span>
+
+                const isPhone = f.field_type === 'phone_number' || f.field_type === 'phone'
+                const isEmail = f.field_type === 'email'
+                const isHighlight = isPhone || isEmail || f.field_key === 'amount_requested' || f.field_key === 'funding_amount'
+
+                if (isPhone) {
+                  return (
+                    <span className="inline-flex items-center gap-2 group/val">
+                      <a href={`tel:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 600 : 500, color: '#111827', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
+                      <button type="button" onClick={() => copyToClipboard(String(raw))} className="opacity-0 group-hover/val:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100" title="Copy"><Copy size={12} className="text-slate-400" /></button>
+                    </span>
+                  )
+                }
+                if (isEmail) {
+                  return (
+                    <span className="inline-flex items-center gap-2 group/val">
+                      <a href={`mailto:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 600 : 500, color: '#111827', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
+                      <button type="button" onClick={() => copyToClipboard(String(raw))} className="opacity-0 group-hover/val:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100" title="Copy"><Copy size={12} className="text-slate-400" /></button>
+                    </span>
+                  )
+                }
+                return <span style={{ fontSize: 14, fontWeight: isHighlight ? 600 : 500, color: '#111827' }}>{display}</span>
+              }
+
+              // ── Section renderer ────────────────────────────────────────────────
               const renderSection = (secKey: string) => {
                 const fields = sectionMap.get(secKey) ?? []
                 if (fields.length === 0) return null
                 const title = SECTION_LABELS[secKey]
                   ?? (secKey.charAt(0).toUpperCase() + secKey.slice(1) + ' Information')
-                const SecIcon   = ICON_MAP[secKey] ?? Settings2
                 return (
-                  <div key={secKey} className="rounded-xl border border-slate-200/70 bg-white overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
-                      <div className="w-4.5 h-4.5 rounded bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                        <SecIcon size={10} className="text-emerald-600" />
-                      </div>
-                      <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{title}</h3>
-                      <span className="ml-auto text-[10px] text-slate-400 tabular-nums">{fields.length}</span>
+                  <div key={secKey}>
+                    {/* Section heading with accent bar */}
+                    <div style={{ marginBottom: 8 }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3 }}>
+                        {title}
+                      </h3>
                     </div>
-                    <div className="p-4 divide-y divide-slate-50">
+                    <div style={{ height: 1, background: '#e5e7eb', marginBottom: 12 }} />
+
+                    {/* Label–value grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                       {fields.map(f => {
                         const raw     = (lead as Record<string, unknown>)[f.field_key]
                         const display = fmtVal(f.field_type, raw)
                         return (
-                          <div key={f.field_key} className="flex items-start gap-3 py-2">
-                            <span className="text-[11px] text-slate-400 w-[120px] flex-shrink-0 pt-0.5 leading-tight truncate" title={f.label_name}>
-                              {f.label_name}
-                            </span>
-                            <span className={`text-[13px] font-medium flex-1 leading-tight break-words min-w-0 ${display ? 'text-slate-800' : 'text-slate-300'}`}>
-                              {display || '—'}
-                            </span>
+                          <div key={f.field_key}>
+                            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 2, lineHeight: 1.3 }}>{f.label_name}</p>
+                            {renderFieldValue(f, raw, display)}
                           </div>
                         )
                       })}
@@ -4467,36 +4544,27 @@ export function CrmLeadDetail() {
                 )
               }
 
-              // Separate second_owner from regular sections
-              const regularSections = orderedSections.filter(s => s !== 'second_owner')
-              const hasOwner2Section = sectionMap.has('second_owner') && (sectionMap.get('second_owner')?.length ?? 0) > 0
+              // Only include second_owner in the grid when it has populated data
+              const displaySections = showOwner2
+                ? orderedSections
+                : orderedSections.filter(s => s !== 'second_owner')
+
+              // Pair sections into rows of 2 for side-by-side layout
+              const sectionElements = displaySections.map(sec => ({ key: sec, node: renderSection(sec) })).filter(s => s.node !== null)
+              const rows: { key: string; node: React.ReactNode }[][] = []
+              for (let i = 0; i < sectionElements.length; i += 2) {
+                rows.push(sectionElements.slice(i, i + 2))
+              }
 
               return (
-                <div className="px-4 py-4 space-y-3 overflow-y-auto">
-                  {/* Regular sections grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
-                    {regularSections.map(sec => renderSection(sec))}
+                <div className="px-6 py-5 overflow-y-auto">
+                  <div className="space-y-7">
+                    {rows.map((row, ri) => (
+                      <div key={ri} className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6 items-start">
+                        {row.map(s => <div key={s.key}>{s.node}</div>)}
+                      </div>
+                    ))}
                   </div>
-
-                  {/* Owner 2 — full-width toggle + section */}
-                  {hasOwner2Section && (
-                    <div>
-                      <label className="flex items-center gap-2.5 py-2 cursor-pointer select-none w-fit">
-                        <input
-                          type="checkbox"
-                          checked={showOwner2}
-                          onChange={e => setShowOwner2(e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                        />
-                        <span className="text-xs font-medium text-slate-600">This lead has a second owner / co-applicant</span>
-                      </label>
-                      {showOwner2 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start mt-1">
-                          {renderSection('second_owner')}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )
             })()}

@@ -282,7 +282,7 @@ export function CrmLeadsList() {
   const navigate                        = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const qc                              = useQueryClient()
-  const { setDescription, setActions }  = useCrmHeader()
+  const { setDescription, setActions, headerKey }  = useCrmHeader()
   const tableRef                        = useRef<HTMLDivElement>(null)
 
   const [searchInput, setSearchInput] = useState('')
@@ -400,11 +400,35 @@ export function CrmLeadsList() {
 
   // ── Selection ────────────────────────────────────────────────────────────────
 
+  // Clear selection when page/search/filters change (stale IDs from other pages)
+  useEffect(() => { setSelectedIds([]) }, [page, search, appliedFilters, perPage])
+
+  const currentPageIds = useMemo(() => new Set(leads.map(l => l.id)), [leads])
+
   const toggleSelect = (id: number) =>
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
-  const toggleAll = () =>
-    setSelectedIds(prev => prev.length === leads.length ? [] : leads.map(l => l.id))
+  const allOnPageSelected = leads.length > 0 && leads.every(l => selectedIds.includes(l.id))
+  const someOnPageSelected = leads.length > 0 && leads.some(l => selectedIds.includes(l.id)) && !allOnPageSelected
+
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someOnPageSelected
+  }, [someOnPageSelected])
+
+  const toggleAll = () => {
+    if (allOnPageSelected) {
+      // Deselect all on current page
+      setSelectedIds(prev => prev.filter(id => !currentPageIds.has(id)))
+    } else {
+      // Select all on current page (merge with existing selections)
+      setSelectedIds(prev => {
+        const set = new Set(prev)
+        leads.forEach(l => set.add(l.id))
+        return Array.from(set)
+      })
+    }
+  }
 
   // ── Active filter count ───────────────────────────────────────────────────────
 
@@ -510,7 +534,7 @@ export function CrmLeadsList() {
     )
     return () => { setDescription(undefined); setActions(undefined) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, total])
+  }, [isLoading, total, headerKey])
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -619,10 +643,11 @@ export function CrmLeadsList() {
               <tr>
                 <th className="w-10">
                   <input
+                    ref={selectAllRef}
                     type="checkbox"
-                    checked={leads.length > 0 && selectedIds.length === leads.length}
+                    checked={allOnPageSelected}
                     onChange={toggleAll}
-                    className="rounded accent-indigo-600"
+                    className="rounded accent-indigo-600 cursor-pointer"
                   />
                 </th>
                 <th className="w-14 text-slate-400 font-medium">#</th>
@@ -675,12 +700,12 @@ export function CrmLeadsList() {
                       onClick={() => navigate(`/crm/leads/${lead.id}`)}
                     >
                       {/* Checkbox */}
-                      <td onClick={e => { e.stopPropagation(); toggleSelect(lead.id) }}>
+                      <td onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selected}
                           onChange={() => toggleSelect(lead.id)}
-                          className="rounded accent-indigo-600"
+                          className="rounded accent-indigo-600 cursor-pointer"
                         />
                       </td>
 

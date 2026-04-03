@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, RefreshCw, Save, X, ArrowLeft, Pencil } from 'lucide-react'
+import {
+  Plus, Trash2, RefreshCw, Save, X, Pencil,
+  Search, ChevronDown, CheckCircle2,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
+
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { recycleRuleService } from '../../services/recycleRule.service'
@@ -12,6 +15,7 @@ import { dispositionService } from '../../services/disposition.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { cn } from '../../utils/cn'
 
 interface RecycleRuleItem {
   id: number
@@ -39,6 +43,109 @@ interface OptionItem {
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+// ─── Disposition Multi-Select Dropdown ────────────────────────────────────────
+function DispositionDropdown({
+  dispositions, selected, onChange, singleOnly,
+}: {
+  dispositions: OptionItem[]; selected: string[]; onChange: (ids: string[]) => void; singleOnly?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = dispositions.filter(d =>
+    (d.title ?? '').toLowerCase().includes(search.toLowerCase())
+  )
+  const toggle = (id: string) => {
+    if (singleOnly) { onChange([id]); setOpen(false); return }
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
+  }
+  const clearAll = (e: React.MouseEvent) => { e.stopPropagation(); onChange([]) }
+  const selectedDisps = dispositions.filter(d => selected.includes(String(d.id)))
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 h-[38px] rounded-lg border text-sm transition-all text-left bg-white',
+          open ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300',
+        )}>
+        {selected.length === 0 ? (
+          <span className="flex-1 text-slate-400 text-sm truncate">Select disposition{singleOnly ? '' : 's'}…</span>
+        ) : (
+          <div className="flex-1 flex items-center gap-1 overflow-hidden min-w-0">
+            {selectedDisps.slice(0, 2).map(d => (
+              <span key={d.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] font-medium rounded border border-indigo-100 flex-shrink-0 max-w-[100px]">
+                <span className="truncate">{d.title}</span>
+                <span role="button" onClick={e => { e.stopPropagation(); onChange(selected.filter(x => x !== String(d.id))) }}
+                  className="text-indigo-400 hover:text-red-500 cursor-pointer flex-shrink-0 leading-none">
+                  <X size={9} />
+                </span>
+              </span>
+            ))}
+            {selected.length > 2 && (
+              <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">+{selected.length - 2} more</span>
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+          {selected.length > 0 && (
+            <span onClick={clearAll} className="text-slate-300 hover:text-red-400 transition-colors cursor-pointer p-0.5 leading-none">
+              <X size={12} />
+            </span>
+          )}
+          <ChevronDown size={13} className={cn('text-slate-400 transition-transform duration-150', open && 'rotate-180')} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/80">
+            <Search size={12} className="text-slate-400 flex-shrink-0" />
+            <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search dispositions…"
+              className="flex-1 text-xs bg-transparent outline-none text-slate-700 placeholder-slate-400" />
+            {search && <button type="button" onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600"><X size={11} /></button>}
+          </div>
+          <div className="max-h-44 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4">No dispositions found</p>
+            ) : filtered.map(d => {
+              const isChecked = selected.includes(String(d.id))
+              return (
+                <button key={d.id} type="button" onClick={() => toggle(String(d.id))}
+                  className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors',
+                    isChecked ? 'bg-indigo-50 text-indigo-800' : 'text-slate-700 hover:bg-slate-50')}>
+                  <span className={cn('w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all',
+                    isChecked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300')}>
+                    {isChecked && <CheckCircle2 size={9} className="text-white" strokeWidth={3} />}
+                  </span>
+                  <span className="truncate">{d.title}</span>
+                </button>
+              )
+            })}
+          </div>
+          {selected.length > 0 && (
+            <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">{selected.length} selected</span>
+              <button type="button" onClick={clearAll} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">Clear all</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 function RecycleRuleModal({
@@ -88,14 +195,14 @@ function RecycleRuleModal({
   const dispositions: OptionItem[] = ((dispositionsData as any)?.data?.data ?? []) as OptionItem[]
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (isEdit) {
-        return recycleRuleService.update({
-          recycle_rule_id: editRule!.id,
+        await recycleRuleService.softDelete(editRule!.id)
+        return recycleRuleService.create({
           campaign_id: Number(campaignId),
           list_id: Number(listId),
-          disposition_id: Number(selectedDispositions[0]),
-          day: selectedDays[0]?.toLowerCase(),
+          disposition: selectedDispositions.map(Number),
+          day: selectedDays.map(d => d.toLowerCase()),
           time,
           call_time: Number(callTime),
         })
@@ -116,119 +223,107 @@ function RecycleRuleModal({
     onError: () => toast.error(isEdit ? 'Failed to update recycle rule' : 'Failed to create recycle rule'),
   })
 
-  const isValid = isEdit
-    ? campaignId && listId && selectedDispositions.length === 1 && selectedDays.length === 1
-    : campaignId && listId && selectedDispositions.length > 0 && selectedDays.length > 0
+  const isValid = campaignId && listId && selectedDispositions.length > 0 && selectedDays.length > 0
 
   const toggleDay = (day: string) => {
-    if (isEdit) {
-      setSelectedDays([day])
-    } else {
-      setSelectedDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
-    }
-  }
-
-  const toggleDisp = (id: string) => {
-    if (isEdit) {
-      setSelectedDispositions([id])
-    } else {
-      setSelectedDispositions(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id])
-    }
+    setSelectedDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900 text-base">{isEdit ? 'Edit Recycle Rule' : 'New Recycle Rule'}</h3>
-          <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="form-group">
-            <label className="label">Campaign *</label>
-            <select className="input" value={campaignId} onChange={e => setCampaignId(e.target.value)}>
-              <option value="">Select campaign</option>
-              {campaigns.map(c => (
-                <option key={c.id} value={c.id}>{c.title || c.campaign_name || `#${c.id}`}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="label">List *</label>
-            <select className="input" value={listId} onChange={e => setListId(e.target.value)}>
-              <option value="">Select list</option>
-              {lists.map(l => (
-                <option key={l.id} value={l.id}>{l.title || l.l_title || `#${l.id}`}</option>
-              ))}
-            </select>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <RefreshCw size={18} className="text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 text-base">{isEdit ? 'Edit Recycle Rule' : 'New Recycle Rule'}</h3>
+                <p className="text-xs text-slate-500">Configure lead recycling schedule</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+              <X size={16} />
+            </button>
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="label">Disposition{isEdit ? '' : 's'} *{isEdit ? ' (single)' : ''}</label>
-          <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg max-h-32 overflow-y-auto">
-            {dispositions.map(d => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => toggleDisp(String(d.id))}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                  selectedDispositions.includes(String(d.id))
-                    ? 'bg-indigo-500 text-white border-indigo-500'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {d.title}
-              </button>
-            ))}
-            {dispositions.length === 0 && (
-              <span className="text-xs text-slate-400 italic">Loading dispositions…</span>
-            )}
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="form-group">
+              <label className="label">Campaign <span className="text-red-500">*</span></label>
+              <select className="input" value={campaignId} onChange={e => setCampaignId(e.target.value)}>
+                <option value="">Select campaign</option>
+                {campaigns.map(c => (
+                  <option key={c.id} value={c.id}>{c.title || c.campaign_name || `#${c.id}`}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="label">List <span className="text-red-500">*</span></label>
+              <select className="input" value={listId} onChange={e => setListId(e.target.value)}>
+                <option value="">Select list</option>
+                {lists.map(l => (
+                  <option key={l.id} value={l.id}>{l.title || l.l_title || `#${l.id}`}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
 
-        <div className="form-group">
-          <label className="label">Day{isEdit ? '' : 's'} *{isEdit ? ' (single)' : ''}</label>
-          <div className="flex flex-wrap gap-1.5">
-            {DAYS_OF_WEEK.map(day => (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggleDay(day)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                  selectedDays.includes(day)
-                    ? 'bg-indigo-500 text-white border-indigo-500'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {day.slice(0, 3)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
           <div className="form-group">
-            <label className="label">Time</label>
-            <input type="time" className="input" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="label">Call Count</label>
-            <input
-              type="number"
-              className="input"
-              min="1"
-              placeholder="1"
-              value={callTime}
-              onChange={e => setCallTime(e.target.value)}
+            <label className="label">Disposition{isEdit ? '' : 's'} <span className="text-red-500">*</span>{isEdit ? ' (single)' : ''}</label>
+            <DispositionDropdown
+              dispositions={dispositions}
+              selected={selectedDispositions}
+              onChange={setSelectedDispositions}
+              singleOnly={isEdit}
             />
           </div>
+
+          <div className="form-group">
+            <label className="label">Days <span className="text-red-500">*</span></label>
+            <div className="flex flex-wrap gap-1.5">
+              {DAYS_OF_WEEK.map(day => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDay(day)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    selectedDays.includes(day)
+                      ? 'bg-indigo-500 text-white border-indigo-500'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {day.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="form-group">
+              <label className="label">Time</label>
+              <input type="time" className="input" value={time} onChange={e => setTime(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="label">Call Count</label>
+              <input
+                type="number"
+                className="input"
+                min="1"
+                placeholder="1"
+                value={callTime}
+                onChange={e => setCallTime(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex gap-3 pt-1">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex gap-3">
           <button onClick={onClose} className="btn-outline flex-1">Cancel</button>
           <button
             onClick={() => saveMutation.mutate()}
@@ -246,7 +341,6 @@ function RecycleRuleModal({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function RecycleRules() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
   const [showCreate, setShowCreate] = useState(false)
@@ -354,16 +448,11 @@ export function RecycleRules() {
         />
       )}
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="page-title">Recycle Rules</h1>
-              <p className="page-subtitle">Configure lead recycling by disposition and schedule</p>
-            </div>
+      <div className="space-y-4">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Recycle Rules</h1>
+            <p className="page-subtitle">Configure lead recycling by disposition and schedule</p>
           </div>
         </div>
 
