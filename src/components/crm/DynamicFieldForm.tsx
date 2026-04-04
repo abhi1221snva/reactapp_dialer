@@ -6,6 +6,8 @@ import type { UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-f
 import { crmService } from '../../services/crm.service'
 import type { CrmLabel, FieldCondition } from '../../types/crm.types'
 import { buildFieldRules, parseFieldOptions } from '../../utils/fieldValidation'
+import AddressAutocomplete from '../ui/AddressAutocomplete'
+import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
 interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -386,7 +388,22 @@ export function DynamicFieldForm({
                         {isRequired && <span style={{ color: '#ef4444', fontSize: 13, marginLeft: 3 }}>*</span>}
                       </label>
                     )}
-                    {renderInput(label, register, defaultValues[label.field_key])}
+                    {isAddressAutocompleteKey(label.field_key, label.label_name) && setValue ? (
+                      <AddressAutocomplete
+                        value={String(formValues?.[label.field_key] ?? '')}
+                        onChange={v => setValue(label.field_key, v)}
+                        onPlaceSelect={(parsed: ParsedPlace) => {
+                          const group = resolveAddressGroup(label.field_key, label.label_name)
+                          if (group && setValue) {
+                            setValue(group.cityKey, parsed.city)
+                            setValue(group.stateKey, parsed.state)
+                            setValue(group.zipKey, parsed.zip)
+                            if (group.countryKey) setValue(group.countryKey, parsed.country)
+                          }
+                        }}
+                        placeholder={label.placeholder || label.label_name}
+                      />
+                    ) : renderInput(label, register, defaultValues[label.field_key])}
                     {fieldError?.message && (
                       <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
                         <AlertCircle size={11} />{String(fieldError.message)}

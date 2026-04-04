@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Search, ArrowLeft, Clock, User, MessageSquare, Phone, Mail, FileText } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Activity, Clock, User, MessageSquare, Phone, Mail, FileText } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { leadService } from '../../services/lead.service'
 import api from '../../api/axios'
@@ -85,7 +84,6 @@ function formatTimestamp(ts?: string): string {
 }
 
 export function LeadActivity() {
-  const navigate = useNavigate()
   const [rawDigits, setRawDigits] = useState('')
   const [displayValue, setDisplayValue] = useState('')
   const [debouncedDigits, setDebouncedDigits] = useState('')
@@ -158,16 +156,6 @@ export function LeadActivity() {
 
   return (
     <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-          <ArrowLeft size={16} />
-        </button>
-        <div>
-          <h1 className="page-title">Lead Activity</h1>
-          <p className="page-subtitle">Search by mobile number to view lead activity timeline</p>
-        </div>
-      </div>
 
       {/* Phone search bar */}
       <div className="card" ref={dropdownRef}>

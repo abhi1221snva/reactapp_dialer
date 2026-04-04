@@ -13,6 +13,7 @@ import { cn } from '../../utils/cn'
 import { ServerDataTable } from '../../components/ui/ServerDataTable'
 import type { Column } from '../../components/ui/ServerDataTable'
 import { useServerTable } from '../../hooks/useServerTable'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1772,36 +1773,32 @@ const TABS: { key: MainTab; label: string; icon: React.ReactNode }[] = [
 
 export function Ivr() {
   const [tab, setTab] = useState<MainTab>('ivr')
+  const { setToolbar } = useDialerHeader()
 
-  return (
-    <div className="flex flex-col">
-      <div className="flex-shrink-0 px-6 py-4 bg-white border-b border-slate-200">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">IVR System</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Build phone menus, configure key routing, and manage voice prompts
-            </p>
-          </div>
-          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-            {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className={cn(
-                  'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                  tab === t.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                )}>
-                {t.icon}{t.label}
-              </button>
-            ))}
-          </div>
+  useEffect(() => {
+    setToolbar(
+      <div className="lt-right">
+        <div className="flex items-center gap-1" style={{ background: '#f1f5f9', borderRadius: 8, padding: 2 }}>
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                tab === t.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              )}>
+              {t.icon}{t.label}
+            </button>
+          ))}
         </div>
       </div>
+    )
+    return () => setToolbar(undefined)
+  })
 
-      <div className="bg-slate-50">
-        {tab === 'ivr'   && <IvrTab />}
-        {tab === 'menu'  && <IvrMenuTab />}
-        {tab === 'audio' && <AudioMessagesTab />}
-      </div>
+  return (
+    <div>
+      {tab === 'ivr'   && <IvrTab />}
+      {tab === 'menu'  && <IvrMenuTab />}
+      {tab === 'audio' && <AudioMessagesTab />}
     </div>
   )
 }

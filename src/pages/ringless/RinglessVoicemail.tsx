@@ -1,24 +1,31 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Play, Pause, Copy, Trash2, Pencil, Voicemail, Eye,
-  LayoutList, Users, Radio,
+  Plus, Trash2, Pencil, Radio, Eye, Clock, Search,
+  LayoutList, X, Users, Voicemail,
+  CheckCircle2, XCircle, Mail,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
-import { Modal } from '../../components/ui/Modal'
 import { RowActions } from '../../components/ui/RowActions'
 import { ringlessService } from '../../services/ringless.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { useDialerHeader } from '../../layouts/DialerLayout'
+import { cn } from '../../utils/cn'
 
 interface RinglessCampaign {
   id?: number
+  campaign_id?: number
   title?: string
+  campaign_name?: string
+  name?: string
   description?: string
   status?: number | string
   caller_id?: string
+  custom_caller_id?: string | number
   time_based_calling?: number | string
   call_time_start?: string | null
   call_time_end?: string | null
@@ -27,420 +34,407 @@ interface RinglessCampaign {
   sip_gateway_id?: number | string
   country_code?: number | string
   rowcount_lead_report?: number
+  lists_associated?: number
+  list_count?: number
   ringless_lead_temps_count?: number
   ringless_lead_report_count?: number
+  total_leads?: number
+  lead_count?: number
+  hopper_count?: number
   [key: string]: unknown
-}
-
-interface VoiceTemplate {
-  id: number
-  title?: string
-  name?: string
-  ivr_desc?: string
-}
-
-interface VoipConfig {
-  id: number
-  name?: string
-  title?: string
-  host?: string
-}
-
-const CALLER_ID_OPTIONS = [
-  { value: 'area_code', label: 'Area Code' },
-  { value: 'area_code_random', label: 'Area Code (Random)' },
-  { value: 'custom', label: 'Custom' },
-]
-
-const EMPTY_FORM = {
-  title: '',
-  description: '',
-  status: '1',
-  caller_id: 'area_code',
-  custom_caller_id: '',
-  time_based_calling: '0',
-  call_time_start: '09:00',
-  call_time_end: '17:00',
-  voice_template_id: '',
-  sip_gateway_id: '',
-  country_code: '1',
-  call_ratio: '1',
 }
 
 function isActive(status: string | number | undefined): boolean {
   return status === 1 || status === '1' || status === 'active'
 }
 
-// ──────────── Campaign Form Modal ────────────
-function CampaignFormModal({
-  isOpen, onClose, editing,
-}: { isOpen: boolean; onClose: () => void; editing: RinglessCampaign | null }) {
-  const qc = useQueryClient()
-  const [form, setForm] = useState(EMPTY_FORM)
+function getCId(row: RinglessCampaign): number {
+  return Number(row.id ?? row.campaign_id ?? 0)
+}
 
-  const { data: templatesData } = useQuery({
-    queryKey: ['voice-templates'],
-    queryFn: () => ringlessService.getVoiceTemplates(),
-    enabled: isOpen,
-  })
-  const { data: voipData } = useQuery({
-    queryKey: ['voip-configs'],
-    queryFn: () => ringlessService.getVoipConfigs(),
-    enabled: isOpen,
-  })
+function getCName(row: RinglessCampaign): string {
+  return (row.title || row.campaign_name || row.name || '—') as string
+}
 
-  const templates: VoiceTemplate[] = (
-    (templatesData as { data?: { data?: VoiceTemplate[] } })?.data?.data ??
-    (templatesData as { data?: VoiceTemplate[] })?.data ?? []
+function getListsCount(row: RinglessCampaign): number {
+  const r = row as Record<string, unknown>
+  // Primary: use eagerly loaded ringless_list array
+  const lists = r.ringless_list ?? r.ringlessList
+  if (Array.isArray(lists)) return lists.length
+  // Fallback: withCount fields (snake_case from Laravel toArray)
+  return Number(r.row_count_lead_report ?? r.rowCountLeadReport ?? r.lists_count ?? 0)
+}
+
+function getLeadsQueued(row: RinglessCampaign): number {
+  const r = row as Record<string, unknown>
+  return Number(r.ringless_lead_temps_count ?? r.ringlessLeadTemps_count ?? r.ringlessLeadTempsCount ?? 0)
+}
+
+function getLeadsDelivered(row: RinglessCampaign): number {
+  const r = row as Record<string, unknown>
+  return Number(r.ringless_lead_report_count ?? r.ringlessLeadReport_count ?? r.ringlessLeadReportCount ?? 0)
+}
+
+function getTotalLeadsFromLists(row: RinglessCampaign): number {
+  const r = row as Record<string, unknown>
+  const lists = r.ringless_list ?? r.ringlessList
+  if (Array.isArray(lists)) {
+    return lists.reduce((sum: number, l: Record<string, unknown>) => {
+      return sum + Number(l.ringless_list_data_count ?? l.ringlessListData_count ?? l.ringlessListDataCount ?? l.total_leads ?? 0)
+    }, 0)
+  }
+  return 0
+}
+
+function formatTime(t?: string | null): string {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
+// ─────────────────────────────────────────────
+//  View helpers (matching Campaign detail modal)
+// ─────────────────────────────────────────────
+function CampaignOnOff({ val, label }: { val?: unknown; label: string }) {
+  const on = val === 1 || val === '1' || val === true || Number(val) === 1
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <span className={cn(
+        'inline-flex items-center gap-1 text-xs font-semibold',
+        on ? 'text-emerald-600' : 'text-slate-400'
+      )}>
+        {on
+          ? <><CheckCircle2 size={13} className="text-emerald-500" /> Enabled</>
+          : <><XCircle size={13} className="text-slate-300" /> Disabled</>
+        }
+      </span>
+    </div>
   )
-  const voipConfigs: VoipConfig[] = (
-    (voipData as { data?: { data?: VoipConfig[] } })?.data?.data ??
-    (voipData as { data?: VoipConfig[] })?.data ?? []
+}
+
+function CampaignSectionCard({ icon: Icon, title, iconColor, children }: {
+  icon: React.ElementType; title: string; iconColor: string; children: React.ReactNode
+}) {
+  return (
+    <div className="card p-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
+        <Icon size={14} className={iconColor} />
+        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{title}</span>
+      </div>
+      <div className="px-4 py-1">
+        {children}
+      </div>
+    </div>
   )
+}
 
-  useEffect(() => {
-    if (isOpen) {
-      if (editing) {
-        setForm({
-          title: editing.title ?? '',
-          description: editing.description ?? '',
-          status: String(editing.status ?? '1'),
-          caller_id: editing.caller_id ?? 'area_code',
-          custom_caller_id: String(editing.custom_caller_id ?? ''),
-          time_based_calling: String(editing.time_based_calling ?? '0'),
-          call_time_start: editing.call_time_start ?? '09:00',
-          call_time_end: editing.call_time_end ?? '17:00',
-          voice_template_id: String(editing.voice_template_id ?? ''),
-          sip_gateway_id: String(editing.sip_gateway_id ?? ''),
-          country_code: String(editing.country_code ?? '1'),
-          call_ratio: '1',
-        })
-      } else {
-        setForm(EMPTY_FORM)
-      }
-    }
-  }, [isOpen, editing])
+function CampaignDetailRow({ label, value }: { label: string; value?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
+      <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
+      <span className="text-xs text-right font-semibold text-slate-800">{value ?? '—'}</span>
+    </div>
+  )
+}
 
-  const mutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      editing ? ringlessService.update(data) : ringlessService.create(data),
-    onSuccess: () => {
-      toast.success(editing ? 'Campaign updated' : 'Campaign created')
-      qc.invalidateQueries({ queryKey: ['ringless-campaigns'] })
-      onClose()
-    },
-    onError: () => toast.error('Failed to save campaign'),
+// ─────────────────────────────────────────────
+//  Campaign Detail Modal (matches Campaign page)
+// ─────────────────────────────────────────────
+function CampaignDetailModal({ campaign, onClose }: { campaign: RinglessCampaign; onClose: () => void }) {
+  const cid = getCId(campaign)
+  const { data: detailData, isLoading } = useQuery({
+    queryKey: ['ringless-campaign-view', cid],
+    queryFn: () => ringlessService.getById(cid),
+    staleTime: 0,
+    enabled: cid > 0,
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.title.trim()) { toast.error('Campaign title is required'); return }
-    if (!form.voice_template_id) { toast.error('Please select a voice template'); return }
-    const payload: Record<string, unknown> = {
-      ...form,
-      status: Number(form.status),
-      time_based_calling: Number(form.time_based_calling),
-      voice_template_id: Number(form.voice_template_id),
-      sip_gateway_id: form.sip_gateway_id ? Number(form.sip_gateway_id) : undefined,
-      country_code: Number(form.country_code),
-    }
-    if (editing?.id) payload.campaign_id = editing.id
-    if (form.caller_id !== 'custom') delete payload.custom_caller_id
-    mutation.mutate(payload)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outer = (detailData as any)?.data
+  const nested = outer?.data ?? outer ?? {}
+  const raw = Array.isArray(nested) ? nested[0] ?? {} : nested
+  const d = { ...campaign, ...raw } as RinglessCampaign
+
+  const callerIdLabel: Record<string, string> = {
+    area_code: 'Area Code',
+    area_code_random: 'Area Code & Randomizer',
+    custom: 'Custom',
   }
 
-  const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
-  const timeBased = form.time_based_calling === '1'
+  const active = isActive(d.status)
+  const campaignName = getCName(d)
+  const timeBased = Number(d.time_based_calling) === 1
+  const callTimeDisplay = timeBased && d.call_time_start
+    ? `${formatTime(d.call_time_start)} – ${formatTime(d.call_time_end)}`
+    : 'All Day'
+
+  const listsCount = getListsCount(d)
+  const queued = getLeadsQueued(d)
+  const delivered = getLeadsDelivered(d)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose}
-      title={editing ? 'Edit RVM Campaign' : 'New Ringless Voicemail Campaign'} size="lg">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-        {/* Title & Description */}
-        <div>
-          <label className="label">Campaign Title <span className="text-red-500">*</span></label>
-          <input className="input" value={form.title}
-            onChange={e => set('title', e.target.value)}
-            placeholder="e.g. April Promo Blast" />
-        </div>
-        <div>
-          <label className="label">Description</label>
-          <textarea className="input min-h-[60px]" value={form.description}
-            onChange={e => set('description', e.target.value)}
-            placeholder="Optional description…" />
-        </div>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden">
 
-        {/* Voice Template */}
-        <div>
-          <label className="label">Voice Template / Audio Message <span className="text-red-500">*</span></label>
-          <select className="input" value={form.voice_template_id}
-            onChange={e => set('voice_template_id', e.target.value)}>
-            <option value="">Select a voice template…</option>
-            {templates.map(t => (
-              <option key={t.id} value={t.id}>
-                {t.title ?? t.name ?? t.ivr_desc ?? `Template #${t.id}`}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* ── Blue Header Banner ── */}
+        <div className="bg-gradient-to-br from-indigo-500 to-blue-600 relative overflow-hidden flex-shrink-0">
+          <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
+          <div className="absolute top-6 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-        {/* Caller ID */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Caller ID Type</label>
-            <select className="input" value={form.caller_id}
-              onChange={e => set('caller_id', e.target.value)}>
-              {CALLER_ID_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          {form.caller_id === 'custom' && (
-            <div>
-              <label className="label">Custom Caller ID</label>
-              <input className="input font-mono" value={form.custom_caller_id}
-                onChange={e => set('custom_caller_id', e.target.value)}
-                placeholder="10-digit number" />
-            </div>
-          )}
-          {form.caller_id !== 'custom' && (
-            <div>
-              <label className="label">Country Code</label>
-              <input className="input font-mono" value={form.country_code}
-                onChange={e => set('country_code', e.target.value)}
-                placeholder="1" />
-            </div>
-          )}
-        </div>
-
-        {/* Time-based calling */}
-        <div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={timeBased}
-              onChange={e => set('time_based_calling', e.target.checked ? '1' : '0')}
-              className="w-4 h-4 rounded border-slate-300 text-indigo-600"
-            />
-            <span className="text-sm font-medium text-slate-700">Restrict call hours</span>
-          </label>
-        </div>
-        {timeBased && (
-          <div className="grid grid-cols-2 gap-4 pl-6">
-            <div>
-              <label className="label">Start Time</label>
-              <input type="time" className="input" value={form.call_time_start}
-                onChange={e => set('call_time_start', e.target.value)} />
-            </div>
-            <div>
-              <label className="label">End Time</label>
-              <input type="time" className="input" value={form.call_time_end}
-                onChange={e => set('call_time_end', e.target.value)} />
-            </div>
-          </div>
-        )}
-
-        {/* SIP Gateway */}
-        {voipConfigs.length > 0 && (
-          <div>
-            <label className="label">SIP Gateway</label>
-            <select className="input" value={form.sip_gateway_id}
-              onChange={e => set('sip_gateway_id', e.target.value)}>
-              <option value="">Auto-select</option>
-              {voipConfigs.map(v => (
-                <option key={v.id} value={v.id}>
-                  {v.name ?? v.title ?? v.host ?? `Gateway #${v.id}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Status */}
-        <div>
-          <label className="label">Status</label>
-          <select className="input" value={form.status}
-            onChange={e => set('status', e.target.value)}>
-            <option value="1">Active</option>
-            <option value="0">Inactive</option>
-          </select>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-          <button type="submit" disabled={mutation.isPending} className="btn-primary">
-            {mutation.isPending ? 'Saving…' : editing ? 'Update Campaign' : 'Create Campaign'}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white"
+          >
+            <X size={16} />
           </button>
+
+          <div className="relative px-5 pt-4 pb-3">
+            {isLoading ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 animate-pulse" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 bg-white/30 rounded animate-pulse w-36" />
+                  <div className="h-3 bg-white/20 rounded animate-pulse w-48" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 text-white flex items-center justify-center flex-shrink-0">
+                    <Voicemail size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-base font-bold text-white truncate leading-tight">{campaignName}</h2>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                        active
+                          ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
+                          : 'bg-white/10 border-white/20 text-white/60'
+                      )}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/40')} />
+                        {active ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 border border-white/20 text-white/80">
+                        <Voicemail size={9} />
+                        Ringless VM
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Compact stats strip */}
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/15 flex-wrap">
+                  {[
+                    { icon: LayoutList, val: String(listsCount), lbl: 'Lists' },
+                    { icon: Users, val: queued.toLocaleString(), lbl: 'Queued' },
+                    { icon: Radio, val: delivered.toLocaleString(), lbl: 'Delivered' },
+                  ].map(({ icon: SIcon, val, lbl }) => (
+                    <div key={lbl} className="flex items-center gap-1.5 bg-white/10 rounded-lg px-2.5 py-1.5">
+                      <SIcon size={12} className="text-white/60" />
+                      <span className="text-xs font-bold text-white leading-none">{val}</span>
+                      <span className="text-[9px] text-white/50 font-medium leading-none">{lbl}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </form>
-    </Modal>
-  )
-}
 
-// ──────────── Campaign Detail Preview Modal ────────────
-function CampaignPreviewModal({
-  campaign, onClose,
-}: { campaign: RinglessCampaign; onClose: () => void }) {
-  return (
-    <Modal isOpen onClose={onClose} title="Campaign Details" size="md">
-      <div className="space-y-3">
-        <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-            <Voicemail size={18} className="text-orange-500" />
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">{campaign.title}</p>
-            <Badge variant={isActive(campaign.status) ? 'green' : 'gray'}>
-              {isActive(campaign.status) ? 'Active' : 'Inactive'}
-            </Badge>
-          </div>
-        </div>
+        {/* ── Body (scrollable) ── */}
+        <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+          {isLoading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-4 bg-slate-100 rounded animate-pulse" style={{ width: `${55 + (i % 4) * 12}%` }} />
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
 
-        {campaign.description && (
-          <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{campaign.description}</p>
-        )}
+              {/* Schedule & Caller ID */}
+              <CampaignSectionCard icon={Clock} title="Schedule & Caller ID" iconColor="text-sky-500">
+                <CampaignDetailRow label="Call Times" value={callTimeDisplay} />
+                <CampaignOnOff val={d.time_based_calling} label="Time-Based Calling" />
+                <CampaignDetailRow label="Caller ID" value={callerIdLabel[d.caller_id ?? ''] ?? d.caller_id ?? '—'} />
+                {d.caller_id === 'custom' && d.custom_caller_id && (
+                  <CampaignDetailRow label="Custom DID" value={String(d.custom_caller_id)} />
+                )}
+                <CampaignDetailRow label="Country Code" value={d.country_code ? `+${d.country_code}` : '—'} />
+              </CampaignSectionCard>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
-            <LayoutList size={14} className="text-indigo-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-slate-800">{campaign.rowcount_lead_report ?? 0}</p>
-            <p className="text-[10px] text-slate-400">Lists</p>
-          </div>
-          <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
-            <Users size={14} className="text-emerald-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-slate-800">{campaign.ringless_lead_temps_count ?? 0}</p>
-            <p className="text-[10px] text-slate-400">In Queue</p>
-          </div>
-          <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
-            <Radio size={14} className="text-orange-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-slate-800">{campaign.ringless_lead_report_count ?? 0}</p>
-            <p className="text-[10px] text-slate-400">Delivered</p>
-          </div>
-        </div>
+              {/* Configuration */}
+              <CampaignSectionCard icon={Mail} title="Configuration" iconColor="text-violet-500">
+                <CampaignDetailRow label="Voice Template" value={d.voice_template_name ?? (d.voice_template_id ? `#${d.voice_template_id}` : '—')} />
+                <CampaignDetailRow label="SIP Gateway" value={d.sip_gateway_id ? `#${d.sip_gateway_id}` : 'Auto'} />
+                {d.description && (
+                  <CampaignDetailRow label="Description" value={d.description} />
+                )}
+              </CampaignSectionCard>
 
-        <div className="space-y-2 text-sm">
-          {campaign.caller_id && (
-            <div className="flex justify-between py-2 border-b border-slate-100">
-              <span className="text-slate-500">Caller ID</span>
-              <span className="font-medium text-slate-800 capitalize">
-                {campaign.caller_id.replace(/_/g, ' ')}
-              </span>
             </div>
           )}
-          {campaign.time_based_calling ? (
-            <div className="flex justify-between py-2 border-b border-slate-100">
-              <span className="text-slate-500">Call Hours</span>
-              <span className="font-medium text-slate-800">
-                {campaign.call_time_start} – {campaign.call_time_end}
-              </span>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex justify-end pt-2">
-          <button onClick={onClose} className="btn-outline">Close</button>
         </div>
       </div>
-    </Modal>
+    </div>
   )
 }
 
-// ──────────── Main Page ────────────
+// ─────────────────────────────────────────────
+//  Main Page
+// ─────────────────────────────────────────────
 export function RinglessVoicemail() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
-  const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<RinglessCampaign | null>(null)
-  const [preview, setPreview] = useState<RinglessCampaign | null>(null)
+  const [viewCampaign, setViewCampaign] = useState<RinglessCampaign | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search campaigns…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => navigate('/ringless/create')} className="lt-b lt-p">
+            <Plus size={13} /> Add Campaign
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: number | string }) =>
       ringlessService.toggle(id, isActive(status) ? 0 : 1),
     onSuccess: () => {
-      toast.success('Status updated')
+      toast.success('Campaign status updated')
       qc.invalidateQueries({ queryKey: ['ringless-campaigns'] })
     },
     onError: () => toast.error('Failed to update status'),
   })
 
-  const copyMutation = useMutation({
-    mutationFn: (id: number) => ringlessService.copy(id),
-    onSuccess: () => {
-      toast.success('Campaign duplicated')
-      qc.invalidateQueries({ queryKey: ['ringless-campaigns'] })
-    },
-    onError: () => toast.error('Failed to duplicate'),
-  })
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ringlessService.delete(id),
-    onSuccess: () => {
-      toast.success('Campaign deleted')
-      qc.invalidateQueries({ queryKey: ['ringless-campaigns'] })
-    },
-    onError: () => toast.error('Failed to delete'),
+    onSuccess: () => { toast.success('Campaign deleted'); qc.invalidateQueries({ queryKey: ['ringless-campaigns'] }) },
+    onError: () => toast.error('Failed to delete campaign'),
   })
 
   const columns: Column<RinglessCampaign>[] = [
     {
-      key: 'title', header: 'Campaign',
-      render: (row) => (
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-orange-50">
-            <Voicemail size={14} className="text-orange-500" />
+      key: 'name', header: 'Campaign',
+      render: (row) => {
+        const name = getCName(row)
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
+              <Voicemail size={14} className="text-indigo-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-slate-900 leading-tight truncate">{name}</p>
+              {row.description && (
+                <p className="text-[11px] text-indigo-500 font-medium mt-0.5 truncate max-w-[180px]">{row.description}</p>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-slate-900 text-sm">{row.title || '—'}</p>
-            {row.description && (
-              <p className="text-xs text-slate-400 truncate max-w-[180px]">{row.description}</p>
-            )}
-          </div>
-        </div>
-      ),
+        )
+      },
     },
     {
-      key: 'lists', header: 'Lists / Queue',
-      render: (row) => (
-        <div className="flex items-center gap-3">
+      key: 'call_times', header: 'Call Times',
+      render: (row) => {
+        const timeBased = row.time_based_calling === 1 || row.time_based_calling === '1'
+        if (!timeBased || !row.call_time_start) {
+          return (
+            <div className="flex items-center gap-1.5">
+              <Clock size={12} className="text-slate-300 flex-shrink-0" />
+              <span className="text-xs text-slate-400">All Day</span>
+            </div>
+          )
+        }
+        return (
           <div className="flex items-center gap-1.5">
-            <LayoutList size={12} className="text-slate-400" />
-            <span className="text-sm text-slate-700 font-medium">{row.rowcount_lead_report ?? 0}</span>
-            <span className="text-xs text-slate-400">lists</span>
+            <Clock size={12} className="text-indigo-400 flex-shrink-0" />
+            <span className="text-xs font-medium text-slate-700 whitespace-nowrap">
+              {formatTime(row.call_time_start)} – {formatTime(row.call_time_end)}
+            </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Users size={12} className="text-indigo-400" />
-            <span className="text-sm text-slate-700 font-medium">{row.ringless_lead_temps_count ?? 0}</span>
-            <span className="text-xs text-slate-400">queued</span>
-          </div>
-        </div>
-      ),
+        )
+      },
     },
     {
-      key: 'delivered', header: 'Delivered',
+      key: 'lists_associated', header: 'Lists',
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <Radio size={12} className="text-emerald-400" />
-          <span className="text-sm font-medium text-slate-700">
-            {Number(row.ringless_lead_report_count ?? 0).toLocaleString()}
-          </span>
+          <LayoutList size={13} className="text-slate-400 flex-shrink-0" />
+          <span className="text-sm font-semibold text-slate-700">{getListsCount(row)}</span>
         </div>
       ),
     },
     {
-      key: 'caller_id', header: 'Caller ID',
-      render: (row) => (
-        <span className="text-xs text-slate-600 capitalize">
-          {row.caller_id ? String(row.caller_id).replace(/_/g, ' ') : '—'}
-        </span>
-      ),
+      key: 'leads', header: 'Leads',
+      render: (row) => {
+        const queued = getLeadsQueued(row)
+        const delivered = getLeadsDelivered(row)
+        const fromLists = getTotalLeadsFromLists(row)
+        const total = queued + delivered > 0 ? queued + delivered : fromLists
+        const pct = total > 0 ? Math.min(100, (delivered / total) * 100) : 0
+        if (total === 0) return <span className="text-sm text-slate-400">—</span>
+        return (
+          <div className="min-w-[80px]">
+            <p className="text-sm font-semibold text-slate-800">
+              {delivered.toLocaleString()}{' '}
+              <span className="text-slate-400 font-normal text-xs">/ {total.toLocaleString()}</span>
+            </p>
+            <div className="w-full h-1 bg-slate-100 rounded-full mt-1">
+              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      key: 'hopper', header: 'Hopper',
+      render: (row) => {
+        const count = getLeadsQueued(row) || getTotalLeadsFromLists(row)
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-700">{count.toLocaleString()}</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 whitespace-nowrap">
+              Queued
+            </span>
+          </div>
+        )
+      },
     },
     {
       key: 'status', header: 'Status',
       render: (row) => (
-        <Badge variant={isActive(row.status) ? 'green' : 'gray'}>
-          {isActive(row.status) ? 'Active' : 'Inactive'}
-        </Badge>
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleMutation.mutate({ id: getCId(row), status: row.status ?? 0 }) }}
+          disabled={toggleMutation.isPending}
+          title={isActive(row.status) ? 'Click to deactivate' : 'Click to activate'}
+          className="cursor-pointer hover:opacity-75 transition-opacity"
+        >
+          <Badge variant={isActive(row.status) ? 'green' : 'gray'}>
+            {isActive(row.status) ? 'Active' : 'Inactive'}
+          </Badge>
+        </button>
       ),
     },
     {
@@ -450,38 +444,22 @@ export function RinglessVoicemail() {
       render: (row) => (
         <RowActions actions={[
           {
-            label: 'View Details',
+            label: 'View',
             icon: <Eye size={13} />,
             variant: 'view',
-            onClick: () => setPreview(row),
-          },
-          {
-            label: isActive(row.status) ? 'Pause' : 'Activate',
-            icon: isActive(row.status) ? <Pause size={13} /> : <Play size={13} />,
-            variant: isActive(row.status) ? 'warning' : 'success',
-            onClick: () => toggleMutation.mutate({ id: row.id!, status: row.status ?? 0 }),
-            disabled: toggleMutation.isPending,
+            onClick: () => setViewCampaign(row),
           },
           {
             label: 'Edit',
             icon: <Pencil size={13} />,
             variant: 'edit',
-            onClick: () => { setEditing(row); setModal(true) },
-          },
-          {
-            label: 'Duplicate',
-            icon: <Copy size={13} />,
-            variant: 'default',
-            onClick: () => copyMutation.mutate(row.id!),
-            disabled: copyMutation.isPending,
+            onClick: () => navigate(`/ringless/${getCId(row)}/edit`),
           },
           {
             label: 'Delete',
             icon: <Trash2 size={13} />,
             variant: 'delete',
-            onClick: async () => {
-              if (await confirmDelete(row.title)) deleteMutation.mutate(row.id!)
-            },
+            onClick: async () => { if (await confirmDelete()) deleteMutation.mutate(getCId(row)) },
             disabled: deleteMutation.isPending,
           },
         ]} />
@@ -492,13 +470,6 @@ export function RinglessVoicemail() {
   return (
     <>
       <div className="space-y-5">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Ringless Voicemail</h1>
-            <p className="page-subtitle">Send pre-recorded voicemails directly to voiceboxes without ringing</p>
-          </div>
-        </div>
-
         <ServerDataTable<RinglessCampaign>
           queryKey={['ringless-campaigns']}
           queryFn={(params) =>
@@ -510,8 +481,11 @@ export function RinglessVoicemail() {
           }
           dataExtractor={(res: unknown) => {
             const r = res as { data?: { data?: RinglessCampaign[]; total_rows?: number } | RinglessCampaign[] }
-            if (Array.isArray(r?.data)) return r.data as RinglessCampaign[]
-            return (r?.data as { data?: RinglessCampaign[] })?.data ?? []
+            const arr = Array.isArray(r?.data)
+              ? r.data as RinglessCampaign[]
+              : (r?.data as { data?: RinglessCampaign[] })?.data ?? []
+            // Normalize: ensure every row has `id` from campaign_id
+            return arr.map(row => ({ ...row, id: Number(row.id ?? row.campaign_id ?? 0) }))
           }}
           totalExtractor={(res: unknown) => {
             const r = res as { data?: { total_rows?: number } }
@@ -525,24 +499,14 @@ export function RinglessVoicemail() {
           activeFilters={table.filters} onFilterChange={table.setFilter}
           onResetFilters={table.resetFilters} hasActiveFilters={table.hasActiveFilters}
           page={table.page} limit={table.limit} onPageChange={table.setPage}
-          headerActions={
-            <button onClick={() => { setEditing(null); setModal(true) }} className="btn-primary">
-              <Plus size={15} /> Add Campaign
-            </button>
-          }
+          hideToolbar
         />
       </div>
 
-      <CampaignFormModal
-        isOpen={modal}
-        onClose={() => { setModal(false); setEditing(null) }}
-        editing={editing}
-      />
-
-      {preview && (
-        <CampaignPreviewModal
-          campaign={preview}
-          onClose={() => setPreview(null)}
+      {viewCampaign && (
+        <CampaignDetailModal
+          campaign={viewCampaign}
+          onClose={() => setViewCampaign(null)}
         />
       )}
     </>

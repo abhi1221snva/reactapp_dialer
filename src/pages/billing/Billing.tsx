@@ -75,12 +75,7 @@ export function Billing() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Billing</h1>
-          <p className="page-subtitle">Manage your account balance and payments</p>
-        </div>
+      <div className="flex items-center justify-end">
         <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all">
           <Plus size={15} /> Add Credits
         </button>

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, FileText, Save, X, ArrowLeft, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, FileText, Save, X, ToggleLeft, ToggleRight, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { smsAiService } from '../../services/smsAi.service'
@@ -10,6 +9,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface TemplateItem {
   id: number
@@ -122,12 +122,36 @@ function TemplateModal({
 }
 
 export function SmsAiTemplates() {
-  const navigate = useNavigate()
+
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showCreate, setShowCreate] = useState(false)
   const [editTemplate, setEditTemplate] = useState<TemplateItem | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search templates\u2026" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => { setEditTemplate(null); setShowCreate(true) }} className="lt-b lt-p">
+            <Plus size={13} /> Add Template
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['smsai-templates'] })
 
@@ -230,29 +254,6 @@ export function SmsAiTemplates() {
       )}
 
       <div className="space-y-5">
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/smsai/demo')} className="btn-ghost p-2 rounded-lg mt-0.5">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1">
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">SMS AI Templates</h1>
-                <p className="page-subtitle">Manage AI response templates for SMS campaigns</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { setEditTemplate(null); setShowCreate(true) }}
-                  className="btn-primary"
-                >
-                  <Plus size={15} />
-                  New Template
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <ServerDataTable<TemplateItem>
           queryKey={['smsai-templates']}
           queryFn={(params) => smsAiService.listTemplates(params)}
@@ -279,6 +280,7 @@ export function SmsAiTemplates() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
+          hideToolbar
         />
       </div>
     </>

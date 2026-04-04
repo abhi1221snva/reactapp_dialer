@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ArrowLeft, PhoneOff, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, PhoneOff, Upload, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { dncService } from '../../services/dnc.service'
 import { useAuthStore } from '../../stores/auth.store'
@@ -13,6 +12,7 @@ import { RowActions } from '../../components/ui/RowActions'
 import { AddDncModal } from './AddDncModal'
 import { EditDncModal, type DncItem } from './EditDncModal'
 import { UploadExcelModal } from '../../components/ui/UploadExcelModal'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface ExtItem {
   id: number
@@ -23,7 +23,7 @@ interface ExtItem {
 }
 
 export function DncList() {
-  const navigate = useNavigate()
+
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
   const clientId = useAuthStore(s => s.user?.parent_id)
@@ -31,6 +31,33 @@ export function DncList() {
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<DncItem | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search DNC list…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowUpload(true)} className="lt-b">
+            <Upload size={13} /> Upload Excel
+          </button>
+          <button onClick={() => setShowAdd(true)} className="lt-b lt-p">
+            <Plus size={13} /> Add Number
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const { data: extRes } = useQuery({
     queryKey: ['extensions', clientId],
@@ -151,29 +178,7 @@ export function DncList() {
         />
       )}
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="page-title">DNC List</h1>
-              <p className="page-subtitle">Do Not Call registry — numbers blocked from outbound dialing</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowUpload(true)} className="btn-outline">
-              <Upload size={15} />
-              Upload Excel
-            </button>
-            <button onClick={() => setShowAdd(true)} className="btn-primary">
-              <Plus size={15} />
-              Add Number
-            </button>
-          </div>
-        </div>
-
+      <div className="space-y-2">
         <ServerDataTable<DncItem>
           queryKey={['dnc']}
           queryFn={(params) => dncService.list(params)}
@@ -198,6 +203,7 @@ export function DncList() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
+          hideToolbar
         />
       </div>
     </>

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Pencil, Trash2, List } from 'lucide-react'
+import { Plus, Eye, Pencil, Trash2, List, Search, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -10,6 +10,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface ListItem {
   id: number
@@ -31,6 +32,31 @@ export function Lists() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search lists…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => navigate('/lists/create')} className="lt-b lt-p">
+            <Plus size={13} /> Add List
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
+
   const toggleMutation = useMutation({
     mutationFn: ({ id, campaignId, status }: { id: number; campaignId: number; status: number }) =>
       listService.toggleStatus(id, campaignId, status === 1 ? 0 : 1),
@@ -46,7 +72,10 @@ export function Lists() {
   })
 
   const listId = (row: ListItem) => row.list_id ?? row.id
-  const listName = (row: ListItem) => row.l_title ?? row.title ?? '—'
+  const listName = (row: ListItem) => {
+    const name = (row.l_title ?? row.title ?? '—') as string
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
   const leadCount = (row: ListItem) => row.lead_count ?? row.rowListData ?? 0
 
   const columns: Column<ListItem>[] = [
@@ -146,13 +175,6 @@ export function Lists() {
 
   return (
     <div className="space-y-2">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Lists</h1>
-          <p className="page-subtitle">Manage your lead lists</p>
-        </div>
-      </div>
-
       <ServerDataTable<ListItem>
         queryKey={['lists']}
         queryFn={(params) => listService.list(params)}
@@ -183,11 +205,7 @@ export function Lists() {
         page={table.page}
         limit={table.limit}
         onPageChange={table.setPage}
-        headerActions={
-          <button onClick={() => navigate('/lists/create')} className="btn-primary">
-            <Plus size={15} /> Add List
-          </button>
-        }
+        hideToolbar
       />
     </div>
   )

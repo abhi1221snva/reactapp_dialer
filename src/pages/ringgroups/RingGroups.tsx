@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Users, X, Check, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, X, Check, ChevronDown, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Modal } from '../../components/ui/Modal'
@@ -9,6 +9,7 @@ import { ringgroupService } from '../../services/ringgroup.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface RingGroup {
   id: number
@@ -29,6 +30,8 @@ interface Extension {
   ext?: string
   name?: string
   full_name?: string
+  first_name?: string
+  last_name?: string
   [key: string]: unknown
 }
 
@@ -105,9 +108,21 @@ function ExtensionPicker({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const extName = (e: Extension) => {
+    const parts = [e.first_name, e.last_name].filter(Boolean).join(' ')
+    return parts || e.full_name || e.name || ''
+  }
+
+  // Match extension by exact value or by suffix (API may return 4-digit ext while ring group stores prefixed)
+  const findExt = (val: string) =>
+    extensions.find(e => {
+      const v = String(e.extension ?? e.ext ?? '')
+      return v === val || val.endsWith(v) || v.endsWith(val)
+    })
+
   const filtered = extensions.filter(e => {
     const val = e.extension ?? e.ext ?? ''
-    const label = `${val} ${e.full_name ?? e.name ?? ''}`
+    const label = `${extName(e)} ${val}`
     return label.toLowerCase().includes(q.toLowerCase())
   })
 
@@ -123,14 +138,18 @@ function ExtensionPicker({
         {selected.length === 0 ? (
           <span className="text-slate-400 text-sm flex-1">Select extensions…</span>
         ) : (
-          selected.map(s => (
-            <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
-              {s}
-              <button type="button" onClick={(e) => { e.stopPropagation(); toggle(s) }}>
-                <X size={10} />
-              </button>
-            </span>
-          ))
+          selected.map(s => {
+            const ext = findExt(s)
+            const userName = ext ? extName(ext) : ''
+            return (
+              <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
+                {userName ? `${userName} (${s})` : s}
+                <button type="button" onClick={(e) => { e.stopPropagation(); toggle(s) }}>
+                  <X size={10} />
+                </button>
+              </span>
+            )
+          })
         )}
         <ChevronDown size={14} className={`ml-auto flex-shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
@@ -146,7 +165,7 @@ function ExtensionPicker({
               ? <p className="px-4 py-3 text-sm text-slate-400">No extensions found</p>
               : filtered.map(e => {
                 const val = String(e.extension ?? e.ext ?? e.id)
-                const label = e.full_name ?? e.name ?? ''
+                const label = extName(e)
                 const checked = selected.includes(val)
                 return (
                   <button key={e.id} type="button" onClick={() => toggle(val)}
@@ -155,8 +174,7 @@ function ExtensionPicker({
                       checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
                       {checked && <Check size={10} className="text-white" />}
                     </div>
-                    <span className="text-sm font-mono text-indigo-600 font-medium">{val}</span>
-                    {label && <span className="text-sm text-slate-500 truncate">{label}</span>}
+                    <span className="text-sm text-slate-800">{label ? `${label} (${val})` : val}</span>
                   </button>
                 )
               })}
@@ -316,7 +334,6 @@ function RingGroupFormModal({
             <select className="input" value={form.ring_type}
               onChange={e => setForm(p => ({ ...p, ring_type: Number(e.target.value) }))}>
               <option value={1}>Ring All</option>
-              <option value={2}>Sequence</option>
               <option value={3}>Round Robin</option>
             </select>
           </div>
@@ -338,16 +355,6 @@ function RingGroupFormModal({
             onChange={(v) => setForm(p => ({ ...p, extension: v }))}
             extensions={extensions}
           />
-        </div>
-
-        <div>
-          <label className="label">Receive On</label>
-          <select className="input" value={form.receive_on}
-            onChange={e => setForm(p => ({ ...p, receive_on: e.target.value }))}>
-            {RECEIVE_ON_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
         </div>
 
         <div>
@@ -374,6 +381,30 @@ export function RingGroups() {
   const table = useServerTable({ defaultLimit: 15 })
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<RingGroup | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search ring groups\u2026" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => { setEditing(null); setModal(true) }} className="lt-b lt-p">
+            <Plus size={13} /> Add Ring Group
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ringgroupService.delete(id),
@@ -386,7 +417,7 @@ export function RingGroups() {
 
   const columns: Column<RingGroup>[] = [
     {
-      key: 'title', header: 'Name',
+      key: 'title', header: 'Name', sortable: true,
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-50">
@@ -421,13 +452,13 @@ export function RingGroups() {
       },
     },
     {
-      key: 'emails', header: 'Email',
+      key: 'emails', header: 'Email', sortable: true,
       render: (row) => (
         <span className="text-sm text-slate-600">{row.emails ? String(row.emails) : '—'}</span>
       ),
     },
     {
-      key: 'ring_type', header: 'Ring Type',
+      key: 'ring_type', header: 'Ring Type', sortable: true,
       render: (row) => {
         const rt = RING_TYPE_LABEL[Number(row.ring_type)] ?? { label: String(row.ring_type ?? '—'), cls: 'bg-slate-50 text-slate-600' }
         return <span className={`px-2 py-1 text-xs rounded-full font-medium ${rt.cls}`}>{rt.label}</span>
@@ -461,13 +492,6 @@ export function RingGroups() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Ring Groups</h1>
-          <p className="page-subtitle">Manage extension ring groups for inbound call routing</p>
-        </div>
-      </div>
-
       <ServerDataTable<RingGroup>
         queryKey={['ring-groups']}
         queryFn={(params) => ringgroupService.list(params)}
@@ -487,11 +511,7 @@ export function RingGroups() {
         activeFilters={table.filters} onFilterChange={table.setFilter}
         onResetFilters={table.resetFilters} hasActiveFilters={table.hasActiveFilters}
         page={table.page} limit={table.limit} onPageChange={table.setPage}
-        headerActions={
-          <button onClick={() => { setEditing(null); setModal(true) }} className="btn-primary">
-            <Plus size={15} /> Add Ring Group
-          </button>
-        }
+        hideToolbar
       />
 
       <RingGroupFormModal

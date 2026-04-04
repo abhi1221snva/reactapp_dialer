@@ -361,13 +361,7 @@ export function CdrReport() {
 
   return (
     <div className="space-y-5">
-      {/* Page Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">CDR Report</h1>
-          <p className="page-subtitle">Call Detail Records — {total.toLocaleString()} total records</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end gap-2">
           <button
             onClick={handleExportCsv}
             disabled={!rows.length}
@@ -382,7 +376,6 @@ export function CdrReport() {
           >
             <FileSpreadsheet size={14} /> Export Excel
           </button>
-        </div>
       </div>
 
       {/* Summary Cards */}

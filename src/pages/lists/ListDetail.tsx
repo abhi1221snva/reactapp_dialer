@@ -1,26 +1,40 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Eye, Pencil, Save, X, List, Users, Activity, ToggleLeft, ToggleRight } from 'lucide-react'
+import {
+  ArrowLeft, Eye, Pencil, Save, X, List, Users, Phone,
+  ToggleLeft, ToggleRight, Columns3, Tag,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 import { listService } from '../../services/list.service'
 import { formatDateTime } from '../../utils/format'
+import type { ListHeaderRow } from '../../modules/lists/types'
 
 export function ListDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { setToolbar, headerKey } = useDialerHeader()
+  const listId = Number(id)
+
   const [editing, setEditing] = useState(false)
   const [newTitle, setNewTitle] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['list-detail', id],
-    queryFn: () => listService.getById(Number(id)),
+    queryFn: () => listService.getById(listId),
   })
 
-  // /raw-list with list_id returns { data: singleObject } — handle both single and array
+  // Fetch column mapping for label info
+  const { data: mappingData } = useQuery({
+    queryKey: ['list-mapping', listId],
+    queryFn: () => listService.getMapping(listId),
+    enabled: !!listId,
+  })
+
   const rawData = (data as { data?: { data?: unknown } })?.data?.data
   const list = rawData && typeof rawData === 'object' && !Array.isArray(rawData)
     ? rawData as Record<string, unknown>
@@ -28,16 +42,19 @@ export function ListDetail() {
       ? rawData[0] as Record<string, unknown>
       : null
 
+  const mappingRows: ListHeaderRow[] =
+    (mappingData as { data?: { data?: ListHeaderRow[] } })?.data?.data ?? []
+
   const toggleMutation = useMutation({
     mutationFn: () =>
-      listService.toggleStatus(Number(id), Number(list?.campaign_id ?? 0), list?.is_active === 1 ? 0 : 1),
+      listService.toggleStatus(listId, Number(list?.campaign_id ?? 0), list?.is_active === 1 ? 0 : 1),
     onSuccess: () => { toast.success('Status updated'); qc.invalidateQueries({ queryKey: ['list-detail', id] }) },
     onError: () => toast.error('Failed to update status'),
   })
 
   const renameMutation = useMutation({
     mutationFn: () =>
-      listService.update({ list_id: Number(id), campaign_id: list?.campaign_id ?? 0, title: newTitle }),
+      listService.update({ list_id: listId, campaign_id: list?.campaign_id ?? 0, title: newTitle }),
     onSuccess: () => {
       toast.success('List renamed')
       setEditing(false)
@@ -45,6 +62,53 @@ export function ListDetail() {
     },
     onError: () => toast.error('Failed to rename'),
   })
+
+  const name = (list?.l_title ?? list?.title ?? 'Unnamed List') as string
+  const leadCount = Number(list?.lead_count ?? list?.rowListData ?? 0)
+  const campaignName = (list?.campaign ?? '') as string
+
+  // Inject toolbar
+  useEffect(() => {
+    setToolbar(
+      <>
+        <button className="lt-b" onClick={() => navigate('/lists')}>
+          <ArrowLeft size={13} />
+          Back
+        </button>
+
+        {list && (
+          <span className="lt-desc">
+            <strong style={{ color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>List:</strong>
+            {name}
+          </span>
+        )}
+
+        {campaignName && (
+          <span className="lt-desc" style={{ background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>
+            <strong style={{ color: '#818cf8', fontWeight: 600, marginRight: 4 }}>Campaign:</strong>
+            {campaignName}
+          </span>
+        )}
+
+        {list && (
+          <span className="lt-desc">
+            {leadCount.toLocaleString()} leads
+          </span>
+        )}
+
+        <div className="lt-right">
+          <button className="lt-b" onClick={() => navigate(`/lists/${id}/mapping`)}>
+            <Pencil size={13} />
+            Edit Mapping
+          </button>
+          <button className="lt-b lt-p" onClick={() => navigate(`/lists/${id}/leads`)}>
+            <Eye size={13} />
+            View Leads
+          </button>
+        </div>
+      </>
+    )
+  }, [headerKey, list, name, campaignName, leadCount])
 
   if (isLoading) return <PageLoader />
 
@@ -58,188 +122,201 @@ export function ListDetail() {
     )
   }
 
-  const name = (list.l_title ?? list.title ?? 'Unnamed List') as string
-  const leadCount = Number(list.lead_count ?? list.rowListData ?? 0)
-  const headers = (list.list_header as Array<{ id: number; column_name: string; label_id: number }>) ?? []
+  const dialColumn = mappingRows.find(r => r.is_dialing === 1)
+  const mappedColumns = mappingRows.filter(r => r.label_id)
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <button onClick={() => navigate('/lists')} className="btn-ghost p-2 rounded-lg mt-0.5">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex-1">
-          {editing ? (
-            <div className="flex items-center gap-2">
-              <input
-                className="input text-lg font-semibold h-9 max-w-xs"
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-                autoFocus
-              />
-              <button
-                onClick={() => renameMutation.mutate()}
-                disabled={!newTitle.trim() || renameMutation.isPending}
-                className="btn-primary btn-sm"
-              >
-                <Save size={13} /> Save
-              </button>
-              <button onClick={() => setEditing(false)} className="btn-ghost btn-sm p-1.5">
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <h1 className="page-title">{name}</h1>
-              <button
-                onClick={() => { setNewTitle(name); setEditing(true) }}
-                className="btn-ghost btn-sm p-1.5 text-slate-400 hover:text-slate-700"
-                title="Rename"
-              >
-                <Pencil size={13} />
-              </button>
-            </div>
-          )}
-          <p className="page-subtitle">List #{id}</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => navigate(`/lists/${id}/mapping`)}
-            className="btn-outline"
-          >
-            <Pencil size={15} /> Edit Mapping
-          </button>
-          <button
-            onClick={() => navigate(`/lists/${id}/leads`)}
-            className="btn-primary"
-          >
-            <Eye size={15} /> View Leads
-          </button>
-        </div>
-      </div>
+    <div className="max-w-4xl mx-auto space-y-4">
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <Users size={18} className="text-white" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-900">{leadCount.toLocaleString()}</p>
-            <p className="text-xs text-slate-500">Total Leads</p>
-          </div>
-        </div>
+      {/* ── List Info Card ──────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 space-y-4">
 
-        <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <Activity size={18} className="text-white" />
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900 capitalize">
-              {list.is_active === 1 ? 'Active' : 'Inactive'}
-            </p>
-            <p className="text-xs text-slate-500">Status</p>
-          </div>
-        </div>
-
-        <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <List size={18} className="text-white" />
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">{headers.length} columns</p>
-            <p className="text-xs text-slate-500">Data Headers</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* List info */}
-        <div className="card space-y-4">
-          <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-2">List Info</h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Name</span>
-              <span className="font-medium text-slate-900">{name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Status</span>
-              <div className="flex items-center gap-2">
-                <Badge variant={list.is_active === 1 ? 'green' : 'gray'}>
-                  {list.is_active === 1 ? 'Active' : 'Inactive'}
-                </Badge>
+          {/* List name (editable) */}
+          <div className="flex items-center justify-between">
+            {editing ? (
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  className="input text-sm font-semibold h-8 max-w-xs"
+                  value={newTitle}
+                  onChange={e => setNewTitle(e.target.value)}
+                  autoFocus
+                />
                 <button
-                  onClick={() => toggleMutation.mutate()}
-                  disabled={toggleMutation.isPending}
-                  className="text-slate-400 hover:text-indigo-600 transition-colors"
-                  title="Toggle Status"
+                  onClick={() => renameMutation.mutate()}
+                  disabled={!newTitle.trim() || renameMutation.isPending}
+                  className="lt-b lt-p" style={{ height: 32 }}
                 >
-                  {list.is_active === 1
-                    ? <ToggleRight size={18} className="text-indigo-500" />
-                    : <ToggleLeft size={18} />}
+                  <Save size={12} /> Save
+                </button>
+                <button onClick={() => setEditing(false)} className="lt-b" style={{ height: 32 }}>
+                  <X size={13} />
                 </button>
               </div>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Dialing</span>
-              <Badge variant={list.is_dialing === 1 ? 'blue' : 'gray'}>
-                {list.is_dialing === 1 ? 'Enabled' : 'Disabled'}
+            ) : (
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">{name}</h2>
+                <button
+                  onClick={() => { setNewTitle(name); setEditing(true) }}
+                  className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors"
+                  title="Rename"
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* Status toggle */}
+            <button
+              onClick={() => toggleMutation.mutate()}
+              disabled={toggleMutation.isPending}
+              className="flex items-center gap-1.5 transition-colors"
+              title="Toggle Status"
+            >
+              <Badge variant={list.is_active === 1 ? 'green' : 'gray'}>
+                {list.is_active === 1 ? 'Active' : 'Inactive'}
               </Badge>
+              {list.is_active === 1
+                ? <ToggleRight size={20} className="text-indigo-500" />
+                : <ToggleLeft size={20} className="text-slate-400" />}
+            </button>
+          </div>
+
+          {/* Quick stats row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Users size={14} className="text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{leadCount.toLocaleString()}</p>
+                <p className="text-[10px] text-slate-500">Leads</p>
+              </div>
             </div>
-            {!!list.campaign && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Campaign</span>
-                <span className="font-medium text-slate-900">{list.campaign as string}</span>
+
+            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <Columns3 size={14} className="text-blue-600" />
               </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{mappingRows.length}</p>
+                <p className="text-[10px] text-slate-500">Columns</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <Phone size={14} className="text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900 truncate max-w-[100px]">
+                  {dialColumn ? dialColumn.header : '—'}
+                </p>
+                <p className="text-[10px] text-slate-500">Dial Column</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Tag size={14} className="text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{mappedColumns.length}</p>
+                <p className="text-[10px] text-slate-500">Mapped</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Meta info */}
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+            {campaignName && (
+              <span>Campaign: <strong className="text-slate-600">{campaignName}</strong></span>
             )}
-            {!!list.updated_at && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Updated</span>
-                <span className="text-slate-700">{formatDateTime(list.updated_at as string)}</span>
-              </div>
+            <span>Dialing: <strong className="text-slate-600">{list.is_dialing === 1 ? 'Enabled' : 'Disabled'}</strong></span>
+            {list.updated_at && (
+              <span>Updated: <strong className="text-slate-600">{formatDateTime(list.updated_at as string)}</strong></span>
             )}
-            {!!list.created_at && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Created</span>
-                <span className="text-slate-700">{formatDateTime(list.created_at as string)}</span>
-              </div>
+            {list.created_at && (
+              <span>Created: <strong className="text-slate-600">{formatDateTime(list.created_at as string)}</strong></span>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Column headers */}
-        <div className="card space-y-3">
-          <h3 className="font-semibold text-slate-900 border-b border-slate-100 pb-2">
-            Data Columns ({headers.length})
-          </h3>
-          {headers.length === 0 ? (
-            <p className="text-sm text-slate-400">No column headers defined</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {headers.map((h: Record<string, unknown>, i: number) => (
-                <div key={i} className="flex items-center gap-2 text-sm px-2.5 py-1.5 bg-slate-50 rounded-lg">
-                  <span className="w-5 h-5 rounded-md bg-indigo-100 text-indigo-600 text-xs flex items-center justify-center font-bold flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  <span className="text-slate-700 truncate">
-                    {(h.title as string) || (h.column_name as string) || `Column ${i + 1}`}
-                  </span>
-                  {h.is_search === 1 && (
-                    <span className="ml-auto text-[10px] text-indigo-500 font-medium">Searchable</span>
+      {/* ── Column Mapping Card ────────────────────────────────────── */}
+      {mappingRows.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+          {/* Table Header */}
+          <div className="grid grid-cols-[2rem_1fr_5.5rem_1fr] gap-3 items-center px-4 py-2.5 bg-slate-50/80 border-b border-slate-200">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">#</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Column Name</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Dial</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Mapped Label</span>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {mappingRows.map((row, i) => (
+              <div
+                key={row.id}
+                className={`grid grid-cols-[2rem_1fr_5.5rem_1fr] gap-3 items-center px-4 py-2 transition-colors ${
+                  row.is_dialing === 1 ? 'bg-indigo-50/60' : row.label_id ? 'bg-slate-50/40' : ''
+                }`}
+              >
+                <span className={`w-6 h-6 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
+                  row.is_dialing === 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {i + 1}
+                </span>
+
+                <p className={`text-xs font-semibold truncate ${row.is_dialing === 1 ? 'text-indigo-800' : 'text-slate-800'}`}>
+                  {row.header || row.column_name}
+                </p>
+
+                <div className="flex justify-center">
+                  {row.is_dialing === 1 ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-600 text-white">
+                      <Phone size={9} /> Dial
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-300">—</span>
                   )}
                 </div>
-              ))}
+
+                <div>
+                  {row.label_title ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <Tag size={9} /> {row.label_title}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-300">Not mapped</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-4 text-[10px] text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded bg-indigo-600 inline-block" />
+                Dialing
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded bg-emerald-50 border border-emerald-200 inline-block" />
+                Mapped to label
+              </span>
             </div>
-          )}
-          <button
-            onClick={() => navigate(`/lists/${id}/leads`)}
-            className="btn-outline w-full mt-2"
-          >
-            <Eye size={14} /> Browse {leadCount.toLocaleString()} Leads
-          </button>
+            <button
+              className="lt-b" style={{ height: 28, fontSize: 11 }}
+              onClick={() => navigate(`/lists/${id}/mapping`)}
+            >
+              <Pencil size={11} /> Edit Mapping
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

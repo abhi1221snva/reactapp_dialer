@@ -51,7 +51,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'documents', label: 'Documents',       icon: FolderOpen   },
   { id: 'lenders',   label: 'Lenders',         icon: Building2    },
   // { id: 'ondeck',    label: 'OnDeck API',       icon: Zap          },
-  { id: 'merchant',  label: 'Merchant Portal', icon: ExternalLink },
+  // Merchant Portal moved to header action button
   { id: 'offers',     label: 'Offers & Stips',  icon: DollarSign    },
   { id: 'deal',       label: 'Deal',             icon: TrendingUp    },
   { id: 'compliance', label: 'Compliance',       icon: ShieldCheck   },
@@ -4148,6 +4148,37 @@ export function CrmLeadDetail() {
     staleTime: 5 * 60 * 1000,
   })
 
+  // ── Merchant Portal query ──────────────────────────────────────────────────
+  const { data: merchantPortal } = useQuery({
+    queryKey: ['merchant-portal', leadId],
+    queryFn: async () => {
+      try {
+        const res = await crmService.getMerchantPortal(leadId)
+        return (res.data?.data ?? null) as { url: string; status: number } | null
+      } catch { return null }
+    },
+    retry: false,
+    staleTime: 60_000,
+    enabled: !!leadId,
+  })
+
+  const generatePortalMutation = useMutation({
+    mutationFn: () => crmService.generateMerchantPortal(leadId),
+    onSuccess: () => {
+      toast.success('Portal link generated')
+      qc.invalidateQueries({ queryKey: ['merchant-portal', leadId] })
+    },
+    onError: () => toast.error('Failed to generate portal link'),
+  })
+
+  const handleMerchantPortal = () => {
+    if (merchantPortal?.url) {
+      navigator.clipboard.writeText(merchantPortal.url).then(() => toast.success('Merchant link copied!'))
+    } else {
+      generatePortalMutation.mutate()
+    }
+  }
+
   const docBadgeCount = docsForBadge?.length ?? 0
   const subBadgeCount = subsForBadge?.length ?? 0
 
@@ -4155,13 +4186,13 @@ export function CrmLeadDetail() {
   useEffect(() => {
     if (!lead || !leadFields) return
     const owner2Fields = leadFields.filter(f => f.section === 'second_owner')
-    if (owner2Fields.length === 0) return
+    if (owner2Fields.length === 0) { setShowOwner2(false); return }
     const leadData = lead as Record<string, unknown>
     const hasData = owner2Fields.some(f => {
       const val = leadData[f.field_key]
       return val !== null && val !== undefined && String(val).trim() !== ''
     })
-    if (hasData) setShowOwner2(true)
+    setShowOwner2(hasData)
   }, [lead, leadFields])
 
   const updateStatus = useMutation({
@@ -4224,113 +4255,137 @@ export function CrmLeadDetail() {
     <div className="min-h-screen bg-slate-50/40 -mx-5 -mt-5" style={{ WebkitFontSmoothing: 'antialiased' }}>
 
       {/* ── HEADER ── */}
-      <div className="bg-white border-b border-slate-200/80" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-        <div className="max-w-[1800px] mx-auto px-5 py-3">
+      <div style={{ background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)' }}>
+        <div className="max-w-[1800px] mx-auto px-6 py-5">
 
-          {/* ── Row 1: Back + Avatar + Name/Status/Meta  |  Actions ── */}
-          <div className="flex items-center gap-3 min-h-[44px]">
+          {/* ── Row 1: Back + Avatar + Name/Status ── */}
+          <div className="flex items-start gap-4">
 
             {/* Back button */}
-            <button onClick={() => navigate('/crm/leads')} className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all flex-shrink-0" title="Back to Leads">
-              <ArrowLeft size={14} />
+            <button onClick={() => navigate('/crm/leads')} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/80 transition-all flex-shrink-0 mt-1" style={{ border: '1px solid transparent' }} onMouseEnter={e => (e.currentTarget.style.border = '1px solid #e2e8f0')} onMouseLeave={e => (e.currentTarget.style.border = '1px solid transparent')} title="Back to Leads">
+              <ArrowLeft size={15} />
             </button>
 
             {/* Avatar */}
-            <div className={`w-10 h-10 rounded-xl ${avatarBg} flex items-center justify-center flex-shrink-0`}>
-              <span className="text-sm font-bold text-white leading-none">{leadInits}</span>
+            <div className={`w-12 h-12 rounded-2xl ${avatarBg} flex items-center justify-center flex-shrink-0`} style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)' }}>
+              <span className="text-[15px] font-bold text-white leading-none tracking-wide">{leadInits}</span>
             </div>
 
-            {/* Name + Status badge + Meta stacked */}
+            {/* Name + Status + Meta — stacked */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2.5">
-                <h1 style={{ fontSize: 18, fontWeight: 700, color: '#111827', lineHeight: 1.2, maxWidth: 360 }} className="truncate">{fullName}</h1>
-                {/* Status label (non-editable) */}
+              {/* Line 1: Name + Badges */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', lineHeight: 1.25, letterSpacing: '-0.01em', maxWidth: 400 }} className="truncate">{fullName}</h1>
                 <span
-                  className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-full text-[11px] font-semibold flex-shrink-0 select-none"
-                  style={{ background: `${statusColor}14`, color: statusColor, border: `1px solid ${statusColor}30` }}
+                  className="inline-flex items-center gap-1.5 h-[24px] px-3 rounded-full text-[11px] font-semibold flex-shrink-0 select-none"
+                  style={{ background: `${statusColor}12`, color: statusColor, border: `1px solid ${statusColor}25`, backdropFilter: 'blur(4px)' }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                  <span className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}40` }} />
                   {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                 </span>
                 {tempStyle && (
-                  <span className={`hidden sm:inline-flex items-center gap-1 h-[20px] px-2 rounded-full text-[10px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
+                  <span className={`hidden sm:inline-flex items-center gap-1 h-[22px] px-2.5 rounded-full text-[10px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: tempStyle.dot }} />
                     {tempStyle.label}
                   </span>
                 )}
               </div>
-              {/* Contact + meta inline */}
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
+
+              {/* Line 2: Contact chips */}
+              <div className="flex items-center gap-3 mt-2 flex-wrap">
                 {lead.company_name && (
-                  <>
-                    <span className="flex items-center gap-1 text-[13px] text-slate-600">
-                      <Briefcase size={11} className="text-slate-400" />
-                      <span className="truncate max-w-[180px]">{String(lead.company_name)}</span>
-                    </span>
-                    <span className="text-slate-300 select-none text-[11px]">•</span>
-                  </>
+                  <span className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-lg text-[12.5px] font-medium" style={{ background: '#f1f5f9', color: '#334155' }}>
+                    <Briefcase size={12} className="text-slate-400" />
+                    <span className="truncate max-w-[180px]">{String(lead.company_name)}</span>
+                  </span>
                 )}
                 {lead.phone_number && (
-                  <>
-                    <a href={`tel:${lead.phone_number}`} className="flex items-center gap-1 text-[13px] font-medium hover:text-emerald-600 transition-colors whitespace-nowrap" style={{ color: '#374151' }}>
-                      <Phone size={11} className="text-slate-400" />
-                      {formatPhoneNumber(String(lead.phone_number))}
-                    </a>
-                    <span className="text-slate-300 select-none text-[11px]">•</span>
-                  </>
+                  <a href={`tel:${lead.phone_number}`} className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-lg text-[12.5px] font-medium hover:bg-emerald-50 transition-all" style={{ background: '#f1f5f9', color: '#334155' }}>
+                    <Phone size={12} className="text-emerald-500" />
+                    {formatPhoneNumber(String(lead.phone_number))}
+                  </a>
                 )}
                 {lead.email && (
-                  <>
-                    <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-[13px] font-medium hover:text-sky-600 transition-colors truncate max-w-[220px]" style={{ color: '#374151' }}>
-                      <Mail size={11} className="text-slate-400" />
-                      {String(lead.email)}
-                    </a>
-                    <span className="hidden lg:inline text-slate-300 select-none text-[11px]">•</span>
-                  </>
+                  <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-lg text-[12.5px] font-medium hover:bg-sky-50 transition-all truncate max-w-[260px]" style={{ background: '#f1f5f9', color: '#334155' }}>
+                    <Mail size={12} className="text-sky-500" />
+                    {String(lead.email)}
+                  </a>
                 )}
-                {/* Meta items – labeled for clarity */}
+              </div>
+
+              {/* Line 3: Meta pills */}
+              <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                 {([
-                  (lead.assigned_name as string | undefined) ? { label: 'Agent', value: lead.assigned_name as string } : null,
-                  lead.lead_type ? { label: 'Type', value: toTitleCase(String(lead.lead_type)) } : null,
-                  loanAmount ? { label: 'Amount', value: `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` } : null,
-                  lead.created_at ? { label: 'Created', value: new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) } : null,
-                  { label: 'Pipeline', value: `${daysInSystem}d` },
-                ].filter(Boolean) as { label: string; value: string }[]).map((item, i, arr) => (
-                  <span key={i} className="hidden lg:inline text-[13px] whitespace-nowrap">
-                    <span className="text-slate-400 font-medium">{item.label}:</span>{' '}
-                    <span style={{ color: '#374151' }}>{item.value}</span>
-                    {i < arr.length - 1 && <span className="mx-1.5 text-slate-300 select-none">•</span>}
-                  </span>
-                ))}
+                  (lead.assigned_name as string | undefined) ? { icon: User, label: 'Agent', value: lead.assigned_name as string } : null,
+                  lead.lead_type ? { icon: Tag, label: 'Type', value: toTitleCase(String(lead.lead_type)) } : null,
+                  loanAmount ? { icon: DollarSign, label: 'Amount', value: `$${Number(String(loanAmount).replace(/[^0-9.]/g,'')).toLocaleString('en-US')}` } : null,
+                  lead.created_at ? { icon: Calendar, label: 'Created', value: new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) } : null,
+                  { icon: Clock, label: 'Pipeline', value: `${daysInSystem}d` },
+                ].filter(Boolean) as { icon: LucideIcon; label: string; value: string }[]).map((item, i) => {
+                  const Icon = item.icon
+                  return (
+                    <span key={i} className="inline-flex items-center gap-1.5 whitespace-nowrap" style={{ fontSize: 12 }}>
+                      <Icon size={11} className="text-slate-300" />
+                      <span style={{ color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontSize: 10 }}>{item.label}</span>
+                      <span style={{ fontWeight: 600, color: '#334155' }}>{item.value}</span>
+                      {i < 4 && <span className="ml-0.5 text-slate-200 select-none">|</span>}
+                    </span>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Right: Action buttons only (status removed — edit via Edit button) */}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Right: Action buttons */}
+            <div className="flex items-center gap-2 flex-shrink-0 pt-1">
               <button
                 onClick={() => setShowEmailModal(true)}
-                className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-sky-50 text-sky-700 border border-sky-200/70 hover:bg-sky-100 hover:border-sky-300 transition-all"
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium text-sky-700 transition-all hover:shadow-sm"
+                style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.transform = 'translateY(0)' }}
               >
-                <Mail size={11} /> <span className="hidden sm:inline">Email</span>
+                <Mail size={13} /> <span className="hidden sm:inline">Email</span>
               </button>
               <button
                 onClick={() => setShowSmsModal(true)}
-                className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200/70 hover:bg-violet-100 hover:border-violet-300 transition-all"
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium text-violet-700 transition-all hover:shadow-sm"
+                style={{ background: '#f5f3ff', border: '1px solid #c4b5fd' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.transform = 'translateY(0)' }}
               >
-                <MessageSquare size={11} /> <span className="hidden sm:inline">SMS</span>
+                <MessageSquare size={13} /> <span className="hidden sm:inline">SMS</span>
               </button>
               <button
                 onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
-                className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70 hover:bg-emerald-100 hover:border-emerald-300 transition-all"
+                className="h-8 inline-flex items-center gap-1.5 px-3.5 rounded-lg text-[12px] font-semibold text-white transition-all hover:shadow-md"
+                style={{ background: 'linear-gradient(135deg, #059669, #047857)', border: '1px solid #047857' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(5,150,105,0.3)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
               >
-                <Pencil size={11} /> <span className="hidden sm:inline">Edit</span>
+                <Pencil size={13} /> <span className="hidden sm:inline">Edit</span>
               </button>
               <button
+                onClick={handleMerchantPortal}
+                disabled={generatePortalMutation.isPending}
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium text-amber-700 transition-all hover:shadow-sm disabled:opacity-50"
+                style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#fef3c7'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.transform = 'translateY(0)' }}
+                title={merchantPortal?.url ? 'Copy merchant portal link' : 'Generate merchant portal link'}
+              >
+                {generatePortalMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : merchantPortal?.url ? <Copy size={13} /> : <ExternalLink size={13} />}
+                <span className="hidden sm:inline">{merchantPortal?.url ? 'Copy Link' : 'Merchant Link'}</span>
+              </button>
+              <div className="w-px h-5 bg-slate-200 mx-0.5" />
+              <button
                 onClick={handleDeleteLead}
-                className="h-7 inline-flex items-center justify-center w-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all"
+                className="h-8 inline-flex items-center justify-center w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                style={{ border: '1px solid transparent' }}
+                onMouseEnter={e => (e.currentTarget.style.border = '1px solid #fecaca')}
+                onMouseLeave={e => (e.currentTarget.style.border = '1px solid transparent')}
                 title="Delete Lead"
               >
-                <Trash2 size={11} />
+                <Trash2 size={13} />
               </button>
             </div>
 
@@ -4338,13 +4393,13 @@ export function CrmLeadDetail() {
         </div>
 
         {/* ── Accent separator ── */}
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent 5%, #86efac 35%, #4ade80 50%, #86efac 65%, transparent 95%)' }} />
+        <div style={{ height: 2, background: 'linear-gradient(90deg, transparent 5%, #86efac 35%, #4ade80 50%, #86efac 65%, transparent 95%)' }} />
 
       </div>
 
       {/* ── SINGLE CARD ── */}
-      <div className="max-w-[1800px] mx-auto px-5 pt-3 pb-8">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 140px)' }}>
+      <div className="mx-auto px-3 pt-3 pb-8" style={{ maxWidth: '100%' }}>
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm flex flex-col overflow-x-hidden" style={{ minHeight: 'calc(100vh - 140px)' }}>
 
           {/* Unified tab bar */}
           <div className="relative flex-shrink-0">
@@ -4486,7 +4541,7 @@ export function CrmLeadDetail() {
               // ── Render a single field value ────────────────────────────────────
               const renderFieldValue = (f: FieldDef, raw: unknown, display: string) => {
                 const isEmpty = !display
-                if (isEmpty) return <span style={{ fontSize: 14, color: '#9ca3af', fontStyle: 'italic' }}>Not Provided</span>
+                if (isEmpty) return <span style={{ fontSize: 13, color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>—</span>
 
                 const isPhone = f.field_type === 'phone_number' || f.field_type === 'phone'
                 const isEmail = f.field_type === 'email'
@@ -4495,7 +4550,7 @@ export function CrmLeadDetail() {
                 if (isPhone) {
                   return (
                     <span className="inline-flex items-center gap-2 group/val">
-                      <a href={`tel:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 600 : 500, color: '#111827', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
+                      <a href={`tel:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 700 : 600, color: '#0f172a', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
                       <button type="button" onClick={() => copyToClipboard(String(raw))} className="opacity-0 group-hover/val:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100" title="Copy"><Copy size={12} className="text-slate-400" /></button>
                     </span>
                   )
@@ -4503,39 +4558,73 @@ export function CrmLeadDetail() {
                 if (isEmail) {
                   return (
                     <span className="inline-flex items-center gap-2 group/val">
-                      <a href={`mailto:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 600 : 500, color: '#111827', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
+                      <a href={`mailto:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 700 : 600, color: '#0f172a', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
                       <button type="button" onClick={() => copyToClipboard(String(raw))} className="opacity-0 group-hover/val:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100" title="Copy"><Copy size={12} className="text-slate-400" /></button>
                     </span>
                   )
                 }
-                return <span style={{ fontSize: 14, fontWeight: isHighlight ? 600 : 500, color: '#111827' }}>{display}</span>
+                return <span style={{ fontSize: 14, fontWeight: isHighlight ? 700 : 600, color: '#0f172a' }}>{display}</span>
               }
 
-              // ── Section renderer ────────────────────────────────────────────────
+              // ── Derive a representative name for each section ────────────────
+              const leadData = lead as Record<string, unknown>
+              const NAME_KEYS: Record<string, string[]> = {
+                owner:        ['first_name', 'last_name'],
+                contact:      ['first_name', 'last_name'],
+                business:     ['company_name'],
+                second_owner: ['owner2_first_name', 'owner2_last_name', 'second_owner_first_name', 'second_owner_last_name'],
+              }
+              const sectionName = (secKey: string): string => {
+                // Try known key patterns first
+                const keys = NAME_KEYS[secKey]
+                if (keys) {
+                  const parts = keys.map(k => leadData[k]).filter(v => v && String(v).trim()).map(String)
+                  if (parts.length > 0) return parts.join(' ')
+                }
+                // Fallback: scan section fields for first non-empty name-like field
+                const fields = sectionMap.get(secKey) ?? []
+                for (const f of fields) {
+                  const k = f.field_key.toLowerCase()
+                  if (k.includes('name') || k.includes('company')) {
+                    const v = leadData[f.field_key]
+                    if (v && String(v).trim()) return String(v)
+                  }
+                }
+                return ''
+              }
+
+              // ── Section renderer ─────────────────────────────────────────────
               const renderSection = (secKey: string) => {
                 const fields = sectionMap.get(secKey) ?? []
                 if (fields.length === 0) return null
                 const title = SECTION_LABELS[secKey]
                   ?? (secKey.charAt(0).toUpperCase() + secKey.slice(1) + ' Information')
+                const name = sectionName(secKey)
                 return (
-                  <div key={secKey}>
-                    {/* Section heading with accent bar */}
-                    <div style={{ marginBottom: 8 }}>
-                      <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3 }}>
+                  <div key={secKey} style={{ minWidth: 0 }}>
+                    {/* Heading */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3, whiteSpace: 'nowrap' }}>
                         {title}
                       </h3>
+                      {name && (
+                        <>
+                          <span style={{ color: '#d1d5db' }}>—</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>{name}</span>
+                        </>
+                      )}
                     </div>
-                    <div style={{ height: 1, background: '#e5e7eb', marginBottom: 12 }} />
+                    <div style={{ height: 1, background: '#e5e7eb', marginBottom: 16 }} />
 
-                    {/* Label–value grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                    {/* 2-col field grid inside each section */}
+                    <div className="li-fields">
                       {fields.map(f => {
-                        const raw     = (lead as Record<string, unknown>)[f.field_key]
+                        const raw     = leadData[f.field_key]
                         const display = fmtVal(f.field_type, raw)
                         return (
-                          <div key={f.field_key}>
-                            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 2, lineHeight: 1.3 }}>{f.label_name}</p>
-                            {renderFieldValue(f, raw, display)}
+                          <div key={f.field_key} className="li-field">
+                            <span className="li-label">{f.label_name}</span>
+                            <span className="li-value">{renderFieldValue(f, raw, display)}</span>
                           </div>
                         )
                       })}
@@ -4544,27 +4633,54 @@ export function CrmLeadDetail() {
                 )
               }
 
-              // Only include second_owner in the grid when it has populated data
+              // Only include second_owner when it has populated data
+              const hasOwner2 = showOwner2 && (sectionMap.get('second_owner') ?? []).length > 0
+
               const displaySections = showOwner2
                 ? orderedSections
                 : orderedSections.filter(s => s !== 'second_owner')
 
-              // Pair sections into rows of 2 for side-by-side layout
-              const sectionElements = displaySections.map(sec => ({ key: sec, node: renderSection(sec) })).filter(s => s.node !== null)
-              const rows: { key: string; node: React.ReactNode }[][] = []
-              for (let i = 0; i < sectionElements.length; i += 2) {
-                rows.push(sectionElements.slice(i, i + 2))
+              // Primary: owner, business, second_owner
+              const PRIMARY = ['owner', 'business', 'second_owner']
+              const primarySections = PRIMARY.filter(s => displaySections.includes(s) && (sectionMap.get(s) ?? []).length > 0)
+              const remainingSections = displaySections.filter(s => !PRIMARY.includes(s) && (sectionMap.get(s) ?? []).length > 0)
+
+              // Pair remaining into rows of 2
+              const restRows: string[][] = []
+              for (let i = 0; i < remainingSections.length; i += 2) {
+                restRows.push(remainingSections.slice(i, i + 2))
               }
 
+              // 4-4-4 (3 cols) when Owner2 present, 6-6 (2 cols) when not
+              const primaryCols = hasOwner2 ? 3 : 2
+
               return (
-                <div className="px-6 py-5 overflow-y-auto">
-                  <div className="space-y-7">
-                    {rows.map((row, ri) => (
-                      <div key={ri} className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6 items-start">
-                        {row.map(s => <div key={s.key}>{s.node}</div>)}
-                      </div>
-                    ))}
-                  </div>
+                <div className="px-5 py-5 overflow-y-auto" style={{ width: '100%' }}>
+                  <style>{`
+                    .li-row-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 32px;width:100%}
+                    .li-row-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px;width:100%}
+                    .li-section-sep{padding-bottom:24px;margin-bottom:24px;border-bottom:1px solid #f1f5f9}
+                    .li-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
+                    .li-field{display:flex;flex-direction:column;gap:4px}
+                    .li-label{font-size:12px;color:#7c9bc6;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;line-height:1.3}
+                    .li-value{font-size:14px;font-weight:600;color:#0f172a;word-break:break-word;line-height:1.4}
+                    @media(max-width:1024px){.li-row-3{grid-template-columns:1fr!important}.li-fields{grid-template-columns:1fr}}
+                    @media(max-width:768px){.li-row-2{grid-template-columns:1fr!important}}
+                  `}</style>
+
+                  {/* Primary row: 4-4-4 or 6-6 */}
+                  {primarySections.length > 0 && (
+                    <div className={`li-row-${primaryCols}${restRows.length > 0 ? ' li-section-sep' : ''}`}>
+                      {primarySections.map(sec => <div key={sec} style={{ minWidth: 0 }}>{renderSection(sec)}</div>)}
+                    </div>
+                  )}
+
+                  {/* Remaining sections: 6-6 */}
+                  {restRows.map((row, ri) => (
+                    <div key={ri} className={`li-row-2${ri < restRows.length - 1 ? ' li-section-sep' : ''}`}>
+                      {row.map(sec => <div key={sec} style={{ minWidth: 0 }}>{renderSection(sec)}</div>)}
+                    </div>
+                  ))}
                 </div>
               )
             })()}

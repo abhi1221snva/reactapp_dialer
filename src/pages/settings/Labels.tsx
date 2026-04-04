@@ -2,10 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2,
-  GripVertical, Tag, Save, X, Check, ArrowLeft,
+  GripVertical, Tag, Save, X, Check, Search,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { labelService } from '../../services/label.service'
@@ -13,6 +12,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface LabelItem {
   id: number
@@ -254,13 +254,39 @@ function ReorderPanel({
 
 // ─── Main Labels page ──────────────────────────────────────────────────────────
 export function Labels() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showCreate, setShowCreate] = useState(false)
   const [editLabel, setEditLabel] = useState<LabelItem | null>(null)
   const [showReorder, setShowReorder] = useState(false)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search labels…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowReorder(true)} className="lt-b">
+            <GripVertical size={13} /> Reorder
+          </button>
+          <button onClick={() => { setEditLabel(null); setShowCreate(true) }} className="lt-b lt-p">
+            <Plus size={13} /> Add Label
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['labels'] })
 
@@ -360,19 +386,6 @@ export function Labels() {
       )}
 
       <div className="space-y-2">
-        {/* Page header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="page-title">Label Management</h1>
-              <p className="page-subtitle">Manage lead labels and their display order</p>
-            </div>
-          </div>
-        </div>
-
         <ServerDataTable<LabelItem>
           queryKey={['labels']}
           queryFn={(params) => labelService.list(params)}
@@ -405,16 +418,7 @@ export function Labels() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
-          headerActions={
-            <>
-              <button onClick={() => setShowReorder(true)} className="btn-outline">
-                <GripVertical size={15} /> Reorder
-              </button>
-              <button onClick={() => { setEditLabel(null); setShowCreate(true) }} className="btn-primary">
-                <Plus size={15} /> Add Label
-              </button>
-            </>
-          }
+          hideToolbar
         />
       </div>
     </>

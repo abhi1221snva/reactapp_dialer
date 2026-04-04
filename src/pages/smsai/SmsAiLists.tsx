@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Trash2, List, Save, X, ArrowLeft, Eye, RefreshCw,
+  Plus, Trash2, List, Save, X, Eye, RefreshCw, Search,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { smsAiService } from '../../services/smsAi.service'
@@ -12,6 +11,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface ListItem {
   id: number
@@ -225,12 +225,36 @@ function ListViewModal({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function SmsAiLists() {
-  const navigate = useNavigate()
+
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showCreate, setShowCreate] = useState(false)
   const [viewList, setViewList] = useState<ListItem | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search lists\u2026" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowCreate(true)} className="lt-b lt-p">
+            <Plus size={13} /> Add List
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['smsai-lists'] })
 
@@ -364,20 +388,6 @@ export function SmsAiLists() {
       )}
 
       <div className="space-y-5">
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate('/smsai/demo')} className="btn-ghost p-2 rounded-lg mt-0.5">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1">
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">SMS AI Lists</h1>
-                <p className="page-subtitle">Manage contact lists for SMS AI campaigns</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <ServerDataTable<ListItem>
           queryKey={['smsai-lists']}
           queryFn={(params) => smsAiService.listLists(params)}
@@ -404,11 +414,7 @@ export function SmsAiLists() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
-          headerActions={
-            <button onClick={() => setShowCreate(true)} className="btn-primary">
-              <Plus size={15} /> Add List
-            </button>
-          }
+          hideToolbar
         />
       </div>
     </>

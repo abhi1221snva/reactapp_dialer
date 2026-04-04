@@ -7,6 +7,7 @@ export const listService = {
     api.post('/raw-list', {
       start: (params.page - 1) * params.limit,
       limit: params.limit,
+      sort_order: 'desc',
       ...(params.search ? { title: params.search } : {}),
     }),
 

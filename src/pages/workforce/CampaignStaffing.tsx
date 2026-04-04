@@ -40,11 +40,6 @@ export function CampaignStaffing() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Campaign Settings</h1>
-        <p className="page-subtitle">Configure staffing requirements and break throttling per campaign</p>
-      </div>
-
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {TABS.map(t => (
           <button

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Search, Download, Play, PhoneCall, Clock, TrendingUp, BarChart2,
   ChevronDown, Filter, Calendar, RefreshCw, ArrowDownLeft, ArrowUpRight,
   X, Volume2, PhoneIncoming, PhoneOutgoing, Hash,
 } from 'lucide-react'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -140,6 +141,7 @@ function DirectionBadge({ route }: { route?: string | null }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function Reports() {
+  const { setToolbar } = useDialerHeader()
   const [filters, setFilters] = useState({
     start_date:       new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
     end_date:         new Date().toISOString().split('T')[0],
@@ -433,47 +435,34 @@ export function Reports() {
     },
   ]
 
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="page-title">CDR Report</h1>
-          <p className="page-subtitle">Call detail records — full history with filtering and export</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="btn-ghost btn-sm p-2 rounded-lg"
-            title="Refresh"
-          >
-            <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
+  useEffect(() => {
+    setToolbar(
+      <div className="lt-right">
+        <button onClick={() => refetch()} disabled={isFetching} className="lt-b" title="Refresh">
+          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+        </button>
+        <div className="relative">
+          <button onClick={() => setShowExportMenu((v) => !v)} className="lt-b">
+            <Download size={13} /> Export <ChevronDown size={11} />
           </button>
-          <div className="relative">
-            <button onClick={() => setShowExportMenu((v) => !v)} className="btn-outline gap-2">
-              <Download size={15} /> Export <ChevronDown size={13} />
-            </button>
-            {showExportMenu && (
-              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 z-20 overflow-hidden">
-                <button
-                  onClick={handleExportCsv}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 border-b border-slate-100"
-                >
-                  <Download size={13} className="text-slate-400" /> Export CSV
-                </button>
-                <button
-                  onClick={handleExportExcel}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <Download size={13} className="text-emerald-500" /> Export Excel
-                </button>
-              </div>
-            )}
-          </div>
+          {showExportMenu && (
+            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 z-20 overflow-hidden">
+              <button onClick={handleExportCsv} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 border-b border-slate-100">
+                <Download size={13} className="text-slate-400" /> Export CSV
+              </button>
+              <button onClick={handleExportExcel} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+                <Download size={13} className="text-emerald-500" /> Export Excel
+              </button>
+            </div>
+          )}
         </div>
       </div>
+    )
+    return () => setToolbar(undefined)
+  })
 
+  return (
+    <div className="space-y-6">
       {/* Date Range Presets */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">

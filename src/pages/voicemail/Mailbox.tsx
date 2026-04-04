@@ -56,13 +56,6 @@ export function Mailbox() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Mailbox</h1>
-          <p className="page-subtitle">View and manage voicemail messages received by agents</p>
-        </div>
-      </div>
-
       {/* Filter bar */}
       <div className="card p-4">
         <div className="flex flex-wrap gap-3 items-end">

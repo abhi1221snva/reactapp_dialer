@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Trash2, ArrowLeft, FileText } from 'lucide-react'
+import { Plus, Eye, Trash2, FileText, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { faxService } from '../../services/fax.service'
@@ -12,6 +11,7 @@ import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { CreateFaxModal } from './CreateFaxModal'
 import { ViewFaxModal, type FaxItem } from './ViewFaxModal'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 function FaxStatusBadge({ status }: { status: string | null }) {
   const s = String(status ?? '').toUpperCase()
@@ -40,12 +40,36 @@ function DeliveryStatusBadge({ status }: { status: string | number | null }) {
 }
 
 export function FaxList() {
-  const navigate = useNavigate()
+
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showCreate, setShowCreate] = useState(false)
   const [viewItem, setViewItem] = useState<FaxItem | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search faxes…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowCreate(true)} className="lt-b lt-p">
+            <Plus size={13} /> Send Fax
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['fax'] })
 
@@ -166,24 +190,7 @@ export function FaxList() {
         />
       )}
 
-      <div className="space-y-3">
-        {/* Page header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="page-title">Fax Management</h1>
-              <p className="page-subtitle">View and manage sent and received faxes</p>
-            </div>
-          </div>
-          <button onClick={() => setShowCreate(true)} className="btn-primary">
-            <Plus size={15} />
-            Send Fax
-          </button>
-        </div>
-
+      <div className="space-y-2">
         <ServerDataTable<FaxItem>
           queryKey={['fax']}
           queryFn={(params) => faxService.list(params)}
@@ -218,6 +225,7 @@ export function FaxList() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
+          hideToolbar
         />
       </div>
     </>

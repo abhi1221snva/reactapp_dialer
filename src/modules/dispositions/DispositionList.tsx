@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, Trash2, ArrowLeft, ListChecks, MessageSquare,
+  Plus, Pencil, Trash2, ListChecks, MessageSquare, Search, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { dispositionService } from '../../services/disposition.service'
@@ -13,6 +12,7 @@ import { CreateDispositionModal } from './CreateDispositionModal'
 import { EditDispositionModal, type DispositionItem } from './EditDispositionModal'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 const D_TYPE_LABELS: Record<string, { label: string; variant: 'blue' | 'red' | 'green' }> = {
   '1': { label: 'Status', variant: 'green' },
@@ -21,12 +21,35 @@ const D_TYPE_LABELS: Record<string, { label: string; variant: 'blue' | 'red' | '
 }
 
 export function DispositionList() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showCreate, setShowCreate] = useState(false)
   const [editItem, setEditItem] = useState<DispositionItem | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search dispositions…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowCreate(true)} className="lt-b lt-p">
+            <Plus size={13} /> Add Disposition
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['dispositions'] })
 
@@ -166,20 +189,7 @@ export function DispositionList() {
         />
       )}
 
-      <div className="space-y-3">
-        {/* Page header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">Dispositions</h1>
-              <p className="text-[11px] text-slate-400">Manage call dispositions used by agents</p>
-            </div>
-          </div>
-        </div>
-
+      <div className="space-y-2">
         <ServerDataTable<DispositionItem>
           queryKey={['dispositions']}
           queryFn={(params) => dispositionService.list(params)}
@@ -212,11 +222,7 @@ export function DispositionList() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
-          headerActions={
-            <button onClick={() => setShowCreate(true)} className="btn-primary">
-              <Plus size={15} /> Add Disposition
-            </button>
-          }
+          hideToolbar
         />
       </div>
     </>

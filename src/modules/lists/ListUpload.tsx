@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Upload, X, FileSpreadsheet, AlertCircle } from 'lucide-react'
+import { Upload, X, FileSpreadsheet, AlertCircle, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { listService } from '../../services/list.service'
 import { campaignService } from '../../services/campaign.service'
@@ -79,127 +79,126 @@ export function ListUpload({ onParsed, presetCampaignId }: Props) {
   const isValid = form.title.trim() && form.campaign_id && form.file
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="p-6 space-y-5">
 
-      {/* List details */}
-      <div className="card space-y-5">
-        <div className="border-b border-slate-100 pb-3">
-          <h3 className="font-semibold text-slate-900">List Details</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Name and campaign assignment</p>
-        </div>
-
-        <div className="form-group">
-          <label className="label">List Name <span className="text-red-500">*</span></label>
-          <input
-            className="input"
-            placeholder="e.g. June 2025 Leads"
-            value={form.title}
-            onChange={e => set('title', e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Assign to Campaign <span className="text-red-500">*</span></label>
-          <select
-            className="input"
-            value={form.campaign_id}
-            onChange={e => set('campaign_id', e.target.value)}
-          >
-            <option value="">— Select Campaign —</option>
-            {campaigns.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.title || c.campaign_name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
-          form.duplicate_check ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-        }`}>
-          <input
-            type="checkbox"
-            checked={form.duplicate_check}
-            onChange={e => set('duplicate_check', e.target.checked)}
-            className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0"
-          />
-          <div>
-            <p className={`text-sm font-semibold ${form.duplicate_check ? 'text-indigo-700' : 'text-slate-700'}`}>
-              Duplicate check
-            </p>
-            <p className="text-xs text-slate-400">Skip leads already in the system</p>
+        {/* ═══ Section: List Details ═══ */}
+        <section>
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
+            <FileSpreadsheet size={14} className="text-indigo-500" />
+            <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">List Details</h3>
           </div>
-        </label>
-      </div>
-
-      {/* File upload */}
-      <div className="card space-y-4">
-        <div className="border-b border-slate-100 pb-3">
-          <h3 className="font-semibold text-slate-900">Upload File</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Supported: .xls, .xlsx, .csv</p>
-        </div>
-
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 text-sm text-blue-700">
-          <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium">Required format</p>
-            <p className="text-xs mt-0.5">
-              First row must be column headers. You'll map columns to labels in the next step.
-            </p>
-          </div>
-        </div>
-
-        {form.file ? (
-          <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-            <FileSpreadsheet size={20} className="text-emerald-600 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">{form.file.name}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{(form.file.size / 1024).toFixed(1)} KB</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 tracking-wide mb-1">
+                List Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                className="input"
+                placeholder="e.g. June 2025 Leads"
+                value={form.title}
+                onChange={e => set('title', e.target.value)}
+              />
             </div>
-            <button
-              onClick={() => {
-                set('file', null as unknown as File)
-                if (fileRef.current) fileRef.current.value = ''
-              }}
-              className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600"
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 tracking-wide mb-1">
+                Assign to Campaign <span className="text-red-500">*</span>
+              </label>
+              <select
+                className="input"
+                value={form.campaign_id}
+                onChange={e => set('campaign_id', e.target.value)}
+              >
+                <option value="">-- Select Campaign --</option>
+                {campaigns.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.title || c.campaign_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Duplicate check toggle */}
+          <label className={`mt-3 flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${
+            form.duplicate_check ? 'border-indigo-400 bg-indigo-50/50' : 'border-slate-200 hover:border-slate-300'
+          }`}>
+            <input
+              type="checkbox"
+              checked={form.duplicate_check}
+              onChange={e => set('duplicate_check', e.target.checked)}
+              className="rounded accent-indigo-600 w-4 h-4 flex-shrink-0"
+            />
+            <div>
+              <p className={`text-xs font-semibold ${form.duplicate_check ? 'text-indigo-700' : 'text-slate-700'}`}>
+                Duplicate check
+              </p>
+              <p className="text-[11px] text-slate-400">Skip leads already in the system</p>
+            </div>
+          </label>
+        </section>
+
+        {/* ═══ Section: Upload File ═══ */}
+        <section>
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
+            <Upload size={14} className="text-indigo-500" />
+            <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Upload File</h3>
+          </div>
+
+          {form.file ? (
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <FileSpreadsheet size={18} className="text-emerald-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">{form.file.name}</p>
+                <p className="text-[11px] text-slate-500">{(form.file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <button
+                onClick={() => {
+                  set('file', null as unknown as File)
+                  if (fileRef.current) fileRef.current.value = ''
+                }}
+                className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                dragOver
+                  ? 'border-indigo-400 bg-indigo-50'
+                  : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
+              }`}
             >
-              <X size={14} />
-            </button>
-          </div>
-        ) : (
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-              dragOver
-                ? 'border-indigo-400 bg-indigo-50'
-                : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
-            }`}
-          >
-            <Upload size={28} className="mx-auto mb-3 text-slate-400" />
-            <p className="text-sm font-medium text-slate-700">Drop your file here</p>
-            <p className="text-xs text-slate-400 mt-1">or click to browse — .xls, .xlsx, .csv</p>
-          </div>
-        )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xls,.xlsx,.csv"
-          className="hidden"
-          onChange={handleFileInput}
-        />
+              <Upload size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm font-medium text-slate-700">Drop your file here or click to browse</p>
+              <p className="text-[11px] text-slate-400 mt-1">Supported formats: .xls, .xlsx, .csv — first row must be column headers</p>
+            </div>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xls,.xlsx,.csv"
+            className="hidden"
+            onChange={handleFileInput}
+          />
+        </section>
+
       </div>
 
-      {/* Continue button */}
-      <div className="lg:col-span-2">
+      {/* ── Footer action bar ──────────────────────────────────────────── */}
+      <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
         <button
           onClick={() => parseMutation.mutate()}
           disabled={!isValid || parseMutation.isPending}
-          className="btn-primary w-full"
+          className="btn-primary flex items-center gap-2 text-xs px-4 py-2 h-auto disabled:opacity-50"
         >
-          {parseMutation.isPending ? 'Reading file…' : 'Continue — Map Columns →'}
+          {parseMutation.isPending ? 'Reading file…' : 'Continue — Map Columns'}
+          {!parseMutation.isPending && <ArrowRight size={14} />}
         </button>
       </div>
     </div>

@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import { useCrmHeader } from '../../layouts/CrmLayout'
 import { RowActions } from '../../components/ui/RowActions'
 import { Badge } from '../../components/ui/Badge'
 import { confirmDelete } from '../../utils/confirmDelete'
@@ -916,7 +915,6 @@ function ReorderModal({ allFields, onClose, onSaved }: ReorderModalProps) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function CrmLeadFields() {
   const qc = useQueryClient()
-  const { setDescription } = useCrmHeader()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<CrmLabel | null>(null)
   const [search, setSearch] = useState('')
@@ -930,12 +928,6 @@ export function CrmLeadFields() {
   const dragItemRef                  = useRef<number | null>(null)
   const pendingOrder                 = useRef<number[] | null>(null)
   const [localOrder, setLocalOrder]  = useState<CrmLabel[] | null>(null)
-
-  useEffect(() => {
-    setDescription('Manage dynamic fields shown on the lead create / edit form')
-    return () => setDescription(undefined)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => { setPage(1) }, [search, sectionFilter])
 
@@ -1032,96 +1024,66 @@ export function CrmLeadFields() {
   }
 
   return (
-    <div className="-mt-1">
-      {/* ── Card Container ── */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200/80">
-
-        {/* ── Toolbar (single row) ── */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100">
-          {/* Search */}
-          <div className="relative flex-1 min-w-0" style={{ maxWidth: 320 }}>
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              className="w-full h-8 rounded-lg border border-slate-200 bg-slate-50/60 pl-8 pr-8 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 focus:bg-white transition"
-              placeholder="Search fields…"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
-            />
-            {search && (
-              <button
-                onClick={() => { setSearch(''); setPage(1) }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-
-          {/* Section filter */}
-          {presentSections.length > 1 && (
-            <div className="relative flex-shrink-0">
-              <select
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50/60 pl-3 pr-7 text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 focus:bg-white transition cursor-pointer"
-                value={sectionFilter}
-                onChange={e => setSectionFilter(e.target.value)}
-              >
-                <option value="">All Sections</option>
-                {presentSections.map(s => (
-                  <option key={s} value={s}>{humanizeSection(s)}</option>
-                ))}
-              </select>
-              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          )}
-
-          {/* Record count + drag hint */}
-          <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-medium flex-shrink-0 ml-1">
-            {isLoading ? 'Loading…' : <><span className="text-slate-500">{total}</span> field{total !== 1 ? 's' : ''}</>}
-            <span className="text-slate-200">|</span>
-            <GripVertical size={11} className="text-slate-300" />
-            <span>Drag rows to reorder</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* ── .lt Header Toolbar ── */}
+      <div className="lt">
+        <div className="lt-title">
+          <h1>Labels</h1>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, background: '#f1f5f9', padding: '1px 7px', borderRadius: 8, lineHeight: '16px' }}>
+            {isLoading ? '…' : total}
           </span>
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Updating indicator */}
+        </div>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input
+            type="text"
+            value={search}
+            placeholder="Search fields…"
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1) }}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        {presentSections.length > 1 && (
+          <select
+            className="lt-sel"
+            value={sectionFilter}
+            onChange={e => setSectionFilter(e.target.value)}
+          >
+            <option value="">All Sections</option>
+            {presentSections.map(s => (
+              <option key={s} value={s}>{humanizeSection(s)}</option>
+            ))}
+          </select>
+        )}
+        <div className="lt-divider" />
+        <div className="lt-right">
           {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1 flex-shrink-0">
-              <RefreshCw size={11} className="animate-spin" /> Syncing…
+            <span style={{ fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <RefreshCw size={10} className="animate-spin" /> Syncing…
             </span>
           )}
-
-          {/* Refresh */}
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            title="Refresh"
-            className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition disabled:opacity-40 flex-shrink-0"
-          >
-            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+          <button onClick={() => refetch()} disabled={isFetching} className="lt-b" title="Refresh">
+            <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
           </button>
-
-          {/* Reorder Fields */}
-          <button
-            onClick={() => setShowReorder(true)}
-            disabled={!allFields?.length}
-            title="Reorder all fields section-by-section"
-            className="h-8 flex items-center gap-1.5 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition disabled:opacity-40 flex-shrink-0"
-          >
-            <ListOrdered size={13} />
-            <span className="hidden lg:inline">Reorder</span>
+          <button onClick={() => setShowReorder(true)} disabled={!allFields?.length} className="lt-b" title="Reorder fields">
+            <ListOrdered size={12} /> Reorder
           </button>
-
-          {/* Add Field */}
-          <button
-            onClick={openAdd}
-            className="h-8 flex items-center gap-1.5 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition flex-shrink-0 shadow-sm"
-          >
-            <Plus size={13} />
-            <span>Add Field</span>
+          <button onClick={openAdd} className="lt-b lt-g">
+            <Plus size={13} /> Add Field
           </button>
         </div>
+      </div>
+      <div className="lt-accent lt-accent-green" />
+
+      {/* ── Card Container ── */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200/80" style={{ marginTop: 8 }}>
 
         {/* ── Table ── */}
         <div className="overflow-x-auto">

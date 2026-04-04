@@ -380,11 +380,7 @@ export function AiSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="page-title">AI Settings</h1>
-          <p className="page-subtitle">Configure AI integrations for SMS, Chat, and Voice automation</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200">
           <CheckCircle2 size={13} className="text-emerald-600" />
           <span className="text-xs font-semibold text-emerald-700">AI Ready</span>

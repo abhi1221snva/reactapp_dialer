@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, ArrowLeft, Search, Calendar, FileText } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { BarChart3, Search, Calendar, FileText } from 'lucide-react'
 import { smsAiService } from '../../services/smsAi.service'
 import { cn } from '../../utils/cn'
 
@@ -285,25 +284,11 @@ function DailyReportsTab() {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function SmsAiReports() {
-  const navigate = useNavigate()
+
   const [tab, setTab] = useState<TabKey>('sms')
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3">
-        <button onClick={() => navigate('/smsai/demo')} className="btn-ghost p-2 rounded-lg mt-0.5">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex-1">
-          <div className="page-header">
-            <div>
-              <h1 className="page-title">SMS AI Reports</h1>
-              <p className="page-subtitle">View SMS delivery reports and daily analytics</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
         {TABS.map(t => (

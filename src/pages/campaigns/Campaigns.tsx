@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Trash2, Pencil, Radio, Eye, Clock,
+  Plus, Trash2, Pencil, Radio, Eye, Clock, Search,
   LayoutList, X, Tag, Users, Zap, Activity,
   Phone, Mail,
   CheckCircle2, XCircle,
@@ -16,6 +16,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { cn } from '../../utils/cn'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface Campaign {
   id: number
@@ -322,6 +323,30 @@ export function Campaigns() {
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
   const [viewCampaign, setViewCampaign] = useState<Campaign | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search campaigns…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => navigate('/campaigns/create')} className="lt-b lt-p">
+            <Plus size={13} /> Add Campaign
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string | number }) =>
@@ -381,9 +406,12 @@ export function Campaigns() {
     {
       key: 'lists_associated', header: 'Lists',
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <LayoutList size={13} className="text-slate-400 flex-shrink-0" />
-          <span className="text-sm font-semibold text-slate-700">{row.lists_associated ?? 0}</span>
+        <div
+          className="flex items-center gap-1.5 cursor-pointer group"
+          onClick={(e) => { e.stopPropagation(); navigate(`/campaigns/${row.id}/add-review`) }}
+        >
+          <LayoutList size={13} className="text-slate-400 flex-shrink-0 group-hover:text-indigo-500" />
+          <span className="text-sm font-semibold text-slate-700 group-hover:text-indigo-600 underline-offset-2 group-hover:underline">{row.lists_associated ?? 0}</span>
         </div>
       ),
     },
@@ -470,13 +498,6 @@ export function Campaigns() {
   return (
     <>
       <div className="space-y-5">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Campaigns</h1>
-            <p className="page-subtitle">Manage your dialing campaigns</p>
-          </div>
-        </div>
-
         <ServerDataTable<Campaign>
           queryKey={['campaigns']}
           queryFn={(params) => campaignService.list(params)}
@@ -504,11 +525,7 @@ export function Campaigns() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
-          headerActions={
-            <button onClick={() => navigate('/campaigns/create')} className="btn-primary">
-              <Plus size={15} /> Add Campaign
-            </button>
-          }
+          hideToolbar
         />
       </div>
 

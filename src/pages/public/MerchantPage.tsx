@@ -13,6 +13,8 @@ import {
   MerchantDocument, PublicDocumentType,
 } from '../../services/publicApp.service'
 import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
+import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
+import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
@@ -140,6 +142,25 @@ function FormField({ f, value, onChange, error }: {
           {show ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
       </div>
+    )
+    if (isAddressAutocompleteKey(f.key, f.label)) return (
+      <AddressAutocomplete
+        value={value}
+        onChange={v => onChange(f.key, v)}
+        onPlaceSelect={(parsed: ParsedPlace) => {
+          const group = resolveAddressGroup(f.key, f.label)
+          if (group) {
+            onChange(group.cityKey, parsed.city)
+            onChange(group.stateKey, parsed.state)
+            onChange(group.zipKey, parsed.zip)
+            if (group.countryKey) onChange(group.countryKey, parsed.country)
+          }
+        }}
+        placeholder={f.placeholder ?? ''}
+        className=""
+        style={base}
+        isPublic
+      />
     )
     const t = { tel: 'tel', email: 'email', date: 'date', number: 'number' }[f.type] ?? 'text'
     return <input type={t} value={value} onChange={e => onChange(f.key, e.target.value)}

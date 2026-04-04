@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ArrowLeft, MinusCircle, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, MinusCircle, Upload, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { excludeListService } from '../../services/excludeList.service'
 import { useServerTable } from '../../hooks/useServerTable'
@@ -12,15 +11,43 @@ import { RowActions } from '../../components/ui/RowActions'
 import { AddExcludeModal } from './AddExcludeModal'
 import { EditExcludeModal, type ExcludeItem } from './EditExcludeModal'
 import { UploadExcelModal } from '../../components/ui/UploadExcelModal'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 export function ExcludeList() {
-  const navigate = useNavigate()
+
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
 
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<ExcludeItem | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search exclude list…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowUpload(true)} className="lt-b">
+            <Upload size={13} /> Upload Excel
+          </button>
+          <button onClick={() => setShowAdd(true)} className="lt-b lt-p">
+            <Plus size={13} /> Add Number
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['exclude-list'] })
 
@@ -133,29 +160,7 @@ export function ExcludeList() {
         />
       )}
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="page-title">Exclude From List</h1>
-              <p className="page-subtitle">Numbers excluded from dialing campaigns</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowUpload(true)} className="btn-outline">
-              <Upload size={15} />
-              Upload Excel
-            </button>
-            <button onClick={() => setShowAdd(true)} className="btn-primary">
-              <Plus size={15} />
-              Add Number
-            </button>
-          </div>
-        </div>
-
+      <div className="space-y-2">
         <ServerDataTable<ExcludeItem>
           queryKey={['exclude-list']}
           queryFn={(params) => excludeListService.list(params)}
@@ -180,6 +185,7 @@ export function ExcludeList() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
+          hideToolbar
         />
       </div>
     </>

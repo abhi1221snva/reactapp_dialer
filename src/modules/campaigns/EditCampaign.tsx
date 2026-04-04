@@ -5,21 +5,17 @@ import { z } from 'zod'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, ArrowRight, Save, Phone, Clock, Tag,
-  ChevronDown, X, Search, CheckCircle2, Zap, Mail,
-  Radio,
+  ArrowLeft, Save, Loader2, AlertCircle, Pencil,
+  ChevronDown, X, Search, CheckCircle2,
 } from 'lucide-react'
-import { List, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
 import { userService } from '../../services/user.service'
-import { listService } from '../../services/list.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
-import { CampaignListsSection } from './CampaignListsSection'
-import { Badge } from '../../components/ui/Badge'
+import { scrollToFirstError } from '../../utils/publicFormValidation'
 
 // ─────────────────────────────────────────────
 //  Week Schedule
@@ -59,17 +55,17 @@ function WeekScheduleGrid({ schedule, onChange }: { schedule: WeekSchedule; onCh
               <td className="px-3 py-1.5 text-center">
                 <input type="checkbox" checked={schedule[day].enabled}
                   onChange={e => update(day, 'enabled', e.target.checked)}
-                  className="rounded accent-indigo-600 cursor-pointer w-3.5 h-3.5" />
+                  className="rounded accent-blue-600 cursor-pointer w-3.5 h-3.5" />
               </td>
               <td className="px-2 py-1.5">
                 <input type="time" value={schedule[day].start} disabled={!schedule[day].enabled}
                   onChange={e => update(day, 'start', e.target.value)}
-                  className="input text-[11px] py-1 w-full disabled:cursor-not-allowed" />
+                  className="cpn-fi text-[11px] !py-1 w-full disabled:cursor-not-allowed" />
               </td>
               <td className="px-2 py-1.5">
                 <input type="time" value={schedule[day].end} disabled={!schedule[day].enabled}
                   onChange={e => update(day, 'end', e.target.value)}
-                  className="input text-[11px] py-1 w-full disabled:cursor-not-allowed" />
+                  className="cpn-fi text-[11px] !py-1 w-full disabled:cursor-not-allowed" />
               </td>
             </tr>
           ))}
@@ -163,35 +159,17 @@ const OUTBOUND_DURATION = [
   { value: '1200', label: '20 Min' }, { value: '1800', label: '30 Min' },
 ]
 
+const LBL: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }
+
 // ─────────────────────────────────────────────
 //  UI Helpers
 // ─────────────────────────────────────────────
 function FieldError({ message }: { message?: string }) {
   if (!message) return null
-  return <p className="mt-1 text-[11px] text-red-500 font-medium">{message}</p>
-}
-
-// ─────────────────────────────────────────────
-//  Status Segmented Control
-// ─────────────────────────────────────────────
-function StatusSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const opts = [
-    { v: 1, label: 'Active', on: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-    { v: 0, label: 'Inactive', on: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
-  ]
   return (
-    <div className="flex gap-2">
-      {opts.map(o => (
-        <button key={o.v} type="button" onClick={() => onChange(o.v)}
-          className={cn(
-            'flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all',
-            value === o.v ? o.on : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300',
-          )}>
-          <span className={cn('w-1.5 h-1.5 rounded-full', value === o.v ? o.dot : 'bg-slate-300')} />
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+      <AlertCircle size={11} />{message}
+    </span>
   )
 }
 
@@ -219,32 +197,34 @@ function DispositionMultiSelect({
 
   const filtered = dispositions.filter(d => d.title.toLowerCase().includes(search.toLowerCase()))
   const toggle = (id: number) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
+  const selectAll = (e: React.MouseEvent) => { e.stopPropagation(); onChange(dispositions.map(d => d.id)) }
   const clearAll = (e: React.MouseEvent) => { e.stopPropagation(); onChange([]) }
+  const allSelected = selected.length === dispositions.length && dispositions.length > 0
   const selectedDisps = dispositions.filter(d => selected.includes(d.id))
 
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen(o => !o)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 h-[38px] rounded-lg border text-sm transition-all text-left bg-white',
-          open ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300',
+          'w-full flex items-center gap-2 px-2.5 h-[36px] rounded-lg border text-sm transition-all text-left bg-white',
+          open ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200 hover:border-slate-300',
         )}>
         {selected.length === 0 ? (
-          <span className="flex-1 text-slate-400 text-sm truncate">Select dispositions…</span>
+          <span className="flex-1 text-slate-400 text-[13px] truncate">Select dispositions…</span>
         ) : (
           <div className="flex-1 flex items-center gap-1 overflow-hidden min-w-0">
-            {selectedDisps.slice(0, 2).map(d => (
+            {selectedDisps.slice(0, 3).map(d => (
               <span key={d.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] font-medium rounded border border-indigo-100 flex-shrink-0 max-w-[100px]">
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-[11px] font-medium rounded-md border border-blue-100 flex-shrink-0 max-w-[110px]">
                 <span className="truncate">{d.title}</span>
                 <span role="button" onClick={e => { e.stopPropagation(); onChange(selected.filter(x => x !== d.id)) }}
-                  className="text-indigo-400 hover:text-red-500 cursor-pointer flex-shrink-0 leading-none">
+                  className="text-blue-400 hover:text-red-500 cursor-pointer flex-shrink-0 leading-none">
                   <X size={9} />
                 </span>
               </span>
             ))}
-            {selected.length > 2 && (
-              <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">+{selected.length - 2} more</span>
+            {selected.length > 3 && (
+              <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">+{selected.length - 3}</span>
             )}
           </div>
         )}
@@ -275,9 +255,9 @@ function DispositionMultiSelect({
               return (
                 <button key={d.id} type="button" onClick={() => toggle(d.id)}
                   className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors',
-                    isChecked ? 'bg-indigo-50 text-indigo-800' : 'text-slate-700 hover:bg-slate-50')}>
+                    isChecked ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50')}>
                   <span className={cn('w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all',
-                    isChecked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300')}>
+                    isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300')}>
                     {isChecked && <CheckCircle2 size={9} className="text-white" strokeWidth={3} />}
                   </span>
                   <span className="truncate">{d.title}</span>
@@ -285,12 +265,19 @@ function DispositionMultiSelect({
               )
             })}
           </div>
-          {selected.length > 0 && (
-            <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">{selected.length} selected</span>
-              <button type="button" onClick={clearAll} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">Clear all</button>
+          <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400">{selected.length}/{dispositions.length} selected</span>
+            <div className="flex items-center gap-2">
+              {allSelected ? (
+                <button type="button" onClick={clearAll} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">Deselect All</button>
+              ) : (
+                <button type="button" onClick={selectAll} className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold">Select All</button>
+              )}
+              {selected.length > 0 && !allSelected && (
+                <button type="button" onClick={clearAll} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">Clear</button>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
@@ -310,9 +297,47 @@ export function EditCampaign() {
   const [customTimerTitle, setCustomTimerTitle] = useState('')
   const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE)
   const [existingTimerId, setExistingTimerId] = useState<number | null>(null)
+  const [editingTimerId, setEditingTimerId] = useState<number | null>(null)
+  const [editTimerLoading, setEditTimerLoading] = useState(false)
+  const formScrollRef = useRef<HTMLDivElement>(null)
+  const [formErrorCount, setFormErrorCount] = useState(0)
 
-  type StepKey = 'details' | 'lists' | 'review'
-  const [activeStep, setActiveStep] = useState<StepKey>('details')
+  const handleEditSavedTimer = async (timerId: number) => {
+    setEditTimerLoading(true)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await campaignService.getCallTimer(timerId) as any
+      const timer = res?.data?.data
+      if (timer) {
+        setCustomTimerTitle(timer.title || '')
+        const wp = timer.week_plan || {}
+        const sched = { ...DEFAULT_WEEK_SCHEDULE }
+        ALL_DAYS.forEach(day => {
+          if (wp[day]) sched[day] = { enabled: true, start: wp[day].start || '09:00', end: wp[day].end || '17:00' }
+          else sched[day] = { ...DEFAULT_WEEK_SCHEDULE[day], enabled: false }
+        })
+        setWeekSchedule(sched)
+        setEditingTimerId(timerId)
+        setSelectedTimerKey('custom')
+      }
+    } catch { toast.error('Failed to load timer') }
+    setEditTimerLoading(false)
+  }
+
+  const handleSaveEditedTimer = async () => {
+    if (!editingTimerId) return
+    setEditTimerLoading(true)
+    try {
+      const weekPlan: Record<string, { start: string; end: string }> = {}
+      ALL_DAYS.forEach(day => { if (weekSchedule[day].enabled) weekPlan[day] = { start: weekSchedule[day].start, end: weekSchedule[day].end } })
+      await campaignService.updateCallTimer(editingTimerId, { title: customTimerTitle.trim() || undefined, week_plan: weekPlan })
+      toast.success('Timer updated')
+      queryClient.invalidateQueries({ queryKey: ['call-timers-list'] })
+      setSelectedTimerKey(editingTimerId)
+      setEditingTimerId(null)
+    } catch { toast.error('Failed to update timer') }
+    setEditTimerLoading(false)
+  }
 
   const {
     register, handleSubmit, control, watch, reset, setValue,
@@ -345,13 +370,6 @@ export function EditCampaign() {
   // Reset dependent dropdowns when parent changes
   useEffect(() => { setValue('redirect_to_dropdown', null) }, [redirectTo, setValue])
   useEffect(() => { setValue('no_agent_dropdown_action', null) }, [noAgentAction, setValue])
-
-  // Derived flags
-  const showCallRatioDuration = dialMode === 'predictive_dial' || dialMode === 'outbound_ai'
-  const showAutomatedDuration = dialMode === 'predictive_dial'
-  const showAmd               = dialMode === 'predictive_dial' || dialMode === 'outbound_ai'
-  const showNoAgent           = dialMode === 'predictive_dial'
-  const showRedirectTo        = dialMode === 'outbound_ai'
 
   // Dropdown queries
   const { data: campaignTypesData } = useQuery({ queryKey: ['campaign-types'], queryFn: () => campaignService.getTypes() })
@@ -420,14 +438,6 @@ export function EditCampaign() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? (callTimersData as any).data.data.data
     : []
-
-  // Review tab: fetch lists attached to this campaign
-  const { data: listsData } = useQuery({
-    queryKey: ['campaign-lists-review', campaignId],
-    queryFn: () => listService.listByCampaign(campaignId, { page: 1, limit: 100, search: '', filters: {} }),
-    enabled: Boolean(campaignId) && activeStep === 'review',
-    staleTime: 0,
-  })
 
   // Populate form from API
   useEffect(() => {
@@ -552,7 +562,7 @@ export function EditCampaign() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] })
       toast.success('Campaign updated')
-      setActiveStep('lists')
+      navigate(`/campaigns/${campaignId}/attach-leads`)
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -563,211 +573,247 @@ export function EditCampaign() {
   if (loadingCampaign) return <PageLoader />
 
   const isPending = isSubmitting || updateMutation.isPending
-  const callRatioOptions = dialMode === 'predictive_dial' ? PREDICTIVE_CALL_RATIO : OUTBOUND_CALL_RATIO
-  const durationOptions  = dialMode === 'predictive_dial' ? PREDICTIVE_DURATION   : OUTBOUND_DURATION
 
-  const STEPS: Array<{ key: StepKey; num: number; label: string; sub: string }> = [
-    { key: 'details', num: 1, label: 'Details', sub: 'Basic settings & configuration' },
-    { key: 'lists', num: 2, label: 'Manage Lists', sub: 'Add lead lists to campaign' },
-    { key: 'review', num: 3, label: 'Review', sub: 'Verify & launch campaign' },
-  ]
+  const onSubmit = (data: EditCampaignFormValues) => {
+    setFormErrorCount(0)
+    updateMutation.mutate(data)
+  }
+
+  const onFormError = (errs: Record<string, unknown>) => {
+    const keys = Object.keys(errs)
+    setFormErrorCount(keys.length)
+    scrollToFirstError(keys, formScrollRef.current)
+  }
 
   // ─────────────────────────────────────────────
   //  Render
   // ─────────────────────────────────────────────
   return (
-    <div className="w-full animate-fadeIn -mx-5 -mt-3" style={{ minHeight: 'calc(100vh - 70px)' }}>
-      {/* ── Compact Header Bar ── */}
-      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
+    <div className="-mx-5 -mt-5 flex flex-col animate-fadeIn" style={{ height: 'calc(100vh - 70px)' }}>
+      <style>{`
+        .cpn-fi{width:100%;height:36px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+        .cpn-fi:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+        .cpn-fi::placeholder{color:#94a3b8}
+        .cpn-fi:disabled{opacity:.45;cursor:not-allowed}
+        select.cpn-fi{appearance:none;cursor:pointer;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:13px}
+        .cpn-reveal{animation:cpnReveal .25s ease-out}
+        @keyframes cpnReveal{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+        .cpn-toggle{display:inline-flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px}
+        .cpn-toggle button{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;color:#64748b;border:none;cursor:pointer;transition:all .15s;background:transparent;white-space:nowrap}
+        .cpn-toggle button.active{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+        .cpn-toggle button:hover:not(.active){color:#475569}
+        .cpn-g3{display:grid;grid-template-columns:repeat(1,1fr);gap:12px 16px}
+        @media(min-width:640px){.cpn-g3{grid-template-columns:repeat(2,1fr)}}
+        @media(min-width:1024px){.cpn-g3{grid-template-columns:repeat(3,1fr)}}
+        .cpn-g4{display:grid;grid-template-columns:repeat(1,1fr);gap:12px 16px}
+        @media(min-width:640px){.cpn-g4{grid-template-columns:repeat(2,1fr)}}
+        @media(min-width:1024px){.cpn-g4{grid-template-columns:repeat(4,1fr)}}
+      `}</style>
+
+      {/* Hidden fields */}
+      <input type="hidden" {...register('campaign_id', { valueAsNumber: true })} />
+      <input type="hidden" {...register('hopper_mode')} />
+      <input type="hidden" {...register('max_lead_temp')} />
+      <input type="hidden" {...register('min_lead_temp')} />
+      <input type="hidden" {...register('percentage_inc_dec')} />
+      <input type="hidden" {...register('call_metric')} />
+      <input type="hidden" {...register('api')} />
+      <input type="hidden" {...register('crm_type')} />
+      <input type="hidden" {...register('voip_configuration_id')} />
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0">
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => navigate('/campaigns')}
             className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50 transition-all">
             <ArrowLeft size={15} />
           </button>
-          <div>
-            <h1 className="text-sm font-semibold text-slate-800 leading-tight">Edit Campaign</h1>
-            <p className="text-[11px] text-slate-400 mt-0.5">Campaign #{campaignId}</p>
-          </div>
+          <h1 className="text-[15px] font-semibold text-slate-800">Edit Campaign</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate('/campaigns')}
+            className="text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors hidden sm:block">Cancel</button>
+          <button type="submit" form="edit-campaign-form" disabled={isPending}
+            className="px-5 py-2 text-xs font-semibold text-white rounded-lg flex items-center gap-2 disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow: '0 2px 8px rgba(37,99,235,.3)' }}>
+            {isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {isPending ? 'Saving…' : 'Save Campaign'}
+          </button>
         </div>
       </div>
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #bfdbfe, #3b82f6)' }} />
 
-      <div className="px-5 py-5 space-y-5">
+      {/* Form */}
+      <form id="edit-campaign-form" onSubmit={handleSubmit(onSubmit, onFormError)} noValidate className="flex-1 overflow-hidden">
+        <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-0">
 
-      {/* ── Premium Step Tabs ── */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="flex divide-x divide-slate-100">
-          {STEPS.map(step => (
-            <button key={step.key} type="button" onClick={() => setActiveStep(step.key)}
-              className={cn(
-                'flex-1 relative px-5 py-4 text-left transition-all',
-                activeStep === step.key
-                  ? 'bg-gradient-to-b from-indigo-50/60 to-white'
-                  : 'hover:bg-slate-50/50',
-              )}>
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  'w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition-all',
-                  activeStep === step.key
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                    : 'bg-slate-100 text-slate-400',
-                )}>{step.num}</div>
-                <div>
-                  <p className={cn('text-sm font-semibold', activeStep === step.key ? 'text-slate-900' : 'text-slate-500')}>{step.label}</p>
-                  <p className={cn('text-[11px]', activeStep === step.key ? 'text-slate-400' : 'text-slate-300')}>{step.sub}</p>
+          {/* -- LEFT: Main form fields -- */}
+          <div ref={formScrollRef} className="overflow-y-auto scroll-smooth border-r border-slate-200 bg-white">
+            <div className="p-5">
+
+              {formErrorCount > 0 && (
+                <div className="cpn-reveal mb-4" style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                  Please fix <strong>{formErrorCount}</strong> error{formErrorCount > 1 ? 's' : ''} before saving.
                 </div>
-              </div>
-              {activeStep === step.key && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
-            </button>
-          ))}
-        </div>
-      </div>
+              )}
 
-      {/* ═══ TAB 1: Campaign Details Form ═══ */}
-      {activeStep === 'details' && (
-        <form id="edit-campaign-form" onSubmit={handleSubmit(
-          d => updateMutation.mutate(d),
-          (errs) => {
-            const msgs = Object.values(errs).map(e => e?.message).filter(Boolean)
-            toast.error((msgs[0] as string) || 'Please fix the highlighted fields before saving')
-          }
-        )} noValidate>
-          <input type="hidden" {...register('campaign_id', { valueAsNumber: true })} />
-
-          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-
-            <section>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Campaign Name <span className="text-red-400">*</span></label>
-                    <input {...register('title')} className={cn('input', errors.title && 'border-red-400')}
-                      placeholder="e.g. Summer Sales 2025" />
+              {/* === Section: Campaign Details === */}
+              <section>
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                    Campaign Details
+                  </h3>
+                  <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                </div>
+                <div className="cpn-g4">
+                  <div data-field-key="title">
+                    <label style={LBL}>Campaign Name <span className="text-red-400">*</span></label>
+                    <input {...register('title')} className={cn('cpn-fi', errors.title && '!border-red-400')} placeholder="e.g. Summer Sales 2026" />
                     <FieldError message={errors.title?.message} />
                   </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Description</label>
-                    <input {...register('description')} className="input" placeholder="Optional description" />
-                  </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Status</label>
-                    <Controller name="status" control={control}
-                      render={({ field }) => <StatusSelector value={field.value} onChange={field.onChange} />} />
-                  </div>
-                </div>
-            </section>
-
-            <section>
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Dial Mode <span className="text-red-400">*</span></label>
-                    <select {...register('dial_mode')} className={cn('input', errors.dial_mode && 'border-red-400')}>
-                      <option value="">— Select Mode —</option>
+                  <div data-field-key="dial_mode">
+                    <label style={LBL}>Dial Mode <span className="text-red-400">*</span></label>
+                    <select {...register('dial_mode')} className={cn('cpn-fi', errors.dial_mode && '!border-red-400')}>
+                      <option value="">Select Mode</option>
                       {dialModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                     <FieldError message={errors.dial_mode?.message} />
                   </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
-                      Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}
-                    </label>
-                    <select {...register('group_id')} className={cn('input', errors.group_id && 'border-red-400')}>
-                      <option value="">— None —</option>
+                  <div data-field-key="group_id">
+                    <label style={LBL}>Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}</label>
+                    <select {...register('group_id')} className={cn('cpn-fi', errors.group_id && '!border-red-400')}>
+                      <option value="">None</option>
                       {groups.map(g => <option key={g.id} value={g.id}>{g.group_name ?? g.title}</option>)}
                     </select>
                     <FieldError message={errors.group_id?.message as string} />
                   </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Hopper Mode</label>
-                    <select {...register('hopper_mode', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
-                      <option value="1">Linear</option>
-                      <option value="2">Random</option>
+                  <div>
+                    <label style={LBL}>Send Email</label>
+                    <select {...register('email', { valueAsNumber: true })} className="cpn-fi">
+                      <option value={0}>Off</option><option value={1}>User Email</option><option value={2}>Campaign Email</option><option value={3}>System Email</option>
                     </select>
                   </div>
                 </div>
+              </section>
 
-                {showCallRatioDuration && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3 pt-3">
-                    <div className="form-group mb-0">
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{dialMode === 'predictive_dial' ? 'Call Ratio' : 'Simultaneous Calls'}</label>
-                      <select {...register('call_ratio')} className="input">
-                        <option value="">— Select —</option>
-                        {callRatioOptions.map(v => <option key={v} value={v}>{v}</option>)}
+              {/* === Section: Predictive Dial Settings === */}
+              {dialMode === 'predictive_dial' && (
+                <section className="cpn-reveal mt-6">
+                  <div style={{ marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                      Predictive Dial Settings
+                    </h3>
+                    <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                  </div>
+                  <div className="cpn-g3">
+                    <div>
+                      <label style={LBL}>Call Ratio</label>
+                      <select {...register('call_ratio')} className="cpn-fi">
+                        <option value="">Select</option>
+                        {PREDICTIVE_CALL_RATIO.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
-                    <div className="form-group mb-0">
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{dialMode === 'predictive_dial' ? 'Duration (sec)' : 'Duration'}</label>
-                      <select {...register('duration')} className="input">
-                        <option value="">— Select —</option>
-                        {durationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    <div>
+                      <label style={LBL}>Duration (sec)</label>
+                      <select {...register('duration')} className="cpn-fi">
+                        <option value="">Select</option>
+                        {PREDICTIVE_DURATION.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </div>
-                    {showAutomatedDuration ? (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Automated Duration</label>
-                        <select {...register('automated_duration')} className="input">
-                          <option value="0">No</option>
-                          <option value="1">Yes</option>
-                        </select>
-                      </div>
-                    ) : showRedirectTo ? (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Redirect To</label>
-                        <select {...register('redirect_to')} className="input">
-                          <option value="">— None —</option>
-                          <option value="1">Audio Message</option>
-                          <option value="2">Voice Template</option>
-                          <option value="3">Extension</option>
-                          <option value="4">Ring Group</option>
-                          <option value="5">IVR</option>
-                          <option value="6">Voice AI</option>
-                        </select>
-                      </div>
-                    ) : null}
-                    {showAmd && (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>AMD Detection</label>
-                        <select {...register('amd')} className="input">
-                          <option value="0">Off</option>
-                          <option value="1">On</option>
+                    <div>
+                      <label style={LBL}>No Agent Available</label>
+                      <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="cpn-fi">
+                        <option value="">Select</option>
+                        <option value="1">Hang Up</option><option value="2">Voice Drop</option><option value="3">Inbound IVR</option>
+                        <option value="4">Extension</option><option value="5">Assistant AI</option>
+                      </select>
+                    </div>
+                    {noAgentAction && noAgentAction !== 1 && (
+                      <div className="cpn-reveal">
+                        <label style={LBL}>{noAgentAction === 2 ? 'Voice Drop Target' : noAgentAction === 3 ? 'IVR Menu' : noAgentAction === 4 ? 'Extension' : 'Assistant'}</label>
+                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                          <option value="">Select</option>
+                          {noAgentAction === 2 && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
+                          {noAgentAction === 3 && ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
+                          {noAgentAction === 4 && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
+                          {noAgentAction === 5 && <option value="123">Assistant</option>}
                         </select>
                       </div>
                     )}
-                    {showAmd && amd === '1' && (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>AMD Drop Action</label>
-                        <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
-                          <option value="">— Select —</option>
-                          <option value="1">Hang Up</option>
-                          <option value="2">Audio Message</option>
-                          <option value="3">Voice Template</option>
+                    {amd === '1' && (
+                      <div className="cpn-reveal">
+                        <label style={LBL}>AMD Drop Action</label>
+                        <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="cpn-fi">
+                          <option value="">Select</option>
+                          <option value="1">Hang Up</option><option value="2">Audio Message</option><option value="3">Voice Template</option>
                         </select>
                       </div>
                     )}
-                    {showAmd && amd === '1' && amdDropAction === 2 && (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Audio Message</label>
-                        <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="">— Select —</option>
+                    {amd === '1' && amdDropAction === 2 && (
+                      <div className="cpn-reveal">
+                        <label style={LBL}>Audio Message</label>
+                        <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                          <option value="">Select</option>
                           {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
                         </select>
                       </div>
                     )}
-                    {showAmd && amd === '1' && amdDropAction === 3 && (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Voice Template</label>
-                        <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="">— Select —</option>
+                    {amd === '1' && amdDropAction === 3 && (
+                      <div className="cpn-reveal">
+                        <label style={LBL}>Voice Template</label>
+                        <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                          <option value="">Select</option>
                           {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
                         </select>
                       </div>
                     )}
-                    {showRedirectTo && redirectTo !== '' && (
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
+                  </div>
+                </section>
+              )}
+
+              {/* === Section: Outbound AI Settings === */}
+              {dialMode === 'outbound_ai' && (
+                <section className="cpn-reveal mt-6">
+                  <div style={{ marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                      Outbound AI Settings
+                    </h3>
+                    <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                  </div>
+                  {/* All outbound fields in single row */}
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                    {/* Col: Calls & Duration (shared heading, two inputs) */}
+                    <div style={{ flex: '1 1 0' }}>
+                      <label style={LBL}>Calls &amp; Duration</label>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <select {...register('call_ratio')} className="cpn-fi" title="Simultaneous Calls">
+                          <option value="">Calls</option>
+                          {OUTBOUND_CALL_RATIO.map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                        <select {...register('duration')} className="cpn-fi" title="Ring Duration">
+                          <option value="">Duration</option>
+                          {OUTBOUND_DURATION.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Col: Redirect To */}
+                    <div style={{ flex: '1 1 0' }}>
+                      <label style={LBL}>Redirect To</label>
+                      <select {...register('redirect_to')} className="cpn-fi">
+                        <option value="">None</option>
+                        <option value="1">Audio Message</option><option value="2">Voice Template</option><option value="3">Extension</option>
+                        <option value="4">Ring Group</option><option value="5">IVR</option><option value="6">Voice AI</option>
+                      </select>
+                    </div>
+                    {/* Col: Target (dynamic) */}
+                    {redirectTo !== '' && (
+                      <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                        <label style={LBL}>
                           {redirectTo === '1' ? 'Audio Message' : redirectTo === '2' ? 'Voice Template' : redirectTo === '3' ? 'Extension' : redirectTo === '4' ? 'Ring Group' : redirectTo === '5' ? 'IVR' : 'Voice AI Prompt'}
                         </label>
-                        <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="">— Select —</option>
+                        <select {...register('redirect_to_dropdown', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                          <option value="">Select</option>
                           {redirectTo === '1' && audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
                           {redirectTo === '2' && voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
                           {redirectTo === '3' && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
@@ -777,421 +823,286 @@ export function EditCampaign() {
                         </select>
                       </div>
                     )}
-                  </div>
-                )}
-
-                {showNoAgent && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3 pt-3">
-                    <div className="form-group mb-0">
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>No Agent Available</label>
-                      <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="input">
-                        <option value="">— Select —</option>
-                        <option value="1">Hang Up</option>
-                        <option value="2">Voice Drop</option>
-                        <option value="3">Inbound IVR</option>
-                        <option value="4">Extension</option>
-                        <option value="5">Assistant AI</option>
-                      </select>
-                    </div>
-                    {noAgentAction === 2 && (
-                      <div className="form-group mb-0 col-span-2">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Voice Drop Target</label>
-                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="">— Select Extension —</option>
-                          {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
+                    {/* Col: AMD Drop Action (dynamic) */}
+                    {amd === '1' && (
+                      <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                        <label style={LBL}>AMD Drop Action</label>
+                        <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="cpn-fi">
+                          <option value="">Select</option>
+                          <option value="1">Hang Up</option><option value="2">Audio Message</option><option value="3">Voice Template</option>
                         </select>
                       </div>
                     )}
-                    {noAgentAction === 3 && (
-                      <div className="form-group mb-0 col-span-2">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Inbound IVR</label>
-                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="">— Select IVR —</option>
-                          {ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
+                    {/* Col: AMD sub-option (dynamic) */}
+                    {amd === '1' && amdDropAction === 2 && (
+                      <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                        <label style={LBL}>Audio Message</label>
+                        <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                          <option value="">Select</option>
+                          {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
                         </select>
                       </div>
                     )}
-                    {noAgentAction === 4 && (
-                      <div className="form-group mb-0 col-span-2">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Extension</label>
-                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="">— Select Extension —</option>
-                          {extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
-                        </select>
-                      </div>
-                    )}
-                    {noAgentAction === 5 && (
-                      <div className="form-group mb-0 col-span-2">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Assistant</label>
-                        <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="input">
-                          <option value="123">Assistant</option>
+                    {amd === '1' && amdDropAction === 3 && (
+                      <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                        <label style={LBL}>Voice Template</label>
+                        <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                          <option value="">Select</option>
+                          {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
                         </select>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            </section>
+                </section>
+              )}
 
-            <section>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Caller ID Type <span className="text-red-400">*</span></label>
-                    <select {...register('caller_id')} className="input">
+              {/* === Section: Caller ID & Settings === */}
+              <section className="mt-6">
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                    Caller ID &amp; Settings
+                  </h3>
+                  <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                </div>
+                {/* Row 1: Caller ID + DID + Country Code */}
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <div style={{ flex: '1 1 0' }}>
+                    <label style={LBL}>Caller ID Type</label>
+                    <select {...register('caller_id')} className="cpn-fi">
                       <option value="area_code">Area Code</option>
-                      <option value="area_code_random">Area Code &amp; Randomizer</option>
-                      <option value="custom">Custom</option>
+                      <option value="area_code_random">Area Code + Random</option>
+                      <option value="custom">Custom DID</option>
                     </select>
                   </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Custom DID {callerIdType === 'custom' && <span className="text-red-400">*</span>}</label>
-                    <select {...register('custom_caller_id')} disabled={callerIdType !== 'custom'}
-                      className={cn('input', callerIdType !== 'custom' && 'opacity-50', errors.custom_caller_id && 'border-red-400')}>
-                      <option value="">— Select DID —</option>
-                      {dids.map(d => <option key={d.cli} value={d.cli}>{d.cli}{d.cnam ? ` — ${d.cnam}` : ''}</option>)}
-                    </select>
-                    <FieldError message={errors.custom_caller_id?.message} />
-                  </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Country Code</label>
-                    <select {...register('country_code')} className="input">
-                      <option value="">— Select Country —</option>
+                  {callerIdType === 'custom' && (
+                    <div style={{ flex: '1 1 0' }} className="cpn-reveal" data-field-key="custom_caller_id">
+                      <label style={LBL}>Custom DID <span className="text-red-400">*</span></label>
+                      <select {...register('custom_caller_id')} className={cn('cpn-fi', errors.custom_caller_id && '!border-red-400')}>
+                        <option value="">Select DID</option>
+                        {dids.map(d => <option key={d.cli} value={d.cli}>{d.cli}{d.cnam ? ` — ${d.cnam}` : ''}</option>)}
+                      </select>
+                      <FieldError message={errors.custom_caller_id?.message} />
+                    </div>
+                  )}
+                  <div style={{ flex: '1 1 0' }}>
+                    <label style={LBL}>Country Code</label>
+                    <select {...register('country_code')} className="cpn-fi">
+                      <option value="">Default</option>
                       {countries.map(c => <option key={c.phonecode} value={c.phonecode}>{c.name} (+{c.phonecode})</option>)}
                     </select>
                   </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Call Transfer</label>
-                    <select {...register('call_transfer', { valueAsNumber: true })} className="input">
-                      <option value="0">No</option>
-                      <option value="1">Yes</option>
-                    </select>
-                  </div>
                 </div>
-            </section>
-
-            <section>
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
-                  <div className="form-group mb-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Call Timer</label>
-                      <button type="button"
-                        onClick={() => { setSelectedTimerKey('custom'); setExistingTimerId(null) }}
-                        className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md transition-colors">
-                        + Custom
-                      </button>
-                    </div>
-                    <select
-                      className="input"
-                      value={selectedTimerKey === 'none' || selectedTimerKey === 'custom' ? '' : String(selectedTimerKey)}
-                      onChange={e => {
-                        const v = e.target.value
-                        if (v === '') setSelectedTimerKey('none')
-                        else setSelectedTimerKey(Number(v))
-                      }}
-                    >
-                      <option value="">No Limit (calls anytime)</option>
-                      {callTimers.map(t => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
-                    </select>
-                  </div>
-                  {selectedTimerKey !== 'none' && selectedTimerKey !== 'custom' && (
-                    <div className="form-group mb-0">
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Timezone</label>
-                      <select {...register('timezone')} className="input">
-                        <option value="America/New_York">New York (ET)</option>
-                        <option value="America/Chicago">Chicago (CT)</option>
-                        <option value="America/Denver">Denver (MT)</option>
-                        <option value="America/Los_Angeles">Los Angeles (PT)</option>
-                        <option value="America/Phoenix">Phoenix (AZ)</option>
-                        <option value="America/Anchorage">Anchorage (AK)</option>
-                        <option value="Pacific/Honolulu">Honolulu (HI)</option>
-                        <option value="UTC">UTC</option>
-                      </select>
-                    </div>
-                  )}
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Time-Based Calling</label>
-                    <select {...register('time_based_calling', { valueAsNumber: true })} className="input">
-                      <option value="0">No</option>
-                      <option value="1">Yes</option>
-                    </select>
-                  </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Dispositions <span className="text-red-400">*</span></label>
+                {/* Row 2: Dispositions + Description */}
+                <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+                  <div style={{ flex: '1 1 0' }}>
+                    <label style={LBL}>Dispositions</label>
                     {dispositionsLoading ? (
-                      <div className="flex items-center gap-2 text-xs text-slate-400 h-[38px]">
-                        <div className="w-3.5 h-3.5 border border-slate-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
-                        Loading dispositions...
+                      <div className="flex items-center gap-2 text-xs text-slate-400 h-[36px]">
+                        <div className="w-3.5 h-3.5 border border-slate-200 border-t-blue-500 rounded-full animate-spin flex-shrink-0" /> Loading…
                       </div>
                     ) : (
                       <Controller name="disposition_id" control={control}
-                        render={({ field }) => (
-                          <DispositionMultiSelect
-                            dispositions={dispositions}
-                            selected={field.value ?? []}
-                            onChange={field.onChange}
-                          />
-                        )}
+                        render={({ field }) => <DispositionMultiSelect dispositions={dispositions} selected={field.value ?? []} onChange={field.onChange} />}
                       />
                     )}
                   </div>
+                  <div style={{ flex: '1 1 0' }}>
+                    <label style={LBL}>Description <span className="text-slate-300 font-normal normal-case">optional</span></label>
+                    <input {...register('description')} className="cpn-fi" placeholder="Brief campaign description" />
+                  </div>
                 </div>
-                {selectedTimerKey === 'custom' && (
-                  <div className="border border-sky-100 bg-sky-50/40 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-sky-700">New Custom Timer</span>
+                {/* Call Timer */}
+                <div style={{ marginTop: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: selectedTimerKey !== 'none' ? 12 : 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#334155', letterSpacing: 0.3 }}>Call Timer</span>
+                    <div style={{ display: 'inline-flex', background: '#fff', borderRadius: 7, padding: 2, gap: 2, border: '1px solid #e2e8f0' }}>
                       <button type="button" onClick={() => setSelectedTimerKey('none')}
-                        className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors rounded">
-                        <X size={13} />
+                        style={{ padding: '4px 12px', borderRadius: 5, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all .15s',
+                          background: selectedTimerKey === 'none' ? '#2563eb' : 'transparent',
+                          color: selectedTimerKey === 'none' ? '#fff' : '#64748b' }}>
+                        No Limit
+                      </button>
+                      {callTimers.length > 0 && (
+                        <button type="button" onClick={() => setSelectedTimerKey(callTimers[0]?.id ?? 'none')}
+                          style={{ padding: '4px 12px', borderRadius: 5, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all .15s',
+                            background: typeof selectedTimerKey === 'number' ? '#2563eb' : 'transparent',
+                            color: typeof selectedTimerKey === 'number' ? '#fff' : '#64748b' }}>
+                          Saved
+                        </button>
+                      )}
+                      <button type="button" onClick={() => setSelectedTimerKey('custom')}
+                        style={{ padding: '4px 12px', borderRadius: 5, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all .15s',
+                          background: selectedTimerKey === 'custom' ? '#2563eb' : 'transparent',
+                          color: selectedTimerKey === 'custom' ? '#fff' : '#64748b' }}>
+                        Custom
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Timer Name</label>
-                        <input className="input" placeholder="e.g. Business Hours"
-                          value={customTimerTitle} onChange={e => setCustomTimerTitle(e.target.value)} />
-                      </div>
-                      <div className="form-group mb-0">
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Timezone</label>
-                        <select {...register('timezone')} className="input">
-                          <option value="America/New_York">New York (ET)</option>
-                          <option value="America/Chicago">Chicago (CT)</option>
-                          <option value="America/Denver">Denver (MT)</option>
-                          <option value="America/Los_Angeles">Los Angeles (PT)</option>
-                          <option value="America/Phoenix">Phoenix (AZ)</option>
-                          <option value="America/Anchorage">Anchorage (AK)</option>
-                          <option value="Pacific/Honolulu">Honolulu (HI)</option>
-                          <option value="UTC">UTC</option>
+                  </div>
+
+                  {/* Saved timer */}
+                  {typeof selectedTimerKey === 'number' && (
+                    <div className="cpn-reveal" style={{ display: 'flex', gap: 16, alignItems: 'flex-end' }}>
+                      <div style={{ flex: '1 1 0' }}>
+                        <label style={LBL}>Select Timer</label>
+                        <select className="cpn-fi" value={String(selectedTimerKey)} onChange={e => setSelectedTimerKey(Number(e.target.value))}>
+                          {callTimers.map(t => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
                         </select>
                       </div>
+                      <div style={{ flex: '1 1 0' }}>
+                        <label style={LBL}>Timezone</label>
+                        <select {...register('timezone')} className="cpn-fi">
+                          <option value="America/New_York">New York (ET)</option><option value="America/Chicago">Chicago (CT)</option>
+                          <option value="America/Denver">Denver (MT)</option><option value="America/Los_Angeles">Los Angeles (PT)</option>
+                          <option value="America/Phoenix">Phoenix (AZ)</option><option value="America/Anchorage">Anchorage (AK)</option>
+                          <option value="Pacific/Honolulu">Honolulu (HI)</option><option value="UTC">UTC</option>
+                        </select>
+                      </div>
+                      <button type="button" disabled={editTimerLoading} onClick={() => handleEditSavedTimer(selectedTimerKey)}
+                        style={{ height: 36, padding: '0 14px', borderRadius: 8, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                        {editTimerLoading ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />} Edit
+                      </button>
                     </div>
-                    <WeekScheduleGrid schedule={weekSchedule} onChange={setWeekSchedule} />
-                  </div>
-                )}
-              </div>
-            </section>
+                  )}
 
-            <section>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-3">
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send Email</label>
-                    <select {...register('email', { valueAsNumber: true })} className="input">
-                      <option value="0">No</option>
-                      <option value="1">User Email</option>
-                      <option value="2">Campaign Email</option>
-                      <option value="3">System Email</option>
-                    </select>
-                  </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send SMS</label>
-                    <select {...register('sms', { valueAsNumber: true })} className="input">
-                      <option value="0">No</option>
-                      <option value="1">User Phone</option>
-                    </select>
-                  </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send to CRM</label>
-                    <select {...register('send_crm', { valueAsNumber: true })} className="input">
-                      <option value="0">No</option>
-                      <option value="1">Yes</option>
-                    </select>
-                  </div>
-                  <div className="form-group mb-0">
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>Send Report</label>
-                    <select {...register('send_report', { valueAsNumber: true })} className="input">
-                      <option value="0">No</option>
-                      <option value="1">Yes</option>
-                    </select>
-                  </div>
+                  {/* Custom / Edit timer */}
+                  {selectedTimerKey === 'custom' && (
+                    <div className="cpn-reveal" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {editingTimerId && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#2563eb' }}>Editing saved timer</span>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button type="button" onClick={() => { setEditingTimerId(null); setSelectedTimerKey(editingTimerId); setCustomTimerTitle('') }}
+                              style={{ fontSize: 11, fontWeight: 600, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                            <button type="button" disabled={editTimerLoading} onClick={handleSaveEditedTimer}
+                              style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#2563eb', border: 'none', borderRadius: 5, padding: '4px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              {editTimerLoading ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save Timer
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ flex: '1 1 0' }}>
+                          <label style={LBL}>Timer Name</label>
+                          <input className="cpn-fi" placeholder="e.g. Business Hours" value={customTimerTitle} onChange={e => setCustomTimerTitle(e.target.value)} />
+                        </div>
+                        <div style={{ flex: '1 1 0' }}>
+                          <label style={LBL}>Timezone</label>
+                          <select {...register('timezone')} className="cpn-fi">
+                            <option value="America/New_York">New York (ET)</option><option value="America/Chicago">Chicago (CT)</option>
+                            <option value="America/Denver">Denver (MT)</option><option value="America/Los_Angeles">Los Angeles (PT)</option>
+                            <option value="America/Phoenix">Phoenix (AZ)</option><option value="America/Anchorage">Anchorage (AK)</option>
+                            <option value="Pacific/Honolulu">Honolulu (HI)</option><option value="UTC">UTC</option>
+                          </select>
+                        </div>
+                      </div>
+                      <WeekScheduleGrid schedule={weekSchedule} onChange={setWeekSchedule} />
+                    </div>
+                  )}
                 </div>
-            </section>
+              </section>
 
+            </div>
           </div>
 
-          {/* Bottom actions for Tab 1 */}
-          <div className="flex justify-end gap-3 pt-6 pb-2">
-            <button type="button" onClick={() => navigate('/campaigns')} className="btn-outline px-6 py-2.5">Cancel</button>
-            <button type="submit" disabled={isPending}
-              className="btn-primary px-6 flex items-center gap-2">
-              {isPending ? (
-                <><Save size={15} /> Saving...</>
-              ) : (
-                <>Save & Continue <ArrowRight size={15} /></>
+          {/* -- RIGHT: Toggle/Status sidebar -- */}
+          <div style={{ background: '#f8fafc', borderLeft: '1px solid #e2e8f0' }}>
+            <div className="p-4 space-y-3">
+              <div>
+                <label style={LBL}>Status</label>
+                <Controller name="status" control={control}
+                  render={({ field }) => (
+                    <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                      <button type="button" className={cn(field.value === 1 && 'active')} style={{ flex: 1, ...(field.value === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>Active</button>
+                      <button type="button" className={cn(field.value === 0 && 'active')} style={{ flex: 1, ...(field.value === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Inactive</button>
+                    </div>
+                  )}
+                />
+              </div>
+              <div>
+                <label style={LBL}>Call Transfer</label>
+                <Controller name="call_transfer" control={control}
+                  render={({ field }) => (
+                    <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                      <button type="button" className={cn(field.value === 0 && 'active')} style={{ flex: 1, ...(field.value === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>No</button>
+                      <button type="button" className={cn(field.value === 1 && 'active')} style={{ flex: 1, ...(field.value === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>Yes</button>
+                    </div>
+                  )}
+                />
+              </div>
+              {dialMode === 'predictive_dial' && (
+                <div className="cpn-reveal">
+                  <label style={LBL}>Automated Duration</label>
+                  <Controller name="automated_duration" control={control}
+                    render={({ field }) => (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(field.value === '0' && 'active')} style={{ flex: 1, ...(field.value === '0' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('0')}>No</button>
+                        <button type="button" className={cn(field.value === '1' && 'active')} style={{ flex: 1, ...(field.value === '1' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('1')}>Yes</button>
+                      </div>
+                    )}
+                  />
+                </div>
               )}
-            </button>
+              {(dialMode === 'predictive_dial' || dialMode === 'outbound_ai') && (
+                <div className="cpn-reveal">
+                  <label style={LBL}>AMD Detection</label>
+                  <Controller name="amd" control={control}
+                    render={({ field }) => (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(field.value === '0' && 'active')} style={{ flex: 1, ...(field.value === '0' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('0')}>Off</button>
+                        <button type="button" className={cn(field.value === '1' && 'active')} style={{ flex: 1, ...(field.value === '1' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('1')}>On</button>
+                      </div>
+                    )}
+                  />
+                </div>
+              )}
+              <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />
+              <div>
+                <label style={LBL}>Send SMS</label>
+                <Controller name="sms" control={control}
+                  render={({ field }) => {
+                    const v = Number(field.value)
+                    return (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Off</button>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>User Phone</button>
+                      </div>
+                    )
+                  }}
+                />
+              </div>
+              <div>
+                <label style={LBL}>Send to CRM</label>
+                <Controller name="send_crm" control={control}
+                  render={({ field }) => {
+                    const v = Number(field.value)
+                    return (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Off</button>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>On</button>
+                      </div>
+                    )
+                  }}
+                />
+              </div>
+              <div>
+                <label style={LBL}>Send Report</label>
+                <Controller name="send_report" control={control}
+                  render={({ field }) => {
+                    const v = Number(field.value)
+                    return (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Off</button>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>On</button>
+                      </div>
+                    )
+                  }}
+                />
+              </div>
+            </div>
           </div>
-        </form>
-      )}
 
-      {/* ═══ TAB 2: Manage Lists ═══ */}
-      {activeStep === 'lists' && (
-        <div className="space-y-4">
-          <CampaignListsSection campaignId={campaignId} />
-          <div className="flex justify-between pt-2 pb-2">
-            <button type="button" onClick={() => setActiveStep('details')} className="btn-outline px-5 flex items-center gap-2">
-              <ArrowLeft size={15} /> Back to Details
-            </button>
-            <button type="button" onClick={() => setActiveStep('review')} className="btn-primary px-6 flex items-center gap-2">
-              Next: Review <ArrowRight size={15} />
-            </button>
-          </div>
         </div>
-      )}
-
-      {/* ═══ TAB 3: Review ═══ */}
-      {activeStep === 'review' && (() => {
-        const c = (campaignData as { data?: { data?: Record<string, unknown> } })?.data?.data ?? {} as Record<string, unknown>
-        const attachedLists = (listsData as { data?: { data?: Array<Record<string, unknown>> } })?.data?.data ?? []
-        const getListName = (row: Record<string, unknown>) => (row.l_title ?? row.title ?? row.list_name ?? `List #${row.list_id ?? row.id}`) as string
-        const getLeadCount = (row: Record<string, unknown>) => Number(row.lead_count ?? row.rowListData ?? 0)
-        const totalLeads = attachedLists.reduce((sum, r) => sum + getLeadCount(r), 0)
-        const dialModeDisplay = c.dial_mode ? String(c.dial_mode).replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()) : '--'
-        const isActive = c.status === 1 || c.status === '1' || c.status === 'active'
-        const callerIdLabel: Record<string, string> = { area_code: 'Area Code', area_code_random: 'Area Code + Randomizer', custom: 'Custom DID' }
-        const emailLabel: Record<string, string> = { '0': 'Disabled', '1': 'User Email', '2': 'Campaign Email', '3': 'System Email' }
-
-        // Resolve dispositions
-        const rawDisps: unknown[] = (c.dispositions ?? c.disposition ?? []) as unknown[]
-        const campaignDispIds = rawDisps.map(d => typeof d === 'object' && d !== null && 'id' in d ? Number((d as {id:number}).id) : Number(d))
-        const resolvedDispositions = dispositions.filter(d => campaignDispIds.includes(d.id))
-
-        return (
-          <div className="space-y-3">
-            {/* Campaign Identity Card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-5 flex items-start gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-md">
-                  <Radio size={22} className="text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-lg font-bold text-slate-900">{(c.title as string) || 'Untitled Campaign'}</h2>
-                    <Badge variant={isActive ? 'green' : 'gray'}>{isActive ? 'Active' : 'Inactive'}</Badge>
-                  </div>
-                  {c.description ? <p className="text-sm text-slate-500 mt-1">{String(c.description)}</p> : null}
-                  <div className="flex items-center gap-4 mt-3 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><List size={12} className="text-emerald-500" />{attachedLists.length} list{attachedLists.length !== 1 ? 's' : ''}</span>
-                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><Users size={12} className="text-blue-500" />{totalLeads.toLocaleString()} total leads</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Configuration Grid */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-0 gap-y-1">
-                <div className="md:pr-6">
-                  <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Zap size={10} /> Dialing Setup</p>
-                  <div className="divide-y divide-slate-100">
-                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Dial Mode</span><span className="text-xs font-semibold text-slate-800 text-right">{dialModeDisplay}</span></div>
-                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Hopper Mode</span><span className="text-xs font-semibold text-slate-800 text-right">{Number(c.hopper_mode) === 2 ? 'Random' : 'Linear'}</span></div>
-                  </div>
-                </div>
-                <div className="md:border-l md:border-slate-100 md:px-6">
-                  <p className="text-[10px] font-bold text-sky-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Phone size={10} /> Caller ID & Transfer</p>
-                  <div className="divide-y divide-slate-100">
-                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Caller ID</span><span className="text-xs font-semibold text-slate-800 text-right">{callerIdLabel[c.caller_id as string ?? ''] ?? '--'}</span></div>
-                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Call Transfer</span><span className="text-xs font-semibold text-slate-800 text-right">{Number(c.call_transfer ?? 0) === 1 ? 'Enabled' : 'Disabled'}</span></div>
-                  </div>
-                </div>
-                <div className="md:border-l md:border-slate-100 md:pl-6">
-                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Clock size={10} /> Schedule & Communication</p>
-                  <div className="divide-y divide-slate-100">
-                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Timezone</span><span className="text-xs font-semibold text-slate-800 text-right">{(c.timezone as string) ?? 'America/New_York'}</span></div>
-                    <div className="flex items-start justify-between py-2.5"><span className="text-xs text-slate-500 font-medium">Email</span><span className="text-xs font-semibold text-slate-800 text-right">{emailLabel[String(c.email ?? '0')] ?? '--'}</span></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Features & Dispositions row */}
-              {(String(c.amd ?? '0') === '1' || Number(c.time_based_calling ?? 0) === 1 || Number(c.sms ?? 0) === 1 || Number(c.send_report ?? 0) === 1 || Number(c.send_crm ?? 0) === 1 || resolvedDispositions.length > 0) && (
-                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-0">
-                  {(String(c.amd ?? '0') === '1' || Number(c.time_based_calling ?? 0) === 1 || Number(c.sms ?? 0) === 1 || Number(c.send_report ?? 0) === 1 || Number(c.send_crm ?? 0) === 1) && (
-                    <div className={cn("pr-5", resolvedDispositions.length > 0 && "md:border-r md:border-slate-100")}>
-                      <p className="text-[10px] font-bold text-slate-700 uppercase tracking-widest mb-2">Features</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {String(c.amd ?? '0') === '1' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />AMD Detection</span>}
-                        {Number(c.time_based_calling ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Time-Based Calling</span>}
-                        {Number(c.sms ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Send SMS</span>}
-                        {Number(c.send_report ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Send Report</span>}
-                        {Number(c.send_crm ?? 0) === 1 && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Send to CRM</span>}
-                      </div>
-                    </div>
-                  )}
-                  {resolvedDispositions.length > 0 && (
-                    <div className="pl-5 max-md:pt-4 max-md:mt-4 max-md:border-t max-md:border-slate-100 max-md:pl-0">
-                      <p className="text-[10px] font-bold text-violet-500 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Tag size={10} /> Dispositions ({resolvedDispositions.length})</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {resolvedDispositions.map(d => (
-                          <span key={d.id} className="inline-flex items-center px-2.5 py-1 bg-violet-50 text-violet-700 text-[11px] font-semibold rounded-lg border border-violet-200">{d.title}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Attached Lists Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-slate-50/80 to-transparent border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: '#3b82f618', color: '#3b82f6' }}>
-                    <List size={15} />
-                  </div>
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Attached Lists</span>
-                </div>
-                <span className="text-xs font-semibold text-slate-500">{attachedLists.length} list{attachedLists.length !== 1 ? 's' : ''} · {totalLeads.toLocaleString()} leads</span>
-              </div>
-              {attachedLists.length === 0 ? (
-                <div className="text-center py-12 px-6">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3"><List size={24} className="text-slate-300" /></div>
-                  <p className="text-sm font-medium text-slate-500">No lists attached</p>
-                  <p className="text-xs text-slate-400 mt-1">Go back to Manage Lists to add lead lists.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead><tr className="border-b border-slate-100">
-                      <th className="px-5 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12">#</th>
-                      <th className="px-5 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">List Name</th>
-                      <th className="px-5 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Leads</th>
-                      <th className="px-5 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                    </tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {attachedLists.map((row, idx) => (
-                        <tr key={(row.list_id ?? row.id) as number} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-5 py-3.5 text-xs font-medium text-slate-400">{idx + 1}</td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm"><List size={13} className="text-white" /></div>
-                              <span className="text-sm font-semibold text-slate-800">{getListName(row)}</span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3.5 text-right"><span className="text-sm font-bold text-slate-700">{getLeadCount(row).toLocaleString()}</span></td>
-                          <td className="px-5 py-3.5 text-center"><Badge variant={(row.is_active as number) === 1 ? 'green' : 'gray'}>{(row.is_active as number) === 1 ? 'Active' : 'Inactive'}</Badge></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot><tr className="bg-slate-50/80 border-t border-slate-200">
-                      <td colSpan={2} className="px-5 py-3 text-xs font-bold text-slate-500 uppercase">Total</td>
-                      <td className="px-5 py-3 text-right text-sm font-bold text-slate-800">{totalLeads.toLocaleString()}</td>
-                      <td />
-                    </tr></tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Actions for Review */}
-            <div className="flex items-center justify-between pt-1 pb-4">
-              <button type="button" onClick={() => setActiveStep('lists')} className="btn-outline px-5 flex items-center gap-2"><ArrowLeft size={15} /> Back to Lists</button>
-              <button type="button" onClick={() => { toast.success('Campaign updated successfully'); navigate('/campaigns') }} className="btn-primary px-6 flex items-center gap-2"><Save size={15} /> Update Campaign</button>
-            </div>
-          </div>
-        )
-      })()}
-      </div>
+      </form>
     </div>
   )
 }

@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   BrainCircuit, Wallet, ArrowRight, Radio, List, BarChart3, FileText,
-  DollarSign, Clock, ArrowLeft,
+  DollarSign, Clock,
 } from 'lucide-react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { smsAiService } from '../../services/smsAi.service'
 import api from '../../api/axios'
 
@@ -34,7 +34,7 @@ interface AiSetting {
 }
 
 export function SmsAiDemo() {
-  const navigate = useNavigate()
+
 
   // Wallet balance
   const { data: walletData, isLoading: walletLoading } = useQuery({
@@ -98,22 +98,10 @@ export function SmsAiDemo() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <button onClick={() => navigate('/dashboard')} className="btn-ghost p-2 rounded-lg mt-0.5">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex-1">
-          <div className="page-header">
-            <div>
-              <h1 className="page-title">SMS AI Dashboard</h1>
-              <p className="page-subtitle">Overview of your AI-powered SMS platform</p>
-            </div>
-            <Link to="/ai/settings" className="btn-outline text-sm">
-              AI Settings <ArrowRight size={14} />
-            </Link>
-          </div>
-        </div>
+      <div className="flex items-center justify-end">
+        <Link to="/ai/settings" className="btn-outline text-sm">
+          AI Settings <ArrowRight size={14} />
+        </Link>
       </div>
 
       {/* Quick Links */}

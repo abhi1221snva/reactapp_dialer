@@ -78,12 +78,7 @@ export function Attendance() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Attendance</h1>
-          <p className="page-subtitle">Track your work hours and breaks</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-slate-600 text-sm font-medium">
           <Calendar size={14} />
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}

@@ -208,11 +208,6 @@ export function AiCoach() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="page-title">AI Coach</h1>
-        <p className="page-subtitle">Analyze call recordings with AI — get transcription, lead scoring, and coaching insights</p>
-      </div>
-
       {/* How it works */}
       <div className="grid grid-cols-3 gap-4">
         {[

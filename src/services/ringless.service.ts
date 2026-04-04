@@ -18,14 +18,14 @@ export const ringlessService = {
     api.post('/ringless/campaign/delete', { campaign_id: id }),
 
   toggle: (id: number, status: number) =>
-    api.post('/ringless/campaign/update-status', { campaign_id: id, status }),
+    api.post('/ringless/campaign/update-status', { listId: id, status: String(status) }),
 
   copy: (id: number) =>
     api.post('/ringless/campaign/copy', { campaign_id: id }),
 
   // Dropdown data
-  getVoiceTemplates: () => api.get('/voice-templete'),
-  getVoipConfigs: () => api.get('/voip-configurations'),
+  getVoiceTemplates: () => api.post('/ringless-ivr', {}),
+  getSipGateways: () => api.get('/sip-gateways'),
   getCountryCodes: () => api.post('/country-list', {}),
 
   // Reports

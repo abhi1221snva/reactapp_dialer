@@ -159,12 +159,7 @@ export function WorkforceAnalytics() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Workforce Analytics</h1>
-          <p className="page-subtitle">Trends, utilization, and agent performance insights</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
           {DAY_OPTIONS.map(o => (
             <button

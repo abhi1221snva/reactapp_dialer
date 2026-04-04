@@ -16,6 +16,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { cn } from '../../utils/cn'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface RecycleRuleItem {
   id: number
@@ -345,6 +346,30 @@ export function RecycleRules() {
   const table = useServerTable({ defaultLimit: 15 })
   const [showCreate, setShowCreate] = useState(false)
   const [editingRule, setEditingRule] = useState<RecycleRuleItem | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search rules\u2026" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => setShowCreate(true)} className="lt-b lt-p">
+            <Plus size={13} /> Add Rule
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['recycle-rules'] })
 
@@ -449,13 +474,6 @@ export function RecycleRules() {
       )}
 
       <div className="space-y-4">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Recycle Rules</h1>
-            <p className="page-subtitle">Configure lead recycling by disposition and schedule</p>
-          </div>
-        </div>
-
         <ServerDataTable<RecycleRuleItem>
           queryKey={['recycle-rules']}
           queryFn={(params) => recycleRuleService.list(params)}
@@ -482,11 +500,7 @@ export function RecycleRules() {
           page={table.page}
           limit={table.limit}
           onPageChange={table.setPage}
-          headerActions={
-            <button onClick={() => setShowCreate(true)} className="btn-primary">
-              <Plus size={15} /> Add Rule
-            </button>
-          }
+          hideToolbar
         />
       </div>
     </>

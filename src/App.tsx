@@ -7,6 +7,7 @@ import { usePresence } from './hooks/usePresence'
 import { AuthLayout } from './layouts/AuthLayout'
 import { AppLayout } from './layouts/AppLayout'
 import { CrmLayout } from './layouts/CrmLayout'
+import { DialerLayout } from './layouts/DialerLayout'
 
 // Auth pages
 import { Login } from './pages/auth/Login'
@@ -76,6 +77,12 @@ import { DailyReport } from './pages/reports/DailyReport'
 import { LiveCalls } from './pages/reports/LiveCalls'
 import { Profile } from './pages/profile/Profile'
 import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
+import { CreateRingless } from './modules/ringless/CreateRingless'
+import { EditRingless } from './modules/ringless/EditRingless'
+import { RinglessAttachLeads } from './modules/ringless/RinglessAttachLeads'
+import { RinglessAddReview } from './modules/ringless/RinglessAddReview'
+import { RinglessEditLists } from './modules/ringless/RinglessEditLists'
+import { RinglessEditReview } from './modules/ringless/RinglessEditReview'
 import { AiSettings } from './pages/ai/AiSettings'
 import { AiCoach } from './pages/ai/AiCoach'
 import { SMSCenter } from './pages/sms/SMSCenter'
@@ -166,8 +173,6 @@ export default function App() {
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute><AppWithPusher /></ProtectedRoute>}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dialer" element={<ErrorBoundary fallbackTitle="Dialer Error"><Dialer /></ErrorBoundary>} />
 
         {/* CRM (legacy routes kept for backward compat) */}
         <Route path="/crm" element={<CrmLeads />} />
@@ -207,137 +212,149 @@ export default function App() {
           <Route path="/crm/integrations" element={<CrmIntegrations />} />
         </Route>
 
-        {/* Campaigns */}
-        <Route path="/campaigns" element={<Campaigns />} />
-        <Route path="/campaigns/create" element={<ErrorBoundary fallbackTitle="Campaign Error"><CreateCampaign /></ErrorBoundary>} />
-        <Route path="/campaigns/:id/edit" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaign /></ErrorBoundary>} />
-        <Route path="/campaigns/:id/attach-leads" element={<AttachLeads />} />
-        <Route path="/campaigns/:id/add-review" element={<ErrorBoundary fallbackTitle="Campaign Error"><AddCampaignReview /></ErrorBoundary>} />
-        <Route path="/campaigns/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignLists /></ErrorBoundary>} />
-        <Route path="/campaigns/:id/review" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignReview /></ErrorBoundary>} />
-        <Route path="/campaigns/:id" element={<CampaignDetail />} />
-        <Route path="/agent-status" element={<AgentStatus />} />
+        {/* All Dialer / Phone System routes — wrapped in DialerLayout */}
+        <Route element={<DialerLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dialer" element={<ErrorBoundary fallbackTitle="Dialer Error"><Dialer /></ErrorBoundary>} />
 
-        {/* Users */}
-        <Route path="/users" element={<Users />} />
-        <Route path="/users/create" element={<UserForm />} />
-        <Route path="/users/:id/edit" element={<UserForm />} />
+          {/* Campaigns */}
+          <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/campaigns/create" element={<ErrorBoundary fallbackTitle="Campaign Error"><CreateCampaign /></ErrorBoundary>} />
+          <Route path="/campaigns/:id/edit" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaign /></ErrorBoundary>} />
+          <Route path="/campaigns/:id/attach-leads" element={<AttachLeads />} />
+          <Route path="/campaigns/:id/add-review" element={<ErrorBoundary fallbackTitle="Campaign Error"><AddCampaignReview /></ErrorBoundary>} />
+          <Route path="/campaigns/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignLists /></ErrorBoundary>} />
+          <Route path="/campaigns/:id/review" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignReview /></ErrorBoundary>} />
+          <Route path="/campaigns/:id" element={<CampaignDetail />} />
+          <Route path="/agent-status" element={<AgentStatus />} />
 
-        {/* DIDs */}
-        <Route path="/dids" element={<Dids />} />
-        <Route path="/dids/create" element={<DidForm />} />
-        <Route path="/dids/:id/edit" element={<DidForm />} />
+          {/* Users */}
+          <Route path="/users" element={<Users />} />
+          <Route path="/users/create" element={<UserForm />} />
+          <Route path="/users/:id/edit" element={<UserForm />} />
 
-        {/* Lists */}
-        <Route path="/lists" element={<Lists />} />
-        <Route path="/lists/create" element={<ListForm />} />
-        <Route path="/lists/:id/edit" element={<ListEditForm />} />
-        <Route path="/lists/:id/mapping" element={<EditMapping />} />
-        <Route path="/lists/:id" element={<ListDetail />} />
-        <Route path="/lists/:id/leads" element={<ListLeads />} />
+          {/* DIDs */}
+          <Route path="/dids" element={<Dids />} />
+          <Route path="/dids/create" element={<DidForm />} />
+          <Route path="/dids/:id/edit" element={<DidForm />} />
 
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/reports/daily" element={<DailyReport />} />
-        <Route path="/reports/agent-summary" element={<AgentSummary />} />
-        <Route path="/reports/disposition" element={<DispositionReport />} />
-        <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
-        <Route path="/reports/live" element={<LiveCalls />} />
-        <Route path="/sms" element={<SMSCenter />} />
-        <Route path="/chat" element={<TeamChat />} />
-        <Route path="/monitoring" element={<AgentMonitoring />} />
-        <Route path="/attendance" element={<Attendance />} />
-        <Route path="/billing" element={<Billing />} />
+          {/* Lists */}
+          <Route path="/lists" element={<Lists />} />
+          <Route path="/lists/create" element={<ListForm />} />
+          <Route path="/lists/:id/edit" element={<ListEditForm />} />
+          <Route path="/lists/:id/mapping" element={<EditMapping />} />
+          <Route path="/lists/:id" element={<ListDetail />} />
+          <Route path="/lists/:id/leads" element={<ListLeads />} />
 
-        <Route path="/settings/labels" element={<Labels />} />
-        <Route path="/settings/dispositions" element={<DispositionList />} />
-        <Route path="/settings/dnc" element={<DncList />} />
-        <Route path="/settings/exclude" element={<ExcludeList />} />
-        <Route path="/settings/fax" element={<FaxList />} />
-        <Route path="/settings/security" element={<SecuritySettings />} />
-        <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/reports/daily" element={<DailyReport />} />
+          <Route path="/reports/agent-summary" element={<AgentSummary />} />
+          <Route path="/reports/disposition" element={<DispositionReport />} />
+          <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
+          <Route path="/reports/live" element={<LiveCalls />} />
+          <Route path="/sms" element={<SMSCenter />} />
+          <Route path="/chat" element={<TeamChat />} />
+          <Route path="/monitoring" element={<AgentMonitoring />} />
+          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/billing" element={<Billing />} />
 
-        {/* Lead Management */}
-        <Route path="/leads" element={<Leads />} />
-        <Route path="/settings/lead-sources" element={<LeadSources />} />
-        <Route path="/settings/recycle-rules" element={<RecycleRules />} />
-        <Route path="/settings/custom-field-labels" element={<CustomFieldLabels />} />
-        <Route path="/settings/lead-activity" element={<LeadActivity />} />
+          <Route path="/settings/labels" element={<Labels />} />
+          <Route path="/settings/dispositions" element={<DispositionList />} />
+          <Route path="/settings/dnc" element={<DncList />} />
+          <Route path="/settings/exclude" element={<ExcludeList />} />
+          <Route path="/settings/fax" element={<FaxList />} />
+          <Route path="/settings/security" element={<SecuritySettings />} />
+          <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
 
-        {/* Profile */}
-        <Route path="/profile" element={<Profile />} />
+          {/* Lead Management */}
+          <Route path="/leads" element={<Leads />} />
+          <Route path="/settings/lead-sources" element={<LeadSources />} />
+          <Route path="/settings/recycle-rules" element={<RecycleRules />} />
+          <Route path="/settings/custom-field-labels" element={<CustomFieldLabels />} />
+          <Route path="/settings/lead-activity" element={<LeadActivity />} />
 
-        {/* Ringless Voicemail */}
-        <Route path="/ringless" element={<RinglessVoicemail />} />
+          {/* Profile */}
+          <Route path="/profile" element={<Profile />} />
 
-        {/* AI Tools */}
-        <Route path="/ai/settings" element={<AiSettings />} />
-        <Route path="/ai/coach" element={<AiCoach />} />
+          {/* Ringless Voicemail */}
+          <Route path="/ringless" element={<RinglessVoicemail />} />
+          <Route path="/ringless/create" element={<ErrorBoundary fallbackTitle="Ringless Campaign Error"><CreateRingless /></ErrorBoundary>} />
+          <Route path="/ringless/:id/edit" element={<ErrorBoundary fallbackTitle="Ringless Campaign Error"><EditRingless /></ErrorBoundary>} />
+          <Route path="/ringless/:id/attach-leads" element={<ErrorBoundary fallbackTitle="Ringless Campaign Error"><RinglessAttachLeads /></ErrorBoundary>} />
+          <Route path="/ringless/:id/add-review" element={<ErrorBoundary fallbackTitle="Ringless Campaign Error"><RinglessAddReview /></ErrorBoundary>} />
+          <Route path="/ringless/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Ringless Campaign Error"><RinglessEditLists /></ErrorBoundary>} />
+          <Route path="/ringless/:id/review" element={<ErrorBoundary fallbackTitle="Ringless Campaign Error"><RinglessEditReview /></ErrorBoundary>} />
 
-        {/* SMS AI */}
-        <Route path="/smsai/demo" element={<SmsAiDemo />} />
-        <Route path="/smsai/campaigns" element={<SmsAiCampaigns />} />
-        <Route path="/smsai/lists" element={<SmsAiLists />} />
-        <Route path="/smsai/reports" element={<SmsAiReports />} />
-        <Route path="/smsai/templates" element={<SmsAiTemplates />} />
+          {/* AI Tools */}
+          <Route path="/ai/settings" element={<AiSettings />} />
+          <Route path="/ai/coach" element={<AiCoach />} />
 
-        {/* IVR */}
-        <Route path="/ivr" element={<Ivr />} />
+          {/* SMS AI */}
+          <Route path="/smsai/demo" element={<SmsAiDemo />} />
+          <Route path="/smsai/campaigns" element={<SmsAiCampaigns />} />
+          <Route path="/smsai/lists" element={<SmsAiLists />} />
+          <Route path="/smsai/reports" element={<SmsAiReports />} />
+          <Route path="/smsai/templates" element={<SmsAiTemplates />} />
 
-        {/* Gmail Mailbox */}
-        <Route path="/gmail-mailbox" element={<GmailMailbox />} />
-        <Route path="/email-parser" element={<EmailParser />} />
-        <Route path="/google-calendar" element={<GoogleCalendar />} />
+          {/* IVR */}
+          <Route path="/ivr" element={<Ivr />} />
 
-        {/* Voicemail */}
-        <Route path="/voicemail" element={<VoicemailDrops />} />
-        <Route path="/voicemail/mailbox" element={<Mailbox />} />
+          {/* Gmail Mailbox */}
+          <Route path="/gmail-mailbox" element={<GmailMailbox />} />
+          <Route path="/email-parser" element={<EmailParser />} />
+          <Route path="/google-calendar" element={<GoogleCalendar />} />
 
-        {/* Ring Groups */}
-        <Route path="/ring-groups" element={<RingGroups />} />
+          {/* Voicemail */}
+          <Route path="/voicemail" element={<VoicemailDrops />} />
+          <Route path="/voicemail/mailbox" element={<Mailbox />} />
 
-        {/* Call Times & Holidays */}
-        <Route path="/call-times" element={<CallTimes />} />
-        <Route path="/holidays"   element={<Holidays />} />
+          {/* Ring Groups */}
+          <Route path="/ring-groups" element={<RingGroups />} />
 
-        {/* Extension Groups */}
-        <Route path="/extension-groups" element={<ExtensionGroups />} />
+          {/* Call Times & Holidays */}
+          <Route path="/call-times" element={<CallTimes />} />
+          <Route path="/holidays"   element={<Holidays />} />
 
-        {/* Agents */}
-        <Route path="/agents" element={<Agents />} />
+          {/* Extension Groups */}
+          <Route path="/extension-groups" element={<ExtensionGroups />} />
 
-        {/* Onboarding */}
-        <Route path="/onboarding" element={<Onboarding />} />
+          {/* Agents */}
+          <Route path="/agents" element={<Agents />} />
 
-        {/* Unified Telecom Hub */}
-        <Route path="/telecom"        element={<TelecomPage />} />
+          {/* Onboarding */}
+          <Route path="/onboarding" element={<Onboarding />} />
 
-        {/* Legacy Twilio routes → redirect to unified hub */}
-        <Route path="/twilio"         element={<Navigate to="/telecom?p=twilio&t=dashboard" replace />} />
-        <Route path="/twilio/numbers" element={<Navigate to="/telecom?p=twilio&t=numbers"   replace />} />
-        <Route path="/twilio/trunks"  element={<Navigate to="/telecom?p=twilio&t=trunks"    replace />} />
-        <Route path="/twilio/calls"   element={<Navigate to="/telecom?p=twilio&t=calls"     replace />} />
-        <Route path="/twilio/sms"     element={<Navigate to="/telecom?p=twilio&t=sms"       replace />} />
-        <Route path="/twilio/usage"   element={<Navigate to="/telecom?p=twilio&t=usage"     replace />} />
+          {/* Unified Telecom Hub */}
+          <Route path="/telecom"        element={<TelecomPage />} />
 
-        {/* Legacy Plivo routes → redirect to unified hub */}
-        <Route path="/plivo"          element={<Navigate to="/telecom?p=plivo&t=dashboard" replace />} />
-        <Route path="/plivo/numbers"  element={<Navigate to="/telecom?p=plivo&t=numbers"   replace />} />
-        <Route path="/plivo/trunks"   element={<Navigate to="/telecom?p=plivo&t=trunks"    replace />} />
-        <Route path="/plivo/calls"    element={<Navigate to="/telecom?p=plivo&t=calls"     replace />} />
-        <Route path="/plivo/sms"      element={<Navigate to="/telecom?p=plivo&t=sms"       replace />} />
-        <Route path="/plivo/usage"    element={<Navigate to="/telecom?p=plivo&t=usage"     replace />} />
+          {/* Legacy Twilio routes → redirect to unified hub */}
+          <Route path="/twilio"         element={<Navigate to="/telecom?p=twilio&t=dashboard" replace />} />
+          <Route path="/twilio/numbers" element={<Navigate to="/telecom?p=twilio&t=numbers"   replace />} />
+          <Route path="/twilio/trunks"  element={<Navigate to="/telecom?p=twilio&t=trunks"    replace />} />
+          <Route path="/twilio/calls"   element={<Navigate to="/telecom?p=twilio&t=calls"     replace />} />
+          <Route path="/twilio/sms"     element={<Navigate to="/telecom?p=twilio&t=sms"       replace />} />
+          <Route path="/twilio/usage"   element={<Navigate to="/telecom?p=twilio&t=usage"     replace />} />
 
-        {/* Workforce Management */}
-        <Route path="/workforce"          element={<WorkforceDashboard />} />
-        <Route path="/workforce/shifts"   element={<ShiftManagement />} />
-        <Route path="/workforce/staffing" element={<CampaignStaffing />} />
-        <Route path="/workforce/reports"  element={<WorkforceReports />} />
-        <Route path="/workforce/analytics" element={<WorkforceAnalytics />} />
+          {/* Legacy Plivo routes → redirect to unified hub */}
+          <Route path="/plivo"          element={<Navigate to="/telecom?p=plivo&t=dashboard" replace />} />
+          <Route path="/plivo/numbers"  element={<Navigate to="/telecom?p=plivo&t=numbers"   replace />} />
+          <Route path="/plivo/trunks"   element={<Navigate to="/telecom?p=plivo&t=trunks"    replace />} />
+          <Route path="/plivo/calls"    element={<Navigate to="/telecom?p=plivo&t=calls"     replace />} />
+          <Route path="/plivo/sms"      element={<Navigate to="/telecom?p=plivo&t=sms"       replace />} />
+          <Route path="/plivo/usage"    element={<Navigate to="/telecom?p=plivo&t=usage"     replace />} />
 
-        {/* System Admin */}
-        <Route path="/admin/clients" element={<AdminClients />} />
-        <Route path="/admin/system-monitor" element={<SystemMonitor />} />
-        <Route path="/system/swagger" element={<SwaggerDocs />} />
+          {/* Workforce Management */}
+          <Route path="/workforce"          element={<WorkforceDashboard />} />
+          <Route path="/workforce/shifts"   element={<ShiftManagement />} />
+          <Route path="/workforce/staffing" element={<CampaignStaffing />} />
+          <Route path="/workforce/reports"  element={<WorkforceReports />} />
+          <Route path="/workforce/analytics" element={<WorkforceAnalytics />} />
+
+          {/* System Admin */}
+          <Route path="/admin/clients" element={<AdminClients />} />
+          <Route path="/admin/system-monitor" element={<SystemMonitor />} />
+          <Route path="/system/swagger" element={<SwaggerDocs />} />
+        </Route>
       </Route>
 
       {/* Default redirect */}

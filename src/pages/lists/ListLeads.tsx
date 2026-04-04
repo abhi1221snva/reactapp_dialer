@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, Search, X, RefreshCw, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, SlidersHorizontal, List,
+  ChevronsLeft, ChevronsRight, List,
 } from 'lucide-react'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 import { listService } from '../../services/list.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 
@@ -89,12 +90,28 @@ function Pagination({
 export function ListLeads() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { setToolbar, headerKey } = useDialerHeader()
   const listId = Number(id)
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Fetch list detail for name + campaign
+  const { data: listDetailData } = useQuery({
+    queryKey: ['list-detail', id],
+    queryFn: () => listService.getById(listId),
+    enabled: !isNaN(listId),
+  })
+  const rawDetail = (listDetailData as { data?: { data?: unknown } })?.data?.data
+  const listDetail = rawDetail && typeof rawDetail === 'object' && !Array.isArray(rawDetail)
+    ? rawDetail as Record<string, unknown>
+    : Array.isArray(rawDetail) && rawDetail.length > 0
+      ? rawDetail[0] as Record<string, unknown>
+      : null
+  const detailListName = (listDetail?.l_title ?? listDetail?.title ?? '') as string
+  const campaignName = (listDetail?.campaign ?? '') as string
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -137,41 +154,50 @@ export function ListLeads() {
   const rows: Record<string, unknown>[] = payload?.list_data ?? []
   const total: number = payload?.total_records ?? 0
 
-  if (isLoading && !payload) return <PageLoader />
-
-  // If headers are empty after loading — API returned error or no headers
-  const noHeaders = !isLoading && headers.length === 0
-
-  return (
-    <div className="space-y-4">
-      {/* Page header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate(`/lists/${id}`)} className="btn-ghost p-2 rounded-lg">
-          <ArrowLeft size={18} />
+  // Inject toolbar into the standard .lt header
+  useEffect(() => {
+    setToolbar(
+      <>
+        {/* Back to list detail */}
+        <button className="lt-b" onClick={() => navigate(`/lists/${id}`)}>
+          <ArrowLeft size={13} />
+          Back
         </button>
-        <div className="flex-1">
-          <h1 className="page-title">{listName}</h1>
-          <p className="page-subtitle">
-            {!isLoading && `${total.toLocaleString()} leads`}
-            {' '}
-            <button
-              onClick={() => navigate(`/lists/${id}`)}
-              className="text-indigo-600 hover:underline text-xs"
-            >
-              View list info
-            </button>
-          </p>
-        </div>
-      </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-2 flex-1 max-w-sm">
-          <SlidersHorizontal size={14} className="text-slate-400 flex-shrink-0" />
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        {/* List name */}
+        {detailListName && (
+          <span className="lt-desc">
+            <strong style={{ color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>List:</strong>
+            {detailListName}
+          </span>
+        )}
+
+        {/* Campaign name */}
+        {campaignName && (
+          <span className="lt-desc" style={{ background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>
+            <strong style={{ color: '#818cf8', fontWeight: 600, marginRight: 4 }}>Campaign:</strong>
+            {campaignName}
+          </span>
+        )}
+
+        {/* Record count */}
+        {!isLoading && (
+          <span className="lt-desc">
+            {total.toLocaleString()} record{total !== 1 ? 's' : ''}
+            {debouncedSearch ? ' (filtered)' : ''}
+          </span>
+        )}
+        {isFetching && !isLoading && (
+          <span className="lt-desc" style={{ border: 'none', background: 'transparent', padding: 0 }}>
+            <RefreshCw size={11} className="animate-spin" style={{ color: '#94a3b8' }} />
+          </span>
+        )}
+
+        <div className="lt-right">
+          {/* Search */}
+          <div className="lt-search">
+            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
             <input
-              className="input pl-8 pr-8 h-9 text-sm"
               placeholder="Search leads…"
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -179,41 +205,41 @@ export function ListLeads() {
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             )}
           </div>
+
+          {/* Refresh */}
+          <button
+            className="lt-b"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh"
+          >
+            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+          </button>
+
+          {/* View list info */}
+          <button className="lt-b" onClick={() => navigate(`/lists/${id}`)}>
+            List Info
+          </button>
         </div>
+      </>
+    )
+  }, [headerKey, search, total, isLoading, isFetching, detailListName, campaignName])
 
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="btn-ghost btn-sm p-2 h-9 w-9"
-          title="Refresh"
-        >
-          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-        </button>
-      </div>
+  if (isLoading && !payload) return <PageLoader />
 
+  // If headers are empty after loading — API returned error or no headers
+  const noHeaders = !isLoading && headers.length === 0
+
+  return (
+    <div>
       {/* Table */}
       <div className="table-wrapper bg-white">
-        {/* Count bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
-          <span className="text-xs text-slate-500 font-medium">
-            {isLoading ? 'Loading…' : `${total.toLocaleString()} record${total !== 1 ? 's' : ''}`}
-            {debouncedSearch && !isLoading && (
-              <span className="ml-1.5 text-indigo-600">(filtered)</span>
-            )}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Updating…
-            </span>
-          )}
-        </div>
-
         <div className="overflow-x-auto">
           <table className="table">
             <thead>

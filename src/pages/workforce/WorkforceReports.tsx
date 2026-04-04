@@ -75,13 +75,6 @@ export function WorkforceReports() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Workforce Reports</h1>
-          <p className="page-subtitle">Productivity, staffing coverage, and idle time analysis</p>
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {TABS.map(t => (

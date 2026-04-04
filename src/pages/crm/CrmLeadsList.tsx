@@ -523,43 +523,44 @@ export function CrmLeadsList() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedFilters, statusMap, agents])
 
-  // ── Header (CrmLayout) ────────────────────────────────────────────────────────
-
+  // ── Header (CrmLayout) — hide layout title, we render our own inline ──────
   useEffect(() => {
-    setDescription(isLoading ? 'Loading…' : `${total.toLocaleString()} leads`)
-    setActions(
-      <button onClick={() => navigate('/crm/leads/create')} className="btn-primary flex items-center gap-2">
-        <Plus size={16} /> Add Lead
-      </button>
-    )
+    setDescription(undefined)
+    setActions(undefined)
     return () => { setDescription(undefined); setActions(undefined) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, total, headerKey])
+  }, [headerKey])
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-3 items-center">
+      {/* ── Compact header toolbar ─────────────────────────────────────────── */}
+      <div className="lt">
+        {/* Title + count */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginRight: 4 }}>
+          <h1 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', lineHeight: 1, letterSpacing: '-0.02em', margin: 0 }}>Leads</h1>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, background: '#f1f5f9', padding: '1px 7px', borderRadius: 8, lineHeight: '16px' }}>
+            {isLoading ? '…' : total.toLocaleString()}
+          </span>
+        </div>
 
         {/* Search */}
-        <div className="relative flex-1" style={{ minWidth: '240px' }}>
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
           <input
             type="text"
             value={searchInput}
-            placeholder="Search by name, email, phone, company…"
+            placeholder="Search name, email, phone…"
             onChange={e => handleSearchChange(e.target.value)}
-            className="input w-full pl-9 pr-9"
           />
           {searchInput && (
             <button
               onClick={clearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
             >
-              <X size={13} />
+              <X size={12} />
             </button>
           )}
         </div>
@@ -567,68 +568,71 @@ export function CrmLeadsList() {
         {/* Filter toggle */}
         <button
           onClick={() => setShowFilters(f => !f)}
-          className={cn(
-            'flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors whitespace-nowrap',
-            activeFilterCount > 0
-              ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-          )}
+          className={`lt-b${activeFilterCount > 0 ? ' active' : ''}`}
         >
-          <SlidersHorizontal size={14} />
+          <SlidersHorizontal size={12} />
           Filters
           {activeFilterCount > 0 && (
-            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+            <span style={{ width: 15, height: 15, borderRadius: '50%', background: '#6366f1', color: '#fff', fontSize: 8, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
               {activeFilterCount}
             </span>
           )}
         </button>
 
-        {/* Affiliate Link button */}
-        <button
-          onClick={() => setShowAffiliateModal(true)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100 transition-colors whitespace-nowrap"
-        >
-          <Link2 size={15} /> Affiliate Link
-        </button>
-
         {/* Per-page selector */}
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">Show</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>Show</span>
           <select
             value={perPage}
             onChange={e => { setPerPage(Number(e.target.value)); setPage(1) }}
-            className="input text-sm py-1.5 pr-8 cursor-pointer"
-            style={{ width: 'auto', minWidth: '72px' }}
+            className="lt-sel"
           >
             {PER_PAGE_OPTIONS.map(n => (
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">entries</span>
+        </div>
+
+        {/* Divider */}
+        <div className="lt-divider" />
+
+        {/* Right group — Affiliate + Add Lead */}
+        <div className="lt-right">
+          <button onClick={() => setShowAffiliateModal(true)} className="lt-b lt-og">
+            <Link2 size={12} /> Affiliate
+          </button>
+          <button onClick={() => navigate('/crm/leads/create')} className="lt-b lt-g">
+            <Plus size={13} /> Add Lead
+          </button>
         </div>
       </div>
 
+      {/* Green accent line */}
+      <div className="lt-accent lt-accent-green" />
+
       {/* ── Active filter chips ──────────────────────────────────────────────── */}
       {filterChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, paddingTop: 6 }}>
           {filterChips.map(chip => (
             <span
               key={chip.key}
-              className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px 0 10px', borderRadius: 11, background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', fontSize: 10, fontWeight: 600 }}
             >
               {chip.label}
               <button
                 onClick={chip.onRemove}
-                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-indigo-200 transition-colors flex-shrink-0"
+                style={{ width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'none', border: 'none', cursor: 'pointer', color: '#6366f1', padding: 0 }}
                 title="Remove filter"
               >
-                <X size={10} />
+                <X size={9} />
               </button>
             </span>
           ))}
           <button
             onClick={() => handleApplyFilters(EMPTY_FILTERS)}
-            className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors px-1.5 py-1 rounded-lg hover:bg-red-50"
+            style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4, transition: 'color .12s' }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8' }}
           >
             Clear all
           </button>
@@ -636,7 +640,7 @@ export function CrmLeadsList() {
       )}
 
       {/* ── Table card ──────────────────────────────────────────────────────── */}
-      <div className="table-wrapper" ref={tableRef}>
+      <div className="table-wrapper" ref={tableRef} style={{ marginTop: 8 }}>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>

@@ -2,12 +2,11 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Check, MessageSquare,
-  Search, Layers, ToggleLeft, ToggleRight, ChevronRight,
-  Smartphone, Copy, Inbox, Eye, Code,
+  Search, ToggleLeft, ToggleRight, ChevronRight,
+  Smartphone, Copy, Inbox, Eye,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { SmsTemplate } from '../../types/crm.types'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { PlaceholderPicker, type PickerPlaceholder } from '../../components/crm/PlaceholderPicker'
@@ -584,7 +583,6 @@ function SelectPrompt() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function CrmSmsTemplates() {
   const qc = useQueryClient()
-  const { setDescription, setActions } = useCrmHeader()
 
   const [showModal, setShowModal]       = useState(false)
   const [editing, setEditing]           = useState<SmsTemplate | null>(null)
@@ -595,17 +593,6 @@ export function CrmSmsTemplates() {
   const openCreate = () => { setEditing(null); setShowModal(true) }
   const openEdit   = (t: SmsTemplate) => { setEditing(t); setShowModal(true) }
   const closeModal = () => { setShowModal(false); setEditing(null) }
-
-  useEffect(() => {
-    setDescription('Reusable SMS templates with dynamic lead variables')
-    setActions(
-      <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-        <Plus size={14} /> New Template
-      </button>
-    )
-    return () => { setDescription(undefined); setActions(undefined) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['sms-templates'],
@@ -623,9 +610,6 @@ export function CrmSmsTemplates() {
   })
 
   const allTemplates  = rawData ?? []
-  const activeCount   = allTemplates.filter(t => t.status === 1).length
-  const inactiveCount = allTemplates.length - activeCount
-  const totalSegments = allTemplates.reduce((s, t) => s + smsStats(t.sms_template).segments, 0)
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -664,60 +648,61 @@ export function CrmSmsTemplates() {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* ── Compact header strip ──────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {allTemplates.length > 0 && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
-              <Layers size={12} className="text-emerald-500" /> {allTemplates.length} total
-            </span>
-            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {activeCount} active
-            </span>
-            {inactiveCount > 0 && (
-              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> {inactiveCount} inactive
-              </span>
-            )}
-            {totalSegments > 0 && (
-              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-full">
-                <MessageSquare size={11} /> {totalSegments} segments
-              </span>
-            )}
-          </div>
-        )}
-
-        {allTemplates.length > 0 && (
-          <>
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input className="input w-full pl-9 text-sm h-9" placeholder="Search templates…"
-                value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5 flex-shrink-0">
-              {(['all', 'active', 'inactive'] as const).map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)}
-                  className={cn('px-3 py-1.5 rounded-md text-[11px] font-semibold capitalize transition-all',
-                    statusFilter === s ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  )}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* New Template button - top right */}
-        <div className="ml-auto">
-          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-            <Plus size={14} /> New Template
+      {/* ── .lt header toolbar ─────────────────────────────────────────────── */}
+      <div className="lt">
+        <div className="lt-title">
+          <h1>SMS Templates</h1>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, background: '#f1f5f9', padding: '1px 7px', borderRadius: 8, lineHeight: '16px' }}>
+            {isLoading ? '…' : allTemplates.length}
+          </span>
+        </div>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input
+            type="text"
+            value={search}
+            placeholder="Search templates…"
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        {/* Status filter pills */}
+        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: 6, padding: 2, gap: 2, flexShrink: 0 }}>
+          {(['all', 'active', 'inactive'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              style={{
+                height: 28, padding: '0 10px', borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all .12s',
+                background: statusFilter === f ? '#fff' : 'transparent',
+                color: statusFilter === f ? '#059669' : '#64748b',
+                boxShadow: statusFilter === f ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+              }}
+            >
+              {f === 'all' ? 'All' : f === 'active' ? 'Active' : 'Inactive'}
+            </button>
+          ))}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={openCreate} className="lt-b lt-g">
+            <Plus size={13} /> New Template
           </button>
         </div>
       </div>
+      <div className="lt-accent lt-accent-green" />
 
       {/* ── Main panel ──────────────────────────────────────────────────────── */}
+      <div style={{ marginTop: 8 }}>
       {isLoading ? (
         <div className="flex justify-center py-24">
           <Loader2 size={24} className="animate-spin text-emerald-400" />
@@ -787,6 +772,7 @@ export function CrmSmsTemplates() {
           </div>
         </div>
       )}
+      </div>
 
       {showModal && (
         <SmsModal editing={editing} onClose={closeModal} onSaved={closeModal} />

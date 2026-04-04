@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import { useCrmHeader } from '../../layouts/CrmLayout'
 import { RowActions } from '../../components/ui/RowActions'
 import { Badge } from '../../components/ui/Badge'
 import { confirmDelete } from '../../utils/confirmDelete'
@@ -375,7 +374,6 @@ function StatusModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function CrmLeadStatus() {
   const qc = useQueryClient()
-  const { setDescription } = useCrmHeader()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<LeadStatusExt | null>(null)
   const [search, setSearch] = useState('')
@@ -389,12 +387,6 @@ export function CrmLeadStatus() {
 
   // Dashboard toggle state (local, optimistic)
   const [dashboardToggles, setDashboardToggles] = useState<Record<number, boolean>>({})
-
-  useEffect(() => {
-    setDescription('Define and manage pipeline stages for your CRM leads')
-    return () => setDescription(undefined)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => { setPage(1) }, [search])
 
@@ -544,53 +536,47 @@ export function CrmLeadStatus() {
   }
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="relative min-w-[180px] flex-1 max-w-xs">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+      {/* ── Header Toolbar ── */}
+      <div className="lt">
+        <div className="lt-title">
+          <h1>Lead Status</h1>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, background: '#f1f5f9', padding: '1px 7px', borderRadius: 8, lineHeight: '16px' }}>
+            {isLoading ? '…' : total}
+          </span>
+        </div>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
           <input
-            className="input pl-8 pr-7 h-8 text-xs"
-            placeholder="Search statuses…"
+            type="text"
             value={search}
+            placeholder="Search statuses…"
             onChange={e => { setSearch(e.target.value); setPage(1) }}
           />
           {search && (
-            <button onClick={() => { setSearch(''); setPage(1) }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <button
+              onClick={() => { setSearch(''); setPage(1) }}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+            >
               <X size={12} />
             </button>
           )}
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button onClick={() => refetch()} disabled={isFetching}
-            className="btn-ghost btn-sm p-1.5 h-8 w-8" title="Refresh">
-            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => refetch()} disabled={isFetching} className="lt-b" title="Refresh">
+            <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
           </button>
-          <button onClick={openAdd} className="btn-primary h-8 text-xs px-3 gap-1.5">
-            <Plus size={14} /> Add Status
+          <button onClick={openAdd} className="lt-b lt-g">
+            <Plus size={13} /> Add Status
           </button>
         </div>
       </div>
+      <div className="lt-accent lt-accent-green" />
 
       {/* ── Table wrapper ── */}
-      <div className="table-wrapper bg-white">
-
-        {/* Count bar */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 bg-slate-50/60">
-          <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-            {isLoading ? 'Loading…' : `${total} record${total !== 1 ? 's' : ''}`}
-            <span className="text-slate-300">·</span>
-            <GripVertical size={10} className="text-slate-300" />
-            <span className="text-slate-400">Drag to reorder</span>
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-[11px] text-slate-400 flex items-center gap-1">
-              <RefreshCw size={10} className="animate-spin" /> Updating…
-            </span>
-          )}
-        </div>
+      <div className="table-wrapper bg-white" style={{ marginTop: 8 }}>
 
         {/* Table */}
         <div className="overflow-x-auto">

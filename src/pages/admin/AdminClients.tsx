@@ -347,13 +347,7 @@ export function AdminClients() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="page-title">Client Management</h1>
-          <p className="page-subtitle">Manage all tenant accounts across the platform</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end gap-2">
           <button
             onClick={() => refetch()}
             disabled={isFetching}
@@ -365,7 +359,6 @@ export function AdminClients() {
           <button onClick={() => setShowForm(true)} className="btn-primary gap-2">
             <Plus size={15} /> Add Client
           </button>
-        </div>
       </div>
 
       {/* Summary cards */}

@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Calendar, Download, RefreshCw, Phone, PhoneCall, PhoneOff, Clock,
   ChevronDown, Filter, TrendingUp, BarChart3, Search,
 } from 'lucide-react'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line,
@@ -90,6 +91,7 @@ function SummaryCard({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DailyReport() {
+  const { setToolbar } = useDialerHeader()
   const [filters, setFilters] = useState<Filters>({
     date_from: today(),
     date_to:   today(),
@@ -334,51 +336,34 @@ export function DailyReport() {
     },
   ]
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="page-title">Daily Call Report</h1>
-          <p className="page-subtitle">Day-by-day breakdown of call activity and performance</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="btn-ghost btn-sm p-2 rounded-lg"
-            title="Refresh"
-          >
-            <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
+  useEffect(() => {
+    setToolbar(
+      <div className="lt-right">
+        <button onClick={() => refetch()} disabled={isFetching} className="lt-b" title="Refresh">
+          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+        </button>
+        <div className="relative">
+          <button onClick={() => setShowExport((v) => !v)} disabled={rows.length === 0} className="lt-b">
+            <Download size={13} /> Export <ChevronDown size={11} />
           </button>
-          <div className="relative">
-            <button
-              onClick={() => setShowExport((v) => !v)}
-              className="btn-outline gap-2"
-              disabled={rows.length === 0}
-            >
-              <Download size={15} /> Export <ChevronDown size={13} />
-            </button>
-            {showExport && (
-              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 z-20 overflow-hidden">
-                <button
-                  onClick={handleExport}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 border-b border-slate-100"
-                >
-                  <Download size={13} className="text-slate-400" /> Export CSV
-                </button>
-                <button
-                  onClick={handleExportExcel}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <Download size={13} className="text-emerald-500" /> Export Excel
-                </button>
-              </div>
-            )}
-          </div>
+          {showExport && (
+            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 z-20 overflow-hidden">
+              <button onClick={handleExport} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 border-b border-slate-100">
+                <Download size={13} className="text-slate-400" /> Export CSV
+              </button>
+              <button onClick={handleExportExcel} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+                <Download size={13} className="text-emerald-500" /> Export Excel
+              </button>
+            </div>
+          )}
         </div>
       </div>
+    )
+    return () => setToolbar(undefined)
+  })
 
+  return (
+    <div className="space-y-6">
       {/* Date presets */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">

@@ -9,7 +9,6 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import { useCrmHeader } from '../../layouts/CrmLayout'
 import { RowActions } from '../../components/ui/RowActions'
 import { TablePagination } from '../../components/ui/TablePagination'
 import type { Lender } from '../../types/crm.types'
@@ -133,7 +132,6 @@ function exportCsv(lenders: Lender[], cols: SheetCol[]) {
 export function CrmLenders() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { setDescription, setActions } = useCrmHeader()
   const [searchParams, setSearchParams] = useSearchParams()
   const [view, setView] = useState<'cards' | 'sheet'>('cards')
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -280,41 +278,6 @@ export function CrmLenders() {
     if (e.key === 'Tab') { commitEdit() } // let Tab naturally move focus out
   }, [commitEdit, cancelEdit])
 
-  useEffect(() => {
-    setDescription(isLoading ? 'Loading...' : `${total.toLocaleString()} lenders`)
-    setActions(
-      <div className="flex items-center gap-2">
-        {/* View toggle */}
-        <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-          <button
-            onClick={() => setView('cards')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              view === 'cards' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <LayoutGrid size={13} /> Cards
-          </button>
-          <button
-            onClick={() => setView('sheet')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              view === 'sheet' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Sheet size={13} /> Master Sheet
-          </button>
-        </div>
-        <button
-          onClick={() => navigate('/crm/lenders/create')}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus size={15} /> Add Lender
-        </button>
-      </div>
-    )
-    return () => { setDescription(undefined); setActions(undefined) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, total, view])
-
   const toggleMutation = useMutation({
     mutationFn: (l: Lender) => crmService.toggleLender(l.id, Number(l.status) === 1 ? 0 : 1),
     onSuccess: () => { toast.success('Lender updated'); qc.invalidateQueries({ queryKey: ['lenders'] }) },
@@ -330,37 +293,74 @@ export function CrmLenders() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* Compact toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="lt">
+        <div className="lt-title">
+          <h1>Lenders</h1>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, background: '#f1f5f9', padding: '1px 7px', borderRadius: 8, lineHeight: '16px' }}>
+            {isLoading ? '…' : total}
+          </span>
+        </div>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
           <input
-            className="input pl-8 h-8 text-xs w-56"
-            placeholder="Search name, email, contact…"
+            type="text"
             value={search}
+            placeholder="Search name, email, contact…"
             onChange={e => setFilter('search', e.target.value)}
           />
+          {search && (
+            <button
+              onClick={reset}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
-        {search && (
-          <button onClick={reset} className="btn-ghost h-8 px-2 flex items-center gap-1 text-xs text-slate-500">
-            <X size={12} /> Clear
-          </button>
-        )}
-        {view === 'sheet' && (
+        {/* View toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: 6, padding: 2, gap: 2, flexShrink: 0 }}>
           <button
-            onClick={() => exportCsv(sortedLenders, SHEET_COLUMNS)}
-            className="ml-auto btn-ghost h-8 px-3 flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900"
+            onClick={() => setView('cards')}
+            style={{
+              height: 28, padding: '0 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all .12s', display: 'flex', alignItems: 'center', gap: 4,
+              background: view === 'cards' ? '#fff' : 'transparent',
+              color: view === 'cards' ? '#0f172a' : '#64748b',
+              boxShadow: view === 'cards' ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+            }}
           >
-            <Download size={13} /> Export CSV
+            <LayoutGrid size={11} /> Cards
+          </button>
+          <button
+            onClick={() => setView('sheet')}
+            style={{
+              height: 28, padding: '0 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all .12s', display: 'flex', alignItems: 'center', gap: 4,
+              background: view === 'sheet' ? '#fff' : 'transparent',
+              color: view === 'sheet' ? '#0f172a' : '#64748b',
+              boxShadow: view === 'sheet' ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+            }}
+          >
+            <Sheet size={11} /> Sheet
+          </button>
+        </div>
+        {view === 'sheet' && (
+          <button onClick={() => exportCsv(sortedLenders, SHEET_COLUMNS)} className="lt-b" title="Export CSV">
+            <Download size={12} /> Export
           </button>
         )}
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => navigate('/crm/lenders/create')} className="lt-b lt-g">
+            <Plus size={13} /> Add Lender
+          </button>
+        </div>
       </div>
+      <div className="lt-accent lt-accent-green" />
 
       {/* ── Cards View ──────────────────────────────────────────────────────── */}
       {view === 'cards' && (
-        <div className="table-wrapper">
+        <div className="table-wrapper" style={{ marginTop: 8 }}>
           <div className="overflow-x-auto">
             <table className="table">
               <thead>
@@ -472,7 +472,7 @@ export function CrmLenders() {
 
       {/* ── Master Sheet View ───────────────────────────────────────────────── */}
       {view === 'sheet' && (
-        <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+        <div className="border border-slate-200 rounded-lg bg-white overflow-hidden" style={{ marginTop: 8 }}>
           {/* Sheet info bar */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500">
             <span>{allLoading ? 'Loading…' : `${sortedLenders.length} lenders · ${SHEET_COLUMNS.length} columns · Double-click any cell to edit`}</span>

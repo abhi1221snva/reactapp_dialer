@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Save, Loader2, Radio, Phone, Clock, Users, Settings, Zap } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Radio, Phone, Clock, Users, Settings, Zap, Tag, CheckSquare, Square } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { userService } from '../../services/user.service'
+import { dispositionService } from '../../services/disposition.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
 
@@ -33,6 +34,7 @@ const DEFAULT_FORM = {
   group_id: '',
   max_attempts: 3,
   status: 'active',
+  disposition_id: [] as number[],
 }
 
 const SECTION_HEADER = 'text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3'
@@ -56,9 +58,19 @@ export function CampaignForm() {
     queryFn: () => userService.getGroups(),
   })
 
+  const { data: dispositionsData } = useQuery({
+    queryKey: ['dispositions-all'],
+    queryFn: () => dispositionService.list({ page: 1, limit: 500, search: '', filters: {} }),
+  })
+
   useEffect(() => {
     if (existing?.data?.data) {
       const c = existing.data.data
+      const dispIds = Array.isArray(c.disposition)
+        ? c.disposition.map((d: { id?: number; disposition_id?: number }) => d.id ?? d.disposition_id).filter(Boolean)
+        : Array.isArray(c.disposition_id)
+          ? c.disposition_id
+          : []
       setForm({
         campaign_name: c.campaign_name || '',
         description: c.description || '',
@@ -72,6 +84,7 @@ export function CampaignForm() {
         group_id: c.group_id || '',
         max_attempts: c.max_attempts || 3,
         status: c.status || 'active',
+        disposition_id: dispIds,
       })
     }
   }, [existing])
@@ -97,6 +110,23 @@ export function CampaignForm() {
 
   const groups: Array<{ id: number; group_name: string }> =
     groupsData?.data?.data || groupsData?.data || []
+
+  const dispositions: Array<{ id: number; title: string }> =
+    (dispositionsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; title: string }> ?? []
+
+  const toggleDisposition = (dispId: number) =>
+    setForm(f => ({
+      ...f,
+      disposition_id: f.disposition_id.includes(dispId)
+        ? f.disposition_id.filter(i => i !== dispId)
+        : [...f.disposition_id, dispId],
+    }))
+
+  const selectAllDispositions = () =>
+    setForm(f => ({ ...f, disposition_id: dispositions.map(d => d.id) }))
+
+  const deselectAllDispositions = () =>
+    setForm(f => ({ ...f, disposition_id: [] }))
 
   if (isEdit && loadingExisting) return <PageLoader />
 
@@ -261,6 +291,69 @@ export function CampaignForm() {
                   <p className="text-xs text-slate-400 italic">Time-based calling is disabled — calls will run all day.</p>
                 )}
               </section>
+
+              {/* ═══ Section: Dispositions ═══ */}
+              {dispositions.length > 0 && (
+                <section>
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <Tag size={14} className="text-indigo-500" />
+                      <h3 className={SECTION_HEADER + ' mb-0 pb-0 border-0'}>Dispositions</h3>
+                      <span className="text-[10px] text-slate-400 font-medium ml-1">
+                        {form.disposition_id.length}/{dispositions.length} selected
+                      </span>
+                    </div>
+                    {form.disposition_id.length === dispositions.length ? (
+                      <button
+                        type="button"
+                        onClick={deselectAllDispositions}
+                        className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        <Square size={12} />
+                        Deselect All
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={selectAllDispositions}
+                        className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                      >
+                        <CheckSquare size={12} />
+                        Select All
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+                    {dispositions.map(d => {
+                      const isSelected = form.disposition_id.includes(d.id)
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => toggleDisposition(d.id)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all text-xs ${
+                            isSelected
+                              ? 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                            isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && (
+                              <svg width="8" height="6" viewBox="0 0 10 8" fill="none">
+                                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </div>
+                          <span className="truncate font-medium">{d.title}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
 
             </div>
           </div>

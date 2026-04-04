@@ -14,6 +14,8 @@ import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { scrollToFirstError } from '../../utils/publicFormValidation'
+import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
+import { resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
 
 const schema = z.object({
@@ -101,7 +103,7 @@ export function CrmLeadCreate() {
   const [formErrorCount, setFormErrorCount] = useState(0)
 
   const {
-    register, handleSubmit, setValue, watch, getValues, setError,
+    register, handleSubmit, setValue, watch, getValues, setError, unregister,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -394,8 +396,8 @@ export function CrmLeadCreate() {
         </div>
       </div>
 
-      {/* ── Green separator ───────────────────────────────────────────────── */}
-      <div style={{ height: 2, background: '#16a34a', margin: '0' }} />
+      {/* ── Green accent line ───────────────────────────────────────────────── */}
+      <div style={{ height: 2, background: 'linear-gradient(90deg, #cfe4d7, #4ade80)', margin: 0, borderRadius: 1 }} />
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
@@ -439,14 +441,29 @@ export function CrmLeadCreate() {
                             return (
                               <div key={f.key} className={isWide ? 'sm:col-span-2' : ''} data-field-key={f.key}>
                                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{f.label}</label>
-                                <input
-                                  type={f.type ?? 'text'}
-                                  {...register(f.key as keyof FormData)}
-                                  className="crm-fi"
-                                  placeholder={f.placeholder}
-                                  maxLength={f.maxLength}
-                                  autoComplete={f.type === 'email' ? 'email' : undefined}
-                                />
+                                {f.key === 'address' ? (
+                                  <AddressAutocomplete
+                                    value={watch('address') ?? ''}
+                                    onChange={v => setValue('address', v)}
+                                    onPlaceSelect={(parsed: ParsedPlace) => {
+                                      const group = resolveAddressGroup('address')
+                                      if (group) {
+                                        setValue('city', parsed.city)
+                                        setValue('state', parsed.state)
+                                      }
+                                    }}
+                                    placeholder={f.placeholder}
+                                  />
+                                ) : (
+                                  <input
+                                    type={f.type ?? 'text'}
+                                    {...register(f.key as keyof FormData)}
+                                    className="crm-fi"
+                                    placeholder={f.placeholder}
+                                    maxLength={f.maxLength}
+                                    autoComplete={f.type === 'email' ? 'email' : undefined}
+                                  />
+                                )}
                                 {errors[f.key as keyof FormData]?.message && (
                                   <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
                                     <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
@@ -501,14 +518,12 @@ export function CrmLeadCreate() {
                           onChange={e => {
                             const checked = e.target.checked
                             setHasSecondOwner(checked)
+                            if (!checked) {
+                              // Unregister Owner2 fields so their validation rules are removed
+                              secondOwner.forEach(f => unregister(f.field_key as keyof FormData))
+                            }
                             setTimeout(() => {
-                              if (checked) {
-                                // Scroll down to show the Owner2 fields
-                                owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                              } else {
-                                // Scroll back up to show the Owner2 heading at top
-                                owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                              }
+                              owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                             }, 50)
                           }}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
@@ -517,13 +532,7 @@ export function CrmLeadCreate() {
                           Owner2 Information
                         </span>
                       </label>
-                      <div
-                        className="overflow-hidden transition-all duration-200 ease-in-out"
-                        style={{
-                          maxHeight: hasSecondOwner ? '2000px' : '0',
-                          opacity: hasSecondOwner ? 1 : 0,
-                        }}
-                      >
+                      {hasSecondOwner && (
                         <DynamicFieldForm
                           register={register}
                           setValue={setValue}
@@ -534,7 +543,7 @@ export function CrmLeadCreate() {
                           columns={4}
                           hideSectionHeaders
                         />
-                      </div>
+                      )}
                     </section>
                   )}
 

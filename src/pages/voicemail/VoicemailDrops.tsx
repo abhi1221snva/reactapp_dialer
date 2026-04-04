@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Voicemail, Mail } from 'lucide-react'
+import { Plus, Pencil, Trash2, Voicemail, Mail, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -9,6 +9,7 @@ import { RowActions } from '../../components/ui/RowActions'
 import { voicemailService } from '../../services/voicemail.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface VmDrop {
   id?: number
@@ -182,6 +183,30 @@ export function VoicemailDrops() {
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<VmDrop | null>(null)
   const [emailModal, setEmailModal] = useState<{ open: boolean; path: string }>({ open: false, path: '' })
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search voicemail drops\u2026" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => { setEditing(null); setModal(true) }} className="lt-b lt-p">
+            <Plus size={13} /> Add Voicemail Drop
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => voicemailService.delete(id),
@@ -256,13 +281,6 @@ export function VoicemailDrops() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Voicemail Drops</h1>
-          <p className="page-subtitle">Pre-recorded voicemail messages for automated drop campaigns</p>
-        </div>
-      </div>
-
       <ServerDataTable<VmDrop>
         queryKey={['voicemail-drops']}
         queryFn={(params) => voicemailService.list(params)}
@@ -282,11 +300,7 @@ export function VoicemailDrops() {
         activeFilters={table.filters} onFilterChange={table.setFilter}
         onResetFilters={table.resetFilters} hasActiveFilters={table.hasActiveFilters}
         page={table.page} limit={table.limit} onPageChange={table.setPage}
-        headerActions={
-          <button onClick={() => { setEditing(null); setModal(true) }} className="btn-primary">
-            <Plus size={15} /> Add Voicemail Drop
-          </button>
-        }
+        hideToolbar
       />
 
       <VmDropFormModal

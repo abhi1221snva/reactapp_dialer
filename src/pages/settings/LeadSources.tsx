@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Globe, Save, X, ArrowLeft, Key, Copy, Check, List } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe, Save, X, Key, Copy, Check, List } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
 import { RowActions } from '../../components/ui/RowActions'
@@ -10,6 +9,7 @@ import { leadSourceService } from '../../services/leadSource.service'
 import { showConfirm } from '../../utils/confirmDelete'
 import { useAuthStore } from '../../stores/auth.store'
 import { formatDateTime } from '../../utils/format'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -188,12 +188,25 @@ function LeadSourceModal({
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export function LeadSources() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
 
   const [showModal, setShowModal] = useState(false)
   const [editSource, setEditSource] = useState<LeadSourceConfig | null>(null)
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-right" style={{ marginLeft: 'auto' }}>
+          <button onClick={() => { setEditSource(null); setShowModal(true) }} className="lt-b lt-p">
+            <Plus size={13} /> Add Lead Source
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   // Fetch lead source configs
   const { data, isLoading, refetch } = useQuery({
@@ -351,25 +364,7 @@ export function LeadSources() {
         />
       )}
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <button onClick={() => navigate('/')} className="btn-ghost p-1.5 rounded-lg">
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="page-title">Lead Sources</h1>
-              <p className="page-subtitle">Manage API lead source configurations</p>
-            </div>
-          </div>
-          <button
-            onClick={() => { setEditSource(null); setShowModal(true) }}
-            className="btn-primary"
-          >
-            <Plus size={15} /> Add Lead Source
-          </button>
-        </div>
-
+      <div className="space-y-2">
         <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
           <DataTable
             columns={columns}

@@ -215,13 +215,7 @@ export function WorkforceDashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Workforce Dashboard</h1>
-          <p className="page-subtitle">Real-time agent status and campaign staffing</p>
-        </div>
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-end gap-3">
           <span className="text-xs text-slate-400 flex items-center gap-1">
             <Activity size={12} /> Updated {updatedStr}
           </span>
@@ -233,7 +227,6 @@ export function WorkforceDashboard() {
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
-        </div>
       </div>
 
       {/* Staffing warnings */}

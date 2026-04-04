@@ -12,6 +12,7 @@ import { listService } from '../../services/list.service'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { cn } from '../../utils/cn'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface LeadItem {
   id: number
@@ -202,6 +203,7 @@ function SearchableListDropdown({
 export function Leads() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { setToolbar } = useDialerHeader()
 
   // Filter state
   const [selectedListId, setSelectedListId] = useState<number | null>(null)
@@ -303,16 +305,36 @@ export function Leads() {
     return found ? getListName(found) : ''
   })()
 
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={searchValue} placeholder="Search leads…" onChange={e => setSearchValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && selectedListId) handleSearch() }} />
+          {searchValue && (
+            <button onClick={() => setSearchValue('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          {appliedFilters && (
+            <button onClick={handleReset} className="lt-b">
+              <X size={12} /> Reset
+            </button>
+          )}
+          <button onClick={handleSearch} disabled={!selectedListId} className="lt-b lt-p" style={{ opacity: selectedListId ? 1 : 0.5 }}>
+            <Search size={13} /> Search
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
+
   return (
     <div className="space-y-4">
-      {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Leads</h1>
-          <p className="page-subtitle">Search and manage leads across your lists</p>
-        </div>
-      </div>
-
       {/* Filter Card */}
       <div className="card !p-0">
         <div className="px-2.5 py-3">

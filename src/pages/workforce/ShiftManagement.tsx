@@ -225,13 +225,6 @@ export function ShiftManagement() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Shift Management</h1>
-          <p className="page-subtitle">Define work schedules and assign them to agents</p>
-        </div>
-      </div>
-
       <div className="flex items-center justify-end">
         <button onClick={() => { setEditing(null); setShowForm(true) }} className="btn-primary">
           <Plus size={15} /> Add Shift

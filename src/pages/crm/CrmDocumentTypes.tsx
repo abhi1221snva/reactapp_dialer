@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Loader2, Search, Tag, X, Check, ChevronDown, ChevronUp, RefreshCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import { useCrmHeader } from '../../layouts/CrmLayout'
 import { RowActions } from '../../components/ui/RowActions'
 import { Badge } from '../../components/ui/Badge'
 import { confirmDelete } from '../../utils/confirmDelete'
@@ -202,18 +201,11 @@ function DocTypeModal({ editing, onClose, onSaved }: ModalProps) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function CrmDocumentTypes() {
   const qc = useQueryClient()
-  const { setDescription } = useCrmHeader()
   const [showModal, setShowModal]   = useState(false)
   const [editing, setEditing]       = useState<DocumentType | null>(null)
   const [search, setSearch]         = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [page, setPage]             = useState(1)
-
-  useEffect(() => {
-    setDescription('Define document categories used when uploading files to leads')
-    return () => setDescription(undefined)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // ── Query ──────────────────────────────────────────────────────────────────
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -233,8 +225,6 @@ export function CrmDocumentTypes() {
   const total      = filtered.length
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
-
-  useEffect(() => { setPage(1) }, [search])
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const invalidate = () => qc.invalidateQueries({ queryKey: ['document-types'] })
@@ -259,46 +249,47 @@ export function CrmDocumentTypes() {
   }
 
   return (
-    <div className="space-y-2">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+      {/* ── .lt Toolbar ── */}
+      <div className="lt">
+        <div className="lt-title">
+          <h1>Document Types</h1>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, background: '#f1f5f9', padding: '1px 7px', borderRadius: 8, lineHeight: '16px' }}>
+            {isLoading ? '…' : total}
+          </span>
+        </div>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input
+            type="text"
+            value={search}
+            placeholder="Search document types…"
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1) }}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => refetch()} disabled={isFetching} className="lt-b" title="Refresh">
+            <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={openAdd} className="lt-b lt-g">
+            <Plus size={13} /> Add Type
+          </button>
+        </div>
+      </div>
+      <div className="lt-accent lt-accent-green" />
 
       {/* ── Table ── */}
-      <div className="table-wrapper bg-white">
-
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
-              {isLoading ? 'Loading…' : `${total} type${total !== 1 ? 's' : ''}`}
-            </span>
-            <div className="relative flex-1 max-w-xs">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                className="input pl-8 pr-7 h-8 text-xs w-full"
-                placeholder="Search…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-              {search && (
-                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-            {isFetching && !isLoading && (
-              <span className="text-xs text-slate-400 flex items-center gap-1">
-                <RefreshCw size={11} className="animate-spin" /> Updating…
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button onClick={() => refetch()} disabled={isFetching} className="btn-ghost btn-sm p-1.5 h-8 w-8" title="Refresh">
-              <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-            </button>
-            <button onClick={openAdd} className="btn-primary h-8 text-xs px-3">
-              <Plus size={14} /> Add Type
-            </button>
-          </div>
-        </div>
+      <div className="table-wrapper bg-white" style={{ marginTop: 8 }}>
 
         <div className="overflow-x-auto">
           <table className="table">

@@ -4,13 +4,14 @@ import { showConfirm } from '../../utils/confirmDelete'
 import {
   Plus, Pencil, Trash2, KeyRound,
   Eye, EyeOff, CheckCircle2, XCircle, Mail, Phone,
-  Shield, Users,
+  Shield, Users, Search, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { RowActions } from '../../components/ui/RowActions'
 import { agentService, type CreateAgentPayload, type UpdateAgentPayload } from '../../services/agent.service'
 import { useServerTable } from '../../hooks/useServerTable'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Agent extends Record<string, unknown> {
@@ -353,6 +354,7 @@ const STATUS_FILTER = [
 export function Agents() {
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 20 })
+  const { setToolbar } = useDialerHeader()
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
@@ -387,6 +389,29 @@ export function Agents() {
 
   const openCreate = () => { setEditingAgent(null); setModalOpen(true) }
   const openEdit   = (a: Agent) => { setEditingAgent(a); setModalOpen(true) }
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search agents…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={openCreate} className="lt-b lt-p">
+            <Plus size={13} /> Add Agent
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const columns: Column<Agent>[] = [
     {
@@ -479,13 +504,6 @@ export function Agents() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Agents</h1>
-          <p className="page-subtitle">Manage your team members and their access levels</p>
-        </div>
-      </div>
-
       <ServerDataTable<Agent>
         queryKey={['agents']}
         queryFn={(params) => agentService.list({
@@ -513,11 +531,7 @@ export function Agents() {
         activeFilters={table.filters} onFilterChange={table.setFilter}
         onResetFilters={table.resetFilters} hasActiveFilters={table.hasActiveFilters}
         page={table.page} limit={table.limit} onPageChange={table.setPage}
-        headerActions={
-          <button onClick={openCreate} className="btn-primary">
-            <Plus size={15} /> Add Agent
-          </button>
-        }
+        hideToolbar
       />
 
       <AgentModal

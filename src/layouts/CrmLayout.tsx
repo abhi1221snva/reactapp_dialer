@@ -64,27 +64,39 @@ export function CrmLayout() {
     setHeaderKey(k => k + 1)
   }, [pathname])
 
+  // Pages that render their own toolbar header
+  const OWN_HEADER = new Set([
+    '/crm/dashboard', '/crm/sms-inbox', '/crm/leads', '/crm/leads/create',
+    '/crm/lead-fields', '/crm/lead-status', '/crm/document-types',
+    '/crm/email-templates', '/crm/sms-templates', '/crm/pdf-templates', '/crm/lenders',
+  ])
+  const showHeader = !OWN_HEADER.has(pathname)
+    && !/^\/crm\/leads\/\d+$/.test(pathname)
+    && !/^\/crm\/leads\/\d+\/edit$/.test(pathname)
+    && !/^\/crm\/lenders\//.test(pathname)
+
   return (
     <CrmHeaderContext.Provider value={{ setDescription, setActions, headerKey }}>
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-        {/* ── Page title row (hidden on pages with their own header) */}
-        {pathname !== '/crm/dashboard' && pathname !== '/crm/sms-inbox' && pathname !== '/crm/leads/create' && !/^\/crm\/leads\/\d+$/.test(pathname) && !/^\/crm\/leads\/\d+\/edit$/.test(pathname) && (
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 leading-tight">{title}</h1>
-              {description && (
-                <p className="text-sm mt-0.5 text-slate-500">{description}</p>
-              )}
+        {/* ── Compact title bar (hidden on pages with own header) */}
+        {showHeader && (
+          <>
+            <div className="lt">
+              <div className="lt-title">
+                <h1>{title}</h1>
+              </div>
+              {description && <span className="lt-desc">{description}</span>}
+              {actions && <div className="lt-actions">{actions}</div>}
             </div>
-            {actions && (
-              <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>
-            )}
-          </div>
+            <div className="lt-accent lt-accent-green" />
+          </>
         )}
 
         {/* ── Page content ──────────────────────────────────────────────────── */}
-        <Outlet />
+        <div style={{ marginTop: showHeader ? 8 : 0 }}>
+          <Outlet />
+        </div>
 
       </div>
     </CrmHeaderContext.Provider>

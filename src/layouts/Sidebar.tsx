@@ -137,6 +137,7 @@ const DIALER_SECTIONS: NavSection[] = [
     minLevel: LEVELS.ADMIN,
     items: [
       { to: '/users',            label: 'Users & Agents',  icon: UserCog, minLevel: LEVELS.ADMIN },
+      { to: '/ring-groups',      label: 'Ring Groups',      icon: Users,   minLevel: LEVELS.ADMIN },
       { to: '/extension-groups', label: 'Extension Groups', icon: Layers,  minLevel: LEVELS.ADMIN },
     ],
   },
@@ -181,7 +182,6 @@ const DIALER_SECTIONS: NavSection[] = [
       { to: '/ivr',               label: 'IVR Menus',        icon: PhoneCall,    minLevel: LEVELS.ADMIN },
       { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail,    minLevel: LEVELS.ADMIN },
       { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,        minLevel: LEVELS.MANAGER },
-      { to: '/ring-groups',       label: 'Ring Groups',      icon: Users,        minLevel: LEVELS.ADMIN },
       { to: '/call-times',        label: 'Call Times',       icon: Clock,        minLevel: LEVELS.ADMIN },
       { to: '/holidays',          label: 'Holidays',         icon: CalendarDays, minLevel: LEVELS.ADMIN },
     ],

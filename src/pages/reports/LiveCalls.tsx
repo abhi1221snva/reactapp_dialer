@@ -12,6 +12,7 @@ import { dialerService } from '../../services/dialer.service'
 import { formatDateTime } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import toast from 'react-hot-toast'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ function StatCard({
 const REFRESH_INTERVAL = 5000 // 5 seconds
 
 export function LiveCalls() {
+  const { setToolbar } = useDialerHeader()
   const [tick, setTick]               = useState(0)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [countdown, setCountdown]     = useState(REFRESH_INTERVAL / 1000)
@@ -346,50 +348,26 @@ export function LiveCalls() {
     },
   ]
 
+  useEffect(() => {
+    setToolbar(
+      <div className="lt-right">
+        <button
+          onClick={() => setAutoRefresh((v) => !v)}
+          className="lt-b"
+          style={autoRefresh ? { background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' } : {}}
+        >
+          {autoRefresh ? <><Wifi size={13} /> Auto ({countdown}s)</> : <><WifiOff size={13} /> Paused</>}
+        </button>
+        <button onClick={manualRefresh} disabled={isFetching} className="lt-b" title="Refresh now">
+          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+        </button>
+      </div>
+    )
+    return () => setToolbar(undefined)
+  })
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="page-title">Live Calls</h1>
-            {!isLoading && !isError && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                LIVE
-              </span>
-            )}
-          </div>
-          <p className="page-subtitle">Real-time active call monitor — auto-refreshes every 5 seconds</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Auto-refresh toggle */}
-          <button
-            onClick={() => setAutoRefresh((v) => !v)}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-              autoRefresh
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-            )}
-          >
-            {autoRefresh ? (
-              <><Wifi size={13} /> Auto ({countdown}s)</>
-            ) : (
-              <><WifiOff size={13} /> Paused</>
-            )}
-          </button>
-          <button
-            onClick={manualRefresh}
-            disabled={isFetching}
-            className="btn-ghost btn-sm p-2 rounded-lg"
-            title="Refresh now"
-          >
-            <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
       {/* Campaign filter */}
       {campaignNames.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">

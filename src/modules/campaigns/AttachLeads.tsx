@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, List, Upload, CheckCircle2, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { listService } from '../../services/list.service'
@@ -12,8 +12,16 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { Badge } from '../../components/ui/Badge'
 import { formatDateTime } from '../../utils/format'
 import { useServerTable } from '../../hooks/useServerTable'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 type Step = 'choose' | 'existing' | 'upload' | 'mapping'
+
+const STEP_LABELS: { key: Step; label: string }[] = [
+  { key: 'choose',   label: '1. Choose' },
+  { key: 'existing', label: '2. Select' },
+  { key: 'upload',   label: '2. Upload' },
+  { key: 'mapping',  label: '3. Map' },
+]
 
 interface ListRow {
   id: number
@@ -35,6 +43,7 @@ interface ListRow {
 export function AttachLeads() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { setToolbar, headerKey } = useDialerHeader()
   const campaignId = Number(id)
 
   const [step, setStep] = useState<Step>('choose')
@@ -42,7 +51,14 @@ export function AttachLeads() {
   const [uploadFormData, setUploadFormData] = useState<UploadFormData | null>(null)
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
 
-  // Server table state for the "existing" step — must be at top level (hooks rule)
+  const { data: campaignData } = useQuery({
+    queryKey: ['campaign', id],
+    queryFn: () => campaignService.getById(campaignId),
+    enabled: !!campaignId,
+  })
+  const campaignRaw = (campaignData as { data?: { data?: { title?: string; campaign_name?: string } } })?.data?.data
+  const campaignName = campaignRaw?.title || campaignRaw?.campaign_name || ''
+
   const listTable = useServerTable({ defaultLimit: 15 })
 
   // ── Assign existing lists to campaign ──
@@ -63,24 +79,87 @@ export function AttachLeads() {
       prev.includes(listId) ? prev.filter(i => i !== listId) : [...prev, listId]
     )
 
-  // ── List upload parsed → go to mapping ──
   const handleParsed = (formData: UploadFormData, result: ParseResult) => {
     setUploadFormData(formData)
     setParseResult(result)
     setStep('mapping')
   }
 
-  // ── Mapping complete → navigate back to campaigns ──
   const handleImported = (_result: ImportResult) => {
     toast.success('Leads imported successfully')
     navigate(`/campaigns/${campaignId}/add-review`)
+  }
+
+  const goBack = () => {
+    if (step === 'mapping') setStep('upload')
+    else if (step === 'existing' || step === 'upload') setStep('choose')
+    else navigate(`/campaigns/${campaignId}`)
   }
 
   const getListId = (row: ListRow) => row.list_id ?? row.id
   const getListName = (row: ListRow) => row.l_title ?? row.title ?? row.list_name ?? `List #${getListId(row)}`
   const getLeadCount = (row: ListRow) => row.lead_count ?? row.rowListData ?? 0
 
-  // Columns matching Lists.tsx exactly, with a Select checkbox prepended
+  // ── Toolbar ──
+  useEffect(() => {
+    // Step pills to show
+    const visibleSteps = step === 'upload' || step === 'mapping'
+      ? [STEP_LABELS[0], STEP_LABELS[2], STEP_LABELS[3]]
+      : [STEP_LABELS[0], STEP_LABELS[1]]
+
+    const stepIdx = visibleSteps.findIndex(s => s.key === step)
+
+    setToolbar(
+      <>
+        <button className="lt-b" onClick={goBack}>
+          <ArrowLeft size={13} />
+          Back
+        </button>
+
+        <span className="lt-desc">
+          <strong style={{ color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>Campaign:</strong>
+          {campaignName || `#${campaignId}`}
+        </span>
+
+        {step === 'existing' && selectedListIds.length > 0 && (
+          <span className="lt-desc" style={{ background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>
+            {selectedListIds.length} list{selectedListIds.length !== 1 ? 's' : ''} selected
+          </span>
+        )}
+
+        <div className="lt-right">
+          {/* Step pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {visibleSteps.map((s, i) => (
+              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {i > 0 && <div style={{ width: 16, height: 1, background: '#e2e8f0' }} />}
+                <span style={{
+                  padding: '3px 10px',
+                  borderRadius: 20,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: step === s.key ? '#6366f1' : stepIdx > i ? '#e0e7ff' : '#f1f5f9',
+                  color: step === s.key ? '#fff' : stepIdx > i ? '#4338ca' : '#94a3b8',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {s.label}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="lt-divider" />
+
+          <button className="lt-b lt-p" onClick={() => navigate(`/campaigns/${campaignId}/add-review`)}>
+            Next: Review
+            <ArrowRight size={13} />
+          </button>
+        </div>
+      </>
+    )
+  }, [headerKey, step, selectedListIds.length, campaignName])
+
+  // ── List columns ──
   const listColumns: Column<ListRow>[] = [
     {
       key: 'select',
@@ -110,13 +189,13 @@ export function AttachLeads() {
       key: 'name', header: 'List Name',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <List size={15} className="text-white" />
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+            <List size={13} className="text-white" />
           </div>
           <div>
             <p className="font-medium text-slate-900 text-sm">{getListName(row)}</p>
             {row.campaign && (
-              <p className="text-xs text-slate-400 mt-0.5">{row.campaign as string}</p>
+              <p className="text-[11px] text-slate-400">{row.campaign as string}</p>
             )}
           </div>
         </div>
@@ -139,14 +218,6 @@ export function AttachLeads() {
       ),
     },
     {
-      key: 'is_dialing', header: 'Dialing',
-      render: (row) => (
-        <Badge variant={row.is_dialing === 1 ? 'blue' : 'gray'}>
-          {row.is_dialing === 1 ? 'Yes' : 'No'}
-        </Badge>
-      ),
-    },
-    {
       key: 'updated_at', header: 'Updated',
       render: (row) => (
         <span className="text-xs text-slate-500">
@@ -156,21 +227,12 @@ export function AttachLeads() {
     },
   ]
 
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   //  Render: Column Mapping step
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   if (step === 'mapping' && uploadFormData && parseResult) {
     return (
-      <div className="w-full space-y-4 animate-fadeIn">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setStep('upload')} className="btn-ghost p-2 rounded-lg">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-none">Map Columns</h1>
-            <p className="text-xs text-slate-500 mt-1">Map your file columns to lead fields</p>
-          </div>
-        </div>
+      <div className="max-w-4xl mx-auto">
         <ColumnMapping
           formData={uploadFormData}
           parseResult={parseResult}
@@ -181,62 +243,42 @@ export function AttachLeads() {
     )
   }
 
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   //  Render: Upload New List step
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   if (step === 'upload') {
     return (
-      <div className="w-full space-y-4 animate-fadeIn">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setStep('choose')} className="btn-ghost p-2 rounded-lg">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-none">Upload New List</h1>
-            <p className="text-xs text-slate-500 mt-1">Upload a CSV or Excel file with leads</p>
-          </div>
-        </div>
+      <div className="max-w-4xl mx-auto">
         <ListUpload onParsed={handleParsed} presetCampaignId={String(campaignId)} />
       </div>
     )
   }
 
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   //  Render: Select Existing List step
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   if (step === 'existing') {
     return (
-      <div className="w-full space-y-4 animate-fadeIn">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setStep('choose')} className="btn-ghost p-2 rounded-lg">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-none">Select Existing List</h1>
-            <p className="text-xs text-slate-500 mt-1">Choose one or more lists to attach to this campaign</p>
-          </div>
-        </div>
-
-        {/* Selection Summary Bar */}
+      <div className="space-y-3">
+        {/* Selection Summary */}
         {selectedListIds.length > 0 && (
-          <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-indigo-600 flex-shrink-0" />
-              <span className="text-sm font-medium text-indigo-800">
+              <CheckCircle2 size={14} className="text-indigo-600 flex-shrink-0" />
+              <span className="text-xs font-medium text-indigo-800">
                 {selectedListIds.length} list{selectedListIds.length !== 1 ? 's' : ''} selected
               </span>
             </div>
             <button
               type="button"
               onClick={() => setSelectedListIds([])}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
             >
-              Clear selection
+              Clear
             </button>
           </div>
         )}
 
-        {/* Exact same ServerDataTable as Lists page */}
         <ServerDataTable<ListRow>
           queryKey={['lists-attach']}
           queryFn={(params) => listService.list(params)}
@@ -250,7 +292,7 @@ export function AttachLeads() {
           }}
           columns={listColumns}
           keyField="id"
-          searchPlaceholder="Search lists by name…"
+          searchPlaceholder="Search lists…"
           filters={[
             { key: 'is_active', label: 'All Status', options: [
               { value: '1', label: 'Active' },
@@ -270,104 +312,54 @@ export function AttachLeads() {
           onPageChange={listTable.setPage}
         />
 
-        {selectedListIds.length === 0 && (
-          <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-            <AlertCircle size={15} className="flex-shrink-0" />
-            <span>Select at least one list to continue.</span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setStep('choose')}
-            className="btn-outline flex items-center gap-2"
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
+        {/* Assign button */}
+        <div className="flex items-center justify-end gap-3">
+          {selectedListIds.length === 0 && (
+            <span className="flex items-center gap-1.5 text-[11px] text-amber-600">
+              <AlertCircle size={12} />
+              Select at least one list
+            </span>
+          )}
           <button
             type="button"
             onClick={() => assignMutation.mutate()}
             disabled={selectedListIds.length === 0 || assignMutation.isPending}
-            className="btn-primary flex-1"
+            className="btn-primary flex items-center gap-2 text-xs px-4 py-2 h-auto disabled:opacity-50"
           >
-            <CheckCircle2 size={15} />
+            <CheckCircle2 size={13} />
             {assignMutation.isPending
               ? 'Assigning…'
-              : `Assign ${selectedListIds.length > 0 ? `${selectedListIds.length} ` : ''}List${selectedListIds.length !== 1 ? 's' : ''} to Campaign`}
+              : `Assign ${selectedListIds.length > 0 ? `${selectedListIds.length} ` : ''}List${selectedListIds.length !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
     )
   }
 
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   //  Render: Choose step (default)
-  // ─────────────────────────────────────────────
+  // ────────────────────────────────────────────────
   return (
-    <div className="w-full space-y-4 animate-fadeIn">
-
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/campaigns')}
-            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex-shrink-0">
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-none">Attach Leads</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Campaign #{campaignId} — add a lead list to start dialing</p>
-          </div>
-        </div>
-        <button type="button" onClick={() => navigate(`/campaigns/${campaignId}/add-review`)}
-          className="btn-primary px-6">
-          Next: Review
-          <ArrowRight size={15} />
-        </button>
-      </div>
-
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 text-xs">
-        <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">1</span>
-          Details
-          <CheckCircle2 size={13} className="text-emerald-500" />
-        </span>
-        <span className="w-6 h-px bg-slate-200" />
-        <span className="flex items-center gap-1.5 text-indigo-600 font-semibold">
-          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">2</span>
-          Attach Leads
-        </span>
-        <span className="w-6 h-px bg-slate-200" />
-        <span className="flex items-center gap-1.5 text-slate-400 font-medium">
-          <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] font-bold">3</span>
-          Review
-        </span>
-      </div>
+    <div className="max-w-3xl mx-auto space-y-4">
 
       {/* Two option cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
         {/* Select Existing List */}
         <button
           type="button"
           onClick={() => setStep('existing')}
-          className="group bg-white rounded-2xl border border-slate-200 p-6 text-left hover:border-indigo-300 hover:shadow-md transition-all"
-          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)' }}
+          className="group bg-white rounded-2xl border border-slate-200 p-5 text-left hover:border-indigo-300 hover:shadow-md transition-all"
+          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}
         >
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
-            <List size={20} className="text-indigo-600" />
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center mb-3 group-hover:bg-indigo-100 transition-colors">
+            <List size={18} className="text-indigo-600" />
           </div>
-          <h3 className="text-base font-semibold text-slate-900 mb-1">Select Existing List</h3>
-          <p className="text-sm text-slate-500 leading-relaxed">
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Select Existing List</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
             Choose from lists already in the system and attach them to this campaign.
           </p>
-          <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-indigo-600 group-hover:gap-2 transition-all">
-            Browse lists
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
+          <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-indigo-600 group-hover:gap-2 transition-all">
+            Browse lists <ArrowRight size={12} />
           </div>
         </button>
 
@@ -375,31 +367,28 @@ export function AttachLeads() {
         <button
           type="button"
           onClick={() => setStep('upload')}
-          className="group bg-white rounded-2xl border border-slate-200 p-6 text-left hover:border-indigo-300 hover:shadow-md transition-all"
-          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)' }}
+          className="group bg-white rounded-2xl border border-slate-200 p-5 text-left hover:border-indigo-300 hover:shadow-md transition-all"
+          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}
         >
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
-            <Upload size={20} className="text-indigo-600" />
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center mb-3 group-hover:bg-indigo-100 transition-colors">
+            <Upload size={18} className="text-indigo-600" />
           </div>
-          <h3 className="text-base font-semibold text-slate-900 mb-1">Upload New List</h3>
-          <p className="text-sm text-slate-500 leading-relaxed">
-            Upload a CSV or Excel file, map columns, and import leads directly to this campaign.
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Upload New List</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Upload a CSV or Excel file, map columns, and import leads directly.
           </p>
-          <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-indigo-600 group-hover:gap-2 transition-all">
-            Upload file
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
+          <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-indigo-600 group-hover:gap-2 transition-all">
+            Upload file <ArrowRight size={12} />
           </div>
         </button>
       </div>
 
       {/* Skip link */}
-      <div className="text-center pt-2">
+      <div className="text-center">
         <button
           type="button"
           onClick={() => navigate(`/campaigns/${campaignId}/add-review`)}
-          className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 transition-colors"
+          className="text-[11px] text-slate-400 hover:text-slate-600 underline underline-offset-2 transition-colors"
         >
           Skip for now — I'll add leads later
         </button>

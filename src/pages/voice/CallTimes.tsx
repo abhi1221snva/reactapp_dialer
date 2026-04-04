@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Clock, Plus, Pencil, X, CheckCircle2, AlertCircle,
@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast'
 import { calltimeService, DAY_KEYS, type DayKey, type DaySchedule } from '../../services/calltime.service'
 import { cn } from '../../utils/cn'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,6 +101,7 @@ export function CallTimes() {
   const [form, setForm]           = useState<FormState>(DEFAULT_FORM)
   const [search, setSearch]       = useState('')
   const [page, setPage]           = useState(1)
+  const { setToolbar } = useDialerHeader()
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const { data: rawData, isLoading } = useQuery({
@@ -182,35 +184,33 @@ export function CallTimes() {
     saveMutation.mutate()
   }
 
+  // ── Toolbar injection ──────────────────────────────────────────────────────
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={search} placeholder="Search schedules…" onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          {search && (
+            <button onClick={() => { setSearch(''); setPage(1) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={openCreate} className="lt-b lt-p">
+            <Plus size={13} /> Add Schedule
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-
-      {/* Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Call Times</h1>
-          <p className="page-subtitle">Define business-hour schedules that control when calls are routed normally or diverted.</p>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            className="input pl-9 h-9"
-            placeholder="Search schedules…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
-          />
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={openCreate} className="btn-primary">
-            <Plus size={15} /> Add Schedule
-          </button>
-        </div>
-      </div>
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">

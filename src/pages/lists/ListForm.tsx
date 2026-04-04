@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 import { ListUpload } from '../../modules/lists/ListUpload'
 import { ColumnMapping } from '../../modules/lists/ColumnMapping'
 import { ImportProgress } from '../../modules/lists/ImportProgress'
@@ -8,14 +9,14 @@ import type { UploadFormData, ParseResult, ImportResult } from '../../modules/li
 
 type Step = 'upload' | 'mapping' | 'done'
 
-const STEP_LABELS: Record<Step, string> = {
-  upload:  '1. Upload File',
-  mapping: '2. Map Columns',
-  done:    '3. Done',
-}
+const STEPS: { key: Step; label: string }[] = [
+  { key: 'upload',  label: '1. Upload' },
+  { key: 'mapping', label: '2. Mapping' },
+]
 
 export function ListForm() {
   const navigate = useNavigate()
+  const { setToolbar, headerKey } = useDialerHeader()
 
   const [step, setStep] = useState<Step>('upload')
   const [formData, setFormData] = useState<UploadFormData | null>(null)
@@ -33,46 +34,50 @@ export function ListForm() {
     setStep('done')
   }
 
-  return (
-    <div className="w-full space-y-5">
+  const stepIndex = STEPS.findIndex(s => s.key === step)
 
-      {/* Header */}
-      <div className="flex items-center gap-3">
+  // Inject back button + step pills into the standard .lt toolbar
+  useEffect(() => {
+    setToolbar(
+      <>
+        {/* Back button */}
+        <button
+          className="lt-b"
+          onClick={() => step === 'mapping' ? setStep('upload') : navigate('/lists')}
+        >
+          <ArrowLeft size={13} />
+          Back
+        </button>
+
+        {/* Step pills (right-aligned) */}
         {step !== 'done' && (
-          <button
-            onClick={() => step === 'mapping' ? setStep('upload') : navigate('/lists')}
-            className="btn-ghost p-2 rounded-lg"
-          >
-            <ArrowLeft size={18} />
-          </button>
-        )}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">New List</h1>
-          <p className="page-subtitle">Upload a lead list from Excel or CSV</p>
-        </div>
-      </div>
-
-      {/* Step indicator */}
-      {step !== 'done' && (
-        <div className="flex items-center gap-2">
-          {(['upload', 'mapping'] as Step[]).map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              {i > 0 && <div className="w-8 h-px bg-slate-200" />}
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                step === s
-                  ? 'bg-indigo-600 text-white'
-                  : (s === 'upload' && step === 'mapping')
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'bg-slate-100 text-slate-400'
-              }`}>
-                {STEP_LABELS[s]}
-              </div>
+          <div className="lt-right">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {STEPS.map((s, i) => (
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {i > 0 && <div style={{ width: 16, height: 1, background: '#e2e8f0' }} />}
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: step === s.key ? '#6366f1' : stepIndex > i ? '#e0e7ff' : '#f1f5f9',
+                    color: step === s.key ? '#fff' : stepIndex > i ? '#4338ca' : '#94a3b8',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {s.label}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </>
+    )
+  }, [step, headerKey])
 
-      {/* Step content */}
+  return (
+    <div className="max-w-4xl mx-auto">
       {step === 'upload' && (
         <ListUpload onParsed={handleParsed} />
       )}
@@ -88,13 +93,6 @@ export function ListForm() {
 
       {step === 'done' && importResult && formData && (
         <ImportProgress result={importResult} listTitle={formData.title} />
-      )}
-
-      {/* Cancel (upload step only) */}
-      {step === 'upload' && (
-        <div>
-          <button onClick={() => navigate('/lists')} className="btn-outline w-full">Cancel</button>
-        </div>
       )}
     </div>
   )

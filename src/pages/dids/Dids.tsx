@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../../stores/auth.store'
 import {
   Plus, Pencil, Trash2, Phone, MessageSquare, Star,
   User, GitBranch, Users, Voicemail, ExternalLink,
   ArrowRight, Hash, Search, ChevronLeft, ChevronRight,
-  UserCheck, PhoneIncoming, Loader2,
+  UserCheck, PhoneIncoming, Loader2, X,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 import toast from 'react-hot-toast'
 import { didService } from '../../services/did.service'
 import { confirmDelete } from '../../utils/confirmDelete'
@@ -275,6 +276,7 @@ export function Dids() {
   const navigate      = useNavigate()
   const qc            = useQueryClient()
   const clientId      = useAuthStore(s => s.user?.parent_id)
+  const { setToolbar } = useDialerHeader()
   const [search, setSearch]       = useState('')
   const [page, setPage]           = useState(1)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -330,34 +332,31 @@ export function Dids() {
     }
   }
 
-  return (
-    <div className="space-y-5">
-
-      {/* ── Page header ── */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Phone Numbers</h1>
-          <p className="page-subtitle">Manage DIDs, call routing, and SMS assignments</p>
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={search} placeholder="Search numbers…" onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          {search && (
+            <button onClick={() => { setSearch(''); setPage(1) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
         </div>
-      </div>
-
-      {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            className="input pl-9 h-9"
-            placeholder="Search numbers or caller ID…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
-          />
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => navigate('/dids/create')} className="btn-primary">
-            <Plus size={15} /> Add Number
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => navigate('/dids/create')} className="lt-b lt-p">
+            <Plus size={13} /> Add Number
           </button>
         </div>
-      </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
+
+  return (
+    <div className="space-y-5">
 
       {/* ── Table ── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">

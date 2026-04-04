@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, Trash2, UserCircle, Eye, X,
+  Plus, Pencil, Trash2, UserCircle, Eye, X, Search,
   Phone, Globe,
   PhoneForwarded, Shield,
   CheckCircle2, XCircle,
@@ -16,6 +16,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { cn } from '../../utils/cn'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface Agent {
   id: number
@@ -251,6 +252,30 @@ export function Users() {
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
   const [viewUser, setViewUser] = useState<Agent | null>(null)
+  const { setToolbar } = useDialerHeader()
+
+  useEffect(() => {
+    setToolbar(
+      <>
+        <div className="lt-search">
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          <input type="text" value={table.search} placeholder="Search users…" onChange={e => table.setSearch(e.target.value)} />
+          {table.search && (
+            <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="lt-divider" />
+        <div className="lt-right">
+          <button onClick={() => navigate('/users/create')} className="lt-b lt-p">
+            <Plus size={13} /> Add User
+          </button>
+        </div>
+      </>
+    )
+    return () => setToolbar(undefined)
+  })
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: number }) =>
@@ -372,13 +397,6 @@ export function Users() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Users & Agents</h1>
-          <p className="page-subtitle">Manage team members and their access levels</p>
-        </div>
-      </div>
-
       <ServerDataTable<Agent>
         queryKey={['users']}
         queryFn={(params) => userService.list(params)}
@@ -406,11 +424,7 @@ export function Users() {
         page={table.page}
         limit={table.limit}
         onPageChange={table.setPage}
-        headerActions={
-          <button onClick={() => navigate('/users/create')} className="btn-primary">
-            <Plus size={15} /> Add User
-          </button>
-        }
+        hideToolbar
       />
 
       {viewUser && (

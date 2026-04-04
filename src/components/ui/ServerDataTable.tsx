@@ -58,6 +58,10 @@ interface Props<T extends Record<string, unknown>> {
 
   // header slot
   headerActions?: React.ReactNode
+
+  /** When true, the built-in toolbar (search, filters, refresh) is hidden.
+   *  Use this when the parent page renders the toolbar in the layout header instead. */
+  hideToolbar?: boolean
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -174,6 +178,7 @@ export function ServerDataTable<T extends Record<string, unknown>>({
   filters = [], activeFilters = {}, onFilterChange = () => {}, onResetFilters = () => {}, hasActiveFilters = false,
   page, limit, onPageChange,
   headerActions,
+  hideToolbar = false,
 }: Props<T>) {
 
   const params: TableParams = { page, limit, search, filters: activeFilters }
@@ -190,67 +195,69 @@ export function ServerDataTable<T extends Record<string, unknown>>({
 
   return (
     <div className="space-y-2">
-      {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex flex-1 flex-wrap gap-2 items-center">
-          {/* Search */}
-          <div className="relative min-w-[220px] flex-1 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              className="input pl-9 pr-8 h-9 text-sm"
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={e => onSearchChange(e.target.value)}
-            />
-            {search && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-
-          {/* Filter dropdowns */}
-          {filters.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <SlidersHorizontal size={14} className="text-slate-400" />
-              {filters.map(f => (
-                <select
-                  key={f.key}
-                  className="input h-9 text-sm w-auto pr-8 min-w-[120px] py-1.5"
-                  value={activeFilters[f.key] ?? ''}
-                  onChange={e => onFilterChange(f.key, e.target.value)}
+      {/* ── Toolbar (hidden when parent renders it in the layout header) ── */}
+      {!hideToolbar && (
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+          <div className="flex flex-1 flex-wrap gap-2 items-center">
+            {/* Search */}
+            <div className="relative min-w-[220px] flex-1 max-w-sm">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                className="input pl-9 pr-8 h-9 text-sm"
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={e => onSearchChange(e.target.value)}
+              />
+              {search && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
-                  <option value="">{f.label}</option>
-                  {f.options.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              ))}
-              {hasActiveFilters && (
-                <button onClick={onResetFilters} className="btn-ghost btn-sm h-9 gap-1 text-slate-500">
-                  <X size={13} /> Clear
+                  <X size={13} />
                 </button>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Right side actions + refresh */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="btn-ghost btn-sm p-2 h-9 w-9"
-            title="Refresh"
-          >
-            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-          </button>
-          {headerActions}
+            {/* Filter dropdowns */}
+            {filters.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <SlidersHorizontal size={14} className="text-slate-400" />
+                {filters.map(f => (
+                  <select
+                    key={f.key}
+                    className="input h-9 text-sm w-auto pr-8 min-w-[120px] py-1.5"
+                    value={activeFilters[f.key] ?? ''}
+                    onChange={e => onFilterChange(f.key, e.target.value)}
+                  >
+                    <option value="">{f.label}</option>
+                    {f.options.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                ))}
+                {hasActiveFilters && (
+                  <button onClick={onResetFilters} className="btn-ghost btn-sm h-9 gap-1 text-slate-500">
+                    <X size={13} /> Clear
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right side actions + refresh */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="btn-ghost btn-sm p-2 h-9 w-9"
+              title="Refresh"
+            >
+              <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            </button>
+            {headerActions}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Table ── */}
       <div className="table-wrapper bg-white">

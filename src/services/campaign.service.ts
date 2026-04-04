@@ -38,6 +38,9 @@ export const campaignService = {
   assignLists: (campaignId: number, listIds: number[]) =>
     api.post('/campaign/assign-lists', { campaign_id: campaignId, lead_list_ids: listIds }),
 
+  detachList: (campaignId: number, listId: number) =>
+    api.post('/campaign/detach-list', { campaign_id: campaignId, list_id: listId }),
+
   // Dropdown data for campaign form
   getExtensions: () => api.get('/extension'),
   getDids: () => api.post('/did', {}),
