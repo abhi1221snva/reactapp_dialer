@@ -336,7 +336,8 @@ function ExtGroupFormModal({
       return
     }
 
-    const payload = { title: form.title.trim(), extensions: form.extensions.map(String) }
+    const trimmed = form.title.trim()
+    const payload = { title: trimmed.charAt(0).toUpperCase() + trimmed.slice(1), extensions: form.extensions.map(String) }
     console.log('[ExtGroup submit]', { editing_id: editing?.id, payload })
     mutation.mutate(payload)
   }
@@ -393,7 +394,7 @@ export function ExtensionGroups() {
       <>
         <div className="lt-search">
           <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
-          <input type="text" value={table.search} placeholder="Search groups…" onChange={e => table.setSearch(e.target.value)} />
+          <input type="text" value={table.search} placeholder="Search extension groups…" onChange={e => table.setSearch(e.target.value)} />
           {table.search && (
             <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
               <X size={12} />
@@ -425,6 +426,7 @@ export function ExtensionGroups() {
       extensiongroupService.updateStatus(id, !status),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['extension-groups'] })
+      await qc.invalidateQueries({ queryKey: ['ext-group-map'] })
     },
     onError: () => toast.error('Failed to update status'),
   })
@@ -433,7 +435,7 @@ export function ExtensionGroups() {
 
   const columns: Column<ExtGroup>[] = [
     {
-      key: 'title', header: 'Name',
+      key: 'title', header: 'Name', sortable: true,
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-50">
@@ -501,7 +503,7 @@ export function ExtensionGroups() {
           return r?.data?.total ?? r?.data?.total_rows ?? 0
         }}
         columns={columns}
-        searchPlaceholder="Search groups…"
+        searchPlaceholder="Search extension groups…"
         emptyText="No extension groups found"
         emptyIcon={<Layers size={40} />}
         search={table.search} onSearchChange={table.setSearch}

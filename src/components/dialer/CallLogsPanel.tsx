@@ -1,8 +1,13 @@
-import { PhoneCall, PhoneMissed, PhoneOff, Clock, Inbox } from 'lucide-react'
+import { PhoneCall, PhoneMissed, PhoneOff, Clock, Inbox, RotateCcw } from 'lucide-react'
 import { useDialerStore } from '../../stores/dialer.store'
 import { formatDuration } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import type { CallLog } from '../../types'
+
+interface Props {
+  /** When provided (agent is in 'ready' state), show redial button per log entry */
+  onRedial?: (phoneNumber: string, leadName: string, leadId?: number, campaignId?: number) => void
+}
 
 function statusConfig(status: CallLog['status']) {
   switch (status) {
@@ -28,7 +33,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 3600)}h ago`
 }
 
-export function CallLogsPanel() {
+export function CallLogsPanel({ onRedial }: Props) {
   const callLogs = useDialerStore((s) => s.callLogs)
 
   if (callLogs.length === 0) {
@@ -50,6 +55,7 @@ export function CallLogsPanel() {
       {callLogs.map((log) => {
         const cfg = statusConfig(log.status)
         const Icon = cfg.icon
+        const canRedial = onRedial && log.phone_number && log.status !== 'connected'
         return (
           <div
             key={log.id}
@@ -78,6 +84,17 @@ export function CallLogsPanel() {
               )}
               <p className="text-[10px] text-slate-400 mt-0.5">{timeAgo(log.started_at)}</p>
             </div>
+
+            {/* Redial button */}
+            {canRedial && (
+              <button
+                onClick={() => onRedial(log.phone_number, log.lead_name, log.lead_id, log.campaign_id)}
+                className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center transition-colors"
+                title={`Redial ${log.lead_name}`}
+              >
+                <RotateCcw size={13} />
+              </button>
+            )}
           </div>
         )
       })}

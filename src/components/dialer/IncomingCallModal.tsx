@@ -1,20 +1,33 @@
 import { useEffect } from 'react'
 import { Phone, PhoneOff } from 'lucide-react'
 import { useDialerStore } from '../../stores/dialer.store'
+import { useFloatingStore } from '../../stores/floating.store'
 import { formatPhoneNumber } from '../../utils/format'
 
 export function IncomingCallModal() {
   const { incomingCall, setIncomingCall } = useDialerStore()
+  const sipAnswerHandler  = useFloatingStore(s => s.sipAnswerHandler)
+  const sipDeclineHandler = useFloatingStore(s => s.sipDeclineHandler)
 
   useEffect(() => {
     if (!incomingCall) return
-    const audio = new Audio('/ring.mp3')
+    const audio = new Audio('/asset/audio/ringtone.wav')
     audio.loop = true
     audio.play().catch(() => {})
     return () => { audio.pause(); audio.currentTime = 0 }
   }, [incomingCall])
 
   if (!incomingCall) return null
+
+  const handleAnswer = () => {
+    if (sipAnswerHandler) sipAnswerHandler()
+    else setIncomingCall(null)
+  }
+
+  const handleDecline = () => {
+    if (sipDeclineHandler) sipDeclineHandler()
+    else setIncomingCall(null)
+  }
 
   return (
     /* Blur backdrop */
@@ -50,7 +63,7 @@ export function IncomingCallModal() {
         {/* Button row */}
         <div className="grid grid-cols-2 bg-slate-900">
           <button
-            onClick={() => setIncomingCall(null)}
+            onClick={handleDecline}
             className="flex items-center justify-center gap-2.5 py-5 font-semibold text-sm transition-all hover:bg-slate-800 border-r border-slate-700/60"
             style={{ color: '#f87171' }}
           >
@@ -60,7 +73,7 @@ export function IncomingCallModal() {
             Decline
           </button>
           <button
-            onClick={() => setIncomingCall(null)}
+            onClick={handleAnswer}
             className="flex items-center justify-center gap-2.5 py-5 font-semibold text-sm transition-all hover:bg-slate-800"
             style={{ color: '#34d399' }}
           >

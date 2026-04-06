@@ -45,6 +45,13 @@
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
   }
+  @keyframes slideInRight {
+    0%   { opacity: 0; transform: translateX(100%); }
+    100% { opacity: 1; transform: translateX(0); }
+  }
+  .animate-slideInRight {
+    animation: slideInRight 0.25s ease-out;
+  }
 }
 
 /* =============================================================

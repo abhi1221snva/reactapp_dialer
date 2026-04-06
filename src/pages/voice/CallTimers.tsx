@@ -1,37 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Clock, Plus, Pencil, X, CheckCircle2, AlertCircle,
+  Timer, Plus, Pencil, Trash2, X, CheckCircle2, AlertCircle,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { calltimeService, DAY_KEYS, type DayKey, type DaySchedule } from '../../services/calltime.service'
+import { campaignService } from '../../services/campaign.service'
+import { DAY_KEYS, type DayKey, type DaySchedule } from '../../services/calltime.service'
 import { cn } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type RawRow = {
+type CallTimer = {
   id: number
-  name: string
-  description: string
-  day: string | null
-  from_time: string | null
-  to_time: string | null
-  department_id: number | null
-}
-
-type Department = {
-  id: number
-  name: string
-  description: string
-  timings: Partial<Record<DayKey, { from: string; to: string }>>
+  title: string
+  week_plan: Record<string, { start: string; end: string }>
 }
 
 type FormState = {
-  name: string
-  description: string
-  dept_id: number
+  timer_id: number
+  title: string
   schedule: Record<DayKey, DaySchedule>
 }
 
@@ -53,31 +42,18 @@ function buildDefaultSchedule(): Record<DayKey, DaySchedule> {
   ) as Record<DayKey, DaySchedule>
 }
 
-function buildScheduleFromTimings(
-  timings: Partial<Record<DayKey, { from: string; to: string }>>
+function buildScheduleFromWeekPlan(
+  weekPlan: Record<string, { start: string; end: string }>
 ): Record<DayKey, DaySchedule> {
   return Object.fromEntries(
     DAY_KEYS.map(d => {
-      const t = timings[d]
+      const t = weekPlan[d]
       return [d, t
-        ? { enabled: true,  from: t.from, to: t.to }
+        ? { enabled: true, from: t.start, to: t.end }
         : { enabled: false, from: '09:00', to: '17:00' }
       ]
     })
   ) as Record<DayKey, DaySchedule>
-}
-
-function groupRows(rows: RawRow[]): Department[] {
-  const map = new Map<number, Department>()
-  for (const row of rows) {
-    if (!map.has(row.id)) {
-      map.set(row.id, { id: row.id, name: row.name, description: row.description, timings: {} })
-    }
-    if (row.day && row.from_time && row.to_time) {
-      map.get(row.id)!.timings[row.day as DayKey] = { from: row.from_time, to: row.to_time }
-    }
-  }
-  return Array.from(map.values())
 }
 
 function fmt12(time: string) {
@@ -88,14 +64,14 @@ function fmt12(time: string) {
 }
 
 const DEFAULT_FORM: FormState = {
-  name: '', description: '', dept_id: 0, schedule: buildDefaultSchedule(),
+  timer_id: 0, title: '', schedule: buildDefaultSchedule(),
 }
 
 const LIMIT = 10
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function CallTimes() {
+export function CallTimers() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]           = useState<FormState>(DEFAULT_FORM)
@@ -104,44 +80,52 @@ export function CallTimes() {
   const { setToolbar } = useDialerHeader()
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  const { data: rawData, isLoading } = useQuery({
-    queryKey: ['call-timings'],
+  const { data: timers = [], isLoading } = useQuery({
+    queryKey: ['call-timers-list'],
     queryFn: async () => {
-      const res = await calltimeService.getCallTimings()
-      const d = res.data?.data ?? res.data
-      return Array.isArray(d) ? (d as RawRow[]) : []
+      const res = await campaignService.listCallTimers()
+      const d = res.data?.data?.data ?? res.data?.data ?? res.data
+      return Array.isArray(d) ? (d as CallTimer[]) : []
     },
   })
 
-  const departments = rawData ? groupRows(rawData) : []
-
   // ── Client-side search + pagination ───────────────────────────────────────
-  const filtered = departments.filter(d =>
-    !search || d.name.toLowerCase().includes(search.toLowerCase()) ||
-    d.description.toLowerCase().includes(search.toLowerCase())
+  const filtered = timers.filter(t =>
+    !search || t.title.toLowerCase().includes(search.toLowerCase())
   )
   const totalRows  = filtered.length
   const totalPages = Math.max(1, Math.ceil(totalRows / LIMIT))
   const pageRows   = filtered.slice((page - 1) * LIMIT, page * LIMIT)
 
-  // ── Save mutation ──────────────────────────────────────────────────────────
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
-    mutationFn: () => calltimeService.saveCallTimings({
-      name:        form.name.charAt(0).toUpperCase() + form.name.slice(1),
-      description: form.description,
-      dept_id:     form.dept_id,
-      schedule:    form.schedule,
-    }),
-    onSuccess: (res) => {
-      if (res.data?.success === 'false') {
-        toast.error(res.data.message || 'Failed to save schedule')
-        return
+    mutationFn: () => {
+      const weekPlan: Record<string, { start: string; end: string }> = {}
+      for (const d of DAY_KEYS) {
+        if (form.schedule[d].enabled) {
+          weekPlan[d] = { start: form.schedule[d].from, end: form.schedule[d].to }
+        }
       }
-      toast.success(res.data?.message || 'Schedule saved successfully')
-      qc.invalidateQueries({ queryKey: ['call-timings'] })
-      qc.invalidateQueries({ queryKey: ['department-list'] })
+      if (form.timer_id) {
+        return campaignService.updateCallTimer(form.timer_id, { title: form.title, week_plan: weekPlan })
+      }
+      return campaignService.createCallTimer({ title: form.title, week_plan: weekPlan })
+    },
+    onSuccess: () => {
+      toast.success(form.timer_id ? 'Timer updated' : 'Timer created')
+      qc.invalidateQueries({ queryKey: ['call-timers-list'] })
       setShowModal(false)
     },
+    onError: () => toast.error('Failed to save timer'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => campaignService.deleteCallTimer(id),
+    onSuccess: () => {
+      toast.success('Timer deleted')
+      qc.invalidateQueries({ queryKey: ['call-timers-list'] })
+    },
+    onError: () => toast.error('Failed to delete timer'),
   })
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -150,14 +134,18 @@ export function CallTimes() {
     setShowModal(true)
   }
 
-  function openEdit(dept: Department) {
+  function openEdit(timer: CallTimer) {
     setForm({
-      name:        dept.name,
-      description: dept.description,
-      dept_id:     dept.id,
-      schedule:    buildScheduleFromTimings(dept.timings),
+      timer_id: timer.id,
+      title:    timer.title,
+      schedule: buildScheduleFromWeekPlan(timer.week_plan ?? {}),
     })
     setShowModal(true)
+  }
+
+  function handleDelete(timer: CallTimer) {
+    if (!window.confirm(`Delete "${timer.title}"? This cannot be undone.`)) return
+    deleteMutation.mutate(timer.id)
   }
 
   function setDay(day: DayKey, field: keyof DaySchedule, value: string | boolean) {
@@ -168,9 +156,9 @@ export function CallTimes() {
   }
 
   function handleSave() {
-    if (!form.name.trim()) { toast.error('Please enter a schedule name'); return }
+    if (!form.title.trim()) { toast.error('Please enter a timer name'); return }
     const hasAnyDay = DAY_KEYS.some(d => form.schedule[d].enabled)
-    if (!hasAnyDay) { toast.error('Please enable at least one business day'); return }
+    if (!hasAnyDay) { toast.error('Please enable at least one day'); return }
     for (const d of DAY_KEYS) {
       if (form.schedule[d].enabled) {
         if (!form.schedule[d].from || !form.schedule[d].to) {
@@ -190,7 +178,7 @@ export function CallTimes() {
       <>
         <div className="lt-search">
           <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
-          <input type="text" value={search} placeholder="Search schedules…" onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          <input type="text" value={search} placeholder="Search timers…" onChange={e => { setSearch(e.target.value); setPage(1) }} />
           {search && (
             <button onClick={() => { setSearch(''); setPage(1) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
               <X size={12} />
@@ -200,7 +188,7 @@ export function CallTimes() {
         <div className="lt-divider" />
         <div className="lt-right">
           <button onClick={openCreate} className="lt-b lt-p">
-            <Plus size={13} /> Add Schedule
+            <Plus size={13} /> Add Timer
           </button>
         </div>
       </>
@@ -220,14 +208,11 @@ export function CallTimes() {
               <tr className="border-b border-slate-100 bg-slate-50/70">
                 <th className="px-4 py-3 text-left">
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <Clock size={10} /> Schedule Name
+                    <Timer size={10} /> Timer Name
                   </div>
                 </th>
                 <th className="px-4 py-3 text-left">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Description</div>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Business Hours</div>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Schedule</div>
                 </th>
                 <th className="px-4 py-3 text-right">
                   <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Actions</div>
@@ -237,51 +222,50 @@ export function CallTimes() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-16 text-center">
+                  <td colSpan={3} className="px-4 py-16 text-center">
                     <Loader2 size={24} className="animate-spin text-indigo-400 mx-auto" />
                   </td>
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-16 text-center">
+                  <td colSpan={3} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
-                        <Clock size={24} className="text-slate-300" />
+                        <Timer size={24} className="text-slate-300" />
                       </div>
-                      <p className="text-sm font-semibold text-slate-500">No schedules found</p>
+                      <p className="text-sm font-semibold text-slate-500">No call timers found</p>
                       <p className="text-xs text-slate-400">
-                        {search ? 'Try a different search term' : 'Create your first call time schedule to get started'}
+                        {search ? 'Try a different search term' : 'Create your first call timer to schedule outbound campaigns'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                pageRows.map(dept => {
-                  const openDays = DAY_KEYS.filter(d => dept.timings[d])
+                pageRows.map(timer => {
+                  const openDays = DAY_KEYS.filter(d => timer.week_plan?.[d])
                   return (
-                    <tr key={dept.id} className="group border-b border-slate-100 hover:bg-slate-50/70 transition-colors last:border-b-0">
+                    <tr key={timer.id} className="group border-b border-slate-100 hover:bg-slate-50/70 transition-colors last:border-b-0">
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-                            <Clock size={14} className="text-white" />
+                            <Timer size={14} className="text-white" />
                           </div>
-                          <span className="font-semibold text-sm text-slate-900">{dept.name}</span>
+                          <span className="font-semibold text-sm text-slate-900">{timer.title}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-500">{dept.description || '—'}</td>
                       <td className="px-4 py-3.5">
                         {openDays.length === 0 ? (
                           <span className="text-xs text-slate-400 italic">No hours configured</span>
                         ) : (
                           <div className="flex flex-wrap gap-1.5">
                             {openDays.map(d => {
-                              const t = dept.timings[d]!
+                              const t = timer.week_plan[d]
                               return (
                                 <span
                                   key={d}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
                                 >
-                                  {DAY_LABELS[d]} {fmt12(t.from)}–{fmt12(t.to)}
+                                  {DAY_LABELS[d]} {fmt12(t.start)}–{fmt12(t.end)}
                                 </span>
                               )
                             })}
@@ -289,12 +273,22 @@ export function CallTimes() {
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-right">
-                        <button
-                          onClick={() => openEdit(dept)}
-                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors ml-auto"
-                        >
-                          <Pencil size={13} />
-                        </button>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <button
+                            onClick={() => openEdit(timer)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(timer)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -364,13 +358,13 @@ export function CallTimes() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
-                  <Clock size={16} className="text-white" />
+                  <Timer size={16} className="text-white" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-900">
-                    {form.dept_id ? 'Edit Schedule' : 'New Schedule'}
+                    {form.timer_id ? 'Edit Call Timer' : 'New Call Timer'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">Set the name and business hours for this schedule</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Set the name and weekly schedule for outbound campaigns</p>
                 </div>
               </div>
               <button
@@ -383,29 +377,18 @@ export function CallTimes() {
 
             {/* Body */}
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="form-group mb-0">
-                  <label className="label">Schedule Name <span className="text-red-500">*</span></label>
-                  <input
-                    className="input"
-                    placeholder="e.g. Main Office, Night Shift"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div className="form-group mb-0">
-                  <label className="label">Description</label>
-                  <input
-                    className="input"
-                    placeholder="Optional description"
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  />
-                </div>
+              <div className="form-group mb-0">
+                <label className="label">Timer Name <span className="text-red-500">*</span></label>
+                <input
+                  className="input"
+                  placeholder="e.g. Weekday 9-5, Evening Shift"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                />
               </div>
 
               <div>
-                <p className="label mb-3">Business Hours</p>
+                <p className="label mb-3">Weekly Schedule</p>
                 <div className="space-y-2">
                   {DAY_KEYS.map(day => {
                     const s = form.schedule[day]
@@ -452,7 +435,7 @@ export function CallTimes() {
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400 italic">Closed</span>
+                          <span className="text-xs text-slate-400 italic">Off</span>
                         )}
 
                         {s.enabled ? (
@@ -475,7 +458,7 @@ export function CallTimes() {
                 disabled={saveMutation.isPending}
                 className="btn-primary flex-1 flex items-center justify-center gap-1.5"
               >
-                {saveMutation.isPending ? 'Saving…' : form.dept_id ? 'Save Changes' : 'Create Schedule'}
+                {saveMutation.isPending ? 'Saving…' : form.timer_id ? 'Save Changes' : 'Create Timer'}
               </button>
             </div>
           </div>

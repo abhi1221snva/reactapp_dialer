@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useTimezone } from '../../hooks/useTimezone'
 import { useQuery } from '@tanstack/react-query'
 import {
   Search, Download, Play, PhoneCall, Clock, TrendingUp, BarChart2,
@@ -142,9 +143,11 @@ function DirectionBadge({ route }: { route?: string | null }) {
 
 export function Reports() {
   const { setToolbar } = useDialerHeader()
+  const { today, daysAgo } = useTimezone()
+  const initDates = useMemo(() => ({ from: daysAgo(7), to: today() }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filters, setFilters] = useState({
-    start_date:       new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
-    end_date:         new Date().toISOString().split('T')[0],
+    start_date:       initDates.from,
+    end_date:         initDates.to,
     number:           '',
     extension:        '',
     route:            '',       // IN / OUT direction filter
@@ -255,12 +258,10 @@ export function Reports() {
 
   const handlePreset = (preset: { label: string; days: number }) => {
     setActivePreset(preset.label)
-    const now  = new Date()
-    const from = new Date(now.getTime() - preset.days * 86400000)
     setFilters((f) => ({
       ...f,
-      start_date: preset.days === 0 ? now.toISOString().split('T')[0] : from.toISOString().split('T')[0],
-      end_date:   now.toISOString().split('T')[0],
+      start_date: preset.days === 0 ? today() : daysAgo(preset.days),
+      end_date:   today(),
     }))
     setPage(1)
   }

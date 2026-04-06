@@ -60,7 +60,7 @@ export function Lists() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, campaignId, status }: { id: number; campaignId: number; status: number }) =>
       listService.toggleStatus(id, campaignId, status === 1 ? 0 : 1),
-    onSuccess: () => { toast.success('Status updated'); qc.invalidateQueries({ queryKey: ['lists'] }) },
+    onSuccess: () => { toast.success('Status updated'); qc.invalidateQueries({ queryKey: ['lists'] }); qc.invalidateQueries({ queryKey: ['list'] }) },
     onError: () => toast.error('Failed to update status'),
   })
 
@@ -80,7 +80,8 @@ export function Lists() {
 
   const columns: Column<ListItem>[] = [
     {
-      key: 'name', header: 'List Name',
+      key: 'name', header: 'List Name', sortable: true,
+      sortValue: (row) => String(row.l_title ?? row.title ?? '').toLowerCase(),
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0">

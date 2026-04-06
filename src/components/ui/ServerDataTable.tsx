@@ -1,7 +1,8 @@
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  SlidersHorizontal, X, RefreshCw,
+  SlidersHorizontal, X, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { TableParams } from '../../hooks/useServerTable'
@@ -15,6 +16,7 @@ export interface Column<T> {
   className?: string
   headerClassName?: string
   sortable?: boolean
+  sortValue?: (row: T) => string | number | null
 }
 
 export interface FilterOption {
@@ -189,9 +191,39 @@ export function ServerDataTable<T extends Record<string, unknown>>({
     placeholderData: (prev) => prev,
   })
 
-  const rows = dataExtractor(raw)
+  const rawRows = dataExtractor(raw)
   const total = totalExtractor(raw)
   const totalPages = Math.max(1, Math.ceil(total / limit))
+
+  // ── Client-side sort ──
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDir === 'asc') setSortDir('desc')
+      else { setSortKey(null); setSortDir('asc') }
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const rows = useMemo(() => {
+    if (!sortKey) return rawRows
+    const col = columns.find(c => c.key === sortKey)
+    return [...rawRows].sort((a, b) => {
+      const av = col?.sortValue ? col.sortValue(a) : a[sortKey]
+      const bv = col?.sortValue ? col.sortValue(b) : b[sortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [rawRows, sortKey, sortDir, columns])
 
   return (
     <div className="space-y-2">
@@ -265,7 +297,22 @@ export function ServerDataTable<T extends Record<string, unknown>>({
           <thead>
             <tr>
               {columns.map(col => (
-                <th key={col.key} className={cn('text-left', col.headerClassName)}>{col.header}</th>
+                <th
+                  key={col.key}
+                  className={cn('text-left', col.headerClassName, col.sortable === true && 'cursor-pointer select-none hover:text-slate-700')}
+                  onClick={() => { if (col.sortable === true) handleSort(col.key) }}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {col.header}
+                    {col.sortable === true && (
+                      sortKey === col.key
+                        ? sortDir === 'asc'
+                          ? <ArrowUp size={12} className="text-indigo-600" />
+                          : <ArrowDown size={12} className="text-indigo-600" />
+                        : <ArrowUpDown size={12} className="text-slate-300" />
+                    )}
+                  </span>
+                </th>
               ))}
             </tr>
           </thead>

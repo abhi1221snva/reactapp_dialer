@@ -1,14 +1,18 @@
 import { useState } from 'react'
-import { Phone, Mail, MapPin, User, Copy, Check, FileText, Clock } from 'lucide-react'
+import { Phone, Mail, MapPin, User, Copy, Check, FileText, Clock, MessageSquare, Send, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useDialerStore } from '../../stores/dialer.store'
 import { formatPhoneNumber } from '../../utils/format'
 import { cn } from '../../utils/cn'
+import { smsService } from '../../services/sms.service'
+import { crmService } from '../../services/crm.service'
 
-type Tab = 'info' | 'history' | 'notes'
+type Tab = 'info' | 'history' | 'notes' | 'sms' | 'email'
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'info', label: 'Info', icon: User },
-  { id: 'history', label: 'History', icon: Clock },
+  { id: 'sms', label: 'SMS', icon: MessageSquare },
+  { id: 'email', label: 'Email', icon: Mail },
   { id: 'notes', label: 'Notes', icon: FileText },
 ]
 
@@ -33,6 +37,117 @@ function CopyField({ value, children }: { value: string; children: React.ReactNo
   )
 }
 
+function QuickSmsForm({ phone, leadId }: { phone: string; leadId?: number }) {
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const handleSend = async () => {
+    if (!message.trim()) return
+    setSending(true)
+    try {
+      if (leadId) {
+        await crmService.sendLeadSms(leadId, { to: phone, body: message.trim() })
+      } else {
+        await smsService.send({ did_id: 0, to: phone, message: message.trim() })
+      }
+      toast.success('SMS sent')
+      setMessage('')
+    } catch {
+      toast.error('Failed to send SMS')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <MessageSquare size={12} />
+        <span>To: <span className="font-mono font-medium text-slate-700">{formatPhoneNumber(phone)}</span></span>
+      </div>
+      <textarea
+        className="input resize-none text-sm"
+        rows={3}
+        placeholder="Type your SMS message…"
+        maxLength={320}
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+      />
+      <div className="flex items-center justify-between">
+        <span className={cn('text-[10px] font-medium', message.length > 300 ? 'text-amber-500' : 'text-slate-400')}>
+          {message.length}/320
+        </span>
+        <button
+          onClick={handleSend}
+          disabled={!message.trim() || sending}
+          className="btn-primary py-1.5 px-4 text-xs gap-1.5"
+        >
+          <Send size={12} />
+          {sending ? 'Sending…' : 'Send SMS'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function QuickEmailForm({ email, leadId }: { email: string; leadId?: number }) {
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const handleSend = async () => {
+    if (!subject.trim() || !body.trim() || !leadId) return
+    setSending(true)
+    try {
+      await crmService.sendMerchantEmail(leadId, {
+        to: email,
+        subject: subject.trim(),
+        body: body.trim(),
+      })
+      toast.success('Email sent')
+      setSubject('')
+      setBody('')
+    } catch {
+      toast.error('Failed to send email')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <Mail size={12} />
+        <span>To: <span className="font-medium text-slate-700">{email}</span></span>
+      </div>
+      <input
+        type="text"
+        className="input text-sm"
+        placeholder="Subject"
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+      />
+      <textarea
+        className="input resize-none text-sm"
+        rows={3}
+        placeholder="Email body…"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+      />
+      <div className="flex justify-end">
+        <button
+          onClick={handleSend}
+          disabled={!subject.trim() || !body.trim() || !leadId || sending}
+          className="btn-primary py-1.5 px-4 text-xs gap-1.5"
+        >
+          <Send size={12} />
+          {sending ? 'Sending…' : 'Send Email'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function LeadInfoPanel() {
   const { activeLead } = useDialerStore()
   const [activeTab, setActiveTab] = useState<Tab>('info')
@@ -53,6 +168,7 @@ export function LeadInfoPanel() {
 
   const name = [activeLead.first_name, activeLead.last_name].filter(Boolean).join(' ') || 'Unknown'
   const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+  const leadId = activeLead.lead_id ?? activeLead.id
 
   return (
     <div className="space-y-4">
@@ -72,21 +188,28 @@ export function LeadInfoPanel() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+      <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1">
         {tabs.map((tab) => {
           const Icon = tab.icon
+          // Disable SMS tab if no phone, Email tab if no email
+          const disabled =
+            (tab.id === 'sms' && !activeLead.phone_number) ||
+            (tab.id === 'email' && !activeLead.email)
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => !disabled && setActiveTab(tab.id)}
+              disabled={disabled}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                'flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all',
                 activeTab === tab.id
                   ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  : disabled
+                    ? 'text-slate-300 cursor-not-allowed'
+                    : 'text-slate-500 hover:text-slate-700'
               )}
             >
-              <Icon size={11} /> {tab.label}
+              <Icon size={10} /> {tab.label}
             </button>
           )
         })}
@@ -136,11 +259,12 @@ export function LeadInfoPanel() {
         </div>
       )}
 
-      {activeTab === 'history' && (
-        <div className="flex flex-col items-center justify-center py-8 gap-2">
-          <Clock size={24} className="text-slate-300" />
-          <p className="text-xs text-slate-400">Call history unavailable</p>
-        </div>
+      {activeTab === 'sms' && activeLead.phone_number && (
+        <QuickSmsForm phone={activeLead.phone_number} leadId={leadId} />
+      )}
+
+      {activeTab === 'email' && activeLead.email && (
+        <QuickEmailForm email={activeLead.email} leadId={leadId} />
       )}
 
       {activeTab === 'notes' && (

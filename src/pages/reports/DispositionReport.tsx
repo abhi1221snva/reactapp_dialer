@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart3, Calendar, Download, RefreshCw, Filter, ChevronDown,
@@ -52,12 +52,7 @@ const DATE_PRESETS = [
 
 type ChartType = 'bar' | 'pie'
 
-function today()       { return new Date().toISOString().slice(0, 10) }
-function daysAgo(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+import { useTimezone } from '../../hooks/useTimezone'
 
 const PALETTE = [
   '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444',
@@ -103,9 +98,11 @@ function PieTooltip({ active, payload }: {
 
 export function DispositionReport() {
   const { setToolbar } = useDialerHeader()
+  const { today, daysAgo } = useTimezone()
+  const initDates = useMemo(() => ({ from: daysAgo(7), to: today() }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filters, setFilters] = useState<Filters>({
-    date_from:   daysAgo(7),
-    date_to:     today(),
+    date_from:   initDates.from,
+    date_to:     initDates.to,
     campaign_id: '',
   })
   const [activePreset, setActivePreset] = useState<string>('7 Days')

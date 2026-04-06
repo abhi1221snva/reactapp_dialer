@@ -35,9 +35,23 @@ interface FloatingState {
   phoneRegistered: boolean
   setPhoneRegistered: (v: boolean) => void
 
+  // ── Phone in-call state (true when SIP call is connected) ─────────────────
+  phoneInCall: boolean
+  setPhoneInCall: (v: boolean) => void
+
+  // ── Campaign dial flag (true while Dialer is originating a campaign call) ─
+  campaignDialActive: boolean
+  setCampaignDialActive: (v: boolean) => void
+
   // ── Phone action ─── (WebPhone registers this so FABMenu can call sipEnable)
   phoneClickHandler: (() => void) | null
   registerPhoneClick: (fn: () => void) => void
+
+  // ── SIP answer/decline ── (WebPhone registers, IncomingCallModal calls) ──
+  sipAnswerHandler: (() => void) | null
+  sipDeclineHandler: (() => void) | null
+  registerSipAnswer: (fn: () => void) => void
+  registerSipDecline: (fn: () => void) => void
 
   // ── Chat unread ────────────────────────────────────────────────────────────
   chatUnread: number
@@ -88,8 +102,19 @@ export const useFloatingStore = create<FloatingState>((set) => ({
   phoneRegistered: false,
   setPhoneRegistered: (v) => set({ phoneRegistered: v }),
 
+  phoneInCall: false,
+  setPhoneInCall: (v) => set({ phoneInCall: v }),
+
+  campaignDialActive: false,
+  setCampaignDialActive: (v) => set({ campaignDialActive: v }),
+
   phoneClickHandler: null,
   registerPhoneClick: (fn) => set({ phoneClickHandler: fn }),
+
+  sipAnswerHandler: null,
+  sipDeclineHandler: null,
+  registerSipAnswer: (fn) => set({ sipAnswerHandler: fn }),
+  registerSipDecline: (fn) => set({ sipDeclineHandler: fn }),
 
   chatUnread: 0,
   setChatUnread: (n) => set({ chatUnread: n }),

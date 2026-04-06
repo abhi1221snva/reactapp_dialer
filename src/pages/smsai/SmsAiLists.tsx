@@ -280,7 +280,7 @@ export function SmsAiLists() {
   const columns: Column<ListItem>[] = [
     {
       key: 'title',
-      header: 'List Title',
+      header: 'List Title', sortable: true,
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">

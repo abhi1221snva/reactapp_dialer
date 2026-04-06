@@ -35,6 +35,16 @@ interface RoleOption {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function capFirst(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+function formatUSPhone(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 10)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+}
+
 function agentInitials(a: Agent) {
   return ((a.first_name?.[0] ?? '') + (a.last_name?.[0] ?? '')).toUpperCase() || '?'
 }
@@ -91,7 +101,7 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
     first_name: editing?.first_name ?? '',
     last_name:  editing?.last_name  ?? '',
     email:      editing?.email      ?? '',
-    mobile:     editing?.mobile     ?? '',
+    mobile:     editing?.mobile ? formatUSPhone(editing.mobile) : '',
     role_id:    editing?.role       ?? (roles[0]?.id ?? 0),
     password:   '',
     password_confirmation: '',
@@ -106,7 +116,7 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
       first_name: editing?.first_name ?? '',
       last_name:  editing?.last_name  ?? '',
       email:      editing?.email      ?? '',
-      mobile:     editing?.mobile     ?? '',
+      mobile:     editing?.mobile ? formatUSPhone(editing.mobile) : '',
       role_id:    editing?.role       ?? (roles[0]?.id ?? 0),
       password:   '',
       password_confirmation: '',
@@ -128,9 +138,9 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
     try {
       if (isEdit) {
         const payload: UpdateAgentPayload = {
-          first_name: form.first_name,
-          last_name:  form.last_name,
-          mobile:     form.mobile || undefined,
+          first_name: capFirst(form.first_name),
+          last_name:  capFirst(form.last_name),
+          mobile:     form.mobile ? form.mobile.replace(/\D/g, '') : undefined,
           role_id:    Number(form.role_id),
           status:     Number(form.status) as 0 | 1,
         }
@@ -138,10 +148,10 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
         toast.success('Agent updated')
       } else {
         const payload: CreateAgentPayload = {
-          first_name: form.first_name,
-          last_name:  form.last_name || undefined,
+          first_name: capFirst(form.first_name),
+          last_name:  form.last_name ? capFirst(form.last_name) : undefined,
           email:      form.email,
-          mobile:     form.mobile || undefined,
+          mobile:     form.mobile ? form.mobile.replace(/\D/g, '') : undefined,
           password:   form.password,
           password_confirmation: form.password_confirmation,
           role_id:    Number(form.role_id),
@@ -151,6 +161,7 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
         toast.success('Agent created — credentials emailed')
       }
       qc.invalidateQueries({ queryKey: ['agents'] })
+      qc.invalidateQueries({ queryKey: ['agent'] })
       onClose()
     } catch { /* interceptor */ } finally { setSaving(false) }
   }
@@ -200,8 +211,8 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
               <label className="label">Mobile</label>
               <div className="relative">
                 <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input type="tel" className="input pl-9" placeholder="5551234567"
-                  value={form.mobile} onChange={set('mobile')} />
+                <input type="tel" className="input pl-9" placeholder="(555) 555-5555"
+                  value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: formatUSPhone(e.target.value) }))} maxLength={14} />
               </div>
             </div>
             <div>
@@ -376,6 +387,7 @@ export function Agents() {
     onSuccess: (_r, a) => {
       toast.success(a.status === 1 ? 'Agent deactivated' : 'Agent activated')
       qc.invalidateQueries({ queryKey: ['agents'] })
+      qc.invalidateQueries({ queryKey: ['agent'] })
     },
   })
 
@@ -415,7 +427,8 @@ export function Agents() {
 
   const columns: Column<Agent>[] = [
     {
-      key: 'first_name', header: 'Agent',
+      key: 'first_name', header: 'Agent', sortable: true,
+      sortValue: (a) => `${a.first_name} ${a.last_name}`.toLowerCase(),
       render: (a) => (
         <div className="flex items-center gap-3">
           <div className={`w-9 h-9 rounded-xl ${avatarBg(a.id)} flex items-center justify-center flex-shrink-0`}>
@@ -433,7 +446,7 @@ export function Agents() {
       render: (a) => (
         <div>
           <p className="text-sm text-slate-700">{a.email}</p>
-          {a.mobile && <p className="text-xs text-slate-500">{a.mobile}</p>}
+          {a.mobile && <p className="text-xs text-slate-500">{formatUSPhone(a.mobile)}</p>}
         </div>
       ),
     },

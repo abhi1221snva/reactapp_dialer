@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -15,6 +15,7 @@ import { dashboardService } from '../../services/dashboard.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { initials } from '../../utils/format'
+import { useTimezone } from '../../hooks/useTimezone'
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const PIE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899']
@@ -114,13 +115,10 @@ function fmtMoney(n: number): string {
 const PERIOD_OPTIONS = ['7D', '30D', '90D'] as const
 type Period = typeof PERIOD_OPTIONS[number]
 
-function buildDateRange(days: number) {
-  const to   = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - days)
+function buildDateRange(days: number, todayFn: () => string, daysAgoFn: (n: number) => string) {
   return {
-    date_from: from.toISOString().slice(0, 10),
-    date_to:   to.toISOString().slice(0, 10),
+    date_from: daysAgoFn(days),
+    date_to:   todayFn(),
   }
 }
 
@@ -238,13 +236,14 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
 export function Dashboard() {
   const navigate  = useNavigate()
   const { user }  = useAuthStore()
+  const { today, daysAgo, tz } = useTimezone()
   const [period, setPeriod] = useState<Period>('7D')
   const [revPeriod, setRevPeriod] = useState<Period>('30D')
 
   const days        = period === '7D' ? 7 : period === '30D' ? 30 : 90
   const revDays     = revPeriod === '7D' ? 7 : revPeriod === '30D' ? 30 : 90
-  const dateRange   = buildDateRange(days)
-  const revRange    = buildDateRange(revDays)
+  const dateRange   = buildDateRange(days, today, daysAgo)
+  const revRange    = buildDateRange(revDays, today, daysAgo)
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -301,7 +300,7 @@ export function Dashboard() {
 
   const greeting     = getGreeting()
   const displayName  = user?.first_name || user?.name?.split(' ')[0] || ''
-  const today        = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  const todayDisplay = new Date().toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
     <div className="space-y-5 pb-6">
@@ -319,7 +318,7 @@ export function Dashboard() {
         <div className="absolute right-32 -bottom-12 w-40 h-40 rounded-full bg-white/5" />
 
         <div className="relative">
-          <p className="text-indigo-200 text-sm font-medium">{today}</p>
+          <p className="text-indigo-200 text-sm font-medium">{todayDisplay}</p>
           <h1 className="text-white text-2xl font-bold mt-0.5">
             {greeting}{displayName ? `, ${displayName}` : '!'} 👋
           </h1>

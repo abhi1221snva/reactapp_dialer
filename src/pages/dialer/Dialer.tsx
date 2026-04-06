@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { LogIn, LogOut, Radio, Zap, TrendingUp, Users, BarChart2, History, ClipboardList, PhoneCall, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { LogIn, LogOut, Radio, Zap, TrendingUp, Users, BarChart2, History, ClipboardList, PhoneCall, AlertTriangle, CheckCircle2, Clock, ChevronLeft, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dialerService } from '../../services/dialer.service'
 import { useDialerStore } from '../../stores/dialer.store'
@@ -12,16 +12,16 @@ import { LeadInfoPanel } from '../../components/dialer/LeadInfoPanel'
 import { DispositionForm } from '../../components/dialer/DispositionForm'
 import { TransferModal } from '../../components/dialer/TransferModal'
 import { CallLogsPanel } from '../../components/dialer/CallLogsPanel'
-import { IncomingCallModal } from '../../components/dialer/IncomingCallModal'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { cn } from '../../utils/cn'
-import type { Campaign } from '../../types'
+import { isCampaignInCallingHours } from '../../utils/timezone'
+import type { Campaign, Lead } from '../../types'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; classes: string }> = {
   idle:     { label: 'Not Ready',   classes: 'bg-slate-100 text-slate-500' },
   ready:    { label: 'Ready',       classes: 'bg-emerald-100 text-emerald-700' },
-  ringing:  { label: 'Ringing…',   classes: 'bg-amber-100 text-amber-700' },
+  ringing:  { label: 'Answer WebPhone…', classes: 'bg-amber-100 text-amber-700' },
   'in-call':{ label: 'In Call',    classes: 'bg-blue-100 text-blue-700' },
   wrapping: { label: 'Wrap-up',    classes: 'bg-violet-100 text-violet-700' },
   paused:   { label: 'Paused',     classes: 'bg-orange-100 text-orange-700' },
@@ -33,9 +33,12 @@ type RightTab = 'disposition' | 'logs' | 'stats'
 export function Dialer() {
   const user = useAuthStore((s) => s.user)
   const { sipConfig } = useAuth()
-  const phoneRegistered  = useFloatingStore(s => s.phoneRegistered)
-  const setPhoneOpen     = useFloatingStore(s => s.setPhoneOpen)
-  const phoneClickHandler = useFloatingStore(s => s.phoneClickHandler)
+  const phoneRegistered      = useFloatingStore(s => s.phoneRegistered)
+  const phoneInCall          = useFloatingStore(s => s.phoneInCall)
+  const phoneHasIncoming     = useFloatingStore(s => s.phoneHasIncoming)
+  const setPhoneOpen         = useFloatingStore(s => s.setPhoneOpen)
+  const phoneClickHandler    = useFloatingStore(s => s.phoneClickHandler)
+  const setCampaignDialActive = useFloatingStore(s => s.setCampaignDialActive)
 
   // webphoneOk = SIP is fully configured AND browser stack is registered (ready / in_call)
   const webphoneConfigured = sipConfig?.isConfigured ?? false
@@ -48,6 +51,7 @@ export function Dialer() {
     setActiveLead, setDispositions, setMuted, setOnHold,
     startCallTimer, resetDialer,
     addCallLog, updateLastCallLog,
+    leadHistory, pushLeadToHistory, goToPreviousLead,
   } = useDialerStore()
 
   const [showTransfer, setShowTransfer] = useState(false)
@@ -57,6 +61,38 @@ export function Dialer() {
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const heartbeatRef  = useRef<ReturnType<typeof setInterval> | null>(null)
   const callStartRef  = useRef<number>(0)
+  const ringbackRef   = useRef<HTMLAudioElement | null>(null)
+
+  // ── Play ringback tone while in ringing state ──────────────────────────────
+  // Stop the local ringback once WebPhone shows incoming (it plays its own ringtone)
+  useEffect(() => {
+    if (callState === 'ringing' && !phoneHasIncoming) {
+      if (!ringbackRef.current) {
+        ringbackRef.current = new Audio('/asset/audio/ringbacktone.wav')
+        ringbackRef.current.loop = true
+      }
+      ringbackRef.current.currentTime = 0
+      ringbackRef.current.play().catch(() => {})
+    } else {
+      if (ringbackRef.current) {
+        ringbackRef.current.pause()
+        ringbackRef.current.currentTime = 0
+      }
+    }
+    if (callState !== 'ringing') {
+      setCampaignDialActive(false)
+    }
+  }, [callState, phoneHasIncoming, setCampaignDialActive])
+
+  // ── Auto-transition: when agent answers WebPhone, move Dialer to "in-call" ─
+  // Asterisk rings agent's extension first. When agent answers (phoneInCall=true)
+  // Asterisk then dials the customer. Transition Dialer from ringing → in-call.
+  useEffect(() => {
+    if (phoneInCall && callState === 'ringing') {
+      setCallState('in-call')
+      startCallTimer()
+    }
+  }, [phoneInCall, callState, setCallState, startCallTimer])
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: campaignsData, isLoading } = useQuery({
@@ -71,6 +107,10 @@ export function Dialer() {
     dial_ratio:    Number(c.dial_ratio ?? c.call_ratio ?? 1),
     total_leads:   c.total_leads !== undefined ? Number(c.total_leads) : undefined,
     called_leads:  c.called_leads !== undefined ? Number(c.called_leads) : undefined,
+    time_based_calling: c.time_based_calling as number | undefined,
+    call_time_start:    (c.call_time_start ?? null) as string | null,
+    call_time_end:      (c.call_time_end ?? null) as string | null,
+    timezone:           (c.timezone ?? null) as string | null,
   }))
 
   // ── Timer helpers ────────────────────────────────────────────────────────────
@@ -124,6 +164,7 @@ export function Dialer() {
     return () => {
       stopTimer()
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
+      if (ringbackRef.current) { ringbackRef.current.pause(); ringbackRef.current = null }
     }
   }, [])
 
@@ -234,20 +275,52 @@ export function Dialer() {
 
     setIsDialing(true)
     try {
+      // Push current lead to history before fetching next
+      pushLeadToHistory()
+
       // Step 1: fetch next lead
+      // Backend returns { success, number, lead_id, list_id, data: [{label,value,is_dialing,...}] }
       const leadRes = await dialerService.getLead()
-      const lead = leadRes.data?.data
-      if (!lead) {
+      const raw = leadRes.data
+      if (!raw?.success || !raw.lead_id) {
         toast('No leads available in this campaign', { icon: 'ℹ️' })
         setIsDialing(false)
         return
+      }
+
+      // Transform backend field-array into a flat Lead object
+      const fields: Record<string, string> = {}
+      const fieldArr = Array.isArray(raw.data) ? raw.data : []
+      let firstName = ''; let lastName = ''
+      let email = ''; let address = ''; let city = ''; let state = ''
+      for (const f of fieldArr) {
+        const lbl = (f.label || '').toLowerCase()
+        const val = f.value ?? ''
+        if (lbl) fields[lbl] = val
+        if (lbl === 'first name' || lbl === 'first_name' || lbl === 'firstname') firstName = val
+        else if (lbl === 'last name' || lbl === 'last_name' || lbl === 'lastname') lastName = val
+        else if (lbl === 'email' || lbl === 'e-mail') email = val
+        else if (lbl === 'address') address = val
+        else if (lbl === 'city') city = val
+        else if (lbl === 'state') state = val
+      }
+
+      const lead: Lead = {
+        id: raw.lead_id,
+        lead_id: raw.lead_id,
+        list_id: raw.list_id ?? 0,
+        phone_number: raw.number ?? '',
+        first_name: firstName,
+        last_name: lastName,
+        email, address, city, state,
+        fields,
       }
       setActiveLead(lead)
 
       // Step 2: initiate call
       const leadId   = lead.lead_id ?? lead.id
       const queueId  = lead.id
-      const phoneNum = lead.phone_number ?? lead.number ?? ''
+      const phoneNum = lead.phone_number
 
       if (!phoneNum) {
         toast.error('Lead has no phone number')
@@ -262,7 +335,8 @@ export function Dialer() {
         id: queueId,
       })
 
-      // Step 3: ringing state
+      // Step 3: ringing state — ringback tone plays via callState effect
+      setCampaignDialActive(true)
       setCallState('ringing')
 
       // Add session log entry (status updated on hangup/disposition)
@@ -274,21 +348,13 @@ export function Dialer() {
         duration: 0,
         campaign_name: activeCampaign.campaign_name,
         started_at: new Date().toISOString(),
+        lead_id: leadId,
+        campaign_id: activeCampaign.id,
       })
 
-      /*
-       * ⚠️  Auto-transition ringing → in-call after 5 seconds.
-       *
-       * This simulates Asterisk connecting the call. In production, replace
-       * with a WebSocket event or poll POST /check-line-details until it
-       * returns an active channel.
-       */
-      setTimeout(() => {
-        useDialerStore.setState((s) => {
-          if (s.callState === 'ringing') return { callState: 'in-call' }
-          return s
-        })
-      }, 5000)
+      // WebPhone will auto-answer the SIP INVITE from Asterisk.
+      // Transition to in-call happens when phoneInCall becomes true.
+      setPhoneOpen(true)
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -301,7 +367,47 @@ export function Dialer() {
     }
   }
 
-  // ── Toggle helpers ───────────────────────────────────────────────────────────
+  // ── Redial handler ─────────────────────────────────────────────────────────
+  const handleRedial = async (phoneNumber: string, leadName: string, leadId?: number, campaignId?: number) => {
+    if (!activeCampaign || callState !== 'ready') return
+    const campId = campaignId ?? activeCampaign.id
+
+    setIsDialing(true)
+    try {
+      await dialerService.callNumber({
+        campaign_id: campId,
+        lead_id: leadId ?? 0,
+        number: phoneNumber,
+        id: leadId ?? 0,
+      })
+
+      setCampaignDialActive(true)
+      setCallState('ringing')
+      addCallLog({
+        id: `${Date.now()}`,
+        lead_name: leadName,
+        phone_number: phoneNumber,
+        status: 'no_answer',
+        duration: 0,
+        campaign_name: activeCampaign.campaign_name,
+        started_at: new Date().toISOString(),
+        lead_id: leadId,
+        campaign_id: campId,
+      })
+
+      // WebPhone will auto-answer the SIP INVITE from Asterisk
+      setPhoneOpen(true)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Redial failed'
+      toast.error(msg)
+    } finally {
+      setIsDialing(false)
+    }
+  }
+
+  // ── Toggle helpers ─────────────────────────────────────────────────────────
   const handleMute = () => setMuted(!isMuted)
   const handleHold = () => setOnHold(!isOnHold)
 
@@ -375,27 +481,52 @@ export function Dialer() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {campaigns.map((c) => {
               const progress = c.total_leads ? Math.round(((c.called_leads ?? 0) / c.total_leads) * 100) : 0
+              const callingHours = isCampaignInCallingHours(c, user?.timezone)
+              const isOutOfHours = !callingHours.inHours
               return (
                 <div
                   key={c.id}
-                  className="card hover:shadow-lg transition-all duration-200 flex flex-col"
+                  className={cn(
+                    'card transition-all duration-200 flex flex-col',
+                    isOutOfHours ? 'opacity-60 border-dashed' : 'hover:shadow-lg',
+                  )}
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
+                    <div className={cn(
+                      'w-11 h-11 rounded-xl flex items-center justify-center shadow-sm',
+                      isOutOfHours
+                        ? 'bg-slate-300'
+                        : 'bg-gradient-to-br from-indigo-500 to-violet-600'
+                    )}>
                       <Radio size={20} className="text-white" />
                     </div>
-                    <span className={cn(
-                      'px-2.5 py-1 rounded-full text-[11px] font-semibold',
-                      c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                    )}>
-                      {c.status}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={cn(
+                        'px-2.5 py-1 rounded-full text-[11px] font-semibold',
+                        c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                      )}>
+                        {c.status}
+                      </span>
+                      {isOutOfHours && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 flex items-center gap-1">
+                          <Clock size={9} /> Outside Hours
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <h3 className="font-bold text-slate-900 text-base leading-snug">{c.campaign_name}</h3>
                   <p className="text-xs text-slate-500 mt-1 capitalize">
                     {c.dial_method} &nbsp;·&nbsp; Ratio {c.dial_ratio}:1
                   </p>
+
+                  {/* Calling hours info */}
+                  {isOutOfHours && callingHours.nextWindow && (
+                    <p className="text-[11px] text-amber-600 mt-1.5 flex items-center gap-1">
+                      <Clock size={10} />
+                      {callingHours.nextWindow}
+                    </p>
+                  )}
 
                   <div className="flex items-center gap-3 mt-3">
                     <div className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -425,15 +556,18 @@ export function Dialer() {
 
                   <button
                     onClick={() => loginMutation.mutate(c.id)}
-                    disabled={loginMutation.isPending || !webphoneOk}
-                    title={!webphoneOk ? 'Connect your WebPhone first' : undefined}
+                    disabled={loginMutation.isPending || !webphoneOk || isOutOfHours}
+                    title={
+                      isOutOfHours ? `Campaign is outside calling hours (${callingHours.nextWindow})` :
+                      !webphoneOk ? 'Connect your WebPhone first' : undefined
+                    }
                     className={cn(
                       'btn-primary w-full mt-5 gap-2',
-                      !webphoneOk && 'opacity-50 cursor-not-allowed'
+                      (isOutOfHours || !webphoneOk) && 'opacity-50 cursor-not-allowed'
                     )}
                   >
                     <LogIn size={15} />
-                    {loginMutation.isPending ? 'Joining…' : 'Join Campaign'}
+                    {isOutOfHours ? 'Outside Calling Hours' : loginMutation.isPending ? 'Joining…' : 'Join Campaign'}
                   </button>
                 </div>
               )
@@ -453,9 +587,6 @@ export function Dialer() {
     <>
       {/* Transfer modal */}
       <TransferModal isOpen={showTransfer} onClose={() => setShowTransfer(false)} />
-
-      {/* Incoming call overlay (for future inbound support) */}
-      <IncomingCallModal />
 
       <div className="space-y-4">
         {/* ── Status banner ─────────────────────────────────────────────────── */}
@@ -511,16 +642,28 @@ export function Dialer() {
                 >
                   {isDialing ? 'Fetching lead…' : 'Start Dialing'}
                 </button>
-                <button
-                  onClick={() => {
-                    updateLastCallLog({ status: 'missed' })
-                    setActiveLead(null)
-                    dialerService.getLead().then((r) => setActiveLead(r.data?.data || null)).catch(() => {})
-                  }}
-                  className="btn-outline w-full gap-2 text-sm"
-                >
-                  Skip Lead
-                </button>
+                <div className="flex gap-2">
+                  {leadHistory.length > 0 && (
+                    <button
+                      onClick={goToPreviousLead}
+                      className="btn-outline flex-1 gap-1.5 text-sm"
+                      title="Go back to previous lead"
+                    >
+                      <ChevronLeft size={14} /> Previous
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      pushLeadToHistory()
+                      updateLastCallLog({ status: 'missed' })
+                      setActiveLead(null)
+                      dialerService.getLead().then((r) => setActiveLead(r.data?.data || null)).catch(() => {})
+                    }}
+                    className={cn('btn-outline gap-2 text-sm', leadHistory.length > 0 ? 'flex-1' : 'w-full')}
+                  >
+                    Skip Lead
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -596,7 +739,11 @@ export function Dialer() {
             )}
 
             {/* Call logs tab */}
-            {rightTab === 'logs' && <CallLogsPanel />}
+            {rightTab === 'logs' && (
+              <CallLogsPanel
+                onRedial={callState === 'ready' ? handleRedial : undefined}
+              />
+            )}
 
             {/* Stats tab */}
             {rightTab === 'stats' && (

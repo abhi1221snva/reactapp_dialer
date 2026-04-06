@@ -12,8 +12,9 @@ export const dialerService = {
     api.get('/my-extension-status'),
 
   // POST /extension-login { campaign_id } — joins campaign; 200 = success, 402 = error
+  // dialer_mode=2 tells backend to use the WebPhone (alt_extension)
   extensionLogin: (campaign_id: number) =>
-    api.post('/extension-login', { campaign_id }),
+    api.post('/extension-login', { campaign_id, dialer_mode: 2 }),
 
   // POST /extension-logout
   extensionLogout: () =>
@@ -31,15 +32,16 @@ export const dialerService = {
    * Backend validation: campaign_id*, lead_id*, number* (phone), id* (queue row ID).
    * `id` = lead.id (queue/temp row); `lead_id` = lead.lead_id ?? lead.id (CRM record).
    */
+  // dialer_mode=2 tells backend to use the WebPhone (alt_extension)
   callNumber: (data: { campaign_id: number; lead_id: number; number: string; id: number }) =>
-    api.post('/call-number', data),
+    api.post('/call-number', { ...data, dialer_mode: 2 }),
 
   /**
    * POST /hang-up
    * Backend validation: id* — pass campaign_id as id (identifies agent's active call).
    */
   hangUp: (data: { id: number }) =>
-    api.post('/hang-up', data),
+    api.post('/hang-up', { ...data, dialer_mode: 2 }),
 
   /**
    * POST /asterisk-hang-up (CRM webphone hangup)

@@ -287,10 +287,19 @@ export function Login() {
     const level = payload.level
       ? Number(payload.level)
       : await fetchUserLevel(Number(payload.id), String(payload.token))
+
+    // Extract companyName — may be top-level or nested in permissions[parent_id]
+    let companyName = payload.companyName as string | undefined
+    if (!companyName && payload.permissions && payload.parent_id) {
+      const perms = payload.permissions as Record<string, { companyName?: string }>
+      companyName = perms[String(payload.parent_id)]?.companyName
+    }
+
     return {
       ...payload,
       name: `${payload.first_name ?? ''} ${payload.last_name ?? ''}`.trim() || String(payload.email),
       level,
+      companyName,
     } as User
   }
 

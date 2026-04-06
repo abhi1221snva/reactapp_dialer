@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, UserCircle, Eye, X, Search,
-  Phone, Globe,
-  PhoneForwarded, Shield,
-  CheckCircle2, XCircle,
+  Phone, Globe, Clock, Users as UsersIcon, Settings, Hash,
+  PhoneForwarded, Shield, Mail, Lock,
+  CheckCircle2, XCircle, Smartphone,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -31,6 +31,8 @@ interface Agent {
   [key: string]: unknown
 }
 
+const capFirst = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+
 const levelLabel = (level?: number) => {
   if (!level) return 'Agent'
   if (level >= 10) return 'Super Admin'
@@ -52,49 +54,49 @@ const STATUS_FILTERS = [
 ]
 
 // ---------------------------------------------------------------------------
-// ViewUserModal — redesigned
+// ViewUserModal — Campaign-style compact layout
 // ---------------------------------------------------------------------------
-function OnOff({ val, label }: { val?: unknown; label: string }) {
+function VSection({ icon: Icon, title, iconColor, children }: {
+  icon: React.ElementType; title: string; iconColor: string; children: React.ReactNode
+}) {
+  return (
+    <div className="card p-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50/70 border-b border-slate-100">
+        <Icon size={13} className={iconColor} />
+        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">{title}</span>
+      </div>
+      <div className="px-4 py-1.5">{children}</div>
+    </div>
+  )
+}
+
+function VRow({ label, value }: { label: string; value?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 gap-4">
+      <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">{label}</span>
+      <span className="text-[11px] text-right font-semibold text-slate-800 truncate">{value ?? '—'}</span>
+    </div>
+  )
+}
+
+function VToggle({ val, label }: { val?: unknown; label: string }) {
   const on = val === 1 || val === '1' || val === true
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
-      <span className="text-xs text-slate-500 font-medium">{label}</span>
-      <span className={cn(
-        'inline-flex items-center gap-1 text-xs font-semibold',
-        on ? 'text-emerald-600' : 'text-slate-400'
-      )}>
-        {on
-          ? <><CheckCircle2 size={13} className="text-emerald-500" /> Enabled</>
-          : <><XCircle size={13} className="text-slate-300" /> Disabled</>
-        }
+    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+      <span className="text-[11px] text-slate-500 font-medium">{label}</span>
+      <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold', on ? 'text-emerald-600' : 'text-slate-400')}>
+        {on ? <><CheckCircle2 size={11} className="text-emerald-500" /> On</> : <><XCircle size={11} className="text-slate-300" /> Off</>}
       </span>
     </div>
   )
 }
 
-function ViewSectionCard({ icon: Icon, title, iconColor, children }: {
-  icon: React.ElementType; title: string; iconColor: string; children: React.ReactNode
-}) {
-  return (
-    <div className="card p-0 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
-        <Icon size={14} className={iconColor} />
-        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{title}</span>
-      </div>
-      <div className="px-4 py-1">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function ViewDetailRow({ label, value }: { label: string; value?: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
-      <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
-      <span className="text-xs text-right font-semibold text-slate-800">{value ?? '—'}</span>
-    </div>
-  )
+function formatPhone(raw?: string) {
+  if (!raw) return '—'
+  const d = String(raw).replace(/\D/g, '').slice(0, 10)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
 }
 
 function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => void }) {
@@ -103,14 +105,17 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
     queryFn: () => userService.getById(userId),
   })
 
+  const { data: groupsData } = useQuery({
+    queryKey: ['extension-groups-view'],
+    queryFn: () => userService.getGroups(),
+  })
+
   const u = data?.data?.data as Record<string, unknown> | undefined
 
-  const fullName = u
-    ? [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.email as string)
-    : ''
-
-  const lvl   = u ? Number(u.user_level || u.level || 1) : 1
-  const label = levelLabel(lvl)
+  const fullName = u ? [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.email as string) : ''
+  const lvl = u ? Number(u.user_level || u.level || 1) : 1
+  const roleLabel = levelLabel(lvl)
+  const active = u?.status === 1
 
   const cliLabel = (v?: unknown) => {
     const n = Number(v)
@@ -119,115 +124,131 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
     return 'Area Code'
   }
 
-  const isActive = u?.status === 1
+  const countryCode = u ? (() => {
+    const raw = String(u.country_code || '1')
+    return raw.startsWith('+') ? raw : '+' + raw
+  })() : '+1'
+
+  // Resolve group name from groups list using group_id
+  const groupName = (() => {
+    const groups: Array<{id:number;title?:string;group_name?:string}> = groupsData?.data?.data || groupsData?.data || []
+    const gIds = Array.isArray(u?.group) ? (u.group as Array<{group_id:number}>).map(g => Number(g.group_id)) : Array.isArray(u?.group_id) ? (u?.group_id as number[]) : (u?.group_id ? [Number(u?.group_id)] : [])
+    if (gIds.length === 0) return '—'
+    const names = gIds.map(gid => {
+      const g = groups.find(gr => gr.id === gid)
+      return g ? (g.title || g.group_name || `Group ${g.id}`) : `Group ${gid}`
+    })
+    return names.join(', ')
+  })()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden">
 
-        {/* ── Blue Header Banner ── */}
+        {/* ── Blue Header Banner (compact, campaign-style) ── */}
         <div className="bg-gradient-to-br from-indigo-500 to-blue-600 relative overflow-hidden flex-shrink-0">
           <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
           <div className="absolute top-6 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 z-10 p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white"
-          >
+          <button onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white">
             <X size={16} />
           </button>
 
-          <div className="relative px-6 pt-6 pb-5">
+          <div className="relative px-5 pt-4 pb-3">
             {isLoading ? (
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 animate-pulse" />
-                <div className="space-y-2">
-                  <div className="h-5 bg-white/30 rounded animate-pulse w-36" />
-                  <div className="h-3.5 bg-white/20 rounded animate-pulse w-48" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 animate-pulse" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 bg-white/30 rounded animate-pulse w-36" />
+                  <div className="h-3 bg-white/20 rounded animate-pulse w-48" />
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 text-white text-xl font-bold flex items-center justify-center flex-shrink-0 shadow-lg">
-                  {initials(fullName)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl font-bold text-white truncate leading-tight">{fullName}</h2>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/25">
-                      {label}
-                    </span>
-                    <span className={cn(
-                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border',
-                      isActive
-                        ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
-                        : 'bg-white/10 border-white/20 text-white/60'
-                    )}>
-                      <span className={cn('w-1.5 h-1.5 rounded-full', isActive ? 'bg-emerald-300' : 'bg-white/40')} />
-                      {isActive ? 'Active' : 'Inactive'}
-                    </span>
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
+                    {initials(fullName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-base font-bold text-white truncate leading-tight">{fullName}</h2>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/20 text-white border border-white/25">
+                        {roleLabel}
+                      </span>
+                      <span className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                        active
+                          ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-100'
+                          : 'bg-white/10 border-white/20 text-white/60'
+                      )}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/40')} />
+                        {active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+
+                {/* Stats strip */}
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/15 flex-wrap">
+                  {[
+                    { icon: Hash, val: String(u?.extension ?? '—'), lbl: 'Extension' },
+                    { icon: UsersIcon, val: String(groupName), lbl: 'Group' },
+                    { icon: Clock, val: String(u?.timezone ?? 'America/New_York').split('/').pop()?.replace(/_/g, ' ') ?? '', lbl: 'Timezone' },
+                    { icon: Settings, val: cliLabel(u?.cli_setting), lbl: 'CLI' },
+                    { icon: Phone, val: countryCode, lbl: 'Code' },
+                  ].map(({ icon: SIcon, val, lbl }) => (
+                    <div key={lbl} className="flex items-center gap-1.5 bg-white/10 rounded-lg px-2.5 py-1.5">
+                      <SIcon size={11} className="text-white/60" />
+                      <span className="text-[11px] font-bold text-white leading-none">{val}</span>
+                      <span className="text-[9px] text-white/50 font-medium leading-none">{lbl}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
 
-        {/* ── Body (scrollable) ── */}
+        {/* ── Body ── */}
         <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
           {isLoading ? (
-            <div className="p-6 space-y-3">
-              {Array.from({ length: 8 }).map((_, i) => (
+            <div className="p-5 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-4 bg-slate-100 rounded animate-pulse" style={{ width: `${55 + (i % 4) * 12}%` }} />
               ))}
             </div>
           ) : u ? (
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-3">
 
-              {/* Personal Info */}
-              <ViewSectionCard icon={Globe} title="Personal Info" iconColor="text-indigo-500">
-                <ViewDetailRow label="Email" value={u.email as string} />
-                <ViewDetailRow label="Phone" value={u.mobile as string} />
-                <ViewDetailRow label="Country Code" value={u.country_code as string} />
-                <ViewDetailRow
-                  label="Extension"
-                  value={
-                    u.extension
-                      ? <code className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-xs">{u.extension as string}</code>
-                      : undefined
+              {/* Contact Info */}
+              <VSection icon={Mail} title="Contact Info" iconColor="text-indigo-500">
+                <VRow label="Email" value={u.email as string} />
+                <VRow label="Phone" value={formatPhone(u.mobile as string)} />
+                <VRow label="VM PIN"
+                  value={u.vm_pin
+                    ? <code className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">{u.vm_pin as string}</code>
+                    : '—'
                   }
                 />
-              </ViewSectionCard>
+              </VSection>
 
-              {/* Phone System */}
-              <ViewSectionCard icon={Phone} title="Phone System" iconColor="text-sky-500">
-                <ViewDetailRow label="Extension Type" value={u.extension_type as string} />
-                <ViewDetailRow label="Dialer Mode" value={u.dialer_mode as string} />
-                <ViewDetailRow label="Timezone" value={u.timezone as string} />
-                <ViewDetailRow label="CLI Setting" value={cliLabel(u.cli_setting)} />
-              </ViewSectionCard>
+              {/* Call Settings */}
+              <VSection icon={PhoneForwarded} title="Call Settings" iconColor="text-emerald-500">
+                <VToggle val={u.voicemail}     label="Voicemail" />
+                <VToggle val={u.follow_me}     label="Follow Me" />
+                <VToggle val={u.call_forward}  label="Call Forward" />
+                <VToggle val={u.twinning}      label="Twinning" />
+              </VSection>
 
-              {/* Call & Voicemail */}
-              <ViewSectionCard icon={PhoneForwarded} title="Call & Voicemail" iconColor="text-emerald-500">
-                <OnOff val={u.voicemail}    label="Voicemail" />
-                <OnOff val={u.voicemail_send_to_email} label="Voicemail to Email" />
-                <OnOff val={u.follow_me}    label="Follow Me" />
-                <OnOff val={u.call_forward} label="Call Forward" />
-                <OnOff val={u.twinning}     label="Twinning" />
-              </ViewSectionCard>
-
-              {/* Security & Messaging */}
-              <ViewSectionCard icon={Shield} title="Security & Messaging" iconColor="text-violet-500">
-                <OnOff val={u.enable_2fa}          label="2FA Enabled" />
-                <OnOff val={u.app_status}           label="Mobile App Login" />
-                <OnOff val={u.ip_filtering}         label="IP Filtering" />
-                <OnOff val={u.receive_sms_on_email} label="SMS to Email" />
-                <OnOff val={u.receive_sms_on_mobile} label="SMS to Phone" />
-              </ViewSectionCard>
+              {/* Security */}
+              <VSection icon={Shield} title="Security" iconColor="text-violet-500">
+                <VToggle val={u.ip_filtering}  label="IP Filtering" />
+                <VToggle val={u.enable_2fa}    label="2FA" />
+                <VToggle val={u.app_status}    label="Mobile App" />
+              </VSection>
 
             </div>
           ) : (
@@ -235,10 +256,6 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
           )}
         </div>
 
-        {/* ── Footer ── */}
-        <div className="flex-shrink-0 px-6 py-3 border-t border-slate-100 bg-slate-50/60 flex justify-end">
-          <button onClick={onClose} className="btn-outline text-sm px-5">Close</button>
-        </div>
       </div>
     </div>
   )
@@ -283,6 +300,8 @@ export function Users() {
     onSuccess: () => {
       toast.success('Status updated')
       qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['user'] })
+      qc.invalidateQueries({ queryKey: ['user-view'] })
     },
     onError: () => toast.error('Failed to update status'),
   })
@@ -312,9 +331,10 @@ export function Users() {
 
   const columns: Column<Agent>[] = [
     {
-      key: 'name', header: 'User',
+      key: 'name', header: 'User', sortable: true,
+      sortValue: (row) => [row.first_name, row.last_name].filter(Boolean).join(' ').toLowerCase() || String(row.email).toLowerCase(),
       render: (row) => {
-        const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email
+        const name = [row.first_name, row.last_name].filter(Boolean).map(n => capFirst(String(n))).join(' ') || row.email
         const lvl = (row.user_level || row.level || 1) as number
         const label = levelLabel(lvl)
         const gradient = ROLE_COLORS[label] ?? 'from-slate-400 to-slate-500'

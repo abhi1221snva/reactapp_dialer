@@ -353,7 +353,7 @@ export function RecycleRules() {
       <>
         <div className="lt-search">
           <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
-          <input type="text" value={table.search} placeholder="Search rules\u2026" onChange={e => table.setSearch(e.target.value)} />
+          <input type="text" value={table.search} placeholder="Search recycle rules" onChange={e => table.setSearch(e.target.value)} />
           {table.search && (
             <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
               <X size={12} />
@@ -382,7 +382,8 @@ export function RecycleRules() {
   const columns: Column<RecycleRuleItem>[] = [
     {
       key: 'campaign',
-      header: 'Campaign',
+      header: 'Campaign', sortable: true,
+      sortValue: (row) => String(row.campaign || '').toLowerCase(),
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
@@ -488,7 +489,7 @@ export function RecycleRules() {
             return r?.data?.total ?? r?.data?.data?.length ?? 0
           }}
           columns={columns}
-          searchPlaceholder="Search rules…"
+          searchPlaceholder="Search recycle rules"
           emptyText="No recycle rules found"
           emptyIcon={<RefreshCw size={40} />}
           search={table.search}

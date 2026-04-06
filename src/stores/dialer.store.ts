@@ -20,6 +20,9 @@ interface DialerState {
   // Session call log (in-memory, cleared on extension logout)
   callLogs: CallLog[]
 
+  // Lead history stack for previous-lead navigation
+  leadHistory: Lead[]
+
   setCallState: (state: CallState) => void
   setActiveCampaign: (campaign: Campaign | null) => void
   setActiveLead: (lead: Lead | null) => void
@@ -36,6 +39,11 @@ interface DialerState {
   addCallLog: (log: CallLog) => void
   updateLastCallLog: (patch: Partial<CallLog>) => void
   clearCallLogs: () => void
+
+  /** Push current activeLead onto history before switching to next */
+  pushLeadToHistory: () => void
+  /** Pop the most recent lead from history and set as activeLead */
+  goToPreviousLead: () => void
 
   // Resets callDuration to 0; the interval itself lives in Dialer.tsx via a ref
   startCallTimer: () => void
@@ -58,6 +66,7 @@ export const useDialerStore = create<DialerState>((set, get) => ({
   transferSessionId: null,
 
   callLogs: [],
+  leadHistory: [],
 
   setCallState: (callState) => set({ callState }),
   setActiveCampaign: (activeCampaign) => set({ activeCampaign }),
@@ -82,6 +91,22 @@ export const useDialerStore = create<DialerState>((set, get) => ({
     }),
 
   clearCallLogs: () => set({ callLogs: [] }),
+
+  pushLeadToHistory: () => {
+    const { activeLead, leadHistory } = get()
+    if (!activeLead) return
+    set({ leadHistory: [...leadHistory, activeLead].slice(-20) }) // keep last 20
+  },
+
+  goToPreviousLead: () => {
+    const { leadHistory } = get()
+    if (leadHistory.length === 0) return
+    const prev = leadHistory[leadHistory.length - 1]
+    set({
+      activeLead: prev,
+      leadHistory: leadHistory.slice(0, -1),
+    })
+  },
 
   startCallTimer: () => set({ callDuration: 0 }),
 

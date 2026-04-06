@@ -44,10 +44,13 @@ function LabelModal({
   }, [])
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      label
-        ? labelService.update(label.id, title.trim(), status, Number(label.status ?? 1) === 1 ? 1 : 0)
-        : labelService.create(title.trim(), status),
+    mutationFn: () => {
+      const t = title.trim()
+      const capTitle = t.charAt(0).toUpperCase() + t.slice(1)
+      return label
+        ? labelService.update(label.id, capTitle, status, Number(label.status ?? 1) === 1 ? 1 : 0)
+        : labelService.create(capTitle, status)
+    },
     onSuccess: () => {
       toast.success(label ? 'Label updated' : 'Label created')
       onSaved()
@@ -293,7 +296,7 @@ export function Labels() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: number }) =>
       labelService.toggleStatus(id, Number(status) === 1 ? 0 : 1),
-    onSuccess: () => { toast.success('Status updated'); invalidate() },
+    onSuccess: () => { toast.success('Status updated'); invalidate(); qc.invalidateQueries({ queryKey: ['labels-all'] }) },
     onError: () => toast.error('Failed to update status'),
   })
 
@@ -306,7 +309,7 @@ export function Labels() {
   const columns: Column<LabelItem>[] = [
     {
       key: 'title',
-      header: 'Label Name',
+      header: 'Label Name', sortable: true,
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">

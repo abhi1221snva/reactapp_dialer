@@ -4,7 +4,10 @@ import {
   Power, Delete, ExternalLink, ShieldAlert, Clock, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useAuthStore } from '../../stores/auth.store'
 import { useFloatingStore, useWidgetPositions } from '../../stores/floating.store'
+import { useDialerStore } from '../../stores/dialer.store'
+import { authService } from '../../services/auth.service'
 import { DraggableWidget } from '../floating/DraggableWidget'
 import { DialPad }           from './DialPad'
 import { CallControls }      from './CallControls'
@@ -84,14 +87,36 @@ function fmt(s: number) {
 
 export function WebPhone() {
   const { sipConfig, user } = useAuth()
+  const updateUser = useAuthStore(s => s.updateUser)
 
   const isOpen              = useFloatingStore(s => s.phoneOpen)
   const setPhoneOpen        = useFloatingStore(s => s.setPhoneOpen)
   const setPhoneMinimized   = useFloatingStore(s => s.setPhoneMinimized)
   const registerPhoneClick  = useFloatingStore(s => s.registerPhoneClick)
   const setPhoneRegistered  = useFloatingStore(s => s.setPhoneRegistered)
+  const registerSipAnswer   = useFloatingStore(s => s.registerSipAnswer)
+  const registerSipDecline  = useFloatingStore(s => s.registerSipDecline)
+  const campaignDialActive  = useFloatingStore(s => s.campaignDialActive)
   const setIsOpen = setPhoneOpen
   const { phoneRight } = useWidgetPositions()
+
+  // Keep a ref so the memoised SIP event handler can read the latest value
+  const campaignDialActiveRef = useRef(false)
+  campaignDialActiveRef.current = campaignDialActive
+
+  // Auto-refresh SIP config from /profile on mount so server/domain/secret
+  // stay current even if the admin changed asterisk_server_id after login.
+  const sipRefreshed = useRef(false)
+  useEffect(() => {
+    if (!user || sipRefreshed.current) return
+    sipRefreshed.current = true
+    authService.getProfile().then((res) => {
+      const d = res.data?.data ?? res.data
+      if (d?.server || d?.domain || d?.secret) {
+        updateUser({ server: d.server, domain: d.domain, secret: d.secret })
+      }
+    }).catch(() => {})
+  }, [user, updateUser])
 
   const [phoneState, setPhoneState]     = useState<PhoneState>('idle')
   const [number, setNumber]             = useState('')
@@ -132,16 +157,21 @@ export function WebPhone() {
 
   // ── Publish SIP registration state to global store ────────────────────────
   // Dialer.tsx reads phoneRegistered to decide if "Join Campaign" is allowed.
+  const setPhoneInCall      = useFloatingStore(s => s.setPhoneInCall)
+  const setPhoneHasIncoming = useFloatingStore(s => s.setPhoneHasIncoming)
   useEffect(() => {
     setPhoneRegistered(phoneState === 'ready' || phoneState === 'in_call')
-    return () => setPhoneRegistered(false)   // clear on unmount
-  }, [phoneState, setPhoneRegistered])
+    setPhoneInCall(phoneState === 'in_call')
+    setPhoneHasIncoming(phoneState === 'incoming')
+    return () => { setPhoneRegistered(false); setPhoneInCall(false); setPhoneHasIncoming(false) }
+  }, [phoneState, setPhoneRegistered, setPhoneInCall, setPhoneHasIncoming])
 
   // ── Session events ────────────────────────────────────────────────────────
   // Mirrors the reference implementation: discriminate events by comparing
   // e.session against the known register / call session refs, just like
   // the blade file does with (e.session == oSipSessionRegister).
   const onSipEventSession = useCallback((e: any) => {
+    console.log('[WebPhone] SESSION event:', e.type, 'isReg:', e.session === sipRegSess.current, 'isCall:', e.session === sipCallSess.current, e)
     const isRegSess  = e.session != null && e.session === sipRegSess.current
     const isCallSess = e.session != null && e.session === sipCallSess.current
 
@@ -196,6 +226,7 @@ export function WebPhone() {
 
   // ── Stack events ──────────────────────────────────────────────────────────
   const onSipEventStack = useCallback((e: any) => {
+    console.log('[WebPhone] STACK event:', e.type, e)
     switch (e.type) {
       case 'started':
         setStatusMsg('Registering…')
@@ -225,15 +256,30 @@ export function WebPhone() {
         const from = rawFrom
           ? rawFrom.replace(/^sip:/i, '').replace(/@.*$/, '')
           : 'Unknown Caller'
+
+        // Always show incoming call UI with Answer/Decline buttons
         setIncomingFrom(from); setStatusMsg(`Incoming: ${from}`)
         setPhoneState('incoming')
         ringtone.current?.play().catch(() => {})
-        setIsOpen(true); break
+        setIsOpen(true)
+
+        // Sync to dialer store so IncomingCallModal also shows
+        if (!campaignDialActiveRef.current) {
+          useDialerStore.getState().setIncomingCall({
+            number: from,
+            location_id: 0,
+            parent_id: 0,
+            user_ids: [],
+          })
+        }
+        break
       }
 
       case 'stopping': setPhoneState('registering'); break
       case 'stopped':  sipStack.current = null; setPhoneState('idle'); setStatusMsg('Not connected'); break
       case 'failed_to_start':
+        sipStack.current = null; sipRegSess.current = null; sipCallSess.current = null
+        setPhoneState('error'); setStatusMsg('Connection failed'); break
       case 'failed_to_stop': setPhoneState('error'); setStatusMsg('Connection failed'); break
 
       case 'i_registration_event': {
@@ -249,7 +295,15 @@ export function WebPhone() {
   // ── SIP actions ───────────────────────────────────────────────────────────
   const sipEnable = useCallback(() => {
     if (!sipConfig || !window.SIPml) { setStatusMsg('SIPml not loaded'); setPhoneState('error'); return }
-    if (sipStack.current) return
+    // If a previous stack exists but we're in error/idle, tear it down so we can reconnect
+    if (sipStack.current) {
+      if (phoneStateRef.current === 'error' || phoneStateRef.current === 'idle') {
+        try { sipStack.current.stop() } catch { /* ignore */ }
+        sipStack.current = null; sipRegSess.current = null; sipCallSess.current = null
+      } else {
+        return // genuinely active stack — don't recreate
+      }
+    }
     const ext = sipConfig.extension; const domain = sipConfig.domain
     setPhoneState('registering'); setStatusMsg('Connecting…')
     try {
@@ -386,6 +440,23 @@ export function WebPhone() {
       } else {
         setPhoneOpen(!phoneOpenRef.current)
       }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Register SIP answer/decline so IncomingCallModal can trigger them
+  const sipAnswerRef  = useRef(sipAnswerIncoming)
+  const sipDeclineRef = useRef(sipDecline)
+  sipAnswerRef.current  = sipAnswerIncoming
+  sipDeclineRef.current = sipDecline
+  useEffect(() => {
+    registerSipAnswer(() => {
+      sipAnswerRef.current()
+      useDialerStore.getState().setIncomingCall(null)
+    })
+    registerSipDecline(() => {
+      sipDeclineRef.current()
+      useDialerStore.getState().setIncomingCall(null)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

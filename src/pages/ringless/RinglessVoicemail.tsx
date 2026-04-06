@@ -325,6 +325,7 @@ export function RinglessVoicemail() {
     onSuccess: () => {
       toast.success('Campaign status updated')
       qc.invalidateQueries({ queryKey: ['ringless-campaigns'] })
+      qc.invalidateQueries({ queryKey: ['ringless-campaign-view'] })
     },
     onError: () => toast.error('Failed to update status'),
   })
@@ -337,7 +338,8 @@ export function RinglessVoicemail() {
 
   const columns: Column<RinglessCampaign>[] = [
     {
-      key: 'name', header: 'Campaign',
+      key: 'name', header: 'Campaign', sortable: true,
+      sortValue: (row) => String(row.title || row.campaign_name || row.name || '').toLowerCase(),
       render: (row) => {
         const name = getCName(row)
         return (

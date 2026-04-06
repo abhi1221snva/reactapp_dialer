@@ -143,7 +143,7 @@ function ExtensionPicker({
             const userName = ext ? extName(ext) : ''
             return (
               <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
-                {userName ? `${userName} (${s})` : s}
+                {userName || s}
                 <button type="button" onClick={(e) => { e.stopPropagation(); toggle(s) }}>
                   <X size={10} />
                 </button>
@@ -174,7 +174,7 @@ function ExtensionPicker({
                       checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
                       {checked && <Check size={10} className="text-white" />}
                     </div>
-                    <span className="text-sm text-slate-800">{label ? `${label} (${val})` : val}</span>
+                    <span className="text-sm text-slate-800">{label || val}</span>
                   </button>
                 )
               })}
@@ -304,7 +304,7 @@ function RingGroupFormModal({
       : form.extension  // new group only: user picked from picker, all values are main exts
 
     const payload: Record<string, unknown> = {
-      title:       form.title,
+      title:       form.title.charAt(0).toUpperCase() + form.title.slice(1),
       description: form.description,
       // Backend addRingGroup / ringGroupUpdate both do is_array($request->input('extension'))
       extension:   mainExts,
@@ -388,7 +388,7 @@ export function RingGroups() {
       <>
         <div className="lt-search">
           <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
-          <input type="text" value={table.search} placeholder="Search ring groups\u2026" onChange={e => table.setSearch(e.target.value)} />
+          <input type="text" value={table.search} placeholder="Search ring groups" onChange={e => table.setSearch(e.target.value)} />
           {table.search && (
             <button onClick={() => table.setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
               <X size={12} />
@@ -436,29 +436,37 @@ export function RingGroups() {
     {
       key: 'extension_name', header: 'Extension',
       render: (row) => {
-        const raw = row.extension_name ?? row.extensions ?? ''
-        const names = parseExtensions(raw)
+        // extension_name is "Name-Ext,Name2-Ext2" — split on comma only, not dash
+        const raw = String(row.extension_name ?? '')
+        const entries = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []
         return (
           <div className="flex flex-wrap gap-1">
-            {names.slice(0, 3).map((n, i) => (
-              <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700 font-mono">{n}</span>
-            ))}
-            {names.length > 3 && (
-              <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">+{names.length - 3}</span>
+            {entries.slice(0, 3).map((entry, i) => {
+              const dashIdx = entry.lastIndexOf('-')
+              const name = dashIdx > 0 ? entry.slice(0, dashIdx).trim() : entry
+              const ext = dashIdx > 0 ? entry.slice(dashIdx + 1).trim() : ''
+              return (
+                <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700">
+                  <span className="font-medium">{name}</span>
+                </span>
+              )
+            })}
+            {entries.length > 3 && (
+              <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">+{entries.length - 3}</span>
             )}
-            {names.length === 0 && <span className="text-slate-400 text-sm">—</span>}
+            {entries.length === 0 && <span className="text-slate-400 text-sm">—</span>}
           </div>
         )
       },
     },
     {
-      key: 'emails', header: 'Email', sortable: true,
+      key: 'emails', header: 'Email',
       render: (row) => (
         <span className="text-sm text-slate-600">{row.emails ? String(row.emails) : '—'}</span>
       ),
     },
     {
-      key: 'ring_type', header: 'Ring Type', sortable: true,
+      key: 'ring_type', header: 'Ring Type',
       render: (row) => {
         const rt = RING_TYPE_LABEL[Number(row.ring_type)] ?? { label: String(row.ring_type ?? '—'), cls: 'bg-slate-50 text-slate-600' }
         return <span className={`px-2 py-1 text-xs rounded-full font-medium ${rt.cls}`}>{rt.label}</span>
@@ -504,7 +512,7 @@ export function RingGroups() {
           return r?.data?.total_rows ?? r?.data?.total ?? 0
         }}
         columns={columns}
-        searchPlaceholder="Search ring groups…"
+        searchPlaceholder="Search ring groups"
         emptyText="No ring groups found"
         emptyIcon={<Users size={40} />}
         search={table.search} onSearchChange={table.setSearch}

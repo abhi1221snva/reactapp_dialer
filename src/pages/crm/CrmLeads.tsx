@@ -205,7 +205,8 @@ export function CrmLeads() {
 
   const columns: Column<Lead>[] = [
     {
-      key: 'name', header: 'Contact',
+      key: 'name', header: 'Contact', sortable: true,
+      sortValue: (row) => [row.first_name, row.last_name].filter(Boolean).join(' ').toLowerCase() || 'unknown',
       render: (row) => {
         const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || 'Unknown'
         return (

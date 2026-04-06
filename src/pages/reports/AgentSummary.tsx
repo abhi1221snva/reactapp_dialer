@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Users, Calendar, Download, RefreshCw, Phone, Clock, PhoneCall,
@@ -56,12 +56,7 @@ const DATE_PRESETS = [
   { label: '90 Days', days: 90 },
 ] as const
 
-function today()       { return new Date().toISOString().slice(0, 10) }
-function daysAgo(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+import { useTimezone } from '../../hooks/useTimezone'
 
 function SummaryCard({
   icon: Icon, label, value, sub, color, loading,
@@ -90,9 +85,11 @@ function SummaryCard({
 
 export function AgentSummary() {
   const { setToolbar } = useDialerHeader()
+  const { today, daysAgo } = useTimezone()
+  const initDates = useMemo(() => ({ from: daysAgo(7), to: today() }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filters, setFilters] = useState<Filters>({
-    date_from:   daysAgo(7),
-    date_to:     today(),
+    date_from:   initDates.from,
+    date_to:     initDates.to,
     campaign_id: '',
   })
   const [activePreset, setActivePreset] = useState<string>('7 Days')

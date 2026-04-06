@@ -25,6 +25,7 @@ export interface User {
   otpId?: string
   two_factor_enabled?: number
   is_2fa_google_enabled?: number
+  timezone?: string
 }
 
 export interface LoginRequest {

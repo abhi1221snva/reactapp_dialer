@@ -4,6 +4,7 @@ import {
   Grid3X3, ArrowRightLeft, Voicemail, Clock,
 } from 'lucide-react'
 import { useDialerStore } from '../../stores/dialer.store'
+import { useFloatingStore } from '../../stores/floating.store'
 import { dialerService } from '../../services/dialer.service'
 import { formatDuration } from '../../utils/format'
 import { cn } from '../../utils/cn'
@@ -22,6 +23,8 @@ interface Props {
 
 export function CallControls({ onHangUp, onDial, onMute, onHold, onTransfer, onVoicemail }: Props) {
   const { callState, callDuration, isMuted, isOnHold, activeCampaign } = useDialerStore()
+  const sipAnswerHandler  = useFloatingStore(s => s.sipAnswerHandler)
+  const phoneHasIncoming  = useFloatingStore(s => s.phoneHasIncoming)
   const [showDtmf, setShowDtmf] = useState(false)
   const [dtmfSending, setDtmfSending] = useState(false)
 
@@ -71,38 +74,71 @@ export function CallControls({ onHangUp, onDial, onMute, onHold, onTransfer, onV
         {statusLabel}
       </span>
 
-      {/* Main dial / hang-up button */}
-      <div className="relative flex items-center justify-center">
-        {/* Pulse rings — ringing */}
-        {isRinging && (
-          <>
-            <span className="absolute w-28 h-28 rounded-full bg-amber-400/30 animate-ping" />
-            <span
-              className="absolute w-36 h-36 rounded-full bg-amber-400/15 animate-ping"
-              style={{ animationDelay: '0.3s' }}
-            />
-          </>
-        )}
-        {/* Pulse rings — in call */}
-        {isInCall && (
-          <span className="absolute w-28 h-28 rounded-full bg-red-400/20 animate-ping" />
-        )}
-
-        <button
-          onClick={isInCall || isRinging ? onHangUp : onDial}
-          disabled={callState === 'idle' || callState === 'wrapping' || callState === 'paused'}
-          className={cn(
-            'relative w-24 h-24 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 active:scale-95',
-            isInCall || isRinging
-              ? 'bg-gradient-to-br from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white shadow-red-300/50'
-              : isReady
-                ? 'bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-300/50'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed',
+      {/* Main dial / hang-up / answer buttons */}
+      {isRinging ? (
+        <div className="flex flex-col items-center gap-4">
+          {/* Ringing indicator */}
+          <div className="relative flex items-center justify-center">
+            <span className="absolute w-28 h-28 rounded-full bg-emerald-400/25 animate-ping" />
+            <span className="absolute w-36 h-36 rounded-full bg-emerald-400/12 animate-ping" style={{ animationDelay: '0.3s' }} />
+            <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-xl">
+              <Phone size={32} className="text-white animate-pulse" />
+            </div>
+          </div>
+          <p className="text-sm font-semibold text-slate-600">
+            {phoneHasIncoming ? 'Incoming call — answer now' : 'Waiting for call…'}
+          </p>
+          {/* Answer + Cancel row */}
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center gap-1.5">
+              <button
+                onClick={onHangUp}
+                className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 bg-gradient-to-br from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white shadow-red-300/50"
+              >
+                <PhoneOff size={26} />
+              </button>
+              <span className="text-xs font-semibold text-red-500">Cancel</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <button
+                onClick={() => sipAnswerHandler?.()}
+                disabled={!phoneHasIncoming}
+                className={cn(
+                  'w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95',
+                  phoneHasIncoming
+                    ? 'bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-300/50'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-50',
+                )}
+              >
+                <Phone size={26} />
+              </button>
+              <span className={cn('text-xs font-semibold', phoneHasIncoming ? 'text-emerald-600' : 'text-slate-400')}>Answer</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="relative flex items-center justify-center">
+          {/* Pulse rings — in call */}
+          {isInCall && (
+            <span className="absolute w-28 h-28 rounded-full bg-red-400/20 animate-ping" />
           )}
-        >
-          {isInCall || isRinging ? <PhoneOff size={36} /> : <Phone size={36} />}
-        </button>
-      </div>
+
+          <button
+            onClick={isInCall ? onHangUp : onDial}
+            disabled={callState === 'idle' || callState === 'wrapping' || callState === 'paused'}
+            className={cn(
+              'relative w-24 h-24 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 active:scale-95',
+              isInCall
+                ? 'bg-gradient-to-br from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white shadow-red-300/50'
+                : isReady
+                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-300/50'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed',
+            )}
+          >
+            {isInCall ? <PhoneOff size={36} /> : <Phone size={36} />}
+          </button>
+        </div>
+      )}
 
       {/* Secondary controls (visible only in-call) */}
       {isInCall && (

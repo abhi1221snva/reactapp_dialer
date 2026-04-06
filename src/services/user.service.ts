@@ -67,4 +67,6 @@ export const userService = {
   getGroups: () => api.get('/extension-group'),
 
   getRoles: () => api.get('/role'),
+
+  checkEmail: (email: string) => api.post('/check-email', { email }),
 }

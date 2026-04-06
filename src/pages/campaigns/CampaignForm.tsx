@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ArrowLeft, Save, Loader2, Radio, Phone, Clock, Users, Settings, Zap, Tag, CheckSquare, Square } from 'lucide-react'
@@ -46,6 +46,7 @@ export function CampaignForm() {
   const isEdit = Boolean(id)
   const clientId = useAuthStore(s => s.user?.parent_id)
   const [form, setForm] = useState(DEFAULT_FORM)
+  const formLoaded = useRef(false)
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
     queryKey: ['campaign', id],
@@ -64,7 +65,8 @@ export function CampaignForm() {
   })
 
   useEffect(() => {
-    if (existing?.data?.data) {
+    if (existing?.data?.data && !formLoaded.current) {
+      formLoaded.current = true
       const c = existing.data.data
       const dispIds = Array.isArray(c.disposition)
         ? c.disposition.map((d: { id?: number; disposition_id?: number }) => d.id ?? d.disposition_id).filter(Boolean)
@@ -91,10 +93,11 @@ export function CampaignForm() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      const data = { ...form, campaign_name: form.campaign_name.charAt(0).toUpperCase() + form.campaign_name.slice(1) }
       if (isEdit) {
-        return campaignService.update({ ...form, campaign_id: Number(id) })
+        return campaignService.update({ ...data, campaign_id: Number(id) })
       }
-      return campaignService.create(form)
+      return campaignService.create(data)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Campaign updated' : 'Campaign created')

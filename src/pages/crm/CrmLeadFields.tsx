@@ -36,10 +36,6 @@ const STRUCTURED_SECTIONS = [
   { value: 'owner',        label: 'Owner Information' },
   { value: 'second_owner', label: 'Owner 2 Information' },
   { value: 'business',     label: 'Business Information' },
-  { value: 'funding',      label: 'Funding Information' },
-  { value: 'contact',      label: 'Contact Information' },
-  { value: 'financial',    label: 'Financial Information' },
-  { value: 'custom',       label: 'Custom Fields' },
 ]
 
 const SECTION_MAP: Record<string, string> = {

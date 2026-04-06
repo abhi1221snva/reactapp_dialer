@@ -42,18 +42,21 @@ function TemplateModal({
   }, [])
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      template
+    mutationFn: () => {
+      const n = name.trim()
+      const capName = n.charAt(0).toUpperCase() + n.slice(1)
+      return template
         ? smsAiService.updateTemplate(template.id, {
-            template_name: name.trim(),
+            template_name: capName,
             introduction: intro.trim(),
             description: desc.trim(),
           })
         : smsAiService.createTemplate({
-            template_name: name.trim(),
+            template_name: capName,
             introduction: intro.trim(),
             description: desc.trim(),
-          }),
+          })
+    },
     onSuccess: () => {
       toast.success(template ? 'Template updated' : 'Template created')
       onSaved()
@@ -164,14 +167,14 @@ export function SmsAiTemplates() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       smsAiService.updateTemplateStatus(id, status),
-    onSuccess: () => { toast.success('Status updated'); invalidate() },
+    onSuccess: () => { toast.success('Status updated'); invalidate(); qc.invalidateQueries({ queryKey: ['smsai-templates-all'] }) },
     onError: () => toast.error('Failed to update status'),
   })
 
   const columns: Column<TemplateItem>[] = [
     {
       key: 'template_name',
-      header: 'Template Name',
+      header: 'Template Name', sortable: true,
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">

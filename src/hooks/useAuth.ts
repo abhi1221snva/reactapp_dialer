@@ -1,8 +1,12 @@
 import { useAuthStore } from '../stores/auth.store'
 import { canAccess, isAdmin, isManager, isSuperAdmin, LEVELS } from '../utils/permissions'
 
-// Backend encodes SIP secret as base64_encode(convert_uuencode(raw_password))
-// This reverses both layers to get the raw SIP password.
+// Backend may send the SIP secret in two formats:
+// 1. Encoded: base64_encode(convert_uuencode(raw_password))
+// 2. Plain text: the raw password as-is
+// This function tries to decode format 1 and validates the result.
+// If decoding produces non-printable characters it's a plain-text password
+// that happened to look like valid base64, so we return the raw value.
 function decodeSipSecret(secret: string): string {
   try {
     // Layer 1: base64 decode → gives PHP uuencoded string
@@ -40,7 +44,13 @@ function decodeSipSecret(secret: string): string {
       if (i < uu.length && uu.charCodeAt(i) === 10) i++ // skip '\n'
     }
 
-    return result || secret
+    if (!result) return secret
+
+    // Validate: a real decoded password contains only printable ASCII (32-126).
+    // If we see control chars or high bytes, atob decoded a plain-text password
+    // that happened to be valid base64 → return the original secret.
+    const isPrintable = /^[\x20-\x7e]+$/.test(result)
+    return isPrintable ? result : secret
   } catch {
     return secret
   }

@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, Loader2, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, RefreshCw, Eye, EyeOff, Copy, AlertCircle, User, Settings, CheckCircle2, XCircle, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { userService } from '../../services/user.service'
 import { didService } from '../../services/did.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
+import { isSuperAdmin } from '../../utils/permissions'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,7 +31,10 @@ function genPassword(): string {
   return chars.join('')
 }
 function genPin(): string {
-  return String(Math.floor(Math.random() * 900000) + 100000).slice(0, 4 + Math.floor(Math.random() * 3))
+  return String(Math.floor(Math.random() * 9000) + 1000)
+}
+function capFirst(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 function formatUSPhone(raw: string): string {
   const d = raw.replace(/\D/g, '').slice(0, 10)
@@ -47,11 +51,97 @@ function mapExtType(val: string): string {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const TIMEZONES = [
-  'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
-  'America/Phoenix','America/Anchorage','Pacific/Honolulu','UTC',
-  'Europe/London','Europe/Paris','Europe/Berlin','Asia/Tokyo',
-  'Asia/Shanghai','Asia/Kolkata','Asia/Dubai','Australia/Sydney',
+const TIMEZONES: { value: string; label: string }[] = [
+  { value: 'Pacific/Midway', label: '(GMT-11:00) Midway Island, Samoa' },
+  { value: 'America/Adak', label: '(GMT-10:00) Hawaii-Aleutian' },
+  { value: 'Etc/GMT+10', label: '(GMT-10:00) Hawaii' },
+  { value: 'Pacific/Marquesas', label: '(GMT-09:30) Marquesas Islands' },
+  { value: 'Pacific/Gambier', label: '(GMT-09:00) Gambier Islands' },
+  { value: 'America/Anchorage', label: '(GMT-09:00) Alaska' },
+  { value: 'America/Ensenada', label: '(GMT-08:00) Tijuana, Baja California' },
+  { value: 'Etc/GMT+8', label: '(GMT-08:00) Pitcairn Islands' },
+  { value: 'America/Los_Angeles', label: '(GMT-08:00) Pacific Time (US & Canada)' },
+  { value: 'America/Denver', label: '(GMT-07:00) Mountain Time (US & Canada)' },
+  { value: 'America/Chihuahua', label: '(GMT-07:00) Chihuahua, La Paz, Mazatlan' },
+  { value: 'America/Dawson_Creek', label: '(GMT-07:00) Arizona' },
+  { value: 'America/Belize', label: '(GMT-06:00) Saskatchewan, Central America' },
+  { value: 'America/Cancun', label: '(GMT-06:00) Guadalajara, Mexico City, Monterrey' },
+  { value: 'Chile/EasterIsland', label: '(GMT-06:00) Easter Island' },
+  { value: 'America/Chicago', label: '(GMT-06:00) Central Time (US & Canada)' },
+  { value: 'America/New_York', label: '(GMT-05:00) Eastern Time (US & Canada)' },
+  { value: 'America/Havana', label: '(GMT-05:00) Cuba' },
+  { value: 'America/Bogota', label: '(GMT-05:00) Bogota, Lima, Quito, Rio Branco' },
+  { value: 'America/Caracas', label: '(GMT-04:30) Caracas' },
+  { value: 'America/Santiago', label: '(GMT-04:00) Santiago' },
+  { value: 'America/La_Paz', label: '(GMT-04:00) La Paz' },
+  { value: 'Atlantic/Stanley', label: '(GMT-04:00) Falkland Islands' },
+  { value: 'America/Campo_Grande', label: '(GMT-04:00) Brazil' },
+  { value: 'America/Goose_Bay', label: '(GMT-04:00) Atlantic Time (Goose Bay)' },
+  { value: 'America/Glace_Bay', label: '(GMT-04:00) Atlantic Time (Canada)' },
+  { value: 'America/St_Johns', label: '(GMT-03:30) Newfoundland' },
+  { value: 'America/Araguaina', label: '(GMT-03:00) UTC-3' },
+  { value: 'America/Montevideo', label: '(GMT-03:00) Montevideo' },
+  { value: 'America/Miquelon', label: '(GMT-03:00) Miquelon, St. Pierre' },
+  { value: 'America/Godthab', label: '(GMT-03:00) Greenland' },
+  { value: 'America/Argentina/Buenos_Aires', label: '(GMT-03:00) Buenos Aires' },
+  { value: 'America/Sao_Paulo', label: '(GMT-03:00) Brasilia' },
+  { value: 'America/Noronha', label: '(GMT-02:00) Mid-Atlantic' },
+  { value: 'Atlantic/Cape_Verde', label: '(GMT-01:00) Cape Verde Is.' },
+  { value: 'Atlantic/Azores', label: '(GMT-01:00) Azores' },
+  { value: 'Europe/Belfast', label: '(GMT) Greenwich Mean Time : Belfast' },
+  { value: 'Europe/Dublin', label: '(GMT) Greenwich Mean Time : Dublin' },
+  { value: 'Europe/Lisbon', label: '(GMT) Greenwich Mean Time : Lisbon' },
+  { value: 'Europe/London', label: '(GMT) Greenwich Mean Time : London' },
+  { value: 'Africa/Abidjan', label: '(GMT) Monrovia, Reykjavik' },
+  { value: 'Europe/Amsterdam', label: '(GMT+01:00) Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna' },
+  { value: 'Europe/Belgrade', label: '(GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague' },
+  { value: 'Europe/Brussels', label: '(GMT+01:00) Brussels, Copenhagen, Madrid, Paris' },
+  { value: 'Africa/Algiers', label: '(GMT+01:00) West Central Africa' },
+  { value: 'Africa/Windhoek', label: '(GMT+01:00) Windhoek' },
+  { value: 'Asia/Beirut', label: '(GMT+02:00) Beirut' },
+  { value: 'Africa/Cairo', label: '(GMT+02:00) Cairo' },
+  { value: 'Asia/Gaza', label: '(GMT+02:00) Gaza' },
+  { value: 'Africa/Blantyre', label: '(GMT+02:00) Harare, Pretoria' },
+  { value: 'Asia/Jerusalem', label: '(GMT+02:00) Jerusalem' },
+  { value: 'Europe/Minsk', label: '(GMT+02:00) Minsk' },
+  { value: 'Asia/Damascus', label: '(GMT+02:00) Syria' },
+  { value: 'Europe/Moscow', label: '(GMT+03:00) Moscow, St. Petersburg, Volgograd' },
+  { value: 'Africa/Addis_Ababa', label: '(GMT+03:00) Nairobi' },
+  { value: 'Asia/Tehran', label: '(GMT+03:30) Tehran' },
+  { value: 'Asia/Dubai', label: '(GMT+04:00) Abu Dhabi, Muscat' },
+  { value: 'Asia/Yerevan', label: '(GMT+04:00) Yerevan' },
+  { value: 'Asia/Kabul', label: '(GMT+04:30) Kabul' },
+  { value: 'Asia/Yekaterinburg', label: '(GMT+05:00) Ekaterinburg' },
+  { value: 'Asia/Tashkent', label: '(GMT+05:00) Tashkent' },
+  { value: 'Asia/Kolkata', label: '(GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi' },
+  { value: 'Asia/Katmandu', label: '(GMT+05:45) Kathmandu' },
+  { value: 'Asia/Dhaka', label: '(GMT+06:00) Astana, Dhaka' },
+  { value: 'Asia/Novosibirsk', label: '(GMT+06:00) Novosibirsk' },
+  { value: 'Asia/Rangoon', label: '(GMT+06:30) Yangon (Rangoon)' },
+  { value: 'Asia/Bangkok', label: '(GMT+07:00) Bangkok, Hanoi, Jakarta' },
+  { value: 'Asia/Krasnoyarsk', label: '(GMT+07:00) Krasnoyarsk' },
+  { value: 'Asia/Hong_Kong', label: '(GMT+08:00) Beijing, Chongqing, Hong Kong, Urumqi' },
+  { value: 'Asia/Irkutsk', label: '(GMT+08:00) Irkutsk, Ulaan Bataar' },
+  { value: 'Australia/Perth', label: '(GMT+08:00) Perth' },
+  { value: 'Australia/Eucla', label: '(GMT+08:45) Eucla' },
+  { value: 'Asia/Tokyo', label: '(GMT+09:00) Osaka, Sapporo, Tokyo' },
+  { value: 'Asia/Seoul', label: '(GMT+09:00) Seoul' },
+  { value: 'Asia/Yakutsk', label: '(GMT+09:00) Yakutsk' },
+  { value: 'Australia/Adelaide', label: '(GMT+09:30) Adelaide' },
+  { value: 'Australia/Darwin', label: '(GMT+09:30) Darwin' },
+  { value: 'Australia/Brisbane', label: '(GMT+10:00) Brisbane' },
+  { value: 'Australia/Hobart', label: '(GMT+10:00) Hobart' },
+  { value: 'Asia/Vladivostok', label: '(GMT+10:00) Vladivostok' },
+  { value: 'Australia/Lord_Howe', label: '(GMT+10:30) Lord Howe Island' },
+  { value: 'Etc/GMT-11', label: '(GMT+11:00) Solomon Is., New Caledonia' },
+  { value: 'Asia/Magadan', label: '(GMT+11:00) Magadan' },
+  { value: 'Pacific/Norfolk', label: '(GMT+11:30) Norfolk Island' },
+  { value: 'Asia/Anadyr', label: '(GMT+12:00) Anadyr, Kamchatka' },
+  { value: 'Pacific/Auckland', label: '(GMT+12:00) Auckland, Wellington' },
+  { value: 'Etc/GMT-12', label: '(GMT+12:00) Fiji, Kamchatka, Marshall Is.' },
+  { value: 'Pacific/Chatham', label: '(GMT+12:45) Chatham Islands' },
+  { value: 'Pacific/Tongatapu', label: '(GMT+13:00) Nuku\'alofa' },
+  { value: 'Pacific/Kiritimati', label: '(GMT+14:00) Kiritimati' },
 ]
 const DIALER_MODES = [
   { value: 'webphone', label: 'WebPhone' },
@@ -69,55 +159,158 @@ const CLI_SETTINGS = [
 ]
 const DID_DEST_LABEL: Record<number, string> = { 0:'IVR',1:'Extension',2:'Voicemail',4:'External',8:'Queue' }
 const COUNTRY_CODES = [
-  { code:'+1',short:'US',label:'+1 United States / Canada' },
-  { code:'+44',short:'UK',label:'+44 United Kingdom' },
-  { code:'+61',short:'AU',label:'+61 Australia' },
-  { code:'+33',short:'FR',label:'+33 France' },
-  { code:'+49',short:'DE',label:'+49 Germany' },
-  { code:'+91',short:'IN',label:'+91 India' },
-  { code:'+81',short:'JP',label:'+81 Japan' },
-  { code:'+86',short:'CN',label:'+86 China' },
-  { code:'+55',short:'BR',label:'+55 Brazil' },
-  { code:'+52',short:'MX',label:'+52 Mexico' },
-  { code:'+34',short:'ES',label:'+34 Spain' },
-  { code:'+39',short:'IT',label:'+39 Italy' },
-  { code:'+7',short:'RU',label:'+7 Russia' },
-  { code:'+971',short:'UAE',label:'+971 United Arab Emirates' },
-  { code:'+966',short:'SA',label:'+966 Saudi Arabia' },
-  { code:'+92',short:'PK',label:'+92 Pakistan' },
-  { code:'+27',short:'ZA',label:'+27 South Africa' },
-  { code:'+63',short:'PH',label:'+63 Philippines' },
-  { code:'+60',short:'MY',label:'+60 Malaysia' },
-  { code:'+65',short:'SG',label:'+65 Singapore' },
+  { code:'+93',short:'AF',name:'Afghanistan' },
+  { code:'+355',short:'AL',name:'Albania' },
+  { code:'+213',short:'DZ',name:'Algeria' },
+  { code:'+376',short:'AD',name:'Andorra' },
+  { code:'+244',short:'AO',name:'Angola' },
+  { code:'+54',short:'AR',name:'Argentina' },
+  { code:'+374',short:'AM',name:'Armenia' },
+  { code:'+61',short:'AU',name:'Australia' },
+  { code:'+43',short:'AT',name:'Austria' },
+  { code:'+994',short:'AZ',name:'Azerbaijan' },
+  { code:'+973',short:'BH',name:'Bahrain' },
+  { code:'+880',short:'BD',name:'Bangladesh' },
+  { code:'+375',short:'BY',name:'Belarus' },
+  { code:'+32',short:'BE',name:'Belgium' },
+  { code:'+501',short:'BZ',name:'Belize' },
+  { code:'+591',short:'BO',name:'Bolivia' },
+  { code:'+387',short:'BA',name:'Bosnia & Herzegovina' },
+  { code:'+267',short:'BW',name:'Botswana' },
+  { code:'+55',short:'BR',name:'Brazil' },
+  { code:'+673',short:'BN',name:'Brunei' },
+  { code:'+359',short:'BG',name:'Bulgaria' },
+  { code:'+855',short:'KH',name:'Cambodia' },
+  { code:'+237',short:'CM',name:'Cameroon' },
+  { code:'+1',short:'CA',name:'Canada' },
+  { code:'+56',short:'CL',name:'Chile' },
+  { code:'+86',short:'CN',name:'China' },
+  { code:'+57',short:'CO',name:'Colombia' },
+  { code:'+506',short:'CR',name:'Costa Rica' },
+  { code:'+385',short:'HR',name:'Croatia' },
+  { code:'+53',short:'CU',name:'Cuba' },
+  { code:'+357',short:'CY',name:'Cyprus' },
+  { code:'+420',short:'CZ',name:'Czech Republic' },
+  { code:'+45',short:'DK',name:'Denmark' },
+  { code:'+593',short:'EC',name:'Ecuador' },
+  { code:'+20',short:'EG',name:'Egypt' },
+  { code:'+503',short:'SV',name:'El Salvador' },
+  { code:'+372',short:'EE',name:'Estonia' },
+  { code:'+251',short:'ET',name:'Ethiopia' },
+  { code:'+358',short:'FI',name:'Finland' },
+  { code:'+33',short:'FR',name:'France' },
+  { code:'+995',short:'GE',name:'Georgia' },
+  { code:'+49',short:'DE',name:'Germany' },
+  { code:'+233',short:'GH',name:'Ghana' },
+  { code:'+30',short:'GR',name:'Greece' },
+  { code:'+502',short:'GT',name:'Guatemala' },
+  { code:'+504',short:'HN',name:'Honduras' },
+  { code:'+852',short:'HK',name:'Hong Kong' },
+  { code:'+36',short:'HU',name:'Hungary' },
+  { code:'+354',short:'IS',name:'Iceland' },
+  { code:'+91',short:'IN',name:'India' },
+  { code:'+62',short:'ID',name:'Indonesia' },
+  { code:'+98',short:'IR',name:'Iran' },
+  { code:'+964',short:'IQ',name:'Iraq' },
+  { code:'+353',short:'IE',name:'Ireland' },
+  { code:'+972',short:'IL',name:'Israel' },
+  { code:'+39',short:'IT',name:'Italy' },
+  { code:'+1876',short:'JM',name:'Jamaica' },
+  { code:'+81',short:'JP',name:'Japan' },
+  { code:'+962',short:'JO',name:'Jordan' },
+  { code:'+7',short:'KZ',name:'Kazakhstan' },
+  { code:'+254',short:'KE',name:'Kenya' },
+  { code:'+965',short:'KW',name:'Kuwait' },
+  { code:'+371',short:'LV',name:'Latvia' },
+  { code:'+961',short:'LB',name:'Lebanon' },
+  { code:'+218',short:'LY',name:'Libya' },
+  { code:'+370',short:'LT',name:'Lithuania' },
+  { code:'+352',short:'LU',name:'Luxembourg' },
+  { code:'+853',short:'MO',name:'Macau' },
+  { code:'+60',short:'MY',name:'Malaysia' },
+  { code:'+356',short:'MT',name:'Malta' },
+  { code:'+52',short:'MX',name:'Mexico' },
+  { code:'+373',short:'MD',name:'Moldova' },
+  { code:'+212',short:'MA',name:'Morocco' },
+  { code:'+258',short:'MZ',name:'Mozambique' },
+  { code:'+95',short:'MM',name:'Myanmar' },
+  { code:'+977',short:'NP',name:'Nepal' },
+  { code:'+31',short:'NL',name:'Netherlands' },
+  { code:'+64',short:'NZ',name:'New Zealand' },
+  { code:'+505',short:'NI',name:'Nicaragua' },
+  { code:'+234',short:'NG',name:'Nigeria' },
+  { code:'+47',short:'NO',name:'Norway' },
+  { code:'+968',short:'OM',name:'Oman' },
+  { code:'+92',short:'PK',name:'Pakistan' },
+  { code:'+507',short:'PA',name:'Panama' },
+  { code:'+595',short:'PY',name:'Paraguay' },
+  { code:'+51',short:'PE',name:'Peru' },
+  { code:'+63',short:'PH',name:'Philippines' },
+  { code:'+48',short:'PL',name:'Poland' },
+  { code:'+351',short:'PT',name:'Portugal' },
+  { code:'+1787',short:'PR',name:'Puerto Rico' },
+  { code:'+974',short:'QA',name:'Qatar' },
+  { code:'+40',short:'RO',name:'Romania' },
+  { code:'+7',short:'RU',name:'Russia' },
+  { code:'+966',short:'SA',name:'Saudi Arabia' },
+  { code:'+381',short:'RS',name:'Serbia' },
+  { code:'+65',short:'SG',name:'Singapore' },
+  { code:'+421',short:'SK',name:'Slovakia' },
+  { code:'+386',short:'SI',name:'Slovenia' },
+  { code:'+27',short:'ZA',name:'South Africa' },
+  { code:'+82',short:'KR',name:'South Korea' },
+  { code:'+34',short:'ES',name:'Spain' },
+  { code:'+94',short:'LK',name:'Sri Lanka' },
+  { code:'+46',short:'SE',name:'Sweden' },
+  { code:'+41',short:'CH',name:'Switzerland' },
+  { code:'+886',short:'TW',name:'Taiwan' },
+  { code:'+255',short:'TZ',name:'Tanzania' },
+  { code:'+66',short:'TH',name:'Thailand' },
+  { code:'+1868',short:'TT',name:'Trinidad & Tobago' },
+  { code:'+216',short:'TN',name:'Tunisia' },
+  { code:'+90',short:'TR',name:'Turkey' },
+  { code:'+256',short:'UG',name:'Uganda' },
+  { code:'+380',short:'UA',name:'Ukraine' },
+  { code:'+971',short:'AE',name:'United Arab Emirates' },
+  { code:'+44',short:'GB',name:'United Kingdom' },
+  { code:'+1',short:'US',name:'United States' },
+  { code:'+598',short:'UY',name:'Uruguay' },
+  { code:'+998',short:'UZ',name:'Uzbekistan' },
+  { code:'+58',short:'VE',name:'Venezuela' },
+  { code:'+84',short:'VN',name:'Vietnam' },
+  { code:'+260',short:'ZM',name:'Zambia' },
+  { code:'+263',short:'ZW',name:'Zimbabwe' },
 ]
 
 // Inline style constants (pixel-matched from campaign)
-const LABEL: React.CSSProperties = { display:'block',fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:4 }
-const H3: React.CSSProperties = { fontSize:14,fontWeight:700,color:'#1f2937',borderLeft:'3px solid #2563eb',paddingLeft:10,lineHeight:1.3 }
-const DIVIDER: React.CSSProperties = { height:1,background:'#e5e7eb',marginTop:8 }
-const SEC_HEAD: React.CSSProperties = { marginBottom:16 }
+const LABEL: React.CSSProperties = { display:'flex',alignItems:'center',gap:3,fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.6px',marginBottom:4 }
 const FLEX_ROW: React.CSSProperties = { display:'flex',gap:16,alignItems:'flex-start' }
-const FLEX_ROW_MT: React.CSSProperties = { display:'flex',gap:16,marginTop:12 }
+const FLEX_ROW_MT: React.CSSProperties = { display:'flex',gap:16,marginTop:14 }
 const FLEX1: React.CSSProperties = { flex:'1 1 0' }
-const ACT_BTN: React.CSSProperties = { width:36,height:36,border:'1px solid #e2e8f0',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',background:'#fff',cursor:'pointer',flexShrink:0 }
-const TOGGLE_ACTIVE: React.CSSProperties = { background:'rgb(143, 174, 243)',color:'#fff',borderColor:'rgb(143, 174, 243)' }
+const ACT_BTN: React.CSSProperties = { width:38,height:38,border:'1.5px solid #e2e8f0',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',background:'#fff',cursor:'pointer',flexShrink:0 }
+const TOGGLE_ACTIVE: React.CSSProperties = { background:'#818cf8',color:'#fff',borderColor:'#818cf8' }
 
-// Inline CSS (matches campaign page exactly)
+// Inline CSS (matches ApplyPage / MerchantPage styling)
 const CPN_STYLES = `
-.cpn-fi{width:100%;height:36px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
-.cpn-fi:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.cpn-fi{width:100%;height:38px;padding:0 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+.cpn-fi:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.1)}
 .cpn-fi::placeholder{color:#94a3b8}
 .cpn-fi:disabled{opacity:.45;cursor:not-allowed}
 select.cpn-fi{appearance:none;cursor:pointer;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:13px}
-.cpn-fi.err{border-color:#f87171}
+.cpn-fi.err{border-color:#ef4444}
 .cpn-fi.err:focus{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.1)}
 .cpn-toggle{display:inline-flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px}
 .cpn-toggle button{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;color:#64748b;border:none;cursor:pointer;transition:all .15s;background:transparent;white-space:nowrap}
 .cpn-toggle button.active{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .cpn-toggle button:hover:not(.active){color:#475569}
-.cpn-g4{display:grid;grid-template-columns:repeat(1,1fr);gap:12px 16px}
+.cpn-toggle-sm{display:inline-flex;background:#f1f5f9;border-radius:6px;padding:1.5px;gap:1px}
+.cpn-toggle-sm button{padding:3px 10px;border-radius:5px;font-size:11px;font-weight:600;color:#64748b;border:none;cursor:pointer;transition:all .15s;background:transparent;white-space:nowrap;line-height:1.4}
+.cpn-toggle-sm button.active{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.cpn-toggle-sm button:hover:not(.active){color:#475569}
+.cpn-g4{display:grid;grid-template-columns:repeat(1,1fr);gap:14px 16px}
 @media(min-width:640px){.cpn-g4{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:1024px){.cpn-g4{grid-template-columns:repeat(4,1fr)}}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 `
 
 // ---------------------------------------------------------------------------
@@ -153,12 +346,49 @@ export function UserForm() {
   const [submitted, setSubmitted] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const initialServerSet = useRef(false)
+  const initialGroupSet = useRef(false)
+  const formLoaded = useRef(false)
+  const formRef = useRef<HTMLDivElement>(null)
+  const authUser = useAuthStore(s => s.user)
+  const showServerField = isSuperAdmin(authUser)
 
   /* queries */
   const { data: existing, isLoading: loadingExisting } = useQuery({ queryKey:['user',id], queryFn:()=>userService.getById(Number(id)), enabled:isEdit })
   const { data: groupsData } = useQuery({ queryKey:['extension-groups',clientId], queryFn:()=>userService.getGroups() })
   const { data: serversData } = useQuery({ queryKey:['client-servers'], queryFn:()=>userService.getServers() })
   const { data: didsData } = useQuery({ queryKey:['did-dropdown'], queryFn:()=>didService.list({ page:1,limit:500,search:'',filters:{} }), staleTime:60_000 })
+
+  /* email availability check */
+  const [emailStatus, setEmailStatus] = useState<'idle'|'checking'|'available'|'taken'>('idle')
+  const emailCheckTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
+  const lastCheckedEmail = useRef('')
+
+  const checkEmailAvailability = useCallback((email: string) => {
+    if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current)
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailStatus('idle'); return }
+    if (isEdit && existing?.data?.data && (existing.data.data as Record<string,unknown>).email === email) { setEmailStatus('idle'); return }
+    if (lastCheckedEmail.current === email) return
+    setEmailStatus('checking')
+    emailCheckTimer.current = setTimeout(async () => {
+      try {
+        lastCheckedEmail.current = email
+        const res = await userService.checkEmail(email)
+        const d = res?.data as Record<string,unknown>|undefined
+        const isTaken = d?.success === false || d?.success === 'false'
+        setEmailStatus(isTaken ? 'taken' : 'available')
+      } catch {
+        setEmailStatus('idle')
+      }
+    }, 600)
+  }, [isEdit, existing])
+
+  /* country code search */
+  const [ccSearch, setCcSearch] = useState('')
+  const [ccOpen, setCcOpen] = useState(false)
+  const ccRef = useRef<HTMLDivElement>(null)
+  const filteredCC = ccSearch
+    ? COUNTRY_CODES.filter(c => c.name.toLowerCase().includes(ccSearch.toLowerCase()) || c.code.includes(ccSearch) || c.short.toLowerCase().includes(ccSearch.toLowerCase()))
+    : COUNTRY_CODES
 
   const servers: Array<{id:number;title_name?:string;detail?:string}> = serversData?.data?.data||serversData?.data||[]
   const groups: Array<{id:number;title?:string;group_name?:string}> = groupsData?.data?.data||groupsData?.data||[]
@@ -174,14 +404,33 @@ export function UserForm() {
     }
   }, [servers, isEdit])
 
+  // Auto-select first group when groups load (create mode only)
   useEffect(() => {
-    if (existing?.data?.data) {
+    if (!isEdit && groups.length > 0 && !initialGroupSet.current) {
+      initialGroupSet.current = true
+      setForm(f => f.group_id.length === 0 ? { ...f, group_id: [groups[0].id] } : f)
+    }
+  }, [groups, isEdit])
+
+  // Close country code dropdown on outside click
+  useEffect(() => {
+    if (!ccOpen) return
+    const handler = (e: MouseEvent) => {
+      if (ccRef.current && !ccRef.current.contains(e.target as Node)) setCcOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [ccOpen])
+
+  useEffect(() => {
+    if (existing?.data?.data && !formLoaded.current) {
+      formLoaded.current = true
       const u = existing.data.data as Record<string,unknown>
       setForm(f => ({
         ...f,
         first_name:(u.first_name as string)||'', last_name:(u.last_name as string)||'',
-        email:(u.email as string)||'', mobile:(u.mobile as string)||'',
-        country_code:(u.country_code as string)||'+1', password:'',
+        email:(u.email as string)||'', mobile:formatUSPhone((u.mobile as string)||''),
+        country_code:(()=>{const raw=String(u.country_code||'1');return raw.startsWith('+')?raw:'+'+raw})(), password:'',
         extension:(u.extension as string)||'',
         extension_type:mapExtType((u.extension_type as string)||'ext'),
         dialer_mode:(u.dialer_mode as string)||'webphone',
@@ -189,7 +438,7 @@ export function UserForm() {
         asterisk_server_id:Number(u.asterisk_server_id)||0,
         user_level:Number(u.user_level||u.level)||1,
         status:Number(u.status??1),
-        group_id:Array.isArray(u.group_id)?(u.group_id as number[]):(u.group_id?[Number(u.group_id)]:[]),
+        group_id:Array.isArray(u.group)?(u.group as Array<{group_id:number}>).map(g=>Number(g.group_id)):Array.isArray(u.group_id)?(u.group_id as number[]):(u.group_id?[Number(u.group_id)]:[]),
         voicemail:Number(u.voicemail??0), voicemail_send_to_email:Number(u.voicemail_send_to_email??0),
         vm_pin:(u.vm_pin as string)||'',
         follow_me:Number(u.follow_me??0), call_forward:Number(u.call_forward??0),
@@ -225,7 +474,7 @@ export function UserForm() {
     if (!isEdit) {
       const ext = Number(form.extension)
       if (!form.extension||!Number.isInteger(ext)||ext<1000||ext>9999) e.extension = '4 digits (1000-9999)'
-      if (!form.asterisk_server_id) e.asterisk_server_id = 'Select a server'
+      if (showServerField && !form.asterisk_server_id) e.asterisk_server_id = 'Select a server'
     }
     return e
   }
@@ -235,31 +484,31 @@ export function UserForm() {
     mutationFn: () => {
       if (isEdit) {
         const p: Record<string,unknown> = {
-          extension_id:Number(id),first_name:form.first_name,last_name:form.last_name,
-          email:form.email,mobile:form.mobile.replace(/\D/g,''),country_code:form.country_code,
+          extension_id:Number(id),first_name:capFirst(form.first_name),last_name:capFirst(form.last_name),
+          email:form.email,mobile:form.mobile.replace(/\D/g,''),country_code:form.country_code.replace(/\D/g,''),
           extension_type:form.extension_type,dialer_mode:form.dialer_mode,timezone:form.timezone,
-          group_id:form.group_id,voicemail:form.voicemail,voicemail_send_to_email:form.voicemail_send_to_email,
-          vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:form.follow_me,
-          call_forward:form.call_forward,twinning:form.twinning,no_answer_redirect:form.no_answer_redirect,
-          no_answer_phone:form.no_answer_redirect?form.no_answer_phone:'',cli_setting:form.cli_setting,
-          cli:form.cli,receive_sms_on_email:form.receive_sms_on_email,receive_sms_on_mobile:form.receive_sms_on_mobile,
-          ip_filtering:form.ip_filtering,enable_2fa:form.enable_2fa,app_status:form.app_status,status:form.status,
+          group_id:form.group_id,voicemail:Number(form.voicemail),voicemail_send_to_email:Number(form.voicemail_send_to_email),
+          vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:Number(form.follow_me),
+          call_forward:Number(form.call_forward),twinning:String(form.twinning),no_answer_redirect:Number(form.no_answer_redirect),
+          no_answer_phone:form.no_answer_redirect?form.no_answer_phone.replace(/\D/g,''):'',cli_setting:Number(form.cli_setting),
+          cli:form.cli,receive_sms_on_email:Number(form.receive_sms_on_email),receive_sms_on_mobile:Number(form.receive_sms_on_mobile),
+          ip_filtering:String(form.ip_filtering),enable_2fa:String(form.enable_2fa),app_status:String(form.app_status),status:Number(form.status),
         }
         if (form.password) p.password = form.password
         Object.keys(p).forEach(k => p[k]===undefined && delete p[k])
         return userService.update(p)
       }
       const p: Record<string,unknown> = {
-        first_name:form.first_name,last_name:form.last_name,email:form.email,mobile:form.mobile,
-        country_code:form.country_code,password:form.password,extension:Number(form.extension),
+        first_name:capFirst(form.first_name),last_name:capFirst(form.last_name),email:form.email,mobile:form.mobile.replace(/\D/g,''),
+        country_code:form.country_code.replace(/\D/g,''),password:form.password,extension:Number(form.extension),
         extension_type:form.extension_type,dialer_mode:form.dialer_mode,timezone:form.timezone,
-        asterisk_server_id:form.asterisk_server_id,user_level:form.user_level,status:form.status,
-        group_id:form.group_id,voicemail:form.voicemail,voicemail_send_to_email:form.voicemail_send_to_email,
-        vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:form.follow_me,
-        call_forward:form.call_forward,twinning:String(form.twinning),no_answer_redirect:form.no_answer_redirect,
-        no_answer_phone:form.no_answer_redirect?form.no_answer_phone:'',cli_setting:form.cli_setting,
-        cli:form.cli,receive_sms_on_email:form.receive_sms_on_email,receive_sms_on_mobile:form.receive_sms_on_mobile,
-        ip_filtering:form.ip_filtering,enable_2fa:form.enable_2fa,app_status:form.app_status,
+        asterisk_server_id:form.asterisk_server_id,user_level:Number(form.user_level),status:Number(form.status),
+        group_id:form.group_id,voicemail:Number(form.voicemail),voicemail_send_to_email:Number(form.voicemail_send_to_email),
+        vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:Number(form.follow_me),
+        call_forward:Number(form.call_forward),twinning:Number(form.twinning),no_answer_redirect:Number(form.no_answer_redirect),
+        no_answer_phone:form.no_answer_redirect?form.no_answer_phone:'',cli_setting:Number(form.cli_setting),
+        cli:form.cli,receive_sms_on_email:Number(form.receive_sms_on_email),receive_sms_on_mobile:Number(form.receive_sms_on_mobile),
+        ip_filtering:String(form.ip_filtering),enable_2fa:String(form.enable_2fa),app_status:String(form.app_status),
       }
       Object.keys(p).forEach(k => p[k]===undefined && delete p[k])
       return userService.create(p)
@@ -269,7 +518,10 @@ export function UserForm() {
       if (!data||data.success===false||data.success==='false') { toast.error((data as {message?:string}|null)?.message||'Failed to save'); return }
       toast.success(isEdit?'Extension updated':'Extension created')
       qc.invalidateQueries({ queryKey:['users'] })
-      if (isEdit) qc.invalidateQueries({ queryKey:['user',id] })
+      if (isEdit) {
+        qc.invalidateQueries({ queryKey:['user',id] })
+        qc.invalidateQueries({ queryKey:['user-view'] })
+      }
       navigate('/users')
     },
     onError: (err:unknown) => {
@@ -284,7 +536,19 @@ export function UserForm() {
     },
   })
 
-  const handleSubmit = () => { setSubmitted(true); const e=validate(); setErrors(e); if(!Object.keys(e).length) saveMutation.mutate() }
+  const handleSubmit = () => {
+    setSubmitted(true)
+    const e = validate()
+    setErrors(e)
+    if (Object.keys(e).length) {
+      setTimeout(() => {
+        const el = formRef.current?.querySelector('.cpn-fi.err') as HTMLElement
+        if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus?.() }
+      }, 50)
+      return
+    }
+    saveMutation.mutate()
+  }
 
   /* toggle renderer (mirrors campaign sidebar toggles) */
   const renderToggle = (val:number, setVal:(v:number)=>void, first:string, firstVal:number, second:string, secondVal:number) => (
@@ -296,10 +560,24 @@ export function UserForm() {
     </div>
   )
 
+  /* compact inline toggle for sidebar (label + toggle on same row) */
+  const TOGGLE_ACTIVE_SM: React.CSSProperties = { background:'#818cf8',color:'#fff',borderColor:'#818cf8' }
+  const renderInlineToggle = (label:string, val:number, setVal:(v:number)=>void, first:string, firstVal:number, second:string, secondVal:number) => (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 0' }}>
+      <span style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', flexShrink:0 }}>{label}</span>
+      <div className="cpn-toggle-sm" style={{ width:120, flexShrink:0, display:'flex' }}>
+        <button type="button" className={val===firstVal?'active':''} onClick={()=>setVal(firstVal)}
+          style={{ flex:'1 1 0%', ...(val===firstVal?TOGGLE_ACTIVE_SM:{}) }}>{first}</button>
+        <button type="button" className={val===secondVal?'active':''} onClick={()=>setVal(secondVal)}
+          style={{ flex:'1 1 0%', ...(val===secondVal?TOGGLE_ACTIVE_SM:{}) }}>{second}</button>
+      </div>
+    </div>
+  )
+
   if (isEdit && loadingExisting) return <PageLoader />
 
   /* error hint */
-  const err = (field: keyof FormErrors) => errors[field] ? <p style={{ fontSize:11,color:'#ef4444',marginTop:4 }}>{errors[field]}</p> : null
+  const err = (field: keyof FormErrors) => errors[field] ? <span style={{ fontSize:11,color:'#ef4444',marginTop:4,display:'flex',alignItems:'center',gap:3 }}><AlertCircle size={11}/>{errors[field]}</span> : null
 
   // ════════════════════════════════════════════════════════════════════════
   return (
@@ -324,7 +602,7 @@ export function UserForm() {
           </button>
           <button type="button" onClick={handleSubmit} disabled={saveMutation.isPending}
             className="px-5 py-2 text-xs font-semibold text-white rounded-lg flex items-center gap-2 disabled:opacity-50 transition-all"
-            style={{ background:'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow:'0 2px 8px rgba(37,99,235,0.3)' }}>
+            style={{ background:'linear-gradient(135deg, #4f46e5, #3730a3)', boxShadow:'0 2px 8px rgba(79,70,229,0.3)' }}>
             {saveMutation.isPending
               ? <Loader2 size={14} className="animate-spin" />
               : <Save size={14} />}
@@ -334,51 +612,97 @@ export function UserForm() {
       </div>
 
       {/* ── Blue gradient line ──────────────────────────────────────────── */}
-      <div style={{ height:3, background:'linear-gradient(90deg, #bfdbfe, #3b82f6)' }} />
+      <div style={{ height:3, background:'linear-gradient(90deg, #c7d2fe, #4f46e5)' }} />
 
       {/* ── Form body (2-column grid identical to campaign) ─────────────── */}
       <div className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-0">
 
           {/* ═══ LEFT COLUMN ══════════════════════════════════════════════ */}
-          <div className="overflow-y-auto scroll-smooth border-r border-slate-200 bg-white">
-            <div className="p-5">
+          <div ref={formRef} className="overflow-y-auto scroll-smooth border-r border-slate-200" style={{ background:'#f1f5f9' }}>
+            <div className="p-5" style={{ animation:'fadeSlide .25s ease' }}>
+
+              {submitted && Object.keys(errors).length > 0 && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', color:'#7f1d1d', fontSize:13, display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                  <AlertCircle size={14} style={{ flexShrink:0 }} />
+                  Please fix {Object.keys(errors).length} error{Object.keys(errors).length > 1 ? 's' : ''} before saving.
+                </div>
+              )}
+
+              <div style={{ background:'#fff', borderRadius:16, border:`1.5px solid ${submitted && Object.keys(errors).length > 0 ? '#fca5a5' : '#e2e8f0'}`, padding:'24px', boxShadow:'0 2px 12px rgba(15,23,42,.05)' }}>
 
               {/* Section 1: Extension Details */}
               <section>
-                <div style={SEC_HEAD}>
-                  <h3 style={H3}>Extension Details</h3>
-                  <div style={DIVIDER} />
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(79,70,229,0.08)', display:'flex', alignItems:'center', justifyContent:'center', color:'#4f46e5' }}>
+                    <User size={16} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:'#0f172a' }}>Extension Details</h3>
+                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>Basic user and contact information</p>
+                  </div>
                 </div>
                 <div className="cpn-g4">
                   <div>
                     <label style={LABEL}>First Name <span className="text-red-400">*</span></label>
                     <input className={fiCls('first_name')} placeholder="e.g. John"
-                      value={form.first_name} onChange={e=>set('first_name',e.target.value)} />
+                      value={form.first_name} onChange={e=>set('first_name',capFirst(e.target.value))} />
                     {err('first_name')}
                   </div>
                   <div>
                     <label style={LABEL}>Last Name</label>
                     <input className="cpn-fi" placeholder="Smith"
-                      value={form.last_name} onChange={e=>set('last_name',e.target.value)} />
+                      value={form.last_name} onChange={e=>set('last_name',capFirst(e.target.value))} />
                   </div>
                   <div>
                     <label style={LABEL}>Email Address <span className="text-red-400">*</span></label>
-                    <input type="email" className={fiCls('email')} placeholder="user@company.com"
-                      value={form.email} onChange={e=>set('email',e.target.value)} />
+                    <div style={{ position:'relative' }}>
+                      <input type="email" className={fiCls('email') + (emailStatus === 'taken' ? ' err' : '')} placeholder="user@company.com"
+                        value={form.email} onChange={e=>{set('email',e.target.value);checkEmailAvailability(e.target.value)}} />
+                      {emailStatus === 'checking' && <Loader2 size={14} className="animate-spin" style={{ position:'absolute',right:10,top:12,color:'#94a3b8' }} />}
+                      {emailStatus === 'available' && <CheckCircle2 size={14} style={{ position:'absolute',right:10,top:12,color:'#22c55e' }} />}
+                      {emailStatus === 'taken' && <XCircle size={14} style={{ position:'absolute',right:10,top:12,color:'#ef4444' }} />}
+                    </div>
+                    {emailStatus === 'available' && <span style={{ fontSize:11,color:'#22c55e',marginTop:2,display:'block' }}>Email is available</span>}
+                    {emailStatus === 'taken' && <span style={{ fontSize:11,color:'#ef4444',marginTop:2,display:'block' }}>Email already exists</span>}
                     {err('email')}
                   </div>
                   <div>
                     <label style={LABEL}>Phone Number <span className="text-red-400">*</span></label>
                     <div style={{ display:'flex', gap:4 }}>
-                      <div style={{ position:'relative', width:90, flexShrink:0 }}>
-                        <select className="cpn-fi" value={form.country_code} onChange={e=>set('country_code',e.target.value)}
-                          style={{ color:'transparent', paddingRight:28 }}>
-                          {COUNTRY_CODES.map(c=><option key={c.code} value={c.code} style={{color:'#0f172a'}}>{c.label}</option>)}
-                        </select>
-                        <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',paddingLeft:10,paddingRight:24,pointerEvents:'none',fontSize:12,color:'#0f172a',whiteSpace:'nowrap',overflow:'hidden' }}>
-                          {(()=>{const c=COUNTRY_CODES.find(x=>x.code===form.country_code);return c?`${c.code} ${c.short}`:form.country_code})()}
-                        </div>
+                      <div ref={ccRef} style={{ position:'relative', width:80, flexShrink:0 }}>
+                        <button type="button" className="cpn-fi" onClick={()=>{setCcOpen(v=>!v);setCcSearch('')}}
+                          style={{ display:'flex',alignItems:'center',justifyContent:'space-between',paddingRight:6,cursor:'pointer',fontSize:12,color:'#0f172a',textAlign:'left' }}>
+                          <span>{(()=>{const c=COUNTRY_CODES.find(x=>x.code===form.country_code&&x.short!=='CA');return c?`${c.short} ${c.code}`:form.country_code})()}</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><path d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        {ccOpen && (
+                          <div style={{ position:'absolute',top:'100%',left:0,right:0,marginTop:2,background:'#fff',border:'1.5px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:50,minWidth:220,maxHeight:260,display:'flex',flexDirection:'column' }}>
+                            <div style={{ padding:'6px 8px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:6 }}>
+                              <Search size={12} style={{ color:'#94a3b8',flexShrink:0 }} />
+                              <input autoFocus className="cpn-fi" placeholder="Search country..."
+                                value={ccSearch} onChange={e=>setCcSearch(e.target.value)}
+                                style={{ border:'none',height:28,padding:0,fontSize:12,boxShadow:'none' }}
+                                onClick={e=>e.stopPropagation()} />
+                            </div>
+                            <div style={{ overflowY:'auto',flex:1 }}>
+                              {filteredCC.map(c=>{
+                                const sel = form.country_code===c.code
+                                return (
+                                <button key={c.short} type="button"
+                                  onClick={()=>{set('country_code',c.code);setCcOpen(false);setCcSearch('')}}
+                                  style={{ width:'100%',padding:'6px 10px',border:'none',background:sel?'#eef2ff':'transparent',cursor:'pointer',fontSize:12,color:'#0f172a',textAlign:'left',display:'flex',alignItems:'center',gap:6 }}
+                                  onMouseEnter={e=>(e.currentTarget.style.background=sel?'#eef2ff':'#f8fafc')}
+                                  onMouseLeave={e=>(e.currentTarget.style.background=sel?'#eef2ff':'transparent')}>
+                                  <span style={{ fontWeight:600,minWidth:42 }}>{c.code}</span>
+                                  <span style={{ color:'#64748b' }}>{c.name}</span>
+                                </button>
+                                )
+                              })}
+                              {filteredCC.length===0 && <div style={{ padding:'8px 10px',fontSize:11,color:'#94a3b8' }}>No results</div>}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <input type="tel" className={fiCls('mobile')} style={{ flex:1 }}
                         value={form.mobile} onChange={e=>set('mobile',formatUSPhone(e.target.value))}
@@ -390,38 +714,28 @@ export function UserForm() {
               </section>
 
               {/* Section 2: Configuration */}
-              <section className="mt-6">
-                <div style={SEC_HEAD}>
-                  <h3 style={H3}>Configuration</h3>
-                  <div style={DIVIDER} />
-                </div>
-
-                {/* Row 1: Extension Type | Dialer Mode */}
-                <div style={FLEX_ROW}>
-                  <div style={FLEX1}>
-                    <label style={LABEL}>Extension Type</label>
-                    <select className="cpn-fi" value={form.extension_type} onChange={e=>set('extension_type',e.target.value)}>
-                      {EXTENSION_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
+              <section className="mt-8" style={{ paddingTop:20, borderTop:'1.5px solid #e2e8f0' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(124,58,237,0.08)', display:'flex', alignItems:'center', justifyContent:'center', color:'#7c3aed' }}>
+                    <Settings size={16} />
                   </div>
-                  <div style={FLEX1}>
-                    <label style={LABEL}>Dialer Mode</label>
-                    <select className="cpn-fi" value={form.dialer_mode} onChange={e=>set('dialer_mode',e.target.value)}>
-                      {DIALER_MODES.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
-                    </select>
+                  <div>
+                    <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:'#0f172a' }}>Configuration</h3>
+                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>Extension settings and preferences</p>
                   </div>
                 </div>
 
-                {/* Row 2: Extension | Password */}
+                {/* Row 1: Extension | Password | Voicemail PIN */}
                 <div style={FLEX_ROW_MT}>
                   <div style={FLEX1}>
                     <label style={LABEL}>Extension {!isEdit && <span className="text-red-400">*</span>}</label>
-                    <div style={{ display:'flex', gap:4 }}>
+                    <div style={{ position:'relative' }}>
                       <input className={fiCls('extension')} value={form.extension} readOnly disabled
-                        style={{ flex:1, background:'#f8fafc', color:'#64748b', cursor:'not-allowed', fontFamily:'monospace' }} />
+                        style={{ background:'#f8fafc', color:'#1e293b', cursor:'not-allowed', fontFamily:'monospace', fontWeight:600, opacity:1, paddingRight:!isEdit?36:11 }} />
                       {!isEdit && (
-                        <button type="button" onClick={()=>set('extension',genExtension())} style={ACT_BTN} title="Regenerate">
-                          <RefreshCw size={14} />
+                        <button type="button" onClick={()=>set('extension',genExtension())} title="Regenerate"
+                          style={{ position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
+                          <RefreshCw size={13} />
                         </button>
                       )}
                     </div>
@@ -429,38 +743,45 @@ export function UserForm() {
                   </div>
                   <div style={FLEX1}>
                     <label style={LABEL}>{isEdit?'New Password':'Password'}</label>
-                    <div style={{ display:'flex', gap:4 }}>
+                    <div style={{ position:'relative' }}>
                       <input type={showPassword?'text':'password'} className="cpn-fi"
-                        style={{ flex:1, ...(isEdit?{}:{background:'#f8fafc',fontFamily:'monospace'}) }}
+                        style={{ paddingRight:90, ...(isEdit?{}:{background:'#f8fafc',fontFamily:'monospace'}) }}
                         value={form.password}
-                        onChange={isEdit?e=>set('password',e.target.value):undefined}
-                        readOnly={!isEdit} placeholder={isEdit?'Leave blank to keep':''} autoComplete="new-password" />
-                      <button type="button" onClick={()=>setShowPassword(v=>!v)} style={ACT_BTN}>
-                        {showPassword?<EyeOff size={14}/>:<Eye size={14}/>}
+                        onChange={e=>set('password',e.target.value)}
+                        placeholder={isEdit?'Leave blank to keep current password':''} autoComplete="new-password" />
+                      <div style={{ position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',display:'flex',alignItems:'center',gap:2 }}>
+                        <button type="button" onClick={()=>setShowPassword(v=>!v)}
+                          style={{ width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
+                          {showPassword?<EyeOff size={13}/>:<Eye size={13}/>}
+                        </button>
+                        <button type="button" onClick={()=>copyToClipboard(form.password)} title="Copy"
+                          style={{ width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
+                          <Copy size={13}/>
+                        </button>
+                        <button type="button" onClick={()=>set('password',genPassword())} title="Regenerate"
+                          style={{ width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
+                          <RefreshCw size={13}/>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={FLEX1}>
+                    <label style={LABEL}>Voicemail PIN</label>
+                    <div style={{ position:'relative' }}>
+                      <input type="text" inputMode="numeric" className="cpn-fi" style={{ background:'#f8fafc', color:'#1e293b', fontFamily:'monospace', fontWeight:600, paddingRight:36 }}
+                        value={form.vm_pin} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,4);set('vm_pin',v)}}
+                        placeholder="e.g. 1234" maxLength={4} />
+                      <button type="button" onClick={()=>set('vm_pin',genPin())} title="Generate PIN"
+                        style={{ position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
+                        <RefreshCw size={13} />
                       </button>
-                      {!isEdit && (
-                        <>
-                          <button type="button" onClick={()=>copyToClipboard(form.password)} style={ACT_BTN} title="Copy">
-                            <Copy size={14}/>
-                          </button>
-                          <button type="button" onClick={()=>set('password',genPassword())} style={ACT_BTN} title="Regenerate">
-                            <RefreshCw size={14}/>
-                          </button>
-                        </>
-                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Row 3: Timezone | Server */}
+                {/* Row 2: Asterisk Server | Timezone */}
                 <div style={FLEX_ROW_MT}>
-                  <div style={FLEX1}>
-                    <label style={LABEL}>Timezone</label>
-                    <select className="cpn-fi" value={form.timezone} onChange={e=>set('timezone',e.target.value)}>
-                      {TIMEZONES.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                    </select>
-                  </div>
-                  {servers.length > 0 && (
+                  {showServerField && servers.length > 0 && (
                     <div style={FLEX1}>
                       <label style={LABEL}>Asterisk Server {!isEdit && <span className="text-red-400">*</span>}</label>
                       <select className={fiCls('asterisk_server_id')} value={form.asterisk_server_id}
@@ -471,28 +792,29 @@ export function UserForm() {
                       {err('asterisk_server_id')}
                     </div>
                   )}
+                  <div style={FLEX1}>
+                    <label style={LABEL}>Timezone</label>
+                    <select className="cpn-fi" value={form.timezone} onChange={e=>set('timezone',e.target.value)}>
+                      {TIMEZONES.map(tz=><option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                    </select>
+                  </div>
                 </div>
 
-                {/* Row 4: CLI Setting | Agent Group */}
+                {/* Row 3: Agent Group | CLI Setting | Custom CLI (dynamic) */}
                 <div style={FLEX_ROW_MT}>
+                  <div style={FLEX1}>
+                    <label style={LABEL}>Agent Group</label>
+                    <select className="cpn-fi" value={form.group_id[0]||''}
+                      onChange={e=>set('group_id',e.target.value?[Number(e.target.value)]:[])}>
+                      {groups.map(g=><option key={g.id} value={g.id}>{labelOf(g)}</option>)}
+                    </select>
+                  </div>
                   <div style={FLEX1}>
                     <label style={LABEL}>CLI Setting</label>
                     <select className="cpn-fi" value={form.cli_setting} onChange={e=>set('cli_setting',Number(e.target.value))}>
                       {CLI_SETTINGS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>
-                  <div style={FLEX1}>
-                    <label style={LABEL}>Agent Group</label>
-                    <select className="cpn-fi" value={form.group_id[0]||''}
-                      onChange={e=>set('group_id',e.target.value?[Number(e.target.value)]:[])}>
-                      <option value="">None</option>
-                      {groups.map(g=><option key={g.id} value={g.id}>{labelOf(g)}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Row 5 (conditional): Custom CLI | VM PIN */}
-                <div style={FLEX_ROW_MT}>
                   {form.cli_setting === 1 && (
                     <div style={FLEX1}>
                       <label style={LABEL}>Custom CLI</label>
@@ -508,116 +830,42 @@ export function UserForm() {
                       </select>
                     </div>
                   )}
-                  <div style={FLEX1}>
-                    <label style={LABEL}>Voicemail PIN</label>
-                    <div style={{ display:'flex', gap:4 }}>
-                      <input type="number" className="cpn-fi" style={{ flex:1, fontFamily:'monospace' }}
-                        value={form.vm_pin} onChange={e=>set('vm_pin',e.target.value)}
-                        placeholder="e.g. 1234" />
-                      <button type="button" onClick={()=>set('vm_pin',genPin())}
-                        style={{ height:36,padding:'0 12px',border:'1px solid #e2e8f0',borderRadius:8,background:'#fff',fontSize:12,fontWeight:600,color:'#64748b',cursor:'pointer',whiteSpace:'nowrap' }}>
-                        Generate
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </section>
 
+              </div>{/* end card */}
             </div>
           </div>
 
-          {/* ═══ RIGHT SIDEBAR (identical pattern to campaign) ═══════════ */}
-          <div style={{ background:'#f8fafc', borderLeft:'1px solid #e2e8f0' }} className="overflow-y-auto">
-            <div className="p-4 space-y-3">
+          {/* ═══ RIGHT SIDEBAR ══════════════════════════════════════════ */}
+          <div style={{ background:'#f8fafc', borderLeft:'1.5px solid #e2e8f0' }} className="overflow-y-auto">
+            <div style={{ padding:'12px 14px' }}>
 
-              {/* Status */}
-              <div>
-                <label style={LABEL}>Status</label>
-                {renderToggle(form.status, v=>set('status',v), 'Active',1, 'Inactive',0)}
-              </div>
-
-              {/* Follow Me */}
-              <div>
-                <label style={LABEL}>Follow Me</label>
-                {renderToggle(form.follow_me, v=>set('follow_me',v), 'No',0, 'Yes',1)}
-              </div>
-
-              {/* Call Forward */}
-              <div>
-                <label style={LABEL}>Call Forward</label>
-                {renderToggle(form.call_forward, v=>set('call_forward',v), 'No',0, 'Yes',1)}
-              </div>
-
-              <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
-
-              {/* Twinning */}
-              <div>
-                <label style={LABEL}>Twinning</label>
-                {renderToggle(form.twinning, v=>set('twinning',v), 'No',0, 'Yes',1)}
-              </div>
-
-              {/* No Answer Redirect */}
-              <div>
-                <label style={LABEL}>No Answer Redirect</label>
-                {renderToggle(form.no_answer_redirect, v=>set('no_answer_redirect',v), 'No',0, 'Yes',1)}
-              </div>
-              {form.no_answer_redirect === 1 && (
-                <div>
-                  <label style={LABEL}>Redirect Number <span className="text-red-400">*</span></label>
-                  <input type="tel" className={fiCls('no_answer_phone')}
-                    value={form.no_answer_phone} onChange={e=>set('no_answer_phone',formatUSPhone(e.target.value))}
-                    placeholder="(555) 555-5555" maxLength={14} />
-                  {err('no_answer_phone')}
+              {/* Sidebar header */}
+              <div style={{ display:'flex', alignItems:'center', gap:10, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0', marginBottom:6 }}>
+                <div style={{ width:26, height:26, borderRadius:7, background:'rgba(79,70,229,0.08)', display:'flex', alignItems:'center', justifyContent:'center', color:'#4f46e5' }}>
+                  <Settings size={12} />
                 </div>
-              )}
+                <span style={{ fontSize:12, fontWeight:700, color:'#0f172a' }}>Quick Settings</span>
+              </div>
+
+              {renderInlineToggle('Status', form.status, v=>set('status',v), 'Active',1, 'Inactive',0)}
+              {renderInlineToggle('Follow Me', form.follow_me, v=>set('follow_me',v), 'No',0, 'Yes',1)}
+              {renderInlineToggle('Call Forward', form.call_forward, v=>set('call_forward',v), 'No',0, 'Yes',1)}
 
               <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
 
-              {/* Voicemail */}
-              <div>
-                <label style={LABEL}>Voicemail</label>
-                {renderToggle(form.voicemail, v=>set('voicemail',v), 'Active',1, 'Inactive',0)}
-              </div>
-
-              {/* VM to Email */}
-              <div>
-                <label style={LABEL}>VM to Email</label>
-                {renderToggle(form.voicemail_send_to_email, v=>set('voicemail_send_to_email',v), 'No',0, 'Yes',1)}
-              </div>
+              {renderInlineToggle('Twinning', form.twinning, v=>set('twinning',v), 'No',0, 'Yes',1)}
+              {renderInlineToggle('Voicemail', form.voicemail, v=>set('voicemail',v), 'Active',1, 'Inactive',0)}
 
               <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
 
-              {/* IP Filtering */}
-              <div>
-                <label style={LABEL}>IP Filtering</label>
-                {renderToggle(form.ip_filtering, v=>set('ip_filtering',v), 'Active',1, 'Inactive',0)}
-              </div>
-
-              {/* Enable 2FA */}
-              <div>
-                <label style={LABEL}>Enable 2FA</label>
-                {renderToggle(form.enable_2fa, v=>set('enable_2fa',v), 'No',0, 'Yes',1)}
-              </div>
+              {renderInlineToggle('IP Filtering', form.ip_filtering, v=>set('ip_filtering',v), 'Active',1, 'Inactive',0)}
+              {renderInlineToggle('Enable 2FA', form.enable_2fa, v=>set('enable_2fa',v), 'No',0, 'Yes',1)}
 
               <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
 
-              {/* Mobile App */}
-              <div>
-                <label style={LABEL}>Mobile App</label>
-                {renderToggle(form.app_status, v=>set('app_status',v), 'Active',1, 'Inactive',0)}
-              </div>
-
-              {/* SMS to Email */}
-              <div>
-                <label style={LABEL}>SMS to Email</label>
-                {renderToggle(form.receive_sms_on_email, v=>set('receive_sms_on_email',v), 'Off',0, 'On',1)}
-              </div>
-
-              {/* SMS to Mobile */}
-              <div>
-                <label style={LABEL}>SMS to Mobile</label>
-                {renderToggle(form.receive_sms_on_mobile, v=>set('receive_sms_on_mobile',v), 'Off',0, 'On',1)}
-              </div>
+              {renderInlineToggle('Mobile App', form.app_status, v=>set('app_status',v), 'Active',1, 'Inactive',0)}
 
             </div>
           </div>

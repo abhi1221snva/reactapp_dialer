@@ -3,13 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuthStore } from '../../stores/auth.store'
 import {
-  ArrowLeft, GitBranch, Users,
-  Voicemail, ExternalLink, MessageSquare, Star, Loader2,
-  CheckCircle2, PhoneCall, AlertCircle, Clock,
-  Upload, Mic, History, Lock, User, PhoneIncoming,
+  ArrowLeft, GitBranch, Loader2,
+  AlertCircle, Upload, Mic, History, Lock, Save,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { didService } from '../../services/did.service'
+import { ivrService } from '../../services/ivr.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { cn } from '../../utils/cn'
 
@@ -56,65 +55,28 @@ type DeptItem = { id: number; name: string; description?: string }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const DEST_TYPES = [
-  {
-    value: 'extension', label: 'Extension', Icon: User,
-    gradient:   'from-blue-500 to-indigo-600',
-    activeBg:   'bg-gradient-to-br from-blue-500 to-indigo-600',
-    iconBg:     'bg-blue-100',   iconColor:  'text-blue-600',
-    activeText: 'text-white',    ringColor:  'ring-blue-400',
-    desc: 'Route to a specific agent extension',
-  },
-  {
-    value: 'ivr', label: 'IVR', Icon: GitBranch,
-    gradient:   'from-purple-500 to-violet-600',
-    activeBg:   'bg-gradient-to-br from-purple-500 to-violet-600',
-    iconBg:     'bg-purple-100', iconColor:  'text-purple-600',
-    activeText: 'text-white',    ringColor:  'ring-purple-400',
-    desc: 'Interactive voice response menu',
-  },
-  {
-    value: 'queue', label: 'Queue', Icon: Users,
-    gradient:   'from-emerald-500 to-teal-600',
-    activeBg:   'bg-gradient-to-br from-emerald-500 to-teal-600',
-    iconBg:     'bg-emerald-100', iconColor: 'text-emerald-600',
-    activeText: 'text-white',     ringColor: 'ring-emerald-400',
-    desc: 'Ring group or call queue',
-  },
-  {
-    value: 'voicemail', label: 'Voicemail', Icon: Voicemail,
-    gradient:   'from-amber-500 to-orange-600',
-    activeBg:   'bg-gradient-to-br from-amber-500 to-orange-600',
-    iconBg:     'bg-amber-100',  iconColor:  'text-amber-600',
-    activeText: 'text-white',    ringColor:  'ring-amber-400',
-    desc: 'Send directly to voicemail',
-  },
-  {
-    value: 'external', label: 'External', Icon: ExternalLink,
-    gradient:   'from-rose-500 to-pink-600',
-    activeBg:   'bg-gradient-to-br from-rose-500 to-pink-600',
-    iconBg:     'bg-rose-100',   iconColor:  'text-rose-600',
-    activeText: 'text-white',    ringColor:  'ring-rose-400',
-    desc: 'Forward to external number',
-  },
+// Fallback dest types in case API fails
+const DEST_TYPES_FALLBACK = [
+  { value: 'extension', label: 'Extension' },
+  { value: 'ivr',       label: 'IVR' },
+  { value: 'queue',     label: 'Ring Group / Queue' },
+  { value: 'voicemail', label: 'Voicemail' },
+  { value: 'external',  label: 'External Number' },
 ]
 
+// Map dest_type_list.dest_type name to internal key
+const DEST_NAME_TO_KEY: Record<string, string> = {
+  'Extension': 'extension', 'IVR': 'ivr', 'Voicemail': 'voicemail',
+  'Ring-Group': 'queue', 'Queue': 'queue', 'DID': 'external',
+  'Conferencing': 'conference', 'Fax': 'fax', 'DNC': 'dnc', 'Voice AI': 'voice_ai',
+}
+
 const OPERATORS = [
-  { value: 'twilio',  label: 'Twilio',  dot: 'bg-red-400',
-    active: 'bg-red-50    border-red-400    text-red-700',
-    check:  'text-red-500' },
-  { value: 'telnyx',  label: 'Telnyx',  dot: 'bg-sky-400',
-    active: 'bg-sky-50    border-sky-400    text-sky-700',
-    check:  'text-sky-500' },
-  { value: 'plivo',   label: 'Plivo',   dot: 'bg-orange-400',
-    active: 'bg-orange-50 border-orange-400 text-orange-700',
-    check:  'text-orange-500' },
-  { value: 'vonage',  label: 'Vonage',  dot: 'bg-violet-400',
-    active: 'bg-violet-50 border-violet-400 text-violet-700',
-    check:  'text-violet-500' },
-  { value: 'other',   label: 'Other',   dot: 'bg-slate-400',
-    active: 'bg-slate-100 border-slate-400  text-slate-700',
-    check:  'text-slate-500' },
+  { value: 'twilio',  label: 'Twilio' },
+  { value: 'telnyx',  label: 'Telnyx' },
+  { value: 'plivo',   label: 'Plivo' },
+  { value: 'vonage',  label: 'Vonage' },
+  { value: 'other',   label: 'Other' },
 ]
 
 const DEFAULT_FORM: FormState = {
@@ -138,6 +100,8 @@ const DEST_TYPE_FROM_NUM: Record<number, string> = {
   0: 'ivr', 1: 'extension', 2: 'voicemail', 4: 'external', 5: 'conference', 8: 'queue', 12: 'voice_ai',
 }
 
+const LBL: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }
+
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
 function EmptyHint({ message }: { message: string }) {
@@ -148,116 +112,8 @@ function EmptyHint({ message }: { message: string }) {
   )
 }
 
-// ─── Section header ───────────────────────────────────────────────────────────
 
-function SectionHead({ icon: Icon, title, sub, step }: {
-  icon: React.ElementType; title: string; sub: string; step: number
-}) {
-  return (
-    <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-        <span className="text-xs font-black text-white">{step}</span>
-      </div>
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <Icon size={13} className="text-slate-500" />
-          <p className="text-sm font-bold text-slate-900">{title}</p>
-        </div>
-        <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
-      </div>
-    </div>
-  )
-}
 
-// ─── Routing type card grid ───────────────────────────────────────────────────
-
-function RoutingCards({
-  value, onChange,
-}: {
-  value: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-      {DEST_TYPES.map(dt => {
-        const active = value === dt.value
-        return (
-          <button
-            key={dt.value}
-            type="button"
-            onClick={() => onChange(dt.value)}
-            className={cn(
-              'relative flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 transition-all text-center select-none cursor-pointer',
-              active
-                ? `${dt.activeBg} border-transparent shadow-lg ring-2 ring-offset-1 ${dt.ringColor}`
-                : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'
-            )}
-          >
-            <div className={cn(
-              'w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm transition-all flex-shrink-0',
-              active ? 'bg-white/20' : `bg-gradient-to-br ${dt.gradient}`
-            )}>
-              <dt.Icon size={20} className={active ? 'text-white' : 'text-white'} />
-            </div>
-            <div>
-              <p className={cn('text-xs font-bold leading-none', active ? 'text-white' : 'text-slate-700')}>
-                {dt.label}
-              </p>
-              <p className={cn('text-[10px] mt-1 leading-snug', active ? 'text-white/70' : 'text-slate-400')}>
-                {dt.desc}
-              </p>
-            </div>
-            {active && (
-              <div className="absolute top-2.5 right-2.5 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-sm">
-                <CheckCircle2 size={13} className={dt.iconColor} />
-              </div>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─── Feature toggle ───────────────────────────────────────────────────────────
-
-function Toggle({ checked, onChange, label, description, icon: Icon, accent = 'indigo' }: {
-  checked: boolean
-  onChange: (v: boolean) => void
-  label: string
-  description: string
-  icon: React.ElementType
-  accent?: string
-}) {
-  const A: Record<string, { border: string; bg: string; iconBg: string; iconColor: string; track: string }> = {
-    indigo: { border: 'border-indigo-400', bg: 'bg-indigo-50', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', track: 'bg-indigo-500' },
-    amber:  { border: 'border-amber-400',  bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  iconColor: 'text-amber-600',  track: 'bg-amber-500' },
-  }
-  const a = A[accent]
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer select-none transition-all',
-        checked ? `${a.border} ${a.bg}` : 'border-slate-200 bg-white hover:border-slate-300'
-      )}
-      onClick={() => onChange(!checked)}
-    >
-      <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors',
-        checked ? a.iconBg : 'bg-slate-100')}>
-        <Icon size={17} className={checked ? a.iconColor : 'text-slate-400'} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className={cn('text-sm font-semibold', checked ? 'text-slate-900' : 'text-slate-700')}>{label}</p>
-        <p className="text-xs text-slate-400 mt-0.5 leading-snug">{description}</p>
-      </div>
-      <div className={cn('relative w-10 h-6 rounded-full flex-shrink-0 transition-colors',
-        checked ? a.track : 'bg-slate-200')}>
-        <div className={cn('absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform',
-          checked ? 'translate-x-4' : 'translate-x-0')} />
-      </div>
-    </div>
-  )
-}
 
 // ─── US phone formatter ───────────────────────────────────────────────────────
 
@@ -309,23 +165,23 @@ function RoutingTarget({
   }
 
   if (destType === 'extension') return (
-    <div className="form-group">
-      <label className="label">Target Agent / Extension <span className="text-red-500">*</span></label>
-      <select className="input" value={extension} onChange={e => onChange('extension', e.target.value)}>
+    <div style={{ flex: '1 1 0' }}>
+      <label style={LBL}>Target Agent / Extension <span className="text-red-400">*</span></label>
+      <select className="cpn-fi" value={extension} onChange={e => onChange('extension', e.target.value)}>
         <option value="">— Select an agent —</option>
         {extensions.map(ext => (
           <option key={ext.id} value={String(ext.extension)}>{extLabel(ext)}</option>
         ))}
       </select>
-      <p className="text-[11px] text-slate-400 mt-1.5">{extensions.length} agent{extensions.length !== 1 ? 's' : ''} available</p>
+      <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>{extensions.length} agent{extensions.length !== 1 ? 's' : ''} available</span>
       {extensions.length === 0 && <EmptyHint message="No extensions found. Please create an extension first." />}
     </div>
   )
 
   if (destType === 'ivr') return (
-    <div className="form-group">
-      <label className="label">Select IVR Menu <span className="text-red-500">*</span></label>
-      <select className="input" value={ivr_id} onChange={e => onChange('ivr_id', e.target.value)} disabled={loadingIvrs}>
+    <div style={{ flex: '1 1 0' }}>
+      <label style={LBL}>Select IVR Menu <span className="text-red-400">*</span></label>
+      <select className="cpn-fi" value={ivr_id} onChange={e => onChange('ivr_id', e.target.value)} disabled={loadingIvrs}>
         <option value="">{loadingIvrs ? 'Loading IVR menus…' : '— Select an IVR menu —'}</option>
         {ivrs.map(ivr => (
           <option key={ivr.ivr_id} value={String(ivr.ivr_id)}>
@@ -334,16 +190,16 @@ function RoutingTarget({
         ))}
       </select>
       {!loadingIvrs && ivrs.length > 0 && (
-        <p className="text-[11px] text-slate-400 mt-1.5">{ivrs.length} IVR menu{ivrs.length !== 1 ? 's' : ''} available</p>
+        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>{ivrs.length} IVR menu{ivrs.length !== 1 ? 's' : ''} available</span>
       )}
       {!loadingIvrs && ivrs.length === 0 && <EmptyHint message="No IVRs found. Please create an IVR first." />}
     </div>
   )
 
   if (destType === 'queue') return (
-    <div className="form-group">
-      <label className="label">Select Ring Group / Queue <span className="text-red-500">*</span></label>
-      <select className="input" value={ingroup} onChange={e => onChange('ingroup', e.target.value)} disabled={loadingRingGroups}>
+    <div style={{ flex: '1 1 0' }}>
+      <label style={LBL}>Select Ring Group / Queue <span className="text-red-400">*</span></label>
+      <select className="cpn-fi" value={ingroup} onChange={e => onChange('ingroup', e.target.value)} disabled={loadingRingGroups}>
         <option value="">{loadingRingGroups ? 'Loading ring groups…' : '— Select a ring group —'}</option>
         {ringGroups.map(rg => (
           <option key={rg.id} value={String(rg.id)}>
@@ -352,22 +208,22 @@ function RoutingTarget({
         ))}
       </select>
       {!loadingRingGroups && ringGroups.length > 0 && (
-        <p className="text-[11px] text-slate-400 mt-1.5">{ringGroups.length} ring group{ringGroups.length !== 1 ? 's' : ''} available</p>
+        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>{ringGroups.length} ring group{ringGroups.length !== 1 ? 's' : ''} available</span>
       )}
       {!loadingRingGroups && ringGroups.length === 0 && <EmptyHint message="No ring groups found. Please create one first." />}
     </div>
   )
 
   if (destType === 'voicemail') return (
-    <div className="form-group">
-      <label className="label">Voicemail Box <span className="text-red-500">*</span></label>
-      <select className="input" value={voicemail_id} onChange={e => onChange('voicemail_id', e.target.value)}>
+    <div style={{ flex: '1 1 0' }}>
+      <label style={LBL}>Voicemail Box <span className="text-red-400">*</span></label>
+      <select className="cpn-fi" value={voicemail_id} onChange={e => onChange('voicemail_id', e.target.value)}>
         <option value="">— Select an agent / extension —</option>
         {extensions.map(ext => (
           <option key={ext.id} value={String(ext.extension)}>{extLabel(ext)}</option>
         ))}
       </select>
-      <p className="text-[11px] text-slate-400 mt-1.5">Callers go directly to this agent's voicemail box</p>
+      <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Callers go directly to this agent's voicemail box</span>
       {extensions.length === 0 && <EmptyHint message="No extensions found. Please create an extension first." />}
     </div>
   )
@@ -375,19 +231,19 @@ function RoutingTarget({
   if (destType === 'external') {
     const digits = forward_number.replace(/\D/g, '')
     return (
-      <div className="form-group">
-        <label className="label">Forward To Number <span className="text-red-500">*</span></label>
+      <div style={{ flex: '1 1 0' }}>
+        <label style={LBL}>Forward To Number <span className="text-red-400">*</span></label>
         <input
-          className="input font-mono"
+          className="cpn-fi font-mono"
           value={forward_number}
           onChange={e => onChange('forward_number', formatUSPhone(e.target.value))}
           placeholder="(XXX) XXX-XXXX"
           maxLength={14}
           inputMode="numeric"
         />
-        <p className={cn('text-[11px] mt-1.5', digits.length === 10 ? 'text-emerald-600' : 'text-slate-400')}>
+        <span style={{ fontSize: 11, color: digits.length === 10 ? '#059669' : '#94a3b8', marginTop: 2, display: 'block' }}>
           {digits.length}/10 digits{digits.length === 10 ? ' ✓' : ' · US format (XXX) XXX-XXXX'}
-        </p>
+        </span>
       </div>
     )
   }
@@ -435,6 +291,22 @@ export function DidForm() {
     queryKey: ['department-list', clientId],
     queryFn:  () => didService.getDepartments(),
   })
+  const { data: destTypeData } = useQuery({
+    queryKey: ['dest-types'],
+    queryFn:  () => ivrService.getDestTypes(),
+  })
+
+  // Build dest types from API data
+  const DEST_TYPES = (() => {
+    const raw = (destTypeData as { data?: { data?: Array<{ id: number; dest_type: string; dest_id: number; is_deleted: number }> } })?.data?.data
+    if (!raw || raw.length === 0) return DEST_TYPES_FALLBACK
+    return raw
+      .filter(d => d.is_deleted === 0)
+      .map(d => ({
+        value: DEST_NAME_TO_KEY[d.dest_type] ?? d.dest_type.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+        label: d.dest_type === 'Ring-Group' ? 'Ring Group / Queue' : d.dest_type === 'DID' ? 'External Number' : d.dest_type,
+      }))
+  })()
 
   const extRaw    = (extensionsData as { data?: unknown })?.data
   const extensions: ExtItem[]  = Array.isArray(extRaw)
@@ -724,236 +596,206 @@ export function DidForm() {
   const holidayActive = Boolean(form.call_time_holiday)
 
   return (
-    <div className="space-y-6">
+    <div className="-mx-5 -mt-5 flex flex-col animate-fadeIn" style={{ height: 'calc(100vh - 70px)' }}>
+      <style>{`
+        .cpn-fi{width:100%;height:36px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+        .cpn-fi:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+        .cpn-fi::placeholder{color:#94a3b8}
+        .cpn-fi:disabled{opacity:.45;cursor:not-allowed}
+        select.cpn-fi{appearance:none;cursor:pointer;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:13px}
+        .cpn-reveal{animation:cpnReveal .25s ease-out}
+        @keyframes cpnReveal{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+        .cpn-toggle{display:inline-flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px}
+        .cpn-toggle button{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;color:#64748b;border:none;cursor:pointer;transition:all .15s;background:transparent;white-space:nowrap}
+        .cpn-toggle button.active{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+        .cpn-toggle button:hover:not(.active){color:#475569}
+        textarea.cpn-fi{height:auto;padding:8px 10px;resize:none}
+      `}</style>
 
-      {/* ── Page header ── */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={() => navigate('/dids')}
-          className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors flex-shrink-0"
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="page-title">{isEdit ? 'Edit Phone Number' : 'Add Phone Number'}</h1>
+      {/* ── Sticky Header ── */}
+      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate('/dids')}
+            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50 transition-all">
+            <ArrowLeft size={15} />
+          </button>
+          <h1 className="text-[15px] font-semibold text-slate-800">{isEdit ? 'Edit Phone Number' : 'Add Phone Number'}</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate('/dids')}
+            className="text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors hidden sm:block">Cancel</button>
+          <button type="button" onClick={handleSave} disabled={saveMutation.isPending}
+            className="px-5 py-2 text-xs font-semibold text-white rounded-lg flex items-center gap-2 disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow: '0 2px 8px rgba(37,99,235,.3)' }}>
+            {saveMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saveMutation.isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add DID'}
+          </button>
         </div>
       </div>
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #bfdbfe, #3b82f6)' }} />
 
-      {/* ── Vertical form sections ── */}
-      <div className="space-y-4">
+      {/* ── Body: Left form + Right sidebar ── */}
+      <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-0">
 
-        {/* ─── Section 1: Phone Identity ─── */}
-        <div className="card p-5 space-y-5">
-          <SectionHead icon={PhoneIncoming} title="Phone Identity" sub="Set the phone number, caller ID, and provider" step={1} />
+        {/* ── LEFT: Main form fields ── */}
+        <div className="overflow-y-auto scroll-smooth border-r border-slate-200 bg-white">
+          <div className="p-5 space-y-6">
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="form-group mb-0">
-              <label className="label">
-                Phone Number (CLI) <span className="text-red-500">*</span>
-              </label>
-              <input
-                className={cn('input font-mono', isEdit && 'bg-slate-50 text-slate-500 cursor-not-allowed')}
-                value={form.cli}
-                onChange={e => {
-                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
-                  set('cli', digits)
-                }}
-                placeholder="2125551234"
-                disabled={isEdit}
-                maxLength={10}
-                inputMode="numeric"
-              />
-              <p className="text-[11px] text-slate-400 mt-1.5">
-                {isEdit
-                  ? 'Cannot be changed after creation'
-                  : 'Enter 10-digit US number without country code (e.g. 2125551234)'}
-              </p>
-            </div>
-            <div className="form-group mb-0">
-              <label className="label">Caller ID Name (CNAM)</label>
-              <input
-                className="input"
-                value={form.cnam}
-                onChange={e => set('cnam', e.target.value)}
-                placeholder="e.g. Support Line, Acme Corp"
-              />
-              <p className="text-[11px] text-slate-400 mt-1.5">Shown to recipients on outbound calls</p>
-            </div>
-          </div>
+            {/* ═══ Section: Phone Identity ═══ */}
+            <section>
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                  Phone Identity
+                </h3>
+                <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+              </div>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div style={{ flex: '1 1 0' }}>
+                  <label style={LBL}>Phone Number (CLI) <span className="text-red-400">*</span></label>
+                  <input
+                    className={cn('cpn-fi font-mono', isEdit && '!opacity-45 !cursor-not-allowed')}
+                    value={form.cli}
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      set('cli', digits)
+                    }}
+                    placeholder="2125551234"
+                    disabled={isEdit}
+                    maxLength={10}
+                    inputMode="numeric"
+                  />
+                </div>
+                <div style={{ flex: '1 1 0' }}>
+                  <label style={LBL}>Caller ID Name (CNAM)</label>
+                  <input
+                    className="cpn-fi"
+                    value={form.cnam}
+                    onChange={e => set('cnam', e.target.value)}
+                    placeholder="e.g. Support Line, Acme Corp"
+                  />
+                </div>
+                <div style={{ flex: '1 1 0' }}>
+                  <label style={LBL}>VoIP Provider <span className="text-red-400">*</span></label>
+                  <select className="cpn-fi" value={form.operator} onChange={e => set('operator', e.target.value)}>
+                    <option value="">— Select —</option>
+                    {OPERATORS.map(op => (
+                      <option key={op.value} value={op.value}>{op.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
 
-          {/* Provider */}
-          <div className="pt-4 border-t border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-              VoIP Provider <span className="text-red-500 normal-case font-normal">*</span>
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-              {OPERATORS.map(op => {
-                const active = form.operator === op.value
-                return (
-                  <button
-                    key={op.value}
-                    type="button"
-                    onClick={() => set('operator', active ? '' : op.value)}
-                    className={cn(
-                      'relative flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 transition-all select-none cursor-pointer',
-                      active
-                        ? `${op.active} shadow-sm`
-                        : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'
-                    )}
+            {/* ═══ Section: Call Routing ═══ */}
+            <section>
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                  Call Routing
+                </h3>
+                <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+              </div>
+
+              {Boolean(form.redirect_last_agent) ? (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-200">
+                  <History size={16} className="text-indigo-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-indigo-700 leading-relaxed">
+                    <span className="font-bold">Redirect to Last Spoken is active.</span> Calls will automatically route to the last agent the caller spoke with. Turn off the toggle in the sidebar to configure manual routing.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <div style={{ flex: '1 1 0' }}>
+                    <label style={LBL}>Routing Type</label>
+                    <select className="cpn-fi" value={form.dest_type} onChange={e => switchDestType(e.target.value)}>
+                      {DEST_TYPES.map(dt => (
+                        <option key={dt.value} value={dt.value}>{dt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <RoutingTarget
+                    destType={form.dest_type}
+                    extension={form.extension} ivr_id={form.ivr_id}
+                    voicemail_id={form.voicemail_id} ingroup={form.ingroup}
+                    forward_number={form.forward_number}
+                    extensions={extensions} ivrs={ivrs} ringGroups={ringGroups}
+                    loadingIvrs={loadingIvrs} loadingRingGroups={loadingRingGroups}
+                    onChange={(key, val) => set(key as keyof FormState, val)}
+                  />
+                </div>
+              )}
+            </section>
+
+            {/* ═══ Section: SMS Assignment (visible when SMS on) ═══ */}
+            {Boolean(form.sms) && (
+              <section className="cpn-reveal">
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                    SMS Assignment
+                  </h3>
+                  <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                </div>
+                <div style={{ maxWidth: 400 }}>
+                  <label style={LBL}>Assign SMS to User</label>
+                  <select
+                    className="cpn-fi"
+                    value={form.sms_user_id}
+                    onChange={e => set('sms_user_id', e.target.value)}
                   >
-                    <span className={cn('w-3.5 h-3.5 rounded-full shadow-sm', op.dot)} />
-                    <span className={cn('text-xs font-bold', active ? '' : 'text-slate-600')}>{op.label}</span>
-                    {active && (
-                      <div className="absolute top-2 right-2 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
-                        <CheckCircle2 size={11} className={op.check} />
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-2.5">Click to select. Click again to deselect.</p>
-          </div>
-        </div>
+                    <option value="">— Select a user —</option>
+                    {extensions.map(ext => {
+                      const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
+                      return (
+                        <option key={ext.id} value={String(ext.id)}>
+                          {name || `User #${ext.id}`}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Incoming SMS routed to this user</span>
+                  {extensions.length === 0 && <EmptyHint message="No users found." />}
+                </div>
+              </section>
+            )}
 
-        {/* ─── Section 2: Call Routing ─── */}
-        <div className="card p-5 space-y-5">
-          <SectionHead icon={GitBranch} title="Call Routing" sub="Configure where inbound calls are directed" step={2} />
+            {/* ═══ Section: Business Hours (visible when Call Times on) ═══ */}
+            {Boolean(form.call_time_enabled) && (
+              <section className="cpn-reveal">
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                    Business Hours
+                  </h3>
+                  <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                </div>
+                <div style={{ maxWidth: 400 }}>
+                  <label style={LBL}>Schedule / Department</label>
+                  <select
+                    className="cpn-fi"
+                    value={form.call_time_department_id}
+                    onChange={e => set('call_time_department_id', e.target.value)}
+                  >
+                    <option value="">— Select a schedule —</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={String(d.id)}>{d.name}</option>
+                    ))}
+                  </select>
+                  {departments.length === 0 && <EmptyHint message="No call-time schedules found. Create one under Call Timings first." />}
+                </div>
+              </section>
+            )}
 
-          <Toggle
-            checked={Boolean(form.redirect_last_agent)}
-            onChange={v => set('redirect_last_agent', v ? 1 : 0)}
-            label="Redirect to Last Spoken"
-            description="Reconnect callers with the last agent they spoke with on this number"
-            icon={History}
-            accent="indigo"
-          />
+            {/* ═══ Section: Call Screening (visible when screening + holiday on) ═══ */}
+            {holidayActive && Boolean(form.call_screening_status) && (
+              <section className="cpn-reveal">
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                    Call Screening
+                  </h3>
+                  <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                </div>
 
-          {!Boolean(form.redirect_last_agent) ? (
-            <div className="space-y-5">
-              <div>
-                <label className="label mb-3">Routing Type</label>
-                <RoutingCards value={form.dest_type} onChange={switchDestType} />
-              </div>
-              <RoutingTarget
-                destType={form.dest_type}
-                extension={form.extension} ivr_id={form.ivr_id}
-                voicemail_id={form.voicemail_id} ingroup={form.ingroup}
-                forward_number={form.forward_number}
-                extensions={extensions} ivrs={ivrs} ringGroups={ringGroups}
-                loadingIvrs={loadingIvrs} loadingRingGroups={loadingRingGroups}
-                onChange={(key, val) => set(key as keyof FormState, val)}
-              />
-            </div>
-          ) : (
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-200">
-              <History size={16} className="text-indigo-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-indigo-700 leading-relaxed">
-                <span className="font-bold">Redirect to Last Spoken is active.</span> Calls will automatically route to the last agent the caller spoke with. Disable the toggle above to configure manual routing.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* ─── Section 3: Features ─── */}
-        <div className="card p-5 space-y-5">
-          <SectionHead icon={Star} title="Features" sub="Enable optional features for this number" step={3} />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Toggle
-              checked={Boolean(form.sms)}
-              onChange={v => set('sms', v ? 1 : 0)}
-              label="Enable SMS"
-              description="Send and receive text messages on this number"
-              icon={MessageSquare}
-              accent="indigo"
-            />
-            <Toggle
-              checked={Boolean(form.default_did)}
-              onChange={v => set('default_did', v ? 1 : 0)}
-              label="Set as Default"
-              description="Use as the default outbound caller ID"
-              icon={Star}
-              accent="amber"
-            />
-          </div>
-
-          {Boolean(form.sms) && (
-            <div className="form-group mb-0">
-              <label className="label">Assign SMS to User</label>
-              <select
-                className="input"
-                value={form.sms_user_id}
-                onChange={e => set('sms_user_id', e.target.value)}
-              >
-                <option value="">— Select a user —</option>
-                {extensions.map(ext => {
-                  const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
-                  return (
-                    <option key={ext.id} value={String(ext.id)}>
-                      {name || `User #${ext.id}`}
-                    </option>
-                  )
-                })}
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1.5">Incoming SMS for this number will be routed to this user</p>
-              {extensions.length === 0 && <EmptyHint message="No users found." />}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Toggle
-              checked={Boolean(form.call_time_enabled)}
-              onChange={v => set('call_time_enabled', v ? 1 : 0)}
-              label="Call Times"
-              description="Enforce business-hours routing for this number"
-              icon={Clock}
-              accent="indigo"
-            />
-            <Toggle
-              checked={Boolean(form.call_time_holiday)}
-              onChange={v => set('call_time_holiday', v ? 1 : 0)}
-              label="Holiday Calendar"
-              description="Apply out-of-hours routing on configured holidays"
-              icon={Clock}
-              accent="amber"
-            />
-          </div>
-
-          {Boolean(form.call_time_enabled) && (
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="form-group mb-0">
-                <label className="label">Business Hours Schedule</label>
-                <select
-                  className="input"
-                  value={form.call_time_department_id}
-                  onChange={e => set('call_time_department_id', e.target.value)}
-                >
-                  <option value="">— Select a schedule / department —</option>
-                  {departments.map(d => (
-                    <option key={d.id} value={String(d.id)}>{d.name}</option>
-                  ))}
-                </select>
-                {departments.length === 0 && <EmptyHint message="No call-time schedules found. Create one under Call Timings first." />}
-              </div>
-            </div>
-          )}
-
-          {holidayActive && (<>
-            <Toggle
-              checked={Boolean(form.call_screening_status)}
-              onChange={v => set('call_screening_status', v ? 1 : 0)}
-              label="Call Screening"
-              description="Play a prompt to announce the caller before connecting"
-              icon={PhoneCall}
-              accent="indigo"
-            />
-
-            {Boolean(form.call_screening_status) && (
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
-                <div>
-                  <label className="label mb-2">Screening Method</label>
-                  <div className="flex gap-2">
+                <div style={{ marginBottom: 12 }}>
+                  <label style={LBL}>Screening Method</label>
+                  <div className="flex gap-2" style={{ maxWidth: 480 }}>
                     {([
                       { value: 'ivr',    label: 'Use IVR',      Icon: GitBranch },
                       { value: 'upload', label: 'Upload Audio',  Icon: Upload },
@@ -978,33 +820,33 @@ export function DidForm() {
                 </div>
 
                 {form.call_screening_mode === 'ivr' && (
-                  <div className="form-group mb-0">
-                    <label className="label">IVR Announcement <span className="text-red-500">*</span></label>
+                  <div className="cpn-reveal" style={{ maxWidth: 400 }}>
+                    <label style={LBL}>IVR Announcement <span className="text-red-400">*</span></label>
                     <select
-                      className="input"
+                      className="cpn-fi"
                       value={form.call_screening_ivr_id}
                       onChange={e => set('call_screening_ivr_id', e.target.value)}
                       disabled={loadingIvrs}
                     >
-                      <option value="">{loadingIvrs ? 'Loading IVRs…' : '— Select an IVR announcement —'}</option>
+                      <option value="">{loadingIvrs ? 'Loading IVRs…' : '— Select an IVR —'}</option>
                       {ivrs.map(ivr => (
                         <option key={ivr.ivr_id} value={String(ivr.ivr_id)}>
                           {ivr.ivr_desc || ivr.ann_id || ivr.ivr_id}
                         </option>
                       ))}
                     </select>
-                    <p className="text-[11px] text-slate-400 mt-1.5">Caller hears this IVR; agent hears caller name before accepting</p>
+                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Caller hears this IVR; agent hears caller name before accepting</span>
                     {!loadingIvrs && ivrs.length === 0 && <EmptyHint message="No IVRs found. Create an IVR menu first." />}
                   </div>
                 )}
 
                 {form.call_screening_mode === 'upload' && (
-                  <div className="form-group mb-0">
-                    <label className="label">Upload Screening Audio {!isEdit && <span className="text-red-500">*</span>}</label>
+                  <div className="cpn-reveal">
+                    <label style={LBL}>Upload Screening Audio {!isEdit && <span className="text-red-400">*</span>}</label>
                     <label className={cn(
                       'mt-1 flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed cursor-pointer transition-colors',
                       audioFile ? 'border-indigo-400 bg-indigo-50' : 'border-slate-300 bg-white hover:border-indigo-300 hover:bg-indigo-50/50'
-                    )}>
+                    )} style={{ maxWidth: 480 }}>
                       <Upload size={16} className={audioFile ? 'text-indigo-500' : 'text-slate-400'} />
                       <span className={cn('text-xs font-medium flex-1 truncate', audioFile ? 'text-indigo-700' : 'text-slate-500')}>
                         {audioFile ? audioFile.name : 'Choose audio file (mp3, wav, ogg)…'}
@@ -1016,29 +858,30 @@ export function DidForm() {
                       )}
                       <input type="file" accept=".mp3,.wav,.ogg" className="sr-only" onChange={e => setAudioFile(e.target.files?.[0] ?? null)} />
                     </label>
-                    <p className="text-[11px] text-slate-400 mt-1.5">
-                      {isEdit ? 'Leave empty to keep existing audio. Upload to replace.' : 'Audio is played when a call connects to this number.'}
-                    </p>
+                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>
+                      {isEdit ? 'Leave empty to keep existing audio. Upload to replace.' : 'Audio played when call connects to this number.'}
+                    </span>
                   </div>
                 )}
 
                 {form.call_screening_mode === 'speech' && (
-                  <div className="space-y-3">
-                    <div className="form-group mb-0">
-                      <label className="label">Screening Message <span className="text-red-500">*</span></label>
+                  <div className="cpn-reveal space-y-3">
+                    <div>
+                      <label style={LBL}>Screening Message <span className="text-red-400">*</span></label>
                       <textarea
-                        className="input resize-none"
+                        className="cpn-fi"
                         rows={3}
+                        style={{ height: 'auto', padding: '8px 10px', resize: 'none' }}
                         value={form.speech_text}
                         onChange={e => set('speech_text', e.target.value)}
                         placeholder="e.g. You have a call from a new customer. Press 1 to accept."
                       />
-                      <p className="text-[11px] text-slate-400 mt-1.5">This text will be converted to speech and played to the caller</p>
+                      <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Text converted to speech and played to caller</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="form-group mb-0">
-                        <label className="label">Language</label>
-                        <select className="input" value={form.language} onChange={e => set('language', e.target.value)}>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ flex: '1 1 0' }}>
+                        <label style={LBL}>Language</label>
+                        <select className="cpn-fi" value={form.language} onChange={e => set('language', e.target.value)}>
                           <option value="en-US">English (US)</option>
                           <option value="en-GB">English (UK)</option>
                           <option value="es-ES">Spanish</option>
@@ -1047,9 +890,9 @@ export function DidForm() {
                           <option value="pt-BR">Portuguese (BR)</option>
                         </select>
                       </div>
-                      <div className="form-group mb-0">
-                        <label className="label">Voice</label>
-                        <select className="input" value={form.voice_name} onChange={e => set('voice_name', e.target.value)}>
+                      <div style={{ flex: '1 1 0' }}>
+                        <label style={LBL}>Voice</label>
+                        <select className="cpn-fi" value={form.voice_name} onChange={e => set('voice_name', e.target.value)}>
                           <option value="Joanna">Joanna (Female)</option>
                           <option value="Matthew">Matthew (Male)</option>
                           <option value="Amy">Amy (Female, UK)</option>
@@ -1061,61 +904,105 @@ export function DidForm() {
                     </div>
                   </div>
                 )}
+              </section>
+            )}
+
+            {/* ═══ Section: Out of Hours ═══ */}
+            <section>
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #2563eb', paddingLeft: 10, lineHeight: 1.3 }}>
+                  Out of Hours
+                </h3>
+                <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+              </div>
+
+              {holidayActive ? (
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <div style={{ flex: '1 1 0' }}>
+                    <label style={LBL}>Out-of-Hours Routing Type</label>
+                    <select className="cpn-fi" value={form.dest_type_ooh} onChange={e => switchDestTypeOoh(e.target.value)}>
+                      {DEST_TYPES.map(dt => (
+                        <option key={dt.value} value={dt.value}>{dt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <RoutingTarget
+                    destType={form.dest_type_ooh}
+                    extension={form.extension_ooh} ivr_id={form.ivr_id_ooh}
+                    voicemail_id={form.voicemail_id_ooh} ingroup={form.ingroup_ooh}
+                    forward_number={form.forward_number_ooh}
+                    extensions={extensions} ivrs={ivrs} ringGroups={ringGroups}
+                    loadingIvrs={loadingIvrs} loadingRingGroups={loadingRingGroups}
+                    onChange={(key, val) => set(`${key}_ooh` as keyof FormState, val)}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                    <Lock size={22} className="text-slate-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-600 mb-1.5">Holiday Calendar Required</p>
+                  <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                    Enable the <span className="font-medium text-slate-500">Holiday Calendar</span> toggle
+                    in the sidebar to unlock out-of-hours routing.
+                  </p>
+                </div>
+              )}
+            </section>
+
+          </div>
+        </div>
+
+        {/* ── RIGHT: Toggle sidebar ── */}
+        <div style={{ background: '#f8fafc', borderLeft: '1px solid #e2e8f0' }}>
+          <div className="p-4 space-y-3">
+            <div>
+              <label style={LBL}>Enable SMS</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.sms && 'active')} style={{ flex: 1, ...(!form.sms ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('sms', 0)}>Off</button>
+                <button type="button" className={cn(Boolean(form.sms) && 'active')} style={{ flex: 1, ...(form.sms ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('sms', 1)}>On</button>
+              </div>
+            </div>
+            <div>
+              <label style={LBL}>Default DID</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.default_did && 'active')} style={{ flex: 1, ...(!form.default_did ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('default_did', 0)}>Off</button>
+                <button type="button" className={cn(Boolean(form.default_did) && 'active')} style={{ flex: 1, ...(form.default_did ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('default_did', 1)}>On</button>
+              </div>
+            </div>
+            <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />
+            <div>
+              <label style={LBL}>Call Times</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.call_time_enabled && 'active')} style={{ flex: 1, ...(!form.call_time_enabled ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('call_time_enabled', 0)}>Off</button>
+                <button type="button" className={cn(Boolean(form.call_time_enabled) && 'active')} style={{ flex: 1, ...(form.call_time_enabled ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('call_time_enabled', 1)}>On</button>
+              </div>
+            </div>
+            <div>
+              <label style={LBL}>Holiday Calendar</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.call_time_holiday && 'active')} style={{ flex: 1, ...(!form.call_time_holiday ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('call_time_holiday', 0)}>Off</button>
+                <button type="button" className={cn(Boolean(form.call_time_holiday) && 'active')} style={{ flex: 1, ...(form.call_time_holiday ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('call_time_holiday', 1)}>On</button>
+              </div>
+            </div>
+            <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />
+            <div>
+              <label style={LBL}>Redirect to Last Agent</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.redirect_last_agent && 'active')} style={{ flex: 1, ...(!form.redirect_last_agent ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('redirect_last_agent', 0)}>Off</button>
+                <button type="button" className={cn(Boolean(form.redirect_last_agent) && 'active')} style={{ flex: 1, ...(form.redirect_last_agent ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('redirect_last_agent', 1)}>On</button>
+              </div>
+            </div>
+            {holidayActive && (
+              <div className="cpn-reveal">
+                <label style={LBL}>Call Screening</label>
+                <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                  <button type="button" className={cn(!form.call_screening_status && 'active')} style={{ flex: 1, ...(!form.call_screening_status ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('call_screening_status', 0)}>Off</button>
+                  <button type="button" className={cn(Boolean(form.call_screening_status) && 'active')} style={{ flex: 1, ...(form.call_screening_status ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('call_screening_status', 1)}>On</button>
+                </div>
               </div>
             )}
-          </>)}
-        </div>
-
-        {/* ─── Section 4: Out of Hours ─── */}
-        <div className="card p-5 space-y-5">
-          <SectionHead icon={Clock} title="Out of Hours" sub="Routing applied outside business hours on holidays" step={4} />
-
-          {holidayActive ? (
-            <div className="space-y-5">
-              <div>
-                <label className="label mb-3">Out-of-Hours Routing Type</label>
-                <RoutingCards value={form.dest_type_ooh} onChange={switchDestTypeOoh} />
-              </div>
-              <RoutingTarget
-                destType={form.dest_type_ooh}
-                extension={form.extension_ooh} ivr_id={form.ivr_id_ooh}
-                voicemail_id={form.voicemail_id_ooh} ingroup={form.ingroup_ooh}
-                forward_number={form.forward_number_ooh}
-                extensions={extensions} ivrs={ivrs} ringGroups={ringGroups}
-                loadingIvrs={loadingIvrs} loadingRingGroups={loadingRingGroups}
-                onChange={(key, val) => set(`${key}_ooh` as keyof FormState, val)}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-                <Lock size={22} className="text-slate-300" />
-              </div>
-              <p className="text-sm font-semibold text-slate-600 mb-1.5">Holiday Calendar Required</p>
-              <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-                Enable the <span className="font-medium text-slate-500">Holiday Calendar</span> toggle
-                in the Features section above to unlock out-of-hours routing.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* ─── Save / Cancel ─── */}
-        <div className="flex items-center justify-end gap-2 pb-2">
-          <button type="button" onClick={() => navigate('/dids')} className="btn-outline px-5">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saveMutation.isPending}
-            className="btn-primary flex items-center gap-1.5 px-5"
-          >
-            {saveMutation.isPending
-              ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
-              : isEdit ? 'Save Changes' : 'Add DID'
-            }
-          </button>
+          </div>
         </div>
 
       </div>

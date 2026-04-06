@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, PhoneOff, Upload, Search, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, PhoneOff, Upload, Download, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { dncService } from '../../services/dnc.service'
@@ -47,6 +47,9 @@ export function DncList() {
         </div>
         <div className="lt-divider" />
         <div className="lt-right">
+          <button onClick={() => { dncService.download().catch(() => toast.error('Failed to download DNC list')) }} className="lt-b">
+            <Download size={13} /> Download
+          </button>
           <button onClick={() => setShowUpload(true)} className="lt-b">
             <Upload size={13} /> Upload Excel
           </button>

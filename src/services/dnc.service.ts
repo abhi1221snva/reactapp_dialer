@@ -32,5 +32,18 @@ export const dncService = {
     return api.post('/upload-dnc', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
 
+  download: () =>
+    api.get('/download-dnc', { responseType: 'blob' }).then((res) => {
+      const blob = new Blob([res.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `dnc_list_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    }),
+
   getExtensions: () => api.get('/extension'),
 }

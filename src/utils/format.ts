@@ -6,7 +6,8 @@ export function formatDuration(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export function formatPhoneNumber(phone: string): string {
+export function formatPhoneNumber(phone: string | undefined | null): string {
+  if (!phone) return '—'
   const digits = phone.replace(/\D/g, '')
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
@@ -37,17 +38,21 @@ export function formatPartialPhoneUS(digits: string): string {
   return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
 }
 
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date, timezone?: string): string {
   if (!date) return '-'
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
+  if (timezone) opts.timeZone = timezone
+  return new Date(date).toLocaleDateString('en-US', opts)
 }
 
-export function formatDateTime(date: string | Date): string {
+export function formatDateTime(date: string | Date, timezone?: string): string {
   if (!date) return '-'
-  return new Date(date).toLocaleString('en-US', {
+  const opts: Intl.DateTimeFormatOptions = {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
-  })
+  }
+  if (timezone) opts.timeZone = timezone
+  return new Date(date).toLocaleString('en-US', opts)
 }
 
 export function timeAgo(date: string | Date): string {

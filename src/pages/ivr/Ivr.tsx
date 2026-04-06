@@ -789,7 +789,7 @@ function AudioMessagesTab() {
   const columns: Column<AudioMessage>[] = [
     {
       key: 'ivr_desc',
-      header: 'Name',
+      header: 'Name', sortable: true,
       render: (msg) => (
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
@@ -1642,7 +1642,7 @@ function IvrTab() {
   const columns: Column<Ivr>[] = [
     {
       key: 'ivr_desc',
-      header: 'IVR Name',
+      header: 'IVR Name', sortable: true,
       render: (ivr) => (
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">

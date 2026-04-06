@@ -28,6 +28,19 @@ export const excludeListService = {
   delete: (number: string, campaign_id: number) =>
     api.post('/delete-exclude-number', { number, campaign_id }),
 
+  download: () =>
+    api.get('/download-exclude-number', { responseType: 'blob' }).then((res) => {
+      const blob = new Blob([res.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `exclude_list_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    }),
+
   uploadExcel: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)

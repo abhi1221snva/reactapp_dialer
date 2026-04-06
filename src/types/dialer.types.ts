@@ -10,6 +10,11 @@ export interface Campaign {
   status: 'active' | 'inactive'
   total_leads?: number
   called_leads?: number
+  // Time-based calling fields (from backend campaign table)
+  time_based_calling?: number | string
+  call_time_start?: string | null
+  call_time_end?: string | null
+  timezone?: string | null
 }
 
 export interface Lead {
@@ -94,4 +99,8 @@ export interface CallLog {
   duration: number     // seconds (0 if never connected)
   campaign_name: string
   started_at: string   // ISO string
+  /** For redial — CRM lead ID used to re-fetch lead data */
+  lead_id?: number
+  /** For redial — campaign ID the call was placed under */
+  campaign_id?: number
 }

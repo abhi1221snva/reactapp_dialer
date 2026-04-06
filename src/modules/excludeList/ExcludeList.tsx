@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, MinusCircle, Upload, Search, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, MinusCircle, Upload, Download, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { excludeListService } from '../../services/excludeList.service'
@@ -37,6 +37,9 @@ export function ExcludeList() {
         </div>
         <div className="lt-divider" />
         <div className="lt-right">
+          <button onClick={() => { excludeListService.download().catch(() => toast.error('Failed to download Exclude list')) }} className="lt-b">
+            <Download size={13} /> Download
+          </button>
           <button onClick={() => setShowUpload(true)} className="lt-b">
             <Upload size={13} /> Upload Excel
           </button>

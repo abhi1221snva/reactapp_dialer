@@ -79,8 +79,9 @@ function CampaignModal({
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      const t = title.trim()
       const payload: Record<string, unknown> = {
-        title: title.trim(),
+        title: t.charAt(0).toUpperCase() + t.slice(1),
         description: description.trim(),
         sms_ai_template_id: templateId ? Number(templateId) : undefined,
         caller_id: callerId.trim(),
@@ -368,14 +369,14 @@ export function SmsAiCampaigns() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       smsAiService.updateStatus(id, status),
-    onSuccess: () => { toast.success('Status updated'); invalidate() },
+    onSuccess: () => { toast.success('Status updated'); invalidate(); qc.invalidateQueries({ queryKey: ['smsai-campaign'] }) },
     onError: () => toast.error('Failed to update status'),
   })
 
   const columns: Column<CampaignItem>[] = [
     {
       key: 'title',
-      header: 'Campaign',
+      header: 'Campaign', sortable: true,
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">

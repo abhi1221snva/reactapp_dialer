@@ -52,7 +52,6 @@ import { CrmDocumentTypes } from './pages/crm/CrmDocumentTypes'
 import { CrmEmailSettings } from './pages/crm/CrmEmailSettings'
 import { Campaigns } from './pages/campaigns/Campaigns'
 import { CampaignDetail } from './pages/campaigns/CampaignDetail'
-import { AgentStatus } from './pages/campaigns/AgentStatus'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
 import { EditCampaign } from './modules/campaigns/EditCampaign'
 import { AttachLeads } from './modules/campaigns/AttachLeads'
@@ -75,6 +74,7 @@ import { DispositionReport } from './pages/reports/DispositionReport'
 import { CampaignPerformance } from './pages/reports/CampaignPerformance'
 import { DailyReport } from './pages/reports/DailyReport'
 import { LiveCalls } from './pages/reports/LiveCalls'
+import { CallRecordingReport } from './pages/reports/CallRecordingReport'
 import { Profile } from './pages/profile/Profile'
 import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
 import { CreateRingless } from './modules/ringless/CreateRingless'
@@ -112,6 +112,7 @@ import { FaxList } from './modules/fax/FaxList'
 import { Ivr } from './pages/ivr/Ivr'
 import { RingGroups } from './pages/ringgroups/RingGroups'
 import { CallTimes }  from './pages/voice/CallTimes'
+import { CallTimers } from './pages/voice/CallTimers'
 import { Holidays }   from './pages/voice/Holidays'
 import { ExtensionGroups } from './pages/extensiongroups/ExtensionGroups'
 import { VoicemailDrops } from './pages/voicemail/VoicemailDrops'
@@ -226,7 +227,6 @@ export default function App() {
           <Route path="/campaigns/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignLists /></ErrorBoundary>} />
           <Route path="/campaigns/:id/review" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignReview /></ErrorBoundary>} />
           <Route path="/campaigns/:id" element={<CampaignDetail />} />
-          <Route path="/agent-status" element={<AgentStatus />} />
 
           {/* Users */}
           <Route path="/users" element={<Users />} />
@@ -252,6 +252,7 @@ export default function App() {
           <Route path="/reports/disposition" element={<DispositionReport />} />
           <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
           <Route path="/reports/live" element={<LiveCalls />} />
+          <Route path="/reports/recordings" element={<CallRecordingReport />} />
           <Route path="/sms" element={<SMSCenter />} />
           <Route path="/chat" element={<TeamChat />} />
           <Route path="/monitoring" element={<AgentMonitoring />} />
@@ -313,6 +314,7 @@ export default function App() {
 
           {/* Call Times & Holidays */}
           <Route path="/call-times" element={<CallTimes />} />
+          <Route path="/call-timers" element={<CallTimers />} />
           <Route path="/holidays"   element={<Holidays />} />
 
           {/* Extension Groups */}

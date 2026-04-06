@@ -5,7 +5,6 @@ import { Outlet, useLocation } from 'react-router-dom'
 const DIALER_TITLES: Record<string, string> = {
   '/dashboard':                     'Dashboard',
   '/campaigns':                     'Campaigns',
-  '/agent-status':                  'Agent Status',
   '/users':                         'Users & Agents',
   '/dids':                          'Phone Numbers',
   '/lists':                         'Lists',

@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { Bell, Search, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Settings, Building2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Settings, Building2, Clock } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useAuthStore } from '../stores/auth.store'
@@ -32,6 +32,80 @@ function getRoleLabel(level?: number): string {
   return 'User'
 }
 
+// ─── Live Clock (timezone-aware, updates every second) ──────────────────────
+function LiveClock({ timezone }: { timezone?: string }) {
+  const [time, setTime] = useState('')
+  const [abbr, setAbbr] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [dateStr, setDateStr] = useState('')
+
+  const resolvedTz = useCallback(() => {
+    const tz = timezone?.trim()
+    if (!tz) return Intl.DateTimeFormat().resolvedOptions().timeZone
+    // Validate timezone by trying to format with it
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz }).format()
+      return tz
+    } catch {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone
+    }
+  }, [timezone])
+
+  const tick = useCallback(() => {
+    const tz = resolvedTz()
+    const now = new Date()
+
+    // HH:mm:ss
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(now)
+    setTime(parts.map(p => p.value).join(''))
+
+    // Timezone abbreviation (e.g. EST, IST)
+    const tzName = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, timeZoneName: 'short',
+    }).formatToParts(now).find(p => p.type === 'timeZoneName')?.value ?? ''
+    setAbbr(tzName)
+
+    // Full timezone name for tooltip
+    const tzLong = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, timeZoneName: 'long',
+    }).formatToParts(now).find(p => p.type === 'timeZoneName')?.value ?? tz
+    setFullName(tzLong)
+
+    // Date for tooltip
+    setDateStr(new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    }).format(now))
+  }, [resolvedTz])
+
+  useEffect(() => {
+    tick() // immediate first render
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [tick])
+
+  if (!time) return null
+
+  return (
+    <div
+      title={`${fullName}\n${dateStr}`}
+      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-default select-none transition-colors duration-200 hover:bg-slate-200/60"
+      style={{ background: '#f1f5f9' }}
+    >
+      <Clock size={13} className="text-slate-400 flex-shrink-0" />
+      <span className="text-[12px] font-mono font-medium tracking-wide tabular-nums" style={{ color: '#334155' }}>
+        {time}
+      </span>
+      {abbr && (
+        <span className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>
+          {abbr}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function TopHeader() {
   const { user, logout } = useAuth()
   const { updateUser } = useAuthStore()
@@ -39,6 +113,21 @@ export function TopHeader() {
   const { toggleMobileSidebar } = useUIStore()
   const { engine, setEngine } = useEngineStore()
   const navigate = useNavigate()
+
+  // Bootstrap timezone + companyName from profile API if missing in auth store (existing sessions)
+  const profileFetched = useRef(false)
+  useEffect(() => {
+    if (user && (!user.timezone || !user.companyName) && !profileFetched.current) {
+      profileFetched.current = true
+      api.get('/profile').then(res => {
+        const d = res.data?.data ?? res.data
+        const updates: Partial<typeof user> = {}
+        if (!user.timezone && d?.timezone) updates.timezone = d.timezone
+        if (!user.companyName && d?.companyName) updates.companyName = d.companyName
+        if (Object.keys(updates).length) updateUser(updates)
+      }).catch(() => {})
+    }
+  }, [user, updateUser])
 
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -80,72 +169,103 @@ export function TopHeader() {
     : 'linear-gradient(135deg, #059669 0%, #10B981 100%)'
 
   return (
-    <header className="h-11 flex-shrink-0 bg-white border-b border-slate-200 flex items-center gap-3 px-4 lg:px-5 z-10">
+    <header
+      className="h-[52px] flex-shrink-0 flex items-center gap-4 px-4 lg:px-6 z-10"
+      style={{
+        background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+        borderBottom: '1px solid rgba(0,0,0,0.05)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+      }}
+    >
 
       {/* Mobile hamburger */}
       <button
         onClick={toggleMobileSidebar}
-        className="lg:hidden action-btn"
+        className="lg:hidden p-2 rounded-full text-slate-500 hover:bg-white/70 hover:text-slate-700 transition-all duration-200"
         aria-label="Open menu"
       >
         <Menu size={18} />
       </button>
 
-      {/* ── Engine toggle pill ───────────────────────────────────────────── */}
-      <div className="flex items-center bg-slate-100 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
-        {ENGINES.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => switchEngine(id)}
-            title={ENGINES.find(e => e.id === id)?.description}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-200',
-              engine === id
-                ? id === 'dialer'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'bg-white text-emerald-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            )}
-          >
-            <Icon
-              size={13}
-              className={cn(
-                'flex-shrink-0 transition-colors duration-200',
-                engine === id
-                  ? id === 'dialer' ? 'text-indigo-500' : 'text-emerald-500'
-                  : 'text-slate-400'
-              )}
-            />
-            <span className="hidden sm:inline">{label}</span>
-          </button>
-        ))}
+      {/* ── Engine segmented toggle ──────────────────────────────────────── */}
+      <div
+        className="flex items-center p-[3px] rounded-full gap-[2px] flex-shrink-0"
+        style={{ background: '#e9ecf1' }}
+      >
+        {ENGINES.map(({ id, label, icon: Icon }) => {
+          const isActive = engine === id
+          const activeStyles: React.CSSProperties = isActive
+            ? {
+                background: id === 'dialer' ? '#2563eb' : '#16a34a',
+                color: '#ffffff',
+                fontWeight: 600,
+                boxShadow: id === 'dialer'
+                  ? '0 2px 6px rgba(37,99,235,0.35)'
+                  : '0 2px 6px rgba(22,163,74,0.35)',
+              }
+            : {
+                background: 'transparent',
+                color: '#64748b',
+                fontWeight: 500,
+                boxShadow: 'none',
+              }
+          return (
+            <button
+              key={id}
+              onClick={() => switchEngine(id)}
+              title={ENGINES.find(e => e.id === id)?.description}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] cursor-pointer select-none"
+              style={{
+                ...activeStyles,
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Icon size={13} className="flex-shrink-0" style={{
+                color: isActive ? '#ffffff' : '#94a3b8',
+                transition: 'color 0.2s ease',
+              }} />
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Search bar */}
-      <div className="relative flex-1 max-w-sm hidden md:block">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search..."
-          className="input input-sm w-full pl-8 text-sm"
-        />
-      </div>
+      {/* Spacer */}
+      <div className="flex-1 min-w-0" />
 
-      {/* Right actions */}
-      <div className="ml-auto flex items-center gap-1">
+      {/* ── Right actions ────────────────────────────────────────────────── */}
+      <div className="ml-auto flex items-center gap-2.5">
+
+        {/* Client / Company name */}
+        {user?.companyName && (
+          <>
+            <div className="hidden md:flex items-center gap-1.5">
+              <Building2 size={13} className="text-slate-400 flex-shrink-0" />
+              <span className="text-[12px] font-medium text-slate-500 truncate max-w-[160px]">{user.companyName}</span>
+            </div>
+            <div className="hidden md:block w-px h-5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />
+          </>
+        )}
+
+        {/* Live Clock */}
+        <LiveClock timezone={user?.timezone} />
 
         {/* Notifications */}
-        <Link to="/sms" className="relative action-btn" title="SMS Center">
+        <Link
+          to="/sms"
+          className="relative p-2 rounded-full text-slate-500 hover:bg-white/70 hover:text-slate-700 transition-all duration-200"
+          title="SMS Center"
+        >
           <Bell size={17} />
           {unreadSms > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
+            <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none ring-2 ring-white/80">
               {unreadSms > 9 ? '9+' : unreadSms}
             </span>
           )}
         </Link>
 
         {/* Divider */}
-        <div className="w-px h-5 bg-slate-200 mx-1" />
+        <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
         {/* Profile dropdown */}
         {user && (
@@ -154,7 +274,7 @@ export function TopHeader() {
 
             <button
               onClick={() => setShowProfileMenu(p => !p)}
-              className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-2.5 pl-1.5 pr-2.5 py-1.5 rounded-full hover:bg-white/70 transition-all duration-200"
             >
               {/* Avatar */}
               <div className="relative group/av flex-shrink-0">
@@ -162,13 +282,13 @@ export function TopHeader() {
                   <img
                     src={user.profile_pic}
                     alt={user.name}
-                    className="w-8 h-8 rounded-full object-cover"
-                    style={{ boxShadow: '0 1px 4px rgba(99,102,241,0.25)' }}
+                    className="w-8 h-8 rounded-full object-cover ring-2 ring-white/80"
+                    style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.10)' }}
                   />
                 ) : (
                   <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
-                    style={{ background: avatarBg, boxShadow: '0 1px 4px rgba(99,102,241,0.25)' }}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white ring-2 ring-white/80"
+                    style={{ background: avatarBg, boxShadow: '0 1px 4px rgba(0,0,0,0.10)' }}
                   >
                     {avatarUploading ? '…' : initials(user.name)}
                   </div>
@@ -184,8 +304,8 @@ export function TopHeader() {
 
               {/* Name + role */}
               <div className="hidden sm:block text-left leading-none">
-                <p className="text-[12px] font-semibold text-slate-900 truncate max-w-[120px]">{user.name}</p>
-                <p className="text-[10px] text-slate-400 truncate">{getRoleLabel(user.level)}</p>
+                <p className="text-[12px] font-semibold text-slate-800 truncate max-w-[120px]">{user.name}</p>
+                <p className="text-[10px] font-medium text-slate-400 truncate">{getRoleLabel(user.level)}</p>
               </div>
 
               <ChevronDown size={13} className={cn('hidden sm:block flex-shrink-0 text-slate-400 transition-transform duration-200', showProfileMenu && 'rotate-180')} />
@@ -193,23 +313,26 @@ export function TopHeader() {
 
             {/* Dropdown */}
             {showProfileMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl py-1 bg-white border border-slate-200 shadow-xl z-50">
+              <div
+                className="absolute right-0 top-full mt-1.5 w-48 rounded-xl py-1 bg-white border border-slate-200/80 z-50 animate-fadeIn overflow-hidden"
+                style={{ boxShadow: '0 8px 24px -4px rgba(0,0,0,0.12), 0 2px 8px -2px rgba(0,0,0,0.06)' }}
+              >
                 <button
                   onClick={() => { navigate('/profile'); setShowProfileMenu(false) }}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
                 >
                   <User size={14} className="flex-shrink-0 text-slate-400" /> My Profile
                 </button>
                 <button
                   onClick={() => { navigate('/settings'); setShowProfileMenu(false) }}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
                 >
                   <Settings size={14} className="flex-shrink-0 text-slate-400" /> Settings
                 </button>
                 {user.level >= 7 && (
                   <button
                     onClick={() => { navigate('/crm/company-settings'); setShowProfileMenu(false) }}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
                   >
                     <Building2 size={14} className="flex-shrink-0 text-slate-400" /> Company Settings
                   </button>
@@ -217,9 +340,9 @@ export function TopHeader() {
                 <div className="border-t border-slate-100 my-0.5" />
                 <button
                   onClick={() => { logout(); navigate('/login') }}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors duration-200 cursor-pointer"
                 >
-                  <LogOut size={14} className="flex-shrink-0 text-red-500" /> Sign out
+                  <LogOut size={14} className="flex-shrink-0 text-red-400" /> Sign out
                 </button>
               </div>
             )}

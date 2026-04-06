@@ -144,9 +144,8 @@ const DIALER_SECTIONS: NavSection[] = [
   {
     label: 'CAMPAIGN MANAGEMENT',
     items: [
-      { to: '/campaigns',             label: 'Campaigns',    icon: Radio,      minLevel: LEVELS.MANAGER },
+      { to: '/campaigns',             label: 'Campaigns',    icon: Radio,      minLevel: LEVELS.AGENT },
       { to: '/settings/dispositions', label: 'Dispositions', icon: ListChecks, minLevel: LEVELS.ADMIN },
-      { to: '/agent-status',          label: 'Agent Status', icon: Users,      minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -172,6 +171,7 @@ const DIALER_SECTIONS: NavSection[] = [
       { to: '/reports/disposition',          label: 'Disposition Report',   icon: ListChecks, minLevel: LEVELS.MANAGER },
       { to: '/reports/campaign-performance', label: 'Campaign Performance', icon: PieChart,   minLevel: LEVELS.MANAGER },
       { to: '/reports/live',               label: 'Live Calls',           icon: Radio,      minLevel: LEVELS.MANAGER },
+      { to: '/reports/recordings',         label: 'Recording Report',     icon: Mic,        minLevel: LEVELS.MANAGER },
     ],
   },
   {
@@ -183,6 +183,7 @@ const DIALER_SECTIONS: NavSection[] = [
       { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail,    minLevel: LEVELS.ADMIN },
       { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,        minLevel: LEVELS.MANAGER },
       { to: '/call-times',        label: 'Call Times',       icon: Clock,        minLevel: LEVELS.ADMIN },
+      { to: '/call-timers',       label: 'Call Timers',      icon: Clock,        minLevel: LEVELS.ADMIN },
       { to: '/holidays',          label: 'Holidays',         icon: CalendarDays, minLevel: LEVELS.ADMIN },
     ],
   },

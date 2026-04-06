@@ -351,7 +351,10 @@ export function Campaigns() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string | number }) =>
       campaignService.toggle(id, isActive(status) ? 'inactive' : 'active'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] })
+      qc.invalidateQueries({ queryKey: ['campaign'] })
+    },
     onError: () => toast.error('Failed to update status'),
   })
 
@@ -363,7 +366,8 @@ export function Campaigns() {
 
   const columns: Column<Campaign>[] = [
     {
-      key: 'name', header: 'Campaign',
+      key: 'name', header: 'Campaign', sortable: true,
+      sortValue: (row) => String(row.title || row.campaign_name || '').toLowerCase(),
       render: (row) => {
         const name = row.title || row.campaign_name || '—'
         return (

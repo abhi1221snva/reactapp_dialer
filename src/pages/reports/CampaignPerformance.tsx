@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -55,12 +55,7 @@ const DATE_PRESETS = [
   { label: '90 Days', days: 90 },
 ] as const
 
-function today() { return new Date().toISOString().slice(0, 10) }
-function daysAgo(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+import { useTimezone } from '../../hooks/useTimezone'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -107,9 +102,11 @@ function ChartTooltip({ active, payload, label }: {
 
 export const CampaignPerformance: React.FC = () => {
   const { setToolbar } = useDialerHeader()
+  const { today, daysAgo } = useTimezone()
+  const initDates = useMemo(() => ({ from: daysAgo(7), to: today() }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filters, setFilters] = useState<Filters>({
-    from_date:   daysAgo(7),
-    to_date:     today(),
+    from_date:   initDates.from,
+    to_date:     initDates.to,
     campaign_id: '',
   })
   const [activePreset, setActivePreset] = useState('7 Days')

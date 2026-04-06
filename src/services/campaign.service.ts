@@ -64,4 +64,7 @@ export const campaignService = {
 
   listCallTimers: () =>
     api.get('/call-timers'),
+
+  deleteCallTimer: (id: number) =>
+    api.post(`/call-timers/${id}/delete`),
 }
