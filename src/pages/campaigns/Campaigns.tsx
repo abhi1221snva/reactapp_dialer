@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Trash2, Pencil, Radio, Eye, Clock, Search,
-  LayoutList, X, Tag, Users, Zap, Activity,
+  LayoutList, X, Tag, Users, Zap, Globe,
   Phone, Mail,
   CheckCircle2, XCircle,
 } from 'lucide-react'
@@ -15,7 +15,7 @@ import { dispositionService } from '../../services/disposition.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface Campaign {
@@ -239,7 +239,7 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
                   {[
                     { icon: Users, val: totalLeads.toLocaleString(), lbl: 'Leads' },
                     { icon: Phone, val: dialedLeads.toLocaleString(), lbl: 'Dialed' },
-                    { icon: Activity, val: `${totalLeads > 0 ? Math.min(100, Math.round((dialedLeads / totalLeads) * 100)) : 0}%`, lbl: 'Progress' },
+                    { icon: Globe, val: c.country_code ? `+${c.country_code}` : '—', lbl: 'Country' },
                     { icon: LayoutList, val: String(listsCount), lbl: 'Lists' },
                     { icon: Tag, val: String(hopperCount), lbl: 'Hopper' },
                     { icon: Zap, val: hopperModeLabel, lbl: 'Mode' },
@@ -376,7 +376,7 @@ export function Campaigns() {
               <Radio size={14} className="text-indigo-600" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-sm text-slate-900 leading-tight truncate">{name}</p>
+              <p className="font-semibold text-sm text-slate-900 leading-tight truncate">{capFirst(name)}</p>
               {row.dial_mode && (
                 <p className="text-[11px] text-indigo-500 font-medium mt-0.5">{formatDialMode(row.dial_mode)}</p>
               )}

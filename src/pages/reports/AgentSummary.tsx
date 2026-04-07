@@ -9,6 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { DataTable, type Column } from '../../components/ui/DataTable'
+import { ReportViewTabs } from '../../components/ui/ReportViewTabs'
 import { Badge } from '../../components/ui/Badge'
 import api from '../../api/axios'
 import { campaignService } from '../../services/campaign.service'
@@ -453,128 +454,152 @@ export function AgentSummary() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-          <div className="flex items-center gap-2">
-            <BarChart2 size={14} className="text-slate-400" />
-            <span className="text-xs text-slate-500 font-medium">
-              {isLoading ? 'Loading…' : `${total.toLocaleString()} agent${total !== 1 ? 's' : ''}`}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {isFetching && !isLoading && (
-              <span className="text-xs text-slate-400 flex items-center gap-1">
-                <RefreshCw size={11} className="animate-spin" /> Updating…
-              </span>
-            )}
-            {!isLoading && rows.length > 0 && (
-              <span className="text-xs text-slate-500 flex items-center gap-1">
-                <TrendingUp size={12} className="text-emerald-500" />
-                {formatDate(filters.date_from)} — {formatDate(filters.date_to)}
-              </span>
-            )}
-          </div>
-        </div>
-        <DataTable
-          columns={columns}
-          data={paginated as unknown as Record<string, unknown>[]}
-          loading={isLoading}
-          keyField="id"
-          emptyText="No agent data found for the selected period"
-          pagination={total > PER_PAGE ? { page, total, perPage: PER_PAGE, onChange: setPage } : undefined}
-          sortKey={sortField}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
-
-      {/* Agent Performance Chart */}
-      {!isLoading && sorted.length > 0 && (
-        <div className="card">
-          <div className="flex items-center gap-2 pb-4 mb-2 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <BarChart2 size={14} className="text-indigo-600" />
-            </div>
-            <h3 className="font-semibold text-slate-900">Agent Performance Comparison</h3>
-            <span className="text-xs text-slate-400 ml-auto">
-              Top {Math.min(sorted.length, 10)} agents by call volume
-            </span>
-          </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart
-              data={sorted.slice(0, 10).map((r) => ({
-                name:          (r.agent_name || r.name || 'Unknown').split(' ')[0],
-                'Total Calls': Number(r.total_calls || r.calls || 0),
-                'Answered':    Number(r.answered || 0),
-              }))}
-              barCategoryGap="30%"
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 10, fill: '#64748b' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: '#64748b' }}
-                axisLine={false}
-                tickLine={false}
-                width={36}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: '#0f172a', border: 'none', borderRadius: 10,
-                  color: '#fff', fontSize: 11,
-                }}
-                cursor={{ fill: '#f8fafc' }}
-              />
-              <Bar dataKey="Total Calls" fill="#6366f1" radius={[4, 4, 0, 0]}>
-                {sorted.slice(0, 10).map((_, i) => (
-                  <Cell key={i} fill={i === 0 ? '#4f46e5' : i === 1 ? '#818cf8' : i === 2 ? '#a5b4fc' : '#c7d2fe'} />
-                ))}
-              </Bar>
-              <Bar dataKey="Answered" fill="#22c55e" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Top performers */}
-      {!isLoading && sorted.length >= 3 && (
-        <div className="card">
-          <div className="flex items-center gap-2 pb-4 mb-4 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
-              <UserCheck size={14} className="text-amber-600" />
-            </div>
-            <h3 className="font-semibold text-slate-900">Top Performers</h3>
-            <span className="text-xs text-slate-400 ml-auto">By total calls</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {sorted.slice(0, 3).map((r, idx) => {
-              const name    = r.agent_name || r.name || 'Unknown'
-              const tc      = Number(r.total_calls || r.calls || 0)
-              const an      = Number(r.answered || 0)
-              const rate    = tc > 0 ? Math.round((an / tc) * 100) : 0
-              const medals  = ['🥇', '🥈', '🥉']
-              const initials = name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-              return (
-                <div key={r.id ?? idx} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-2xl leading-none">{medals[idx]}</span>
-                  <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700 flex-shrink-0">
-                    {initials}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 truncate">{name}</p>
-                    <p className="text-xs text-slate-500">{tc} calls · {rate}% answer rate</p>
-                  </div>
+      {/* Tabbed views: Graph / Table */}
+      <ReportViewTabs
+        graphContent={
+          <div className="space-y-6">
+            {/* Agent Performance Chart */}
+            {isLoading ? (
+              <div className="card flex items-center justify-center" style={{ minHeight: 340 }}>
+                <div className="text-center">
+                  <div className="w-10 h-10 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-slate-400">Loading chart data...</p>
                 </div>
-              )
-            })}
+              </div>
+            ) : sorted.length > 0 ? (
+              <div className="card">
+                <div className="flex items-center gap-2 pb-4 mb-2 border-b border-slate-100">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                    <BarChart2 size={14} className="text-indigo-600" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900">Agent Performance Comparison</h3>
+                  <span className="text-xs text-slate-400 ml-auto">
+                    Top {Math.min(sorted.length, 10)} agents by call volume
+                  </span>
+                </div>
+                <ResponsiveContainer width="100%" height={340}>
+                  <BarChart
+                    data={sorted.slice(0, 10).map((r) => ({
+                      name:          (r.agent_name || r.name || 'Unknown').split(' ')[0],
+                      'Total Calls': Number(r.total_calls || r.calls || 0),
+                      'Answered':    Number(r.answered || 0),
+                    }))}
+                    barCategoryGap="30%"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={36}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0f172a', border: 'none', borderRadius: 10,
+                        color: '#fff', fontSize: 11,
+                      }}
+                      cursor={{ fill: '#f8fafc' }}
+                    />
+                    <Bar dataKey="Total Calls" fill="#6366f1" radius={[4, 4, 0, 0]}>
+                      {sorted.slice(0, 10).map((_, i) => (
+                        <Cell key={i} fill={i === 0 ? '#4f46e5' : i === 1 ? '#818cf8' : i === 2 ? '#a5b4fc' : '#c7d2fe'} />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="Answered" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="card flex items-center justify-center" style={{ minHeight: 340 }}>
+                <div className="text-center">
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <BarChart2 size={22} className="text-slate-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-500">No chart data available</p>
+                  <p className="text-xs text-slate-400 mt-1">Adjust the date range or filters to see agent performance</p>
+                </div>
+              </div>
+            )}
+
+            {/* Top performers */}
+            {!isLoading && sorted.length >= 3 && (
+              <div className="card">
+                <div className="flex items-center gap-2 pb-4 mb-4 border-b border-slate-100">
+                  <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+                    <UserCheck size={14} className="text-amber-600" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900">Top Performers</h3>
+                  <span className="text-xs text-slate-400 ml-auto">By total calls</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {sorted.slice(0, 3).map((r, idx) => {
+                    const name    = r.agent_name || r.name || 'Unknown'
+                    const tc      = Number(r.total_calls || r.calls || 0)
+                    const an      = Number(r.answered || 0)
+                    const rate    = tc > 0 ? Math.round((an / tc) * 100) : 0
+                    const medals  = ['🥇', '🥈', '🥉']
+                    const initials = name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+                    return (
+                      <div key={r.id ?? idx} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                        <span className="text-2xl leading-none">{medals[idx]}</span>
+                        <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700 flex-shrink-0">
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{name}</p>
+                          <p className="text-xs text-slate-500">{tc} calls · {rate}% answer rate</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        }
+        tableContent={
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <BarChart2 size={14} className="text-slate-400" />
+                <span className="text-xs text-slate-500 font-medium">
+                  {isLoading ? 'Loading…' : `${total.toLocaleString()} agent${total !== 1 ? 's' : ''}`}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {isFetching && !isLoading && (
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
+                    <RefreshCw size={11} className="animate-spin" /> Updating…
+                  </span>
+                )}
+                {!isLoading && rows.length > 0 && (
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <TrendingUp size={12} className="text-emerald-500" />
+                    {formatDate(filters.date_from)} — {formatDate(filters.date_to)}
+                  </span>
+                )}
+              </div>
+            </div>
+            <DataTable
+              columns={columns}
+              data={paginated as unknown as Record<string, unknown>[]}
+              loading={isLoading}
+              keyField="id"
+              emptyText="No agent data found for the selected period"
+              pagination={total > PER_PAGE ? { page, total, perPage: PER_PAGE, onChange: setPage } : undefined}
+              sortKey={sortField}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        }
+      />
     </div>
   )
 }

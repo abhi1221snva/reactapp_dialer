@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
+import { ReportViewTabs } from '../../components/ui/ReportViewTabs'
 import api from '../../api/axios'
 import { campaignService } from '../../services/campaign.service'
 import { cn } from '../../utils/cn'
@@ -367,144 +368,150 @@ export function DispositionReport() {
         )}
       </div>
 
-      {/* Chart */}
-      <div className="card">
-        <div className="flex items-center justify-between pb-4 mb-2 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <BarChart3 size={14} className="text-indigo-600" />
+      {/* Tabs: Graph / Table */}
+      <ReportViewTabs
+        graphContent={
+          <div className="card">
+            <div className="flex items-center justify-between pb-4 mb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                  <BarChart3 size={14} className="text-indigo-600" />
+                </div>
+                <h3 className="font-semibold text-slate-900">Disposition Distribution</h3>
+                {!isLoading && (
+                  <span className="text-xs text-slate-400">
+                    {totalCalls.toLocaleString()} total calls
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                <button
+                  onClick={() => setChartType('bar')}
+                  className={cn(
+                    'p-1.5 rounded-md transition-all',
+                    chartType === 'bar' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-700'
+                  )}
+                  title="Bar chart"
+                >
+                  <BarChart3 size={15} />
+                </button>
+                <button
+                  onClick={() => setChartType('pie')}
+                  className={cn(
+                    'p-1.5 rounded-md transition-all',
+                    chartType === 'pie' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-700'
+                  )}
+                  title="Pie chart"
+                >
+                  <PieChartIcon size={15} />
+                </button>
+              </div>
             </div>
-            <h3 className="font-semibold text-slate-900">Disposition Distribution</h3>
-            {!isLoading && (
-              <span className="text-xs text-slate-400">
-                {totalCalls.toLocaleString()} total calls
-              </span>
+
+            {isLoading ? (
+              <div className="h-[340px] bg-slate-100 rounded-xl animate-pulse" />
+            ) : enriched.length === 0 ? (
+              <div className="h-[340px] flex flex-col items-center justify-center text-slate-400">
+                <BarChart3 size={40} className="text-slate-200 mb-3" />
+                <p className="text-sm font-medium">No disposition data to chart</p>
+                <p className="text-xs mt-1">Adjust the date range or campaign filter above</p>
+              </div>
+            ) : chartType === 'bar' ? (
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={enriched.map((r) => ({ name: r._label, count: r._count, percentage: r._pct }))} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    angle={enriched.length > 6 ? -30 : 0}
+                    textAnchor={enriched.length > 6 ? 'end' : 'middle'}
+                    height={enriched.length > 6 ? 50 : 30}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                  <Bar dataKey="count" name="Calls" radius={[6, 6, 0, 0]}>
+                    {enriched.map((r, i) => (
+                      <Cell key={i} fill={r._color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center">
+                <ResponsiveContainer width="100%" height={340}>
+                  <PieChart>
+                    <Pie
+                      data={enriched.map((r) => ({ name: r._label, value: r._count, percentage: r._pct }))}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={120}
+                      innerRadius={60}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {enriched.map((r, i) => (
+                        <Cell key={i} fill={r._color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<PieTooltip />} />
+                    <Legend
+                      formatter={(value) => <span style={{ fontSize: 11, color: '#64748b' }}>{value}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-            <button
-              onClick={() => setChartType('bar')}
-              className={cn(
-                'p-1.5 rounded-md transition-all',
-                chartType === 'bar' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-700'
+        }
+        tableContent={
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <AlignLeft size={14} className="text-slate-400" />
+                <span className="text-xs text-slate-500 font-medium">
+                  {isLoading ? 'Loading…' : `${enriched.length} disposition${enriched.length !== 1 ? 's' : ''}`}
+                </span>
+              </div>
+              {isFetching && !isLoading && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <RefreshCw size={11} className="animate-spin" /> Refreshing…
+                </span>
               )}
-              title="Bar chart"
-            >
-              <BarChart3 size={15} />
-            </button>
-            <button
-              onClick={() => setChartType('pie')}
-              className={cn(
-                'p-1.5 rounded-md transition-all',
-                chartType === 'pie' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-700'
+              {!isLoading && totalCalls > 0 && (
+                <span className="text-xs text-slate-500 flex items-center gap-1">
+                  <TrendingUp size={12} className="text-indigo-500" />
+                  {totalCalls.toLocaleString()} total calls
+                </span>
               )}
-              title="Pie chart"
-            >
-              <PieChartIcon size={15} />
-            </button>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="h-56 bg-slate-100 rounded-xl animate-pulse" />
-        ) : enriched.length === 0 ? (
-          <div className="h-56 flex items-center justify-center text-slate-400 text-sm">
-            No disposition data for the selected filters
-          </div>
-        ) : chartType === 'bar' ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={enriched.map((r) => ({ name: r._label, count: r._count, percentage: r._pct }))} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                axisLine={false}
-                tickLine={false}
-                interval={0}
-                angle={enriched.length > 6 ? -30 : 0}
-                textAnchor={enriched.length > 6 ? 'end' : 'middle'}
-                height={enriched.length > 6 ? 50 : 30}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                axisLine={false}
-                tickLine={false}
-                width={40}
-              />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-              <Bar dataKey="count" name="Calls" radius={[6, 6, 0, 0]}>
-                {enriched.map((r, i) => (
-                  <Cell key={i} fill={r._color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center">
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie
-                  data={enriched.map((r) => ({ name: r._label, value: r._count, percentage: r._pct }))}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  innerRadius={50}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {enriched.map((r, i) => (
-                    <Cell key={i} fill={r._color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<PieTooltip />} />
-                <Legend
-                  formatter={(value) => <span style={{ fontSize: 11, color: '#64748b' }}>{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-          <div className="flex items-center gap-2">
-            <AlignLeft size={14} className="text-slate-400" />
-            <span className="text-xs text-slate-500 font-medium">
-              {isLoading ? 'Loading…' : `${enriched.length} disposition${enriched.length !== 1 ? 's' : ''}`}
-            </span>
-          </div>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Refreshing…
-            </span>
-          )}
-          {!isLoading && totalCalls > 0 && (
-            <span className="text-xs text-slate-500 flex items-center gap-1">
-              <TrendingUp size={12} className="text-indigo-500" />
-              {totalCalls.toLocaleString()} total calls
-            </span>
-          )}
-        </div>
-        <DataTable
-          columns={columns as unknown as Column<Record<string, unknown>>[]}
-          data={isLoading ? skeletonRows as unknown as Record<string, unknown>[] : enriched as unknown as Record<string, unknown>[]}
-          loading={isLoading}
-          keyField="_label"
-          emptyText="No disposition data found for the selected filters"
-        />
-        {!isLoading && enriched.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/80">
-            <span className="text-xs font-semibold text-slate-600">Total</span>
-            <div className="flex items-center gap-8">
-              <span className="text-sm font-bold text-slate-900">{totalCalls.toLocaleString()} calls</span>
-              <span className="text-sm font-bold text-slate-900">100%</span>
-              <div className="w-28" />
             </div>
+            <DataTable
+              columns={columns as unknown as Column<Record<string, unknown>>[]}
+              data={isLoading ? skeletonRows as unknown as Record<string, unknown>[] : enriched as unknown as Record<string, unknown>[]}
+              loading={isLoading}
+              keyField="_label"
+              emptyText="No disposition data found for the selected filters"
+            />
+            {!isLoading && enriched.length > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/80">
+                <span className="text-xs font-semibold text-slate-600">Total</span>
+                <div className="flex items-center gap-8">
+                  <span className="text-sm font-bold text-slate-900">{totalCalls.toLocaleString()} calls</span>
+                  <span className="text-sm font-bold text-slate-900">100%</span>
+                  <div className="w-28" />
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        }
+      />
     </div>
   )
 }

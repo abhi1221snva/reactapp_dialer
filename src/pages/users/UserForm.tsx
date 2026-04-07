@@ -6,8 +6,10 @@ import toast from 'react-hot-toast'
 import { userService } from '../../services/user.service'
 import { didService } from '../../services/did.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import { useAuthStore } from '../../stores/auth.store'
 import { isSuperAdmin } from '../../utils/permissions'
+import { TIMEZONES } from '../../constants/timezones'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,98 +53,7 @@ function mapExtType(val: string): string {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const TIMEZONES: { value: string; label: string }[] = [
-  { value: 'Pacific/Midway', label: '(GMT-11:00) Midway Island, Samoa' },
-  { value: 'America/Adak', label: '(GMT-10:00) Hawaii-Aleutian' },
-  { value: 'Etc/GMT+10', label: '(GMT-10:00) Hawaii' },
-  { value: 'Pacific/Marquesas', label: '(GMT-09:30) Marquesas Islands' },
-  { value: 'Pacific/Gambier', label: '(GMT-09:00) Gambier Islands' },
-  { value: 'America/Anchorage', label: '(GMT-09:00) Alaska' },
-  { value: 'America/Ensenada', label: '(GMT-08:00) Tijuana, Baja California' },
-  { value: 'Etc/GMT+8', label: '(GMT-08:00) Pitcairn Islands' },
-  { value: 'America/Los_Angeles', label: '(GMT-08:00) Pacific Time (US & Canada)' },
-  { value: 'America/Denver', label: '(GMT-07:00) Mountain Time (US & Canada)' },
-  { value: 'America/Chihuahua', label: '(GMT-07:00) Chihuahua, La Paz, Mazatlan' },
-  { value: 'America/Dawson_Creek', label: '(GMT-07:00) Arizona' },
-  { value: 'America/Belize', label: '(GMT-06:00) Saskatchewan, Central America' },
-  { value: 'America/Cancun', label: '(GMT-06:00) Guadalajara, Mexico City, Monterrey' },
-  { value: 'Chile/EasterIsland', label: '(GMT-06:00) Easter Island' },
-  { value: 'America/Chicago', label: '(GMT-06:00) Central Time (US & Canada)' },
-  { value: 'America/New_York', label: '(GMT-05:00) Eastern Time (US & Canada)' },
-  { value: 'America/Havana', label: '(GMT-05:00) Cuba' },
-  { value: 'America/Bogota', label: '(GMT-05:00) Bogota, Lima, Quito, Rio Branco' },
-  { value: 'America/Caracas', label: '(GMT-04:30) Caracas' },
-  { value: 'America/Santiago', label: '(GMT-04:00) Santiago' },
-  { value: 'America/La_Paz', label: '(GMT-04:00) La Paz' },
-  { value: 'Atlantic/Stanley', label: '(GMT-04:00) Falkland Islands' },
-  { value: 'America/Campo_Grande', label: '(GMT-04:00) Brazil' },
-  { value: 'America/Goose_Bay', label: '(GMT-04:00) Atlantic Time (Goose Bay)' },
-  { value: 'America/Glace_Bay', label: '(GMT-04:00) Atlantic Time (Canada)' },
-  { value: 'America/St_Johns', label: '(GMT-03:30) Newfoundland' },
-  { value: 'America/Araguaina', label: '(GMT-03:00) UTC-3' },
-  { value: 'America/Montevideo', label: '(GMT-03:00) Montevideo' },
-  { value: 'America/Miquelon', label: '(GMT-03:00) Miquelon, St. Pierre' },
-  { value: 'America/Godthab', label: '(GMT-03:00) Greenland' },
-  { value: 'America/Argentina/Buenos_Aires', label: '(GMT-03:00) Buenos Aires' },
-  { value: 'America/Sao_Paulo', label: '(GMT-03:00) Brasilia' },
-  { value: 'America/Noronha', label: '(GMT-02:00) Mid-Atlantic' },
-  { value: 'Atlantic/Cape_Verde', label: '(GMT-01:00) Cape Verde Is.' },
-  { value: 'Atlantic/Azores', label: '(GMT-01:00) Azores' },
-  { value: 'Europe/Belfast', label: '(GMT) Greenwich Mean Time : Belfast' },
-  { value: 'Europe/Dublin', label: '(GMT) Greenwich Mean Time : Dublin' },
-  { value: 'Europe/Lisbon', label: '(GMT) Greenwich Mean Time : Lisbon' },
-  { value: 'Europe/London', label: '(GMT) Greenwich Mean Time : London' },
-  { value: 'Africa/Abidjan', label: '(GMT) Monrovia, Reykjavik' },
-  { value: 'Europe/Amsterdam', label: '(GMT+01:00) Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna' },
-  { value: 'Europe/Belgrade', label: '(GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague' },
-  { value: 'Europe/Brussels', label: '(GMT+01:00) Brussels, Copenhagen, Madrid, Paris' },
-  { value: 'Africa/Algiers', label: '(GMT+01:00) West Central Africa' },
-  { value: 'Africa/Windhoek', label: '(GMT+01:00) Windhoek' },
-  { value: 'Asia/Beirut', label: '(GMT+02:00) Beirut' },
-  { value: 'Africa/Cairo', label: '(GMT+02:00) Cairo' },
-  { value: 'Asia/Gaza', label: '(GMT+02:00) Gaza' },
-  { value: 'Africa/Blantyre', label: '(GMT+02:00) Harare, Pretoria' },
-  { value: 'Asia/Jerusalem', label: '(GMT+02:00) Jerusalem' },
-  { value: 'Europe/Minsk', label: '(GMT+02:00) Minsk' },
-  { value: 'Asia/Damascus', label: '(GMT+02:00) Syria' },
-  { value: 'Europe/Moscow', label: '(GMT+03:00) Moscow, St. Petersburg, Volgograd' },
-  { value: 'Africa/Addis_Ababa', label: '(GMT+03:00) Nairobi' },
-  { value: 'Asia/Tehran', label: '(GMT+03:30) Tehran' },
-  { value: 'Asia/Dubai', label: '(GMT+04:00) Abu Dhabi, Muscat' },
-  { value: 'Asia/Yerevan', label: '(GMT+04:00) Yerevan' },
-  { value: 'Asia/Kabul', label: '(GMT+04:30) Kabul' },
-  { value: 'Asia/Yekaterinburg', label: '(GMT+05:00) Ekaterinburg' },
-  { value: 'Asia/Tashkent', label: '(GMT+05:00) Tashkent' },
-  { value: 'Asia/Kolkata', label: '(GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi' },
-  { value: 'Asia/Katmandu', label: '(GMT+05:45) Kathmandu' },
-  { value: 'Asia/Dhaka', label: '(GMT+06:00) Astana, Dhaka' },
-  { value: 'Asia/Novosibirsk', label: '(GMT+06:00) Novosibirsk' },
-  { value: 'Asia/Rangoon', label: '(GMT+06:30) Yangon (Rangoon)' },
-  { value: 'Asia/Bangkok', label: '(GMT+07:00) Bangkok, Hanoi, Jakarta' },
-  { value: 'Asia/Krasnoyarsk', label: '(GMT+07:00) Krasnoyarsk' },
-  { value: 'Asia/Hong_Kong', label: '(GMT+08:00) Beijing, Chongqing, Hong Kong, Urumqi' },
-  { value: 'Asia/Irkutsk', label: '(GMT+08:00) Irkutsk, Ulaan Bataar' },
-  { value: 'Australia/Perth', label: '(GMT+08:00) Perth' },
-  { value: 'Australia/Eucla', label: '(GMT+08:45) Eucla' },
-  { value: 'Asia/Tokyo', label: '(GMT+09:00) Osaka, Sapporo, Tokyo' },
-  { value: 'Asia/Seoul', label: '(GMT+09:00) Seoul' },
-  { value: 'Asia/Yakutsk', label: '(GMT+09:00) Yakutsk' },
-  { value: 'Australia/Adelaide', label: '(GMT+09:30) Adelaide' },
-  { value: 'Australia/Darwin', label: '(GMT+09:30) Darwin' },
-  { value: 'Australia/Brisbane', label: '(GMT+10:00) Brisbane' },
-  { value: 'Australia/Hobart', label: '(GMT+10:00) Hobart' },
-  { value: 'Asia/Vladivostok', label: '(GMT+10:00) Vladivostok' },
-  { value: 'Australia/Lord_Howe', label: '(GMT+10:30) Lord Howe Island' },
-  { value: 'Etc/GMT-11', label: '(GMT+11:00) Solomon Is., New Caledonia' },
-  { value: 'Asia/Magadan', label: '(GMT+11:00) Magadan' },
-  { value: 'Pacific/Norfolk', label: '(GMT+11:30) Norfolk Island' },
-  { value: 'Asia/Anadyr', label: '(GMT+12:00) Anadyr, Kamchatka' },
-  { value: 'Pacific/Auckland', label: '(GMT+12:00) Auckland, Wellington' },
-  { value: 'Etc/GMT-12', label: '(GMT+12:00) Fiji, Kamchatka, Marshall Is.' },
-  { value: 'Pacific/Chatham', label: '(GMT+12:45) Chatham Islands' },
-  { value: 'Pacific/Tongatapu', label: '(GMT+13:00) Nuku\'alofa' },
-  { value: 'Pacific/Kiritimati', label: '(GMT+14:00) Kiritimati' },
-]
+// TIMEZONES imported from ../../constants/timezones
 const DIALER_MODES = [
   { value: 'webphone', label: 'WebPhone' },
   { value: 'extension', label: 'Extension' },
@@ -491,7 +402,7 @@ export function UserForm() {
           vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:Number(form.follow_me),
           call_forward:Number(form.call_forward),twinning:String(form.twinning),no_answer_redirect:Number(form.no_answer_redirect),
           no_answer_phone:form.no_answer_redirect?form.no_answer_phone.replace(/\D/g,''):'',cli_setting:Number(form.cli_setting),
-          cli:form.cli,receive_sms_on_email:Number(form.receive_sms_on_email),receive_sms_on_mobile:Number(form.receive_sms_on_mobile),
+          cli:form.cli,receive_sms_on_email:String(form.receive_sms_on_email),receive_sms_on_mobile:String(form.receive_sms_on_mobile),
           ip_filtering:String(form.ip_filtering),enable_2fa:String(form.enable_2fa),app_status:String(form.app_status),status:Number(form.status),
         }
         if (form.password) p.password = form.password
@@ -505,9 +416,9 @@ export function UserForm() {
         asterisk_server_id:form.asterisk_server_id,user_level:Number(form.user_level),status:Number(form.status),
         group_id:form.group_id,voicemail:Number(form.voicemail),voicemail_send_to_email:Number(form.voicemail_send_to_email),
         vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:Number(form.follow_me),
-        call_forward:Number(form.call_forward),twinning:Number(form.twinning),no_answer_redirect:Number(form.no_answer_redirect),
-        no_answer_phone:form.no_answer_redirect?form.no_answer_phone:'',cli_setting:Number(form.cli_setting),
-        cli:form.cli,receive_sms_on_email:Number(form.receive_sms_on_email),receive_sms_on_mobile:Number(form.receive_sms_on_mobile),
+        call_forward:Number(form.call_forward),twinning:String(form.twinning),no_answer_redirect:Number(form.no_answer_redirect),
+        no_answer_phone:form.no_answer_redirect?form.no_answer_phone.replace(/\D/g,''):'',cli_setting:Number(form.cli_setting),
+        cli:form.cli,receive_sms_on_email:String(form.receive_sms_on_email),receive_sms_on_mobile:String(form.receive_sms_on_mobile),
         ip_filtering:String(form.ip_filtering),enable_2fa:String(form.enable_2fa),app_status:String(form.app_status),
       }
       Object.keys(p).forEach(k => p[k]===undefined && delete p[k])
@@ -741,14 +652,15 @@ export function UserForm() {
                     </div>
                     {err('extension')}
                   </div>
+                  {!isEdit && (
                   <div style={FLEX1}>
-                    <label style={LABEL}>{isEdit?'New Password':'Password'}</label>
+                    <label style={LABEL}>Password</label>
                     <div style={{ position:'relative' }}>
                       <input type={showPassword?'text':'password'} className="cpn-fi"
-                        style={{ paddingRight:90, ...(isEdit?{}:{background:'#f8fafc',fontFamily:'monospace'}) }}
+                        style={{ paddingRight:90, background:'#f8fafc',fontFamily:'monospace' }}
                         value={form.password}
                         onChange={e=>set('password',e.target.value)}
-                        placeholder={isEdit?'Leave blank to keep current password':''} autoComplete="new-password" />
+                        autoComplete="new-password" />
                       <div style={{ position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',display:'flex',alignItems:'center',gap:2 }}>
                         <button type="button" onClick={()=>setShowPassword(v=>!v)}
                           style={{ width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
@@ -765,6 +677,7 @@ export function UserForm() {
                       </div>
                     </div>
                   </div>
+                  )}
                   <div style={FLEX1}>
                     <label style={LABEL}>Voicemail PIN</label>
                     <div style={{ position:'relative' }}>
@@ -794,9 +707,13 @@ export function UserForm() {
                   )}
                   <div style={FLEX1}>
                     <label style={LABEL}>Timezone</label>
-                    <select className="cpn-fi" value={form.timezone} onChange={e=>set('timezone',e.target.value)}>
-                      {TIMEZONES.map(tz=><option key={tz.value} value={tz.value}>{tz.label}</option>)}
-                    </select>
+                    <SearchableSelect
+                      className="cpn-fi"
+                      options={TIMEZONES.map(tz => ({ value: tz.value, label: tz.label }))}
+                      value={form.timezone}
+                      onChange={v => set('timezone', v)}
+                      placeholder="Select timezone…"
+                    />
                   </div>
                 </div>
 
@@ -804,10 +721,13 @@ export function UserForm() {
                 <div style={FLEX_ROW_MT}>
                   <div style={FLEX1}>
                     <label style={LABEL}>Agent Group</label>
-                    <select className="cpn-fi" value={form.group_id[0]||''}
-                      onChange={e=>set('group_id',e.target.value?[Number(e.target.value)]:[])}>
-                      {groups.map(g=><option key={g.id} value={g.id}>{labelOf(g)}</option>)}
-                    </select>
+                    <SearchableSelect
+                      className="cpn-fi"
+                      options={groups.map(g => ({ value: String(g.id), label: labelOf(g) }))}
+                      value={String(form.group_id[0] || '')}
+                      onChange={v => set('group_id', v ? [Number(v)] : [])}
+                      placeholder="Select group…"
+                    />
                   </div>
                   <div style={FLEX1}>
                     <label style={LABEL}>CLI Setting</label>
@@ -818,16 +738,20 @@ export function UserForm() {
                   {form.cli_setting === 1 && (
                     <div style={FLEX1}>
                       <label style={LABEL}>Custom CLI</label>
-                      <select className="cpn-fi" value={form.cli} onChange={e=>set('cli',e.target.value)}>
-                        <option value="">-- Select DID --</option>
-                        {dids.map(d => {
+                      <SearchableSelect
+                        className="cpn-fi"
+                        options={dids.map(d => {
                           const raw = d as Record<string,unknown>
                           const dest = DID_DEST_LABEL[Number(raw.dest_type)]??'Other'
                           const cnam = (raw.cnam as string)||''
                           const num = d.cli||`DID #${d.id}`
-                          return <option key={d.id} value={d.cli??''}>{`${num}${cnam?` - ${cnam}`:''} - ${dest}`}</option>
+                          return { value: d.cli??'', label: `${num}${cnam?` - ${cnam}`:''} - ${dest}` }
                         })}
-                      </select>
+                        value={form.cli}
+                        onChange={v => set('cli', v)}
+                        placeholder="-- Select DID --"
+                        emptyLabel="-- Select DID --"
+                      />
                     </div>
                   )}
                 </div>

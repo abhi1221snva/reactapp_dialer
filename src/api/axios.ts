@@ -4,7 +4,11 @@ import toast from 'react-hot-toast'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+  },
 })
 
 /** Read persisted auth state from Zustand's localStorage store. */
@@ -71,6 +75,7 @@ api.interceptors.response.use(
         localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
         localStorage.removeItem('auth-storage')   // clear Zustand persist so /login doesn't bounce to /dashboard
+        sessionStorage.clear()
         window.location.href = '/login'
       }
     } else if (status === 403) {

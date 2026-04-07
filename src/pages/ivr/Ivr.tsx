@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { ivrService } from '../../services/ivr.service'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { useAuthStore } from '../../stores/auth.store'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { ServerDataTable } from '../../components/ui/ServerDataTable'
 import type { Column } from '../../components/ui/ServerDataTable'
 import { useServerTable } from '../../hooks/useServerTable'
@@ -649,7 +649,7 @@ function AudioForm({ editing, onClose, formId = 'audio-form', onSavingChange }: 
       <div>
         <label className="label">Name <span className="text-red-500">*</span></label>
         <input className="input" value={form.ivr_desc}
-          onChange={e => set('ivr_desc', e.target.value)} placeholder="e.g. Main Greeting" />
+          onChange={e => { const v = e.target.value; set('ivr_desc', v.charAt(0).toUpperCase() + v.slice(1)) }} placeholder="e.g. Main Greeting" />
       </div>
 
       <div>
@@ -795,7 +795,7 @@ function AudioMessagesTab() {
           <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
             <Music size={13} className="text-purple-600" />
           </div>
-          <span className="text-sm font-semibold text-slate-800">{msg.ivr_desc}</span>
+          <span className="text-sm font-semibold text-slate-800">{capFirst(msg.ivr_desc)}</span>
         </div>
       ),
     },
@@ -1501,7 +1501,7 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
       <div>
         <label className="label">Display Name <span className="text-red-500">*</span></label>
         <input className="input" value={form.ivr_desc}
-          onChange={e => set('ivr_desc', e.target.value)} placeholder="Main Sales IVR" />
+          onChange={e => { const v = e.target.value; set('ivr_desc', v.charAt(0).toUpperCase() + v.slice(1)) }} placeholder="Main Sales IVR" />
       </div>
 
       <div>
@@ -1648,7 +1648,7 @@ function IvrTab() {
           <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
             <PhoneCall size={13} className="text-indigo-600" />
           </div>
-          <span className="text-sm font-semibold text-slate-800">{ivr.ivr_desc}</span>
+          <span className="text-sm font-semibold text-slate-800">{capFirst(ivr.ivr_desc)}</span>
         </div>
       ),
     },

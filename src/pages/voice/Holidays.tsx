@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { calltimeService } from '../../services/calltime.service'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ export function Holidays() {
                         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-sm">
                           <CalendarDays size={14} className="text-white" />
                         </div>
-                        <span className="font-semibold text-sm text-slate-900">{h.name}</span>
+                        <span className="font-semibold text-sm text-slate-900">{capFirst(h.name)}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
@@ -325,7 +325,7 @@ export function Holidays() {
                   className="input"
                   placeholder="e.g. Christmas Day, New Year's Day"
                   value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  onChange={e => { const v = e.target.value; setForm(f => ({ ...f, name: v.charAt(0).toUpperCase() + v.slice(1) })) }}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">

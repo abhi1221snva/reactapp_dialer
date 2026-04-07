@@ -14,7 +14,7 @@ import { ringlessService } from '../../services/ringless.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { useDialerHeader } from '../../layouts/DialerLayout'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 
 interface RinglessCampaign {
   id?: number
@@ -348,7 +348,7 @@ export function RinglessVoicemail() {
               <Voicemail size={14} className="text-indigo-600" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-sm text-slate-900 leading-tight truncate">{name}</p>
+              <p className="font-semibold text-sm text-slate-900 leading-tight truncate">{capFirst(name)}</p>
               {row.description && (
                 <p className="text-[11px] text-indigo-500 font-medium mt-0.5 truncate max-w-[180px]">{row.description}</p>
               )}

@@ -1,49 +1,18 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
-  Phone, LayoutDashboard, Users, BarChart3, MessageSquare,
-  ChevronRight, Activity,
-  CreditCard, Radio, MessagesSquare, Hash, UserCog, List, Tag, ListChecks, FileText, ChevronUp,
-  PhoneCall, Voicemail, Layers, Link2, ShieldCheck, PieChart, MinusCircle,
-  Mail, Building2, X, ChevronDown, ArrowLeftToLine, ArrowRightFromLine,
-  Headphones, Globe, Bot, Calendar,
-  Mic, Inbox, BrainCircuit, Settings2, User,
-  Wifi, DollarSign, BookMarked, Plug2,
-  Target, CheckCircle2, Zap, Clock, CalendarDays, RefreshCw, FileSearch,
+  Phone, LayoutDashboard, Target,
+  ChevronDown, ArrowLeftToLine, ArrowRightFromLine, X,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useUIStore } from '../stores/ui.store'
 import { useAuth } from '../hooks/useAuth'
 import { useNotificationStore } from '../stores/notification.store'
 import { useEngineStore } from '../stores/engine.store'
+import { useMenuStore, type MenuSectionApi } from '../stores/menu.store'
+import { resolveIcon } from '../utils/iconMap'
 import { initials } from '../utils/format'
-import { LEVELS } from '../utils/permissions'
-
-const ADMIN_ALLOWED_ROUTES = new Set([
-  '/profile',
-  '/crm/dashboard',
-  '/crm/leads',
-  '/crm/lead-status',
-  '/crm/lead-fields',
-  '/crm/email-templates',
-  '/crm/sms-templates',
-  '/crm/lenders',
-  '/crm/lender-api-logs',
-  '/crm/affiliate-links',
-  '/crm/company-settings',
-  '/crm/sms-inbox',
-  '/crm/automations',
-  '/crm/approvals',
-  '/crm/email-settings',
-  '/crm/agent-performance',
-  '/crm/commissions',
-  '/crm/renewals',
-  '/sms',
-  '/chat',
-  '/gmail-mailbox',
-  '/google-calendar',
-])
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Icon = React.ComponentType<any>
@@ -74,15 +43,13 @@ type NavSection = {
   defaultExpanded?: boolean
 }
 
-const profileMenuItems: { to: string; label: string; icon: Icon }[] = [
-  { to: '/profile', label: 'My Profile', icon: User },
-]
-
 function getRoleLabel(level?: number): string {
   if (!level) return 'Agent'
-  if (level >= 10) return 'Super Admin'
+  if (level >= 11) return 'System Administrator'
+  if (level >= 9)  return 'Super Admin'
   if (level >= 7)  return 'Admin'
   if (level >= 5)  return 'Manager'
+  if (level >= 3)  return 'Associate'
   return 'Agent'
 }
 
@@ -123,209 +90,42 @@ const ACCENT: Record<'dialer' | 'crm', AccentSet> = {
   },
 }
 
-// ─── Phone System / Dialer nav sections ───────────────────────────────────────
-const DIALER_SECTIONS: NavSection[] = [
+/** Minimal fallback menu if API fails */
+const FALLBACK_SECTIONS: NavSection[] = [
   {
     label: 'CORE',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, minLevel: 1 },
-      { to: '/dialer',    label: 'Dialer',     icon: Phone,           minLevel: 1 },
-    ],
-  },
-  {
-    label: 'USER MANAGEMENT',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/users',            label: 'Users & Agents',  icon: UserCog, minLevel: LEVELS.ADMIN },
-      { to: '/ring-groups',      label: 'Ring Groups',      icon: Users,   minLevel: LEVELS.ADMIN },
-      { to: '/extension-groups', label: 'Extension Groups', icon: Layers,  minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'CAMPAIGN MANAGEMENT',
-    items: [
-      { to: '/campaigns',             label: 'Campaigns',    icon: Radio,      minLevel: LEVELS.AGENT },
-      { to: '/settings/dispositions', label: 'Dispositions', icon: ListChecks, minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'LEAD MANAGEMENT',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/settings/labels',              label: 'Labels',              icon: Tag,       minLevel: LEVELS.MANAGER },
-      { to: '/leads',                        label: 'Leads',               icon: Target,    minLevel: LEVELS.MANAGER },
-      { to: '/lists',                        label: 'Lists',               icon: List,      minLevel: LEVELS.MANAGER },
-      { to: '/settings/recycle-rules',       label: 'Recycle Rules',       icon: RefreshCw, minLevel: LEVELS.ADMIN },
-      { to: '/settings/lead-activity',       label: 'Lead Activity',       icon: Activity,  minLevel: LEVELS.MANAGER },
-      { to: '/settings/custom-field-labels', label: 'Custom Field Labels', icon: Settings2, minLevel: LEVELS.ADMIN },
-      { to: '/settings/lead-sources',        label: 'Lead Sources',        icon: Globe,     minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'REPORTS',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/reports',                      label: 'CDR Report',           icon: BarChart3,  minLevel: LEVELS.MANAGER },
-      { to: '/reports/daily',              label: 'Daily Report',         icon: Calendar,   minLevel: LEVELS.MANAGER },
-      { to: '/reports/agent-summary',        label: 'Agent Summary',        icon: Users,      minLevel: LEVELS.MANAGER },
-      { to: '/reports/disposition',          label: 'Disposition Report',   icon: ListChecks, minLevel: LEVELS.MANAGER },
-      { to: '/reports/campaign-performance', label: 'Campaign Performance', icon: PieChart,   minLevel: LEVELS.MANAGER },
-      { to: '/reports/live',               label: 'Live Calls',           icon: Radio,      minLevel: LEVELS.MANAGER },
-      { to: '/reports/recordings',         label: 'Recording Report',     icon: Mic,        minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'VOICE',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/dids',              label: 'DID Management',   icon: Hash,         minLevel: LEVELS.ADMIN },
-      { to: '/ivr',               label: 'IVR Menus',        icon: PhoneCall,    minLevel: LEVELS.ADMIN },
-      { to: '/voicemail',         label: 'Voicemail Drops',  icon: Voicemail,    minLevel: LEVELS.ADMIN },
-      { to: '/voicemail/mailbox', label: 'Mailbox',          icon: Inbox,        minLevel: LEVELS.MANAGER },
-      { to: '/call-times',        label: 'Call Times',       icon: Clock,        minLevel: LEVELS.ADMIN },
-      { to: '/call-timers',       label: 'Call Timers',      icon: Clock,        minLevel: LEVELS.ADMIN },
-      { to: '/holidays',          label: 'Holidays',         icon: CalendarDays, minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'AI & TOOLS',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/ai/settings', label: 'AI Settings',        icon: Bot,        minLevel: LEVELS.ADMIN },
-      { to: '/ai/coach',    label: 'AI Coach',           icon: Headphones, minLevel: LEVELS.ADMIN },
-      { to: '/ringless',    label: 'Ringless Voicemail', icon: Voicemail,  minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'SMS AI',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/smsai/demo',      label: 'AI Demo',          icon: BrainCircuit, minLevel: LEVELS.ADMIN },
-      { to: '/smsai/campaigns', label: 'Campaigns',         icon: Radio,        minLevel: LEVELS.ADMIN },
-      { to: '/smsai/lists',     label: 'Lists',             icon: List,         minLevel: LEVELS.ADMIN },
-      { to: '/smsai/reports',   label: 'Reports',           icon: BarChart3,    minLevel: LEVELS.ADMIN },
-      { to: '/smsai/templates', label: 'SMS AI Templates',  icon: FileText,     minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'COMMUNICATIONS',
-    minLevel: 1,
-    items: [
-      { to: '/chat', label: 'Team Chat',  icon: MessagesSquare, minLevel: 1 },
-    ],
-  },
-  {
-    label: 'TELECOM',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/telecom',                    label: 'Telecom Hub',    icon: Radio,       minLevel: LEVELS.MANAGER },
-      { to: '/telecom?p=twilio&t=numbers', label: 'Phone Numbers',  icon: Hash,        minLevel: LEVELS.ADMIN   },
-      { to: '/telecom?p=twilio&t=trunks',  label: 'SIP Trunks',     icon: Wifi,        minLevel: LEVELS.ADMIN   },
-      { to: '/telecom?p=twilio&t=calls',   label: 'Call Logs',      icon: PhoneCall,   minLevel: LEVELS.MANAGER },
-      { to: '/telecom?p=twilio&t=sms',     label: 'SMS Logs',       icon: MessageSquare, minLevel: LEVELS.MANAGER },
-      { to: '/telecom?p=twilio&t=usage',   label: 'Usage & Billing',icon: DollarSign,  minLevel: LEVELS.ADMIN   },
-    ],
-  },
-  {
-    label: 'SETTINGS',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/settings/dnc',     label: 'DNC List',          icon: ShieldCheck,  minLevel: LEVELS.ADMIN },
-      { to: '/settings/exclude', label: 'Exclude From List', icon: MinusCircle,  minLevel: LEVELS.ADMIN },
-      { to: '/settings/fax',     label: 'Fax Settings',      icon: FileText,     minLevel: LEVELS.ADMIN },
-      { to: '/billing',       label: 'Billing',      icon: CreditCard, minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'SYSTEM ADMIN',
-    minLevel: LEVELS.SUPERADMIN,
-    items: [
-      { to: '/admin/clients',        label: 'Client Management', icon: Building2,  minLevel: LEVELS.SUPERADMIN },
-      { to: '/admin/system-monitor', label: 'System Monitor',    icon: Activity,   minLevel: LEVELS.SYSTEM_ADMIN },
-      { to: '/system/swagger',       label: 'Swagger API Docs',  icon: BookMarked, minLevel: LEVELS.SYSTEM_ADMIN },
+      { to: '/dialer',    label: 'Dialer',    icon: Phone,           minLevel: 1 },
     ],
   },
 ]
 
-// ─── CRM nav sections ─────────────────────────────────────────────────────────
-const CRM_SECTIONS: NavSection[] = [
-  {
-    label: 'OVERVIEW',
-    items: [
-      { to: '/crm/dashboard', label: 'Dashboard', icon: PieChart, minLevel: 1 },
-    ],
-  },
-  {
-    label: 'MERCHANT MANAGEMENT',
-    minLevel: 1,
-    items: [
-      { to: '/crm/leads',       label: 'Leads',       icon: Target,    minLevel: 1 },
-      { to: '/crm/lead-fields', label: 'Labels',      icon: Settings2, minLevel: LEVELS.MANAGER },
-      { to: '/crm/lead-status', label: 'Lead Status', icon: Tag,       minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'INBOX',
-    minLevel: 1,
-    items: [
-      { to: '/chat',          label: 'Chat',   icon: MessagesSquare,minLevel: 1 },
-      { to: '/crm/sms-inbox', label: 'SMS',   icon: MessageSquare, minLevel: 1 },
-      { to: '/gmail-mailbox', label: 'Gmail Inbox',  icon: Inbox,   minLevel: 1 },
-      { to: '/email-parser',  label: 'Email Parser', icon: FileSearch, minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'TEMPLATE MANAGEMENT',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/crm/email-templates',  label: 'Email Templates',  icon: Mail,          minLevel: LEVELS.MANAGER },
-      { to: '/crm/sms-templates',    label: 'SMS Templates',    icon: MessageSquare, minLevel: LEVELS.MANAGER },
-      { to: '/crm/pdf-templates',    label: 'PDF Templates',    icon: FileText,      minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'SETTINGS',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/crm/email-settings',   label: 'Email Settings',   icon: Mail,          minLevel: LEVELS.MANAGER },
-      { to: '/crm/document-types',   label: 'Document Types',   icon: Tag,           minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'INTEGRATIONS',
-    minLevel: 1,
-    items: [
-      { to: '/google-calendar',    label: 'Google Calendar',   icon: Calendar, minLevel: 1 },
-      { to: '/crm/integrations',   label: 'API Integrations',  icon: Plug2,    minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'PERFORMANCE',
-    minLevel: LEVELS.ADMIN,
-    items: [
-      { to: '/crm/agent-performance', label: 'Agent Performance', icon: BarChart3, minLevel: LEVELS.ADMIN },
-      { to: '/crm/commissions',       label: 'Commissions',       icon: DollarSign, minLevel: LEVELS.ADMIN },
-      { to: '/crm/renewals',          label: 'Renewal Pipeline',  icon: RefreshCw,  minLevel: LEVELS.ADMIN },
-    ],
-  },
-  {
-    label: 'PARTNERS',
-    minLevel: LEVELS.MANAGER,
-    items: [
-      { to: '/crm/lenders',         label: 'Lenders',      icon: Building2, minLevel: LEVELS.MANAGER },
-      { to: '/crm/lender-api-logs', label: 'API Call Logs', icon: Activity,  minLevel: LEVELS.MANAGER },
-    ],
-  },
-  {
-    label: 'SYSTEM ADMIN',
-    minLevel: LEVELS.SUPERADMIN,
-    items: [
-      { to: '/admin/clients',        label: 'Client Management', icon: Building2,  minLevel: LEVELS.SUPERADMIN },
-      { to: '/admin/system-monitor', label: 'System Monitor',    icon: Activity,   minLevel: LEVELS.SYSTEM_ADMIN },
-      { to: '/system/swagger',       label: 'Swagger API Docs',  icon: BookMarked, minLevel: LEVELS.SYSTEM_ADMIN },
-    ],
-  },
-]
+/** Check if a route `to` string (which may contain query params) matches the current location */
+function isRouteActive(to: string, location: { pathname: string; search: string }): boolean {
+  const qIdx = to.indexOf('?')
+  const toPath = qIdx >= 0 ? to.slice(0, qIdx) : to
+  const toSearch = qIdx >= 0 ? to.slice(qIdx) : ''
+
+  if (location.pathname !== toPath) return false
+  // If the link has no query params, only match when location also has none
+  if (!toSearch) return !location.search
+  return location.search === toSearch
+}
+
+/** Transform API menu sections into the NavSection[] format used by rendering */
+function apiToNavSections(apiSections: MenuSectionApi[], badgeSources: Record<string, number>): NavSection[] {
+  return apiSections.map((section) => ({
+    label: section.section_label,
+    items: section.items.map((item) => ({
+      to: item.route_path,
+      label: item.label,
+      icon: resolveIcon(item.icon_name),
+      minLevel: 1, // Already filtered by backend — all returned items are accessible
+      badge: item.badge_source ? (badgeSources[item.badge_source] ?? undefined) : undefined,
+    })),
+  }))
+}
 
 // ─── Inner sub-group (e.g. Twilio / Plivo inside Telecom) ─────────────────────
 function NavSubGroup({
@@ -341,7 +141,7 @@ function NavSubGroup({
   if (visibleItems.length === 0) return null
   if (sub.minLevel !== undefined && !canAccess(sub.minLevel)) return null
 
-  const isAnyActive = visibleItems.some(item => location.pathname.startsWith(item.to))
+  const isAnyActive = visibleItems.some(item => isRouteActive(item.to, location) || location.pathname.startsWith(item.to.split('?')[0] + '/'))
   const [expanded, setExpanded] = useState(sub.defaultExpanded ?? isAnyActive)
 
   return (
@@ -359,21 +159,22 @@ function NavSubGroup({
       </button>
       {expanded && (
         <div className="ml-3 pl-3 border-l border-slate-200 mt-0.5 space-y-0.5">
-          {visibleItems.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end onClick={onItemClick}
-              className={({ isActive }) => cn(
+          {visibleItems.map(({ to, label, icon: ItemIcon }) => {
+            const active = isRouteActive(to, location)
+            return (
+            <NavLink key={to} to={to} onClick={onItemClick}
+              className={cn(
                 'group flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150',
-                isActive ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                active ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               )}
             >
-              {({ isActive }) => (
                 <>
-                  <Icon size={14} className={cn(isActive ? accent.activeIcon : 'text-slate-400 group-hover:text-slate-600')} />
+                  <ItemIcon size={14} className={cn(active ? accent.activeIcon : 'text-slate-400 group-hover:text-slate-600')} />
                   <span className="truncate leading-none flex-1">{label}</span>
                 </>
-              )}
             </NavLink>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -402,8 +203,8 @@ function NavGroup({
   if (section.minLevel !== undefined && !canAccess(section.minLevel)) return null
 
   const isAnyChildActive =
-    visibleItems.some(item => location.pathname.startsWith(item.to)) ||
-    (section.subSections ?? []).some(sub => sub.items.some(item => location.pathname.startsWith(item.to)))
+    visibleItems.some(item => isRouteActive(item.to, location) || location.pathname.startsWith(item.to.split('?')[0] + '/')) ||
+    (section.subSections ?? []).some(sub => sub.items.some(item => isRouteActive(item.to, location) || location.pathname.startsWith(item.to.split('?')[0] + '/')))
   const [expanded, setExpanded] = useState(section.defaultExpanded ?? isAnyChildActive)
 
   if (collapsed) {
@@ -412,7 +213,7 @@ function NavGroup({
       : (section.subSections ?? []).flatMap(sub => sub.items.filter(item => canAccess(item.minLevel)).slice(0, 1))
     return (
       <div className="mb-1">
-        {collapsedItems.map(({ to, label, icon: Icon }) => (
+        {collapsedItems.map(({ to, label, icon: ItemIcon }) => (
           <NavLink key={to} to={to} onClick={onItemClick}
             onMouseEnter={(e) => showTooltip(label, e.currentTarget)}
             onMouseLeave={hideTooltip}
@@ -424,7 +225,7 @@ function NavGroup({
             {({ isActive }) => (
               <>
                 {isActive && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
-                <Icon size={17} className={cn(isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
+                <ItemIcon size={17} className={cn(isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
                 {label === 'SMS Center' && unreadSms > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center font-bold leading-none">
                     {unreadSms > 9 ? '9+' : unreadSms}
@@ -453,16 +254,17 @@ function NavGroup({
       </button>
       {expanded && (
         <div className="ml-3 pl-3 border-l border-slate-200 mt-0.5 space-y-0.5">
-          {visibleItems.map(({ to, label, icon: Icon, badge }) => (
-            <NavLink key={to} to={to} end onClick={onItemClick}
-              className={({ isActive }) => cn(
+          {visibleItems.map(({ to, label, icon: ItemIcon, badge }) => {
+            const active = isRouteActive(to, location)
+            return (
+            <NavLink key={to} to={to} onClick={onItemClick}
+              className={cn(
                 'group flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150',
-                isActive ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                active ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               )}
             >
-              {({ isActive }) => (
                 <>
-                  <Icon size={15} className={cn(isActive ? accent.activeIcon : 'text-slate-400 group-hover:text-slate-600')} />
+                  <ItemIcon size={15} className={cn(active ? accent.activeIcon : 'text-slate-400 group-hover:text-slate-600')} />
                   <span className="truncate leading-none flex-1">{label}</span>
                   {badge !== undefined && badge > 0 && (
                     <span className="min-w-[18px] h-4.5 px-1 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
@@ -470,14 +272,43 @@ function NavGroup({
                     </span>
                   )}
                 </>
-              )}
             </NavLink>
-          ))}
+            )
+          })}
           {(section.subSections ?? []).map(sub => (
             <NavSubGroup key={sub.label} sub={sub} canAccess={canAccess} onItemClick={onItemClick} accent={accent} />
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Skeleton loader for menu loading state ──────────────────────────────────
+function MenuSkeleton({ collapsed }: { collapsed: boolean }) {
+  const bars = [1, 2, 3, 4, 5, 6, 7, 8]
+  if (collapsed) {
+    return (
+      <div className="space-y-2 px-2 py-3">
+        {bars.map(i => (
+          <div key={i} className="mx-auto w-8 h-8 rounded-lg bg-slate-100 animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-3 px-3 py-2">
+      {[1, 2, 3].map(section => (
+        <div key={section}>
+          <div className="h-2.5 w-16 bg-slate-100 rounded animate-pulse mb-2" />
+          {[1, 2].map(item => (
+            <div key={item} className="flex items-center gap-3 px-3 py-1.5">
+              <div className="w-4 h-4 rounded bg-slate-100 animate-pulse flex-shrink-0" />
+              <div className="h-3 bg-slate-100 rounded animate-pulse flex-1" style={{ maxWidth: `${60 + section * 20}px` }} />
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -488,8 +319,30 @@ export function Sidebar() {
   const { unreadSms } = useNotificationStore()
   const { engine } = useEngineStore()
   const navigate = useNavigate()
+  const { sections: apiSections, loading, loaded, error, fetchMenu } = useMenuStore()
 
   const accent = ACCENT[engine]
+
+  // Fetch menu from API when engine changes or on first mount
+  useEffect(() => {
+    fetchMenu(engine)
+  }, [engine, fetchMenu])
+
+  // Build badge sources from notification store
+  const badgeSources = useMemo<Record<string, number>>(() => ({
+    unreadSms,
+  }), [unreadSms])
+
+  // Transform API data into NavSection[] — or use fallback
+  const effectiveSections = useMemo<NavSection[]>(() => {
+    if (loaded && apiSections.length > 0) {
+      return apiToNavSections(apiSections, badgeSources)
+    }
+    if (error) {
+      return FALLBACK_SECTIONS
+    }
+    return []
+  }, [apiSections, loaded, error, badgeSources])
 
   // Fixed-position tooltip state for collapsed sidebar
   const [tooltip, setTooltip] = useState<{ label: string; top: number } | null>(null)
@@ -500,9 +353,6 @@ export function Sidebar() {
   const hideTooltip = useCallback(() => setTooltip(null), [])
 
   function handleNav(to: string) { navigate(to); closeMobileSidebar() }
-
-  const rawSections = engine === 'dialer' ? DIALER_SECTIONS : CRM_SECTIONS
-  const effectiveSections = rawSections.filter(s => s.label !== 'SYSTEM ADMIN' || canAccess(LEVELS.SUPERADMIN))
 
   const logoGradient = engine === 'dialer'
     ? 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)'
@@ -574,84 +424,88 @@ export function Sidebar() {
         className="flex-1 overflow-y-auto py-2 px-2"
         style={{ scrollbarWidth: 'thin', scrollbarColor: '#E5E7EB transparent' }}
       >
-        {effectiveSections.map((section, idx) => {
-          const visibleItems = (section.items ?? []).filter(item => canAccess(item.minLevel))
-          const hasVisibleSubs = (section.subSections ?? []).some(sub => sub.items.some(item => canAccess(item.minLevel)))
-          if (visibleItems.length === 0 && !hasVisibleSubs) return null
-          if (section.minLevel !== undefined && !canAccess(section.minLevel)) return null
+        {loading && !loaded ? (
+          <MenuSkeleton collapsed={sidebarCollapsed} />
+        ) : (
+          effectiveSections.map((section, idx) => {
+            const visibleItems = (section.items ?? []).filter(item => canAccess(item.minLevel))
+            const hasVisibleSubs = (section.subSections ?? []).some(sub => sub.items.some(item => canAccess(item.minLevel)))
+            if (visibleItems.length === 0 && !hasVisibleSubs) return null
+            if (section.minLevel !== undefined && !canAccess(section.minLevel)) return null
 
-          return (
-            <div key={`${engine}-${section.label}-${idx}`} className="mb-1">
-              {idx > 0 && !(section.expandable && effectiveSections[idx - 1]?.expandable) && (
-                <div className="mx-2 my-2 border-t border-slate-100" />
-              )}
-              {!section.expandable && (
-                !sidebarCollapsed ? (
-                  <p className="px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 select-none">
-                    {section.label}
-                  </p>
+            return (
+              <div key={`${engine}-${section.label}-${idx}`} className="mb-1">
+                {idx > 0 && !(section.expandable && effectiveSections[idx - 1]?.expandable) && (
+                  <div className="mx-2 my-2 border-t border-slate-100" />
+                )}
+                {!section.expandable && (
+                  !sidebarCollapsed ? (
+                    <p className="px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 select-none">
+                      {section.label}
+                    </p>
+                  ) : (
+                    <div className="mx-auto mb-1 w-4 border-t border-slate-200" />
+                  )
+                )}
+
+                {section.expandable ? (
+                  <NavGroup
+                    section={section}
+                    collapsed={sidebarCollapsed}
+                    canAccess={canAccess}
+                    unreadSms={unreadSms}
+                    onItemClick={() => { closeMobileSidebar() }}
+                    accent={accent}
+                    showTooltip={showTooltip}
+                    hideTooltip={hideTooltip}
+                  />
                 ) : (
-                  <div className="mx-auto mb-1 w-4 border-t border-slate-200" />
-                )
-              )}
-
-              {section.expandable ? (
-                <NavGroup
-                  section={section}
-                  collapsed={sidebarCollapsed}
-                  canAccess={canAccess}
-                  unreadSms={unreadSms}
-                  onItemClick={() => { closeMobileSidebar() }}
-                  accent={accent}
-                  showTooltip={showTooltip}
-                  hideTooltip={hideTooltip}
-                />
-              ) : (
-                <div className={cn('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
-                  {visibleItems.map(({ to, label, icon: Icon, badge }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      onClick={() => { closeMobileSidebar() }}
-                      onMouseEnter={sidebarCollapsed ? (e) => showTooltip(label, e.currentTarget) : undefined}
-                      onMouseLeave={sidebarCollapsed ? hideTooltip : undefined}
-                      className={({ isActive }) => cn(
-                        'group/nav relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
-                        'transition-all duration-150',
-                        sidebarCollapsed && 'lg:justify-center lg:px-2.5 w-full',
-                        isActive ? accent.active : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      )}
-                    >
-                      {({ isActive }) => (
-                        <>
-                          {isActive && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
-                          <div className="relative flex-shrink-0">
-                            <Icon size={17} className={cn('transition-colors duration-150', isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
-                            {label === 'SMS Center' && unreadSms > 0 && (
-                              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
-                                {unreadSms > 9 ? '9+' : unreadSms}
-                              </span>
-                            )}
-                          </div>
-                          {!sidebarCollapsed && (
-                            <>
-                              <span className="truncate leading-none flex-1">{label}</span>
-                              {badge !== undefined && badge > 0 && (
-                                <span className="min-w-[18px] px-1 py-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
-                                  {badge}
+                  <div className={cn('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
+                    {visibleItems.map(({ to, label, icon: ItemIcon, badge }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        onClick={() => { closeMobileSidebar() }}
+                        onMouseEnter={sidebarCollapsed ? (e) => showTooltip(label, e.currentTarget) : undefined}
+                        onMouseLeave={sidebarCollapsed ? hideTooltip : undefined}
+                        className={({ isActive }) => cn(
+                          'group/nav relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
+                          'transition-all duration-150',
+                          sidebarCollapsed && 'lg:justify-center lg:px-2.5 w-full',
+                          isActive ? accent.active : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        )}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            {isActive && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
+                            <div className="relative flex-shrink-0">
+                              <ItemIcon size={17} className={cn('transition-colors duration-150', isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
+                              {label === 'SMS Center' && unreadSms > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
+                                  {unreadSms > 9 ? '9+' : unreadSms}
                                 </span>
                               )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
+                            </div>
+                            {!sidebarCollapsed && (
+                              <>
+                                <span className="truncate leading-none flex-1">{label}</span>
+                                {badge !== undefined && badge > 0 && (
+                                  <span className="min-w-[18px] px-1 py-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+                                    {badge}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
       </nav>
 
     </div>

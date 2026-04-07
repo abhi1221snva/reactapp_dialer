@@ -8,6 +8,7 @@ import { FloatingFab } from '../components/floating/FloatingFab'
 import { FloatingSms } from '../components/sms/FloatingSms'
 import { useUIStore } from '../stores/ui.store'
 import { useAuthStore } from '../stores/auth.store'
+import { RouteGuard } from '../components/RouteGuard'
 import { Building2, LogOut } from 'lucide-react'
 
 function ImpersonationBanner() {
@@ -64,7 +65,7 @@ export function AppLayout() {
         <ImpersonationBanner />
         <TopHeader />
         <main className="flex-1 overflow-y-auto px-5 py-3">
-          <Outlet />
+          <RouteGuard><Outlet /></RouteGuard>
         </main>
       </div>
 

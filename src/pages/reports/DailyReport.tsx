@@ -15,6 +15,7 @@ import api from '../../api/axios'
 import { campaignService } from '../../services/campaign.service'
 import { formatDuration, formatDate } from '../../utils/format'
 import { cn } from '../../utils/cn'
+import { ReportViewTabs } from '../../components/ui/ReportViewTabs'
 import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -408,64 +409,6 @@ export function DailyReport() {
         />
       </div>
 
-      {/* Daily Trend Chart */}
-      {(isLoading || rows.length > 0) && (
-        <div className="card">
-          <div className="flex items-center gap-2 pb-4 mb-2 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <BarChart3 size={14} className="text-indigo-600" />
-            </div>
-            <h3 className="font-semibold text-slate-900">Daily Call Trend</h3>
-            {!isLoading && (
-              <span className="text-xs text-slate-400 ml-auto">{rows.length} days</span>
-            )}
-          </div>
-          {isLoading ? (
-            <div className="h-52 bg-slate-100 rounded-xl animate-pulse" />
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={[...rows].sort((a, b) =>
-                  String(a.date || a.day || '').localeCompare(String(b.date || b.day || ''))
-                ).map((r) => ({
-                  date:     String(r.date || r.day || '').slice(5),
-                  Total:    Number(r.total_calls || r.calls || 0),
-                  Answered: Number(r.answered || 0),
-                  Missed:   Number(r.missed || r.no_answer || 0),
-                }))}
-                barCategoryGap="20%"
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={rows.length > 14 ? Math.floor(rows.length / 7) : 0}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={36}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: '#0f172a', border: 'none', borderRadius: 10,
-                    color: '#fff', fontSize: 11,
-                  }}
-                  cursor={{ fill: '#f8fafc' }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Total"    fill="#6366f1" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Answered" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Missed"   fill="#ef4444" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      )}
-
       {/* Filters */}
       <div className="card p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -527,39 +470,104 @@ export function DailyReport() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-          <div className="flex items-center gap-2">
-            <BarChart3 size={14} className="text-slate-400" />
-            <span className="text-xs text-slate-500 font-medium">
-              {isLoading ? 'Loading…' : `${total.toLocaleString()} day${total !== 1 ? 's' : ''}`}
-            </span>
-          </div>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Refreshing…
-            </span>
-          )}
-          {!isLoading && rows.length > 0 && (
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <TrendingUp size={12} className="text-emerald-500" />
-              {answerRate}% answer rate
+      {/* Graph / Table Tabs */}
+      <ReportViewTabs
+        graphContent={
+          <div className="card">
+            <div className="flex items-center gap-2 pb-4 mb-2 border-b border-slate-100">
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                <BarChart3 size={14} className="text-indigo-600" />
+              </div>
+              <h3 className="font-semibold text-slate-900">Daily Call Trend</h3>
+              {!isLoading && (
+                <span className="text-xs text-slate-400 ml-auto">{rows.length} days</span>
+              )}
             </div>
-          )}
-        </div>
-        <DataTable
-          columns={columns}
-          data={paginated as unknown as Record<string, unknown>[]}
-          loading={isLoading}
-          keyField="date"
-          emptyText="No daily report data found for the selected range"
-          pagination={total > PER_PAGE ? { page, total, perPage: PER_PAGE, onChange: setPage } : undefined}
-          sortKey={sortField}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
+            {isLoading ? (
+              <div className="h-72 bg-slate-100 rounded-xl animate-pulse" />
+            ) : rows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <BarChart3 size={40} className="mb-3 opacity-30" />
+                <p className="text-sm font-medium text-slate-500">No data for selected range</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart
+                  data={[...rows].sort((a, b) =>
+                    String(a.date || a.day || '').localeCompare(String(b.date || b.day || ''))
+                  ).map((r) => ({
+                    date:     String(r.date || r.day || '').slice(5),
+                    Total:    Number(r.total_calls || r.calls || 0),
+                    Answered: Number(r.answered || 0),
+                    Missed:   Number(r.missed || r.no_answer || 0),
+                  }))}
+                  barCategoryGap="20%"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={rows.length > 14 ? Math.floor(rows.length / 7) : 0}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#0f172a', border: 'none', borderRadius: 10,
+                      color: '#fff', fontSize: 11,
+                    }}
+                    cursor={{ fill: '#f8fafc' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                  <Bar dataKey="Total"    fill="#6366f1" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Answered" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Missed"   fill="#ef4444" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        }
+        tableContent={
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <BarChart3 size={14} className="text-slate-400" />
+                <span className="text-xs text-slate-500 font-medium">
+                  {isLoading ? 'Loading…' : `${total.toLocaleString()} day${total !== 1 ? 's' : ''}`}
+                </span>
+              </div>
+              {isFetching && !isLoading && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <RefreshCw size={11} className="animate-spin" /> Refreshing…
+                </span>
+              )}
+              {!isLoading && rows.length > 0 && (
+                <div className="flex items-center gap-1 text-xs text-slate-500">
+                  <TrendingUp size={12} className="text-emerald-500" />
+                  {answerRate}% answer rate
+                </div>
+              )}
+            </div>
+            <DataTable
+              columns={columns}
+              data={paginated as unknown as Record<string, unknown>[]}
+              loading={isLoading}
+              keyField="date"
+              emptyText="No daily report data found for the selected range"
+              pagination={total > PER_PAGE ? { page, total, perPage: PER_PAGE, onChange: setPage } : undefined}
+              sortKey={sortField}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        }
+      />
     </div>
   )
 }

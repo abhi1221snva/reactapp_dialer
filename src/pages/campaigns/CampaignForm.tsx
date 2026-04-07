@@ -8,6 +8,7 @@ import { userService } from '../../services/user.service'
 import { dispositionService } from '../../services/disposition.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 
 const DIAL_MODES = [
   { value: 'preview_and_dial', label: 'Preview & Dial' },
@@ -190,7 +191,10 @@ export function CampaignForm() {
                   <div className="sm:col-span-2">
                     <label className={FIELD_LABEL}>Campaign Name *</label>
                     <input className="input" placeholder="e.g. Summer Sales 2025"
-                      value={form.campaign_name} onChange={e => set('campaign_name', e.target.value)} />
+                      value={form.campaign_name} onChange={e => {
+                        const v = e.target.value
+                        set('campaign_name', v.charAt(0).toUpperCase() + v.slice(1))
+                      }} />
                   </div>
                   <div>
                     <label className={FIELD_LABEL}>Status</label>
@@ -232,12 +236,14 @@ export function CampaignForm() {
                   </div>
                   <div>
                     <label className={FIELD_LABEL}>Agent Group</label>
-                    <select className="input" value={form.group_id} onChange={e => set('group_id', e.target.value)}>
-                      <option value="">— None —</option>
-                      {groups.map((g: { id: number; group_name: string }) => (
-                        <option key={g.id} value={g.id}>{g.group_name}</option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      className="input"
+                      options={groups.map((g: { id: number; group_name: string }) => ({ value: String(g.id), label: g.group_name }))}
+                      value={String(form.group_id)}
+                      onChange={v => set('group_id', v)}
+                      placeholder="Select group…"
+                      emptyLabel="— None —"
+                    />
                   </div>
                   {(form.dial_mode === 'predictive_dial' || form.dial_mode === 'super_power_dial') && (
                     <div>

@@ -435,7 +435,7 @@ export function Agents() {
             <span className="text-white text-xs font-bold">{agentInitials(a)}</span>
           </div>
           <div>
-            <p className="font-medium text-slate-900 text-sm">{a.first_name} {a.last_name}</p>
+            <p className="font-medium text-slate-900 text-sm">{capFirst(a.first_name)} {capFirst(a.last_name)}</p>
             <p className="text-xs text-slate-500"># {a.id}</p>
           </div>
         </div>

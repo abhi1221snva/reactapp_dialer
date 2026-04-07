@@ -38,7 +38,7 @@ import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { ErrorBoundary } from '../../components/ui/ErrorBoundary'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, MappedApiError, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload, GroupedValidationState, LenderValidationResult, LenderSubmissionOutcome, SubmissionStatusRow } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, MappedApiError, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload, GroupedValidationState, LenderValidationResult, LenderSubmissionOutcome, SubmissionStatusRow, LenderOffer, StipType } from '../../types/crm.types'
 import { CRM_FIELD_LABELS, COMPUTED_FIELDS, autoLabel as sharedAutoLabel } from '../../constants/crmFieldLabels'
 import { useUIStore } from '../../stores/ui.store'
 
@@ -1044,11 +1044,12 @@ function QuickFixModal({
   )
 }
 
-function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting }: {
+function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting, onApproval }: {
   sub: LenderSubmission; leadId: number
   onViewLog: (lenderId: number, lenderName: string) => void
   onResubmit?: (lenderId: number) => void
   isResubmitting?: boolean
+  onApproval?: (sub: LenderSubmission, note: string) => void
 }) {
   const qc = useQueryClient()
   const [editing,  setEditing]  = useState(false)
@@ -1347,7 +1348,14 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting }: {
           />
           <div className="flex gap-2">
             <button
-              onClick={() => mutation.mutate()}
+              onClick={() => {
+                if (status === 'approved' && onApproval) {
+                  onApproval(sub, newNote)
+                  setEditing(false)
+                } else {
+                  mutation.mutate()
+                }
+              }}
               disabled={mutation.isPending}
               className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1"
             >
@@ -1385,6 +1393,238 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting }: {
           </div>
         )
       })()}
+    </div>
+  )
+}
+
+// ── Approval Offer Modal ────────────────────────────────────────────────────────
+type TermType = 'daily' | 'weekly' | 'monthly'
+
+const STIP_OPTIONS: { type: StipType; name: string; description: string }[] = [
+  { type: 'bank_statement',            name: 'Bank Statements',            description: '3 Months Bank Statements' },
+  { type: 'voided_check',              name: 'Voided Check',               description: 'Voided Check' },
+  { type: 'drivers_license',           name: 'Driver License',             description: 'Driver License (Front & Back)' },
+  { type: 'tax_return',                name: 'Tax Returns',                description: '2024 & 2025 Tax Returns' },
+  { type: 'lease_agreement',           name: 'Lease Agreement',            description: 'Business Lease Agreement' },
+  { type: 'articles_of_incorporation', name: 'Articles of Incorporation',  description: 'Articles of Incorporation' },
+]
+
+interface ApprovalOfferModalProps {
+  leadId: number
+  sub: LenderSubmission
+  note: string
+  onClose: () => void
+  onDone: () => void
+}
+
+function ApprovalOfferModal({ leadId, sub, note, onClose, onDone }: ApprovalOfferModalProps) {
+  const qc = useQueryClient()
+  const [amount, setAmount] = useState('')
+  const [factorRate, setFactorRate] = useState('')
+  const [termType, setTermType] = useState<TermType>('daily')
+  const [termLength, setTermLength] = useState('')
+  const [selectedStips, setSelectedStips] = useState<Set<StipType>>(new Set())
+  const [saving, setSaving] = useState(false)
+
+  const toggleStip = (type: StipType) => {
+    setSelectedStips(prev => {
+      const next = new Set(prev)
+      next.has(type) ? next.delete(type) : next.add(type)
+      return next
+    })
+  }
+
+  const amt = parseFloat(amount) || 0
+  const fr = parseFloat(factorRate) || 0
+  const tl = parseInt(termLength) || 0
+  const totalPayback = amt * fr
+  const termDays = termType === 'daily' ? tl : termType === 'weekly' ? tl * 7 : tl * 30
+  const displayPayment = tl > 0 ? totalPayback / tl : 0
+  const dailyPayment = termDays > 0 ? totalPayback / termDays : 0
+  const termLabel = termType === 'daily' ? 'Daily' : termType === 'weekly' ? 'Weekly' : 'Monthly'
+
+  const canSave = amt > 0 && fr > 0 && tl > 0
+
+  const handleSave = async () => {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      // 1. Update submission response to approved
+      const existingNotes = sub.response_note ?? ''
+      const combined = note.trim() ? buildAppendedNote(existingNotes, note) : existingNotes
+      await crmService.updateSubmissionResponse(leadId, sub.id, {
+        response_status: 'approved',
+        submission_status: sub.submission_status ?? 'submitted',
+        response_note: combined || undefined,
+      })
+      // 2. Create the offer
+      await crmService.createOffer(leadId, {
+        lender_id: sub.lender_id,
+        lender_name: sub.lender_name ?? `Lender #${sub.lender_id}`,
+        offered_amount: amt,
+        factor_rate: fr,
+        term_days: termDays,
+        daily_payment: dailyPayment,
+        total_payback: totalPayback,
+        status: 'received',
+      } as Partial<LenderOffer>)
+      // 3. Create stips if any selected
+      if (selectedStips.size > 0) {
+        const stipNames = STIP_OPTIONS
+          .filter(s => selectedStips.has(s.type))
+          .map(s => s.name)
+        await crmService.bulkCreateStips(leadId, {
+          lender_id: sub.lender_id,
+          stip_names: stipNames,
+          stip_type: 'custom',
+        })
+      }
+      toast.success('Offer created' + (selectedStips.size > 0 ? ` with ${selectedStips.size} stip${selectedStips.size > 1 ? 's' : ''}` : ''))
+      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-offers', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-stips', leadId] })
+      onDone()
+    } catch {
+      toast.error('Failed to save offer')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Create Offer</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">{sub.lender_name ?? `Lender #${sub.lender_id}`} — Approved</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
+          {/* Amount */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Amount</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+              <input
+                type="number"
+                className="w-full text-xs border border-slate-200 rounded-lg pl-6 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                placeholder="50000"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                min={0}
+                step="any"
+              />
+            </div>
+          </div>
+
+          {/* Factor Rate */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Factor Rate</label>
+            <input
+              type="number"
+              className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              placeholder="1.35"
+              value={factorRate}
+              onChange={e => setFactorRate(e.target.value)}
+              min={0}
+              step="0.01"
+            />
+          </div>
+
+          {/* Term Type + Length */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Term Type</label>
+              <select
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-white"
+                value={termType}
+                onChange={e => setTermType(e.target.value as TermType)}
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Term Length</label>
+              <input
+                type="number"
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                placeholder={termType === 'daily' ? '60 days' : termType === 'weekly' ? '12 weeks' : '6 months'}
+                value={termLength}
+                onChange={e => setTermLength(e.target.value)}
+                min={1}
+              />
+            </div>
+          </div>
+
+          {/* Calculated fields */}
+          {amt > 0 && fr > 0 && (
+            <div className="bg-slate-50 rounded-lg px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Total Payback</span>
+                <span className="font-semibold text-slate-800">${totalPayback.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              {tl > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">{termLabel} Payment</span>
+                  <span className="font-bold text-emerald-600">${displayPayment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stipulations */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-600 mb-2">Required Stipulations</label>
+            <div className="space-y-1.5 max-h-44 overflow-y-auto">
+              {STIP_OPTIONS.map(stip => (
+                <label
+                  key={stip.type}
+                  className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-all ${
+                    selectedStips.has(stip.type)
+                      ? 'border-emerald-300 bg-emerald-50'
+                      : 'border-slate-150 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedStips.has(stip.type)}
+                    onChange={() => toggleStip(stip.type)}
+                    className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-400 flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-700">{stip.name}</p>
+                    <p className="text-[10px] text-slate-400">{stip.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-2 px-5 py-4 border-t border-slate-100 flex-shrink-0">
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            {saving ? <><Loader2 size={12} className="animate-spin" /> Saving…</> : <><DollarSign size={12} /> Save Offer</>}
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1564,9 +1804,10 @@ function LenderEmailHistory({ leadId }: { leadId: number }) {
   )
 }
 
-function LendersPanel({ leadId }: { leadId: number }) {
+function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (tab: TabId) => void }) {
   const qc = useQueryClient()
 
+  const [approvalModal, setApprovalModal] = useState<{ sub: LenderSubmission; note: string } | null>(null)
   const [selectedIds, setSelectedIds]       = useState<Set<number>>(new Set())
   const [notes, setNotes]                   = useState('')
   const [templateId, setTemplateId]         = useState<number | ''>('')
@@ -1791,7 +2032,6 @@ function LendersPanel({ leadId }: { leadId: number }) {
     if (rs === 'needs_documents') return 'missing_docs'
     if (rs === 'approved' || ss === 'approved') return 'approved'
     if (ss === 'pending') return 'processing'
-    if ((ss === 'submitted' || ss === 'viewed') && rs === 'pending') return 'pending'
     if (ss === 'submitted' || ss === 'viewed') return 'sent'
     if (ss === 'no_response') return 'no_response'
     return 'sent'
@@ -2302,8 +2542,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
                               }`}
                             >
                               <option value="all">All</option>
-                              <option value="sent">Sent</option>
-                              <option value="pending">Pending</option>
+                              <option value="sent">Submitted</option>
+                              <option value="processing">Processing</option>
                               <option value="approved">Approved</option>
                               <option value="missing_docs">Docs</option>
                               <option value="declined">Declined</option>
@@ -2375,10 +2615,8 @@ function LendersPanel({ leadId }: { leadId: number }) {
                               return { icon: <CheckCircle size={8} />, label: 'Approved', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
                             if (ss === 'pending')
                               return { icon: <Clock size={8} />, label: 'Processing', cls: 'bg-amber-100 text-amber-700 border-amber-200' }
-                            if ((ss === 'submitted' || ss === 'viewed') && rs === 'pending')
-                              return { icon: <Clock size={8} />, label: 'Pending', cls: 'bg-amber-100 text-amber-700 border-amber-200' }
                             if (ss === 'submitted' || ss === 'viewed')
-                              return { icon: <CheckCircle size={8} />, label: 'Sent', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                              return { icon: <CheckCircle size={8} />, label: 'Submitted', cls: 'bg-blue-100 text-blue-700 border-blue-200' }
                             if (ss === 'no_response')
                               return { icon: <Clock size={8} />, label: 'No Response', cls: 'bg-slate-100 text-slate-600 border-slate-200' }
                             return { icon: <CheckCircle size={8} />, label: 'Sent', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
@@ -2884,7 +3122,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
                     {group.submissions.map(s => (
                       <div key={s.id}>
                         <ErrorBoundary fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
-                          <SubmissionRow sub={s} leadId={leadId} onViewLog={handleViewLog} onResubmit={handleQuickResubmit} isResubmitting={quickResubmitId === s.lender_id} />
+                          <SubmissionRow sub={s} leadId={leadId} onViewLog={handleViewLog} onResubmit={handleQuickResubmit} isResubmitting={quickResubmitId === s.lender_id} onApproval={(sub, note) => setApprovalModal({ sub, note })} />
                         </ErrorBoundary>
                       </div>
                     ))}
@@ -2898,7 +3136,7 @@ function LendersPanel({ leadId }: { leadId: number }) {
               {filteredSubList.map(s => (
                 <div key={s.id} id={`sub-row-${s.lender_id}`}>
                   <ErrorBoundary fallbackTitle={`Error rendering submission for ${s.lender_name ?? 'lender'}`} compact>
-                    <SubmissionRow sub={s} leadId={leadId} onViewLog={handleViewLog} onResubmit={handleQuickResubmit} isResubmitting={quickResubmitId === s.lender_id} />
+                    <SubmissionRow sub={s} leadId={leadId} onViewLog={handleViewLog} onResubmit={handleQuickResubmit} isResubmitting={quickResubmitId === s.lender_id} onApproval={(sub, note) => setApprovalModal({ sub, note })} />
                   </ErrorBoundary>
                 </div>
               ))}
@@ -2938,6 +3176,20 @@ function LendersPanel({ leadId }: { leadId: number }) {
           if (drawerLog) setFixModal({ log: drawerLog as unknown as ApiLog, error })
         }}
       />
+
+      {/* ── Approval Offer Modal ── */}
+      {approvalModal && (
+        <ApprovalOfferModal
+          leadId={leadId}
+          sub={approvalModal.sub}
+          note={approvalModal.note}
+          onClose={() => setApprovalModal(null)}
+          onDone={() => {
+            setApprovalModal(null)
+            onTabChange?.('offers')
+          }}
+        />
+      )}
 
     </div>
   )
@@ -4687,7 +4939,7 @@ export function CrmLeadDetail() {
 
             {activeTab === 'activity'  && <ErrorBoundary fallbackTitle="Activity failed to load"><div ref={activityRef}  className="p-5"><ActivityTimeline leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'documents' && <ErrorBoundary fallbackTitle="Documents failed to load"><div className="px-5 py-4 h-full"><DocumentsPanel leadId={leadId} /></div></ErrorBoundary>}
-            {activeTab === 'lenders'   && <ErrorBoundary fallbackTitle="Lenders panel failed to load"><div ref={lendersRef}   className="p-5"><LendersPanel leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'lenders'   && <ErrorBoundary fallbackTitle="Lenders panel failed to load"><div ref={lendersRef}   className="p-5"><LendersPanel leadId={leadId} onTabChange={setActiveTab} /></div></ErrorBoundary>}
             {/* {activeTab === 'ondeck'    && <ErrorBoundary fallbackTitle="OnDeck panel failed to load"><div className="h-full flex flex-col"><OnDeckPanel leadId={leadId} /></div></ErrorBoundary>} */}
             {activeTab === 'merchant'  && <ErrorBoundary fallbackTitle="Merchant portal failed to load"><div className="p-5"><MerchantPortalSection leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'offers'     && <ErrorBoundary fallbackTitle="Offers failed to load"><div className="p-5"><OffersStipsTab leadId={leadId} /></div></ErrorBoundary>}

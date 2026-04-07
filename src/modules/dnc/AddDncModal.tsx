@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { dncService } from '../../services/dnc.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { formatPartialPhoneUS } from '../../utils/format'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 
 interface Props {
   onClose: () => void
@@ -59,8 +60,8 @@ export function AddDncModal({ onClose, onSaved }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <PhoneOff size={15} className="text-red-500" />
+            <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <PhoneOff size={15} className="text-indigo-600" />
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 text-sm leading-tight">Add to DNC List</h3>
@@ -103,18 +104,17 @@ export function AddDncModal({ onClose, onSaved }: Props) {
             <label className="label">
               Extension <span className="text-xs text-slate-400 font-normal">— optional</span>
             </label>
-            <select
-              className="input"
+            <SearchableSelect
               value={extension}
-              onChange={e => setExtension(e.target.value)}
-            >
-              <option value="">None</option>
-              {extensions.map(ext => (
-                <option key={ext.id} value={String(ext.extension)}>
-                  {[ext.first_name, ext.last_name].filter(Boolean).join(' ') || ext.extension}
-                </option>
-              ))}
-            </select>
+              onChange={v => setExtension(v)}
+              options={extensions.map(ext => ({
+                value: String(ext.extension),
+                label: [ext.first_name, ext.last_name].filter(Boolean).join(' ') || ext.extension,
+              }))}
+              placeholder="Select extension"
+              className="input"
+              emptyLabel="None"
+            />
           </div>
 
           {/* Comment */}

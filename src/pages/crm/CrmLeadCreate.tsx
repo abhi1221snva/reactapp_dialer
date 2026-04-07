@@ -19,18 +19,19 @@ import { resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldM
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
 
 const schema = z.object({
-  lead_status:  z.string().min(1, 'Status is required'),
-  lead_type:    z.string().optional(),
-  assigned_to:  z.string().optional(),
+  lead_status:    z.string().min(1, 'Status is required'),
+  lead_source_id: z.string().min(1, 'Lead Source is required'),
+  lead_type:      z.string().optional(),
+  assigned_to:    z.string().optional(),
   // Core lead fields — always editable regardless of crm_labels configuration
-  first_name:   z.string().optional(),
-  last_name:    z.string().optional(),
-  email:        z.string().optional(),
-  phone_number: z.string().optional(),
-  company_name: z.string().optional(),
-  address:      z.string().optional(),
-  city:         z.string().optional(),
-  state:        z.string().optional(),
+  first_name:     z.string().optional(),
+  last_name:      z.string().optional(),
+  email:          z.string().optional(),
+  phone_number:   z.string().optional(),
+  company_name:   z.string().optional(),
+  address:        z.string().optional(),
+  city:           z.string().optional(),
+  state:          z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -107,12 +108,13 @@ export function CrmLeadCreate() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { lead_status: 'new_lead' },
+    defaultValues: { lead_status: 'new_lead', lead_source_id: '' },
   })
 
-  const leadStatus = watch('lead_status')
-  const leadType   = watch('lead_type')
-  const assignedTo = watch('assigned_to')
+  const leadStatus   = watch('lead_status')
+  const leadSourceId = watch('lead_source_id')
+  const leadType     = watch('lead_type')
+  const assignedTo   = watch('assigned_to')
 
   const { data: leadFields } = useQuery({
     queryKey: ['crm-lead-fields'],
@@ -132,6 +134,15 @@ export function CrmLeadCreate() {
   const { data: agents } = useQuery({
     queryKey: ['crm-users'],
     queryFn: () => crmService.getUsers(),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: leadSources } = useQuery({
+    queryKey: ['lead-sources'],
+    queryFn: async () => {
+      const res = await leadService.getLeadSources()
+      return (res.data?.data ?? res.data ?? []) as Array<{ id: number; source_title: string }>
+    },
     staleTime: 5 * 60 * 1000,
   })
 
@@ -179,9 +190,10 @@ export function CrmLeadCreate() {
   useEffect(() => {
     if (!existing) return
     const ex = existing as Record<string, unknown>
-    setValue('lead_status',  String(existing.lead_status))
-    setValue('lead_type',    existing.lead_type   ? String(existing.lead_type)   : '')
-    setValue('assigned_to',  existing.assigned_to ? String(existing.assigned_to) : '')
+    setValue('lead_status',    String(existing.lead_status))
+    setValue('lead_source_id', existing.lead_source_id ? String(existing.lead_source_id) : '')
+    setValue('lead_type',      existing.lead_type   ? String(existing.lead_type)   : '')
+    setValue('assigned_to',    existing.assigned_to ? String(existing.assigned_to) : '')
     // Core fields
     const coreKeys = ['first_name','last_name','email','phone_number','company_name','address','city','state'] as const
     for (const k of coreKeys) {
@@ -599,6 +611,30 @@ export function CrmLeadCreate() {
                       ))}
                     </select>
                   </div>
+                </div>
+
+                {/* Lead Source */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Zap size={10} className="text-slate-400" />
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Lead Source</span>
+                    <span className="text-red-400 text-[10px]">*</span>
+                  </div>
+                  {errors.lead_source_id && (
+                    <p className="flex items-center gap-1 text-[11px] text-red-500 mb-1">
+                      <AlertCircle size={9} /> {errors.lead_source_id.message}
+                    </p>
+                  )}
+                  <select
+                    value={leadSourceId}
+                    onChange={e => setValue('lead_source_id', e.target.value, { shouldValidate: true })}
+                    className="input w-full text-xs"
+                  >
+                    <option value="">— Select source —</option>
+                    {(leadSources ?? []).map(s => (
+                      <option key={s.id} value={String(s.id)}>{s.source_title}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Temperature — inline chips */}

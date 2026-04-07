@@ -8,6 +8,7 @@ import { labelService } from '../../services/label.service'
 import { campaignService } from '../../services/campaign.service'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { ListHeaderRow } from './types'
 
 interface EditRow {
@@ -60,8 +61,12 @@ export function EditMapping() {
     queryFn: () => campaignService.getAll(),
   })
 
-  const labels: Array<{ id: number; title: string }> =
-    (labelsData as { data?: { data?: unknown } })?.data?.data as Array<{ id: number; title: string }> ?? []
+  const labels: Array<{ id: number; title: string; display_order?: number }> =
+    ((labelsData as { data?: { data?: unknown } })?.data?.data as Array<{ id: number; title: string; display_order?: number }> ?? [])
+      .slice()
+      .sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999))
+
+  const labelOptions = labels.map(l => ({ value: String(l.id), label: l.title }))
 
   const campaigns: Array<{ id: number; title?: string; campaign_name?: string }> =
     (campaignsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; title?: string; campaign_name?: string }> ?? []
@@ -319,20 +324,18 @@ export function EditMapping() {
                   </button>
                 </div>
 
-                <select
+                <SearchableSelect
+                  options={labelOptions}
                   value={row.labelId}
-                  onChange={e => setLabel(row.id, e.target.value)}
+                  onChange={v => setLabel(row.id, v)}
+                  placeholder="Search or select label"
+                  emptyLabel="-- Skip --"
                   className={`input text-xs py-1.5 ${
                     row.labelId
                       ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
                       : 'text-slate-500'
                   }`}
-                >
-                  <option value="">-- Skip --</option>
-                  {labels.map(l => (
-                    <option key={l.id} value={String(l.id)}>{l.title}</option>
-                  ))}
-                </select>
+                />
               </div>
             ))}
           </div>

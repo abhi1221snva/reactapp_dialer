@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, UserCircle, Eye, X, Search,
-  Phone, Globe, Clock, Users as UsersIcon, Settings, Hash,
+  Phone, Globe, Users as UsersIcon, Settings, Hash,
   PhoneForwarded, Shield, Mail, Lock,
   CheckCircle2, XCircle, Smartphone,
 } from 'lucide-react'
@@ -12,6 +12,7 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { Badge } from '../../components/ui/Badge'
 import { userService } from '../../services/user.service'
 import { initials } from '../../utils/format'
+import { getTimezoneLabel } from '../../constants/timezones'
 import { useServerTable } from '../../hooks/useServerTable'
 import { cn } from '../../utils/cn'
 import { confirmDelete } from '../../utils/confirmDelete'
@@ -35,16 +36,20 @@ const capFirst = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
 
 const levelLabel = (level?: number) => {
   if (!level) return 'Agent'
-  if (level >= 10) return 'Super Admin'
+  if (level >= 11) return 'System Administrator'
+  if (level >= 9) return 'Super Admin'
   if (level >= 7) return 'Admin'
   if (level >= 5) return 'Manager'
+  if (level >= 3) return 'Associate'
   return 'Agent'
 }
 
 const ROLE_COLORS: Record<string, string> = {
+  'System Administrator': 'from-red-500 to-rose-600',
   'Super Admin': 'from-violet-500 to-purple-600',
   'Admin': 'from-indigo-500 to-blue-600',
   'Manager': 'from-sky-500 to-cyan-600',
+  'Associate': 'from-teal-500 to-emerald-600',
   'Agent': 'from-slate-400 to-slate-500',
 }
 
@@ -61,20 +66,20 @@ function VSection({ icon: Icon, title, iconColor, children }: {
 }) {
   return (
     <div className="card p-0 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50/70 border-b border-slate-100">
-        <Icon size={13} className={iconColor} />
-        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">{title}</span>
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/70 border-b border-slate-100">
+        <Icon size={14} className={iconColor} />
+        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{title}</span>
       </div>
-      <div className="px-4 py-1.5">{children}</div>
+      <div className="px-4 py-1">{children}</div>
     </div>
   )
 }
 
 function VRow({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 gap-4">
-      <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">{label}</span>
-      <span className="text-[11px] text-right font-semibold text-slate-800 truncate">{value ?? '—'}</span>
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 gap-4">
+      <span className="text-xs text-slate-500 font-medium flex-shrink-0">{label}</span>
+      <span className="text-xs text-right font-semibold text-slate-800 truncate">{value ?? '—'}</span>
     </div>
   )
 }
@@ -82,10 +87,10 @@ function VRow({ label, value }: { label: string; value?: React.ReactNode }) {
 function VToggle({ val, label }: { val?: unknown; label: string }) {
   const on = val === 1 || val === '1' || val === true
   return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-      <span className="text-[11px] text-slate-500 font-medium">{label}</span>
-      <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold', on ? 'text-emerald-600' : 'text-slate-400')}>
-        {on ? <><CheckCircle2 size={11} className="text-emerald-500" /> On</> : <><XCircle size={11} className="text-slate-300" /> Off</>}
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <span className={cn('inline-flex items-center gap-1 text-xs font-semibold', on ? 'text-emerald-600' : 'text-slate-400')}>
+        {on ? <><CheckCircle2 size={13} className="text-emerald-500" /> On</> : <><XCircle size={13} className="text-slate-300" /> Off</>}
       </span>
     </div>
   )
@@ -196,7 +201,8 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
                   {[
                     { icon: Hash, val: String(u?.extension ?? '—'), lbl: 'Extension' },
                     { icon: UsersIcon, val: String(groupName), lbl: 'Group' },
-                    { icon: Clock, val: String(u?.timezone ?? 'America/New_York').split('/').pop()?.replace(/_/g, ' ') ?? '', lbl: 'Timezone' },
+
+                    { icon: Lock, val: u?.vm_pin ? String(u.vm_pin) : '—', lbl: 'VM PIN' },
                     { icon: Settings, val: cliLabel(u?.cli_setting), lbl: 'CLI' },
                     { icon: Phone, val: countryCode, lbl: 'Code' },
                   ].map(({ icon: SIcon, val, lbl }) => (
@@ -221,18 +227,13 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
               ))}
             </div>
           ) : u ? (
-            <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
 
               {/* Contact Info */}
               <VSection icon={Mail} title="Contact Info" iconColor="text-indigo-500">
                 <VRow label="Email" value={u.email as string} />
                 <VRow label="Phone" value={formatPhone(u.mobile as string)} />
-                <VRow label="VM PIN"
-                  value={u.vm_pin
-                    ? <code className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">{u.vm_pin as string}</code>
-                    : '—'
-                  }
-                />
+                <VRow label="Timezone" value={getTimezoneLabel(u?.timezone as string)} />
               </VSection>
 
               {/* Call Settings */}

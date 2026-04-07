@@ -13,7 +13,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import { authService } from '../../services/auth.service'
 import { userService } from '../../services/user.service'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { confirmDelete } from '../../utils/confirmDelete'
 
 const SECTIONS = [
@@ -147,7 +147,7 @@ export function Settings() {
   const apiKeys: ApiKey[] = apiKeysData?.data?.data || []
 
   const agentColumns: Column<AgentRow>[] = [
-    { key: 'name',      header: 'Name',      render: r => <span className="text-sm font-medium text-slate-900">{r.name}</span> },
+    { key: 'name',      header: 'Name',      render: r => <span className="text-sm font-medium text-slate-900">{capFirst(r.name)}</span> },
     { key: 'email',     header: 'Email',     render: r => <span className="text-sm text-slate-500">{r.email}</span> },
     { key: 'extension', header: 'Extension', render: r => <code className="text-xs bg-slate-100 px-2 py-1 rounded-lg font-mono font-semibold text-slate-700">{r.extension}</code> },
     { key: 'level',     header: 'Role',      render: r => {
@@ -163,7 +163,7 @@ export function Settings() {
   ]
 
   const apiKeyColumns: Column<ApiKey>[] = [
-    { key: 'name',     header: 'Name',       render: r => <span className="text-sm font-medium text-slate-900">{r.name}</span> },
+    { key: 'name',     header: 'Name',       render: r => <span className="text-sm font-medium text-slate-900">{capFirst(r.name)}</span> },
     { key: 'key',      header: 'Key',        render: r => <code className="text-xs bg-slate-100 px-2 py-1 rounded-lg font-mono text-slate-600">{String(r.key).slice(0, 24)}…</code> },
     { key: 'created_at', header: 'Created',  render: r => <span className="text-xs text-slate-500">{r.created_at}</span> },
     { key: 'last_used', header: 'Last Used', render: r => <span className="text-xs text-slate-500">{r.last_used || 'Never'}</span> },

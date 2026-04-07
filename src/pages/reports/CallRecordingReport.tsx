@@ -389,7 +389,7 @@ export function CallRecordingReport() {
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<number | null>(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
-  const [showFilters, setShowFilters] = useState(true)
+  const [showFilters, setShowFilters] = useState(false)
 
   const PER_PAGE = 25
   const filterRef = useRef<HTMLDivElement>(null)
@@ -402,6 +402,18 @@ export function CallRecordingReport() {
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
   }, [showExportMenu])
+
+  // Close filter panel on outside click
+  useEffect(() => {
+    if (!showFilters) return
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilters(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showFilters])
 
   // Campaigns dropdown
   const { data: campaignsData } = useQuery({
@@ -612,19 +624,17 @@ export function CallRecordingReport() {
   )
 
   return (
-    <div className="space-y-5">
-      {/* Date Presets */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
-          <Calendar size={12} /> Period:
-        </span>
-        <div className="flex gap-1.5 flex-wrap">
+    <div className="space-y-4">
+      {/* Top bar: Date Presets (left) + Stats (right) */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        {/* Date Presets */}
+        <div className="flex items-center gap-2">
           {DATE_PRESETS.map(preset => (
             <button
               key={preset.label}
               onClick={() => handlePreset(preset)}
               className={cn(
-                'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all',
+                'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all',
                 activePreset === preset.label
                   ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200'
                   : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
@@ -634,50 +644,63 @@ export function CallRecordingReport() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={PhoneCall} label="Total Calls" value={stats.total_calls.toLocaleString()}
-          sub={`${stats.with_recording} with recording`} color="bg-indigo-50 text-indigo-600"
-        />
-        <StatCard
-          icon={TrendingUp} label="Answered" value={stats.answered.toLocaleString()}
-          sub={stats.total_calls > 0 ? `${Math.round((stats.answered / stats.total_calls) * 100)}% answer rate` : '—'}
-          color="bg-emerald-50 text-emerald-600"
-        />
-        <StatCard
-          icon={PhoneMissed} label="Missed" value={stats.missed.toLocaleString()}
-          sub={stats.total_calls > 0 ? `${Math.round((stats.missed / stats.total_calls) * 100)}% miss rate` : '—'}
-          color="bg-red-50 text-red-500"
-        />
-        <StatCard
-          icon={Timer} label="Avg Duration" value={formatDuration(stats.avg_duration)}
-          sub={`Total: ${formatDuration(stats.total_duration)}`} color="bg-amber-50 text-amber-600"
-        />
-      </div>
-
-      {/* Filters */}
-      <div ref={filterRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-20">
-        <button
-          onClick={() => setShowFilters(v => !v)}
-          className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors rounded-t-2xl"
-        >
-          <div className="flex items-center gap-2">
-            <Filter size={15} className="text-indigo-500" />
-            <span className="text-sm font-semibold text-slate-700">Filters</span>
-            {hasActiveFilters && (
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-            )}
+        {/* Compact Stats */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-lg">
+            <PhoneCall size={13} className="text-indigo-600" />
+            <span className="text-xs font-bold text-indigo-900">{stats.total_calls.toLocaleString()}</span>
+            <span className="text-[10px] text-indigo-500">Calls</span>
           </div>
-          <ChevronDown size={14} className={cn('text-slate-400 transition-transform', showFilters && 'rotate-180')} />
-        </button>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-lg">
+            <TrendingUp size={13} className="text-emerald-600" />
+            <span className="text-xs font-bold text-emerald-900">{stats.answered.toLocaleString()}</span>
+            <span className="text-[10px] text-emerald-500">Answered</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
+            <PhoneIncoming size={13} className="text-blue-600" />
+            <span className="text-xs font-bold text-blue-900">{stats.inbound.toLocaleString()}</span>
+            <span className="text-[10px] text-blue-500">Inbound</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 rounded-lg">
+            <Timer size={13} className="text-amber-600" />
+            <span className="text-xs font-bold text-amber-900">{formatDuration(stats.avg_duration)}</span>
+            <span className="text-[10px] text-amber-500">Avg</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters — right-aligned slide panel */}
+      <div ref={filterRef} className="relative">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setShowFilters(v => !v)}
+            className={cn(
+              'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all border',
+              showFilters
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+            )}
+          >
+            <Filter size={14} />
+            Filters
+            {hasActiveFilters && (
+              <span className={cn('w-2 h-2 rounded-full animate-pulse', showFilters ? 'bg-white' : 'bg-indigo-500')} />
+            )}
+          </button>
+          {hasActiveFilters && (
+            <button onClick={resetFilters}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"
+            >
+              <RotateCcw size={12} /> Reset
+            </button>
+          )}
+        </div>
 
         {showFilters && (
-          <div className="px-5 pb-5 pt-1 border-t border-slate-100">
-            {/* Row 1: Dates + Search */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+          <div className="absolute right-0 top-full mt-2 w-[420px] bg-white rounded-2xl border border-slate-200 shadow-xl z-30 p-5 space-y-3 animate-fadeIn">
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="form-group">
                 <label className="label">From</label>
                 <input type="date" className="input" value={filters.start_date}
@@ -690,28 +713,21 @@ export function CallRecordingReport() {
                   onChange={e => { setFilters(f => ({ ...f, end_date: e.target.value })); setActivePreset('Custom'); setPage(1) }}
                 />
               </div>
-              <div className="form-group md:col-span-2">
-                <label className="label">Search</label>
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className="input pl-9" placeholder="Search number, extension, recording..."
-                    defaultValue={filters.search}
-                    onChange={e => handleSearchChange(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="form-group flex items-end">
-                <button onClick={resetFilters}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-                >
-                  <RotateCcw size={13} /> Reset
-                </button>
+            </div>
+            {/* Search */}
+            <div className="form-group">
+              <label className="label">Search</label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="input pl-9" placeholder="Number, extension, recording..."
+                  defaultValue={filters.search}
+                  onChange={e => handleSearchChange(e.target.value)}
+                />
               </div>
             </div>
-
-            {/* Row 2: Field filters */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {/* Field filters */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="form-group">
                 <label className="label">Agent</label>
                 <select className="input" value={filters.extension}
@@ -761,9 +777,8 @@ export function CallRecordingReport() {
                 </select>
               </div>
             </div>
-
-            {/* Row 3: Duration range */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            {/* Duration range */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="form-group">
                 <label className="label">Min Duration (sec)</label>
                 <input type="number" min="0" className="input" placeholder="0" value={filters.duration_min}

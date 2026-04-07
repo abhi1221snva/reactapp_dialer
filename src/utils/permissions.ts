@@ -1,11 +1,12 @@
 import type { User } from '../types'
 
 export const LEVELS = {
-  SYSTEM_ADMIN: 11,
-  SUPERADMIN: 10,
-  ADMIN: 7,
-  MANAGER: 5,
-  AGENT: 1,
+  SYSTEM_ADMIN: 11,   // system_administrator (id 6)
+  SUPERADMIN: 9,      // super_admin (id 5)
+  ADMIN: 7,           // admin (id 1)
+  MANAGER: 5,         // manager (id 3)
+  ASSOCIATE: 3,       // associate (id 4)
+  AGENT: 1,           // agent (id 2)
 } as const
 
 export function canAccess(user: User | null, minLevel: number): boolean {

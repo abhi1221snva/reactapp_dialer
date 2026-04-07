@@ -15,6 +15,7 @@ import { userService } from '../../services/user.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { scrollToFirstError } from '../../utils/publicFormValidation'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 
 // ─────────────────────────────────────────────
 //  Week Schedule
@@ -551,7 +552,21 @@ export function CreateCampaign() {
                 <div className="cpn-g4">
                   <div data-field-key="title">
                     <label style={LBL}>Campaign Name <span className="text-red-400">*</span></label>
-                    <input {...register('title')} className={cn('cpn-fi', errors.title && '!border-red-400')} placeholder="e.g. Summer Sales 2026" />
+                    <Controller name="title" control={control}
+                      render={({ field }) => (
+                        <input
+                          value={field.value}
+                          onChange={e => {
+                            const v = e.target.value
+                            field.onChange(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v)
+                          }}
+                          onBlur={field.onBlur}
+                          ref={field.ref}
+                          className={cn('cpn-fi', errors.title && '!border-red-400')}
+                          placeholder="e.g. Summer Sales 2026"
+                        />
+                      )}
+                    />
                     <FieldError message={errors.title?.message} />
                   </div>
                   <div data-field-key="dial_mode">
@@ -564,10 +579,18 @@ export function CreateCampaign() {
                   </div>
                   <div data-field-key="group_id">
                     <label style={LBL}>Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}</label>
-                    <select {...register('group_id')} className={cn('cpn-fi', errors.group_id && '!border-red-400')}>
-                      <option value="">None</option>
-                      {groups.map(g => <option key={g.id} value={g.id}>{g.group_name ?? g.title}</option>)}
-                    </select>
+                    <Controller name="group_id" control={control}
+                      render={({ field }) => (
+                        <SearchableSelect
+                          value={String(field.value ?? '')}
+                          onChange={v => field.onChange(v)}
+                          options={groups.map(g => ({ value: String(g.id), label: g.group_name ?? g.title ?? '' }))}
+                          placeholder="None"
+                          className={cn('cpn-fi', errors.group_id && '!border-red-400')}
+                          emptyLabel="None"
+                        />
+                      )}
+                    />
                     <FieldError message={errors.group_id?.message as string} />
                   </div>
                   <div>
@@ -759,19 +782,35 @@ export function CreateCampaign() {
                   {callerIdType === 'custom' && (
                     <div style={{ flex: '1 1 0' }} className="cpn-reveal" data-field-key="custom_caller_id">
                       <label style={LBL}>Custom DID <span className="text-red-400">*</span></label>
-                      <select {...register('custom_caller_id')} className={cn('cpn-fi', errors.custom_caller_id && '!border-red-400')}>
-                        <option value="">Select DID</option>
-                        {dids.map(d => <option key={d.cli} value={d.cli}>{d.cli}{d.cnam ? ` — ${d.cnam}` : ''}</option>)}
-                      </select>
+                      <Controller name="custom_caller_id" control={control}
+                        render={({ field }) => (
+                          <SearchableSelect
+                            value={String(field.value ?? '')}
+                            onChange={v => field.onChange(v)}
+                            options={dids.map(d => ({ value: d.cli, label: d.cli + (d.cnam ? ` — ${d.cnam}` : '') }))}
+                            placeholder="Select DID"
+                            className={cn('cpn-fi', errors.custom_caller_id && '!border-red-400')}
+                            emptyLabel="Select DID"
+                          />
+                        )}
+                      />
                       <FieldError message={errors.custom_caller_id?.message} />
                     </div>
                   )}
                   <div style={{ flex: '1 1 0' }}>
                     <label style={LBL}>Country Code</label>
-                    <select {...register('country_code')} className="cpn-fi">
-                      <option value="">Default</option>
-                      {countries.map(c => <option key={c.phonecode} value={c.phonecode}>{c.name} (+{c.phonecode})</option>)}
-                    </select>
+                    <Controller name="country_code" control={control}
+                      render={({ field }) => (
+                        <SearchableSelect
+                          value={String(field.value ?? '')}
+                          onChange={v => field.onChange(v)}
+                          options={countries.map(c => ({ value: String(c.phonecode), label: `${c.name} (+${c.phonecode})` }))}
+                          placeholder="Default"
+                          className="cpn-fi"
+                          emptyLabel="Default"
+                        />
+                      )}
+                    />
                   </div>
                 </div>
                 {/* Row 2: Dispositions + Description */}

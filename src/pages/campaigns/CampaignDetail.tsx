@@ -4,7 +4,7 @@ import {
   ArrowLeft, Radio, Pencil, Play, Pause, Copy,
   Users, LayoutList, Phone, Clock, Globe, Tag,
   ChevronRight, X, Mail, Zap, Shield, MessageSquare,
-  CheckCircle2, XCircle, Activity,
+  CheckCircle2, XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
@@ -158,7 +158,6 @@ export function CampaignDetail() {
 
   const total = Number(d.total_leads ?? 0)
   const dialed = Number(d.called_leads ?? 0)
-  const pct = total > 0 ? Math.min(100, Math.round((dialed / total) * 100)) : 0
 
   if (isLoading) {
     return (
@@ -281,18 +280,6 @@ export function CampaignDetail() {
                 </div>
               </div>
 
-              {/* Progress */}
-              <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-                  <Activity size={16} className="text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xl font-bold text-white leading-tight">{pct}%</p>
-                  <div className="w-full max-w-[80px] h-1.5 bg-white/20 rounded-full mt-1">
-                    <div className="h-full bg-emerald-300 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              </div>
 
               {/* Lists */}
               <div className="bg-white/10 rounded-xl px-3 py-3 flex items-center gap-3">

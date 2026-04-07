@@ -6,6 +6,7 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { excludeListService } from '../../services/excludeList.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime, formatPhoneUS } from '../../utils/format'
+import { capFirst } from '../../utils/cn'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { AddExcludeModal } from './AddExcludeModal'
@@ -83,8 +84,8 @@ export function ExcludeList() {
       header: 'Phone Number',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-            <MinusCircle size={13} className="text-orange-500" />
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
+            <MinusCircle size={14} className="text-indigo-600" />
           </div>
           <span className="text-sm font-medium text-slate-900 font-mono">{formatPhoneUS(row.number)}</span>
         </div>
@@ -93,12 +94,12 @@ export function ExcludeList() {
     {
       key: 'first_name',
       header: 'First Name',
-      render: (row) => <span className="text-sm text-slate-600">{row.first_name || '—'}</span>,
+      render: (row) => <span className="text-sm text-slate-600">{row.first_name ? capFirst(row.first_name) : '—'}</span>,
     },
     {
       key: 'last_name',
       header: 'Last Name',
-      render: (row) => <span className="text-sm text-slate-600">{row.last_name || '—'}</span>,
+      render: (row) => <span className="text-sm text-slate-600">{row.last_name ? capFirst(row.last_name) : '—'}</span>,
     },
     {
       key: 'company_name',

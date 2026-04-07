@@ -8,6 +8,7 @@ export const voicemailService = {
       params: {
         start: (params.page - 1) * params.limit,
         limit: params.limit,
+        ...(params.search ? { search: params.search } : {}),
       },
     }),
   create: (data: Record<string, unknown>) => api.post('/add-voice-mail-drop', data),

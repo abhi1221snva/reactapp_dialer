@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, PhoneOff, Upload, Download, Search, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, PhoneOff, Upload, Download, Search, X, UserRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { dncService } from '../../services/dnc.service'
@@ -101,8 +101,8 @@ export function DncList() {
       header: 'Phone Number',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-            <PhoneOff size={13} className="text-red-500" />
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
+            <PhoneOff size={14} className="text-indigo-600" />
           </div>
           <span className="text-sm font-medium text-slate-900 font-mono">{formatPhoneUS(row.number)}</span>
         </div>
@@ -115,7 +115,17 @@ export function DncList() {
         const code = String(row.extension || '')
         if (!code) return <span className="text-sm text-slate-400">—</span>
         const name = extMap.get(code)
-        return <span className="text-sm text-slate-600">{name ? `${name} (${code})` : code}</span>
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
+              <UserRound size={13} className="text-slate-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-700 leading-tight truncate">{name || code}</p>
+              {name && <p className="text-[11px] text-slate-400 mt-0.5">Ext {code}</p>}
+            </div>
+          </div>
+        )
       },
     },
     {

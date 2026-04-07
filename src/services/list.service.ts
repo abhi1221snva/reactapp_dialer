@@ -46,16 +46,21 @@ export const listService = {
     api.post('/edit-list', { list_id: listId, campaign_id: campaignId, is_deleted: 1 }),
 
   // Paginated leads for a list — POST /list-data/{id}/content
-  getLeads: (listId: number, params: { start: number; limit: number; search?: string }) =>
+  getLeads: (listId: number, params: { start: number; limit: number; search?: string; search_by?: string }) =>
     api.post(`/list-data/${listId}/content`, {
       start: params.start,
       limit: params.limit,
       ...(params.search ? { search: params.search } : {}),
+      ...(params.search_by ? { search_by: params.search_by } : {}),
     }),
 
-  // Get list headers
+  // Get list headers (all labels)
   getHeaders: (listId: number) =>
     api.post('/list-header', { id: listId, list_data: [0] }),
+
+  // Get headers for a specific list (returns label titles for that list)
+  getHeadersByList: (listId: number) =>
+    api.post('/list-header', { id: listId, list_data: [String(listId)] }),
 
   // Step 1: parse headers from uploaded file (returns temp_key, headers[], labels[], row_count)
   parseHeaders: (data: FormData) =>

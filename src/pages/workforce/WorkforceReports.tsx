@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { workforceService } from '../../services/workforce.service'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { formatDuration } from '../../utils/format'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -129,7 +129,7 @@ function ProductivityTab({ dateFrom, dateTo }: { dateFrom: string; dateTo: strin
       key: 'name', header: 'Agent',
       render: r => (
         <div>
-          <p className="font-semibold text-slate-900 text-sm">{r.name}</p>
+          <p className="font-semibold text-slate-900 text-sm">{capFirst(r.name)}</p>
           <p className="text-xs text-slate-400">{r.email}</p>
         </div>
       ),
@@ -194,7 +194,7 @@ function StaffingTab({ dateFrom, dateTo }: { dateFrom: string; dateTo: string })
       key: 'campaign_name', header: 'Campaign',
       render: r => (
         <div>
-          <p className="font-semibold text-sm">{r.campaign_name}</p>
+          <p className="font-semibold text-sm">{capFirst(r.campaign_name)}</p>
           <Badge variant={r.is_active ? 'green' : 'gray'}>{r.is_active ? 'Active' : 'Inactive'}</Badge>
         </div>
       ),
@@ -237,7 +237,7 @@ function IdleTab({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
   const rows: IdleRow[] = data?.data ?? []
 
   const columns: Column<IdleRow>[] = [
-    { key: 'name', header: 'Agent', render: r => <span className="font-semibold text-sm">{r.name}</span> },
+    { key: 'name', header: 'Agent', render: r => <span className="font-semibold text-sm">{capFirst(r.name)}</span> },
     { key: 'work_hours', header: 'Work Hours', render: r => <span className="font-mono text-sm">{r.work_hours}h</span> },
     { key: 'talk_hours', header: 'Talk Hours', render: r => <span className="font-mono text-sm text-blue-700">{r.talk_hours}h</span> },
     { key: 'idle_hours', header: 'Idle Hours', render: r => <span className="font-mono text-sm text-amber-700">{r.idle_hours}h</span> },

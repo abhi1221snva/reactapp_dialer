@@ -11,6 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { DataTable, type Column } from '../../components/ui/DataTable'
+import { ReportViewTabs } from '../../components/ui/ReportViewTabs'
 import { Badge } from '../../components/ui/Badge'
 import { reportService } from '../../services/report.service'
 import { extensiongroupService } from '../../services/extensiongroup.service'
@@ -512,71 +513,6 @@ export function Reports() {
         />
       </div>
 
-      {/* Direction split + Disposition chart */}
-      {rawRows.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* IN/OUT split */}
-          <div className="card">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
-              <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
-                <PhoneIncoming size={14} className="text-blue-600" />
-              </div>
-              <h3 className="font-semibold text-slate-900 text-sm">Call Direction</h3>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-medium text-blue-700 flex items-center gap-1">
-                    <ArrowDownLeft size={11} /> Inbound
-                  </span>
-                  <span className="font-bold text-slate-900">{inboundCalls}</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full transition-all"
-                    style={{ width: rawRows.length > 0 ? `${(inboundCalls / rawRows.length) * 100}%` : '0%' }}
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-medium text-emerald-700 flex items-center gap-1">
-                    <ArrowUpRight size={11} /> Outbound
-                  </span>
-                  <span className="font-bold text-slate-900">{outboundCalls}</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all"
-                    style={{ width: rawRows.length > 0 ? `${(outboundCalls / rawRows.length) * 100}%` : '0%' }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Disposition chart */}
-          <div className="card lg:col-span-2">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
-              <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                <BarChart2 size={14} className="text-indigo-600" />
-              </div>
-              <h3 className="font-semibold text-slate-900 text-sm">Disposition Breakdown</h3>
-              <span className="text-xs text-slate-400 ml-auto">Current page ({rawRows.length} calls)</span>
-            </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={chartData} barCategoryGap="35%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} width={28} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-                <Bar dataKey="count" name="Calls" radius={[6, 6, 0, 0]} fill="#6366f1" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
       {/* Filters */}
       <div className="card p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -670,29 +606,108 @@ export function Reports() {
         </div>
       </div>
 
-      {/* Data Table */}
-      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-          <span className="text-xs text-slate-500 font-medium">
-            {isLoading ? 'Loading…' : `${total.toLocaleString()} records`}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Updating…
-            </span>
-          )}
-        </div>
-        <DataTable
-          columns={columns}
-          data={rows}
-          loading={isLoading}
-          emptyText="No call records found for the selected filters"
-          pagination={{ page, total, perPage: PER_PAGE, onChange: setPage }}
-          sortKey={sortField}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
+      {/* Graph / Table Tabs */}
+      <ReportViewTabs
+        graphContent={
+          rawRows.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* IN/OUT split */}
+              <div className="card">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <PhoneIncoming size={14} className="text-blue-600" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 text-sm">Call Direction</h3>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium text-blue-700 flex items-center gap-1">
+                        <ArrowDownLeft size={11} /> Inbound
+                      </span>
+                      <span className="font-bold text-slate-900">{inboundCalls}</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full transition-all"
+                        style={{ width: rawRows.length > 0 ? `${(inboundCalls / rawRows.length) * 100}%` : '0%' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium text-emerald-700 flex items-center gap-1">
+                        <ArrowUpRight size={11} /> Outbound
+                      </span>
+                      <span className="font-bold text-slate-900">{outboundCalls}</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all"
+                        style={{ width: rawRows.length > 0 ? `${(outboundCalls / rawRows.length) * 100}%` : '0%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Disposition chart */}
+              <div className="card lg:col-span-2">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                    <BarChart2 size={14} className="text-indigo-600" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 text-sm">Disposition Breakdown</h3>
+                  <span className="text-xs text-slate-400 ml-auto">Current page ({rawRows.length} calls)</span>
+                </div>
+                <ResponsiveContainer width="100%" height={340}>
+                  <BarChart data={chartData} barCategoryGap="35%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} width={28} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                    <Bar dataKey="count" name="Calls" radius={[6, 6, 0, 0]} fill="#6366f1" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                <BarChart2 size={24} className="text-slate-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-1">No chart data available</h3>
+              <p className="text-xs text-slate-400 max-w-xs">
+                Adjust the date range or filters above to load call records and see the graph view.
+              </p>
+            </div>
+          )
+        }
+        tableContent={
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+              <span className="text-xs text-slate-500 font-medium">
+                {isLoading ? 'Loading...' : `${total.toLocaleString()} records`}
+              </span>
+              {isFetching && !isLoading && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <RefreshCw size={11} className="animate-spin" /> Updating...
+                </span>
+              )}
+            </div>
+            <DataTable
+              columns={columns}
+              data={rows}
+              loading={isLoading}
+              emptyText="No call records found for the selected filters"
+              pagination={{ page, total, perPage: PER_PAGE, onChange: setPage }}
+              sortKey={sortField}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        }
+      />
 
       {/* Recording player modal */}
       {playingUrl && (

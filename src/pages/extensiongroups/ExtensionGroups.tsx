@@ -10,6 +10,7 @@ import { extensiongroupService } from '../../services/extensiongroup.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface ExtGroup {
@@ -351,7 +352,7 @@ function ExtGroupFormModal({
         <div>
           <label className="label">Name <span className="text-red-500">*</span></label>
           <input className="input" value={form.title}
-            onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+            onChange={e => { const v = e.target.value; setForm(p => ({ ...p, title: v.charAt(0).toUpperCase() + v.slice(1) })) }}
             placeholder="e.g. Support Team" />
         </div>
 
@@ -441,7 +442,7 @@ export function ExtensionGroups() {
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-50">
             <Layers size={14} className="text-violet-600" />
           </div>
-          <p className="font-medium text-slate-900 text-sm">{row.title}</p>
+          <p className="font-medium text-slate-900 text-sm">{capFirst(row.title)}</p>
         </div>
       ),
     },

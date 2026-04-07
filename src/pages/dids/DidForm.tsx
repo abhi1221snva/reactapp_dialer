@@ -11,6 +11,7 @@ import { didService } from '../../services/did.service'
 import { ivrService } from '../../services/ivr.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { cn } from '../../utils/cn'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,12 +168,14 @@ function RoutingTarget({
   if (destType === 'extension') return (
     <div style={{ flex: '1 1 0' }}>
       <label style={LBL}>Target Agent / Extension <span className="text-red-400">*</span></label>
-      <select className="cpn-fi" value={extension} onChange={e => onChange('extension', e.target.value)}>
-        <option value="">— Select an agent —</option>
-        {extensions.map(ext => (
-          <option key={ext.id} value={String(ext.extension)}>{extLabel(ext)}</option>
-        ))}
-      </select>
+      <SearchableSelect
+        className="cpn-fi"
+        options={extensions.map(ext => ({ value: String(ext.extension), label: extLabel(ext) }))}
+        value={extension}
+        onChange={v => onChange('extension', v)}
+        placeholder="— Select an agent —"
+        emptyLabel="— Select an agent —"
+      />
       <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>{extensions.length} agent{extensions.length !== 1 ? 's' : ''} available</span>
       {extensions.length === 0 && <EmptyHint message="No extensions found. Please create an extension first." />}
     </div>
@@ -181,14 +184,15 @@ function RoutingTarget({
   if (destType === 'ivr') return (
     <div style={{ flex: '1 1 0' }}>
       <label style={LBL}>Select IVR Menu <span className="text-red-400">*</span></label>
-      <select className="cpn-fi" value={ivr_id} onChange={e => onChange('ivr_id', e.target.value)} disabled={loadingIvrs}>
-        <option value="">{loadingIvrs ? 'Loading IVR menus…' : '— Select an IVR menu —'}</option>
-        {ivrs.map(ivr => (
-          <option key={ivr.ivr_id} value={String(ivr.ivr_id)}>
-            {ivr.ivr_desc || ivr.ann_id || ivr.ivr_id}
-          </option>
-        ))}
-      </select>
+      <SearchableSelect
+        className="cpn-fi"
+        options={ivrs.map(ivr => ({ value: String(ivr.ivr_id), label: ivr.ivr_desc || ivr.ann_id || String(ivr.ivr_id) }))}
+        value={ivr_id}
+        onChange={v => onChange('ivr_id', v)}
+        placeholder={loadingIvrs ? 'Loading IVR menus…' : '— Select an IVR menu —'}
+        emptyLabel="— Select an IVR menu —"
+        disabled={loadingIvrs}
+      />
       {!loadingIvrs && ivrs.length > 0 && (
         <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>{ivrs.length} IVR menu{ivrs.length !== 1 ? 's' : ''} available</span>
       )}
@@ -199,14 +203,15 @@ function RoutingTarget({
   if (destType === 'queue') return (
     <div style={{ flex: '1 1 0' }}>
       <label style={LBL}>Select Ring Group / Queue <span className="text-red-400">*</span></label>
-      <select className="cpn-fi" value={ingroup} onChange={e => onChange('ingroup', e.target.value)} disabled={loadingRingGroups}>
-        <option value="">{loadingRingGroups ? 'Loading ring groups…' : '— Select a ring group —'}</option>
-        {ringGroups.map(rg => (
-          <option key={rg.id} value={String(rg.id)}>
-            {rgLabel(rg)}
-          </option>
-        ))}
-      </select>
+      <SearchableSelect
+        className="cpn-fi"
+        options={ringGroups.map(rg => ({ value: String(rg.id), label: rgLabel(rg) }))}
+        value={ingroup}
+        onChange={v => onChange('ingroup', v)}
+        placeholder={loadingRingGroups ? 'Loading ring groups…' : '— Select a ring group —'}
+        emptyLabel="— Select a ring group —"
+        disabled={loadingRingGroups}
+      />
       {!loadingRingGroups && ringGroups.length > 0 && (
         <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>{ringGroups.length} ring group{ringGroups.length !== 1 ? 's' : ''} available</span>
       )}
@@ -217,12 +222,14 @@ function RoutingTarget({
   if (destType === 'voicemail') return (
     <div style={{ flex: '1 1 0' }}>
       <label style={LBL}>Voicemail Box <span className="text-red-400">*</span></label>
-      <select className="cpn-fi" value={voicemail_id} onChange={e => onChange('voicemail_id', e.target.value)}>
-        <option value="">— Select an agent / extension —</option>
-        {extensions.map(ext => (
-          <option key={ext.id} value={String(ext.extension)}>{extLabel(ext)}</option>
-        ))}
-      </select>
+      <SearchableSelect
+        className="cpn-fi"
+        options={extensions.map(ext => ({ value: String(ext.extension), label: extLabel(ext) }))}
+        value={voicemail_id}
+        onChange={v => onChange('voicemail_id', v)}
+        placeholder="— Select an agent / extension —"
+        emptyLabel="— Select an agent / extension —"
+      />
       <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Callers go directly to this agent's voicemail box</span>
       {extensions.length === 0 && <EmptyHint message="No extensions found. Please create an extension first." />}
     </div>
@@ -670,7 +677,10 @@ export function DidForm() {
                   <input
                     className="cpn-fi"
                     value={form.cnam}
-                    onChange={e => set('cnam', e.target.value)}
+                    onChange={e => {
+                      const v = e.target.value
+                      set('cnam', v.charAt(0).toUpperCase() + v.slice(1))
+                    }}
                     placeholder="e.g. Support Line, Acme Corp"
                   />
                 </div>
@@ -736,21 +746,17 @@ export function DidForm() {
                 </div>
                 <div style={{ maxWidth: 400 }}>
                   <label style={LBL}>Assign SMS to User</label>
-                  <select
+                  <SearchableSelect
                     className="cpn-fi"
-                    value={form.sms_user_id}
-                    onChange={e => set('sms_user_id', e.target.value)}
-                  >
-                    <option value="">— Select a user —</option>
-                    {extensions.map(ext => {
+                    options={extensions.map(ext => {
                       const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
-                      return (
-                        <option key={ext.id} value={String(ext.id)}>
-                          {name || `User #${ext.id}`}
-                        </option>
-                      )
+                      return { value: String(ext.id), label: name || `User #${ext.id}` }
                     })}
-                  </select>
+                    value={form.sms_user_id}
+                    onChange={v => set('sms_user_id', v)}
+                    placeholder="— Select a user —"
+                    emptyLabel="— Select a user —"
+                  />
                   <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Incoming SMS routed to this user</span>
                   {extensions.length === 0 && <EmptyHint message="No users found." />}
                 </div>
@@ -768,16 +774,14 @@ export function DidForm() {
                 </div>
                 <div style={{ maxWidth: 400 }}>
                   <label style={LBL}>Schedule / Department</label>
-                  <select
+                  <SearchableSelect
                     className="cpn-fi"
+                    options={departments.map(d => ({ value: String(d.id), label: d.name }))}
                     value={form.call_time_department_id}
-                    onChange={e => set('call_time_department_id', e.target.value)}
-                  >
-                    <option value="">— Select a schedule —</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={String(d.id)}>{d.name}</option>
-                    ))}
-                  </select>
+                    onChange={v => set('call_time_department_id', v)}
+                    placeholder="— Select a schedule —"
+                    emptyLabel="— Select a schedule —"
+                  />
                   {departments.length === 0 && <EmptyHint message="No call-time schedules found. Create one under Call Timings first." />}
                 </div>
               </section>
@@ -822,19 +826,15 @@ export function DidForm() {
                 {form.call_screening_mode === 'ivr' && (
                   <div className="cpn-reveal" style={{ maxWidth: 400 }}>
                     <label style={LBL}>IVR Announcement <span className="text-red-400">*</span></label>
-                    <select
+                    <SearchableSelect
                       className="cpn-fi"
+                      options={ivrs.map(ivr => ({ value: String(ivr.ivr_id), label: ivr.ivr_desc || ivr.ann_id || String(ivr.ivr_id) }))}
                       value={form.call_screening_ivr_id}
-                      onChange={e => set('call_screening_ivr_id', e.target.value)}
+                      onChange={v => set('call_screening_ivr_id', v)}
+                      placeholder={loadingIvrs ? 'Loading IVRs…' : '— Select an IVR —'}
+                      emptyLabel="— Select an IVR —"
                       disabled={loadingIvrs}
-                    >
-                      <option value="">{loadingIvrs ? 'Loading IVRs…' : '— Select an IVR —'}</option>
-                      {ivrs.map(ivr => (
-                        <option key={ivr.ivr_id} value={String(ivr.ivr_id)}>
-                          {ivr.ivr_desc || ivr.ann_id || ivr.ivr_id}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>Caller hears this IVR; agent hears caller name before accepting</span>
                     {!loadingIvrs && ivrs.length === 0 && <EmptyHint message="No IVRs found. Create an IVR menu first." />}
                   </div>

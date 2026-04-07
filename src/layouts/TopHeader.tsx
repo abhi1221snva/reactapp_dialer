@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Settings, Building2, Clock } from 'lucide-react'
+import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Settings, Building2, Clock, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useAuthStore } from '../stores/auth.store'
@@ -23,12 +23,12 @@ const ENGINE_HOME: Record<Engine, string> = {
 
 function getRoleLabel(level?: number): string {
   if (level === undefined) return ''
-  if (level >= 10) return 'Super Admin'
-  if (level >= 9)  return 'System Admin'
-  if (level >= 7)  return 'Telecom Admin'
-  if (level >= 6)  return 'Admin'
+  if (level >= 11) return 'System Administrator'
+  if (level >= 9)  return 'Super Admin'
+  if (level >= 7)  return 'Admin'
   if (level >= 5)  return 'Manager'
-  if (level >= 3)  return 'Agent'
+  if (level >= 3)  return 'Associate'
+  if (level >= 1)  return 'Agent'
   return 'User'
 }
 
@@ -263,6 +263,30 @@ export function TopHeader() {
             </span>
           )}
         </Link>
+
+        {/* Clear Cache — system_administrator only */}
+        {user && user.level >= 11 && (
+          <button
+            onClick={async () => {
+              try {
+                localStorage.clear()
+                sessionStorage.clear()
+                if ('caches' in window) {
+                  const keys = await caches.keys()
+                  await Promise.all(keys.map(k => caches.delete(k)))
+                }
+                toast.success('Cache cleared — reloading…')
+                setTimeout(() => window.location.reload(), 500)
+              } catch {
+                toast.error('Failed to clear cache')
+              }
+            }}
+            className="p-2 rounded-full text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all duration-200"
+            title="Clear Cache"
+          >
+            <Trash2 size={17} />
+          </button>
+        )}
 
         {/* Divider */}
         <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />

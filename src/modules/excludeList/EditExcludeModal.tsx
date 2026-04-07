@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { excludeListService } from '../../services/excludeList.service'
 import { campaignService } from '../../services/campaign.service'
 import { formatPhoneUS } from '../../utils/format'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 
 export interface ExcludeItem {
   number: string | number
@@ -70,8 +71,8 @@ export function EditExcludeModal({ item, onClose, onSaved }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <MinusCircle size={15} className="text-orange-500" />
+            <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <MinusCircle size={15} className="text-indigo-600" />
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 text-sm leading-tight">Edit Exclude Entry</h3>
@@ -130,16 +131,17 @@ export function EditExcludeModal({ item, onClose, onSaved }: Props) {
             <label className="label">
               Campaign <span className="text-xs text-slate-400 font-normal">— optional</span>
             </label>
-            <select
+            <SearchableSelect
+              value={String(campaignId)}
+              onChange={v => setCampaignId(Number(v))}
+              options={campaigns.map(c => ({
+                value: String(c.id),
+                label: c.title,
+              }))}
+              placeholder="Select campaign"
               className="input"
-              value={campaignId}
-              onChange={e => setCampaignId(Number(e.target.value))}
-            >
-              <option value={0}>Global (all campaigns)</option>
-              {campaigns.map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
+              emptyLabel="Global (all campaigns)"
+            />
           </div>
         </div>
 

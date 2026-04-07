@@ -55,6 +55,7 @@ import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
 import { EditCampaign } from './modules/campaigns/EditCampaign'
 import { AttachLeads } from './modules/campaigns/AttachLeads'
+import { AgentStatus } from './pages/campaigns/AgentStatus'
 import { EditCampaignLists } from './modules/campaigns/EditCampaignLists'
 import { EditCampaignReview } from './modules/campaigns/EditCampaignReview'
 import { AddCampaignReview } from './modules/campaigns/AddCampaignReview'
@@ -227,6 +228,7 @@ export default function App() {
           <Route path="/campaigns/:id/manage-lists" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignLists /></ErrorBoundary>} />
           <Route path="/campaigns/:id/review" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaignReview /></ErrorBoundary>} />
           <Route path="/campaigns/:id" element={<CampaignDetail />} />
+          <Route path="/agent-status" element={<AgentStatus />} />
 
           {/* Users */}
           <Route path="/users" element={<Users />} />

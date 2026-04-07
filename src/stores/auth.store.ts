@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '../types'
+import { useMenuStore } from './menu.store'
+import { queryClient } from '../main'
+
+/** Wipe all React Query caches + menu store so no stale data leaks between sessions */
+function resetAllCaches() {
+  useMenuStore.getState().clearMenu()
+  // Clear all React Query caches — prevents stale data from previous session
+  queryClient.clear()
+}
 
 interface AuthState {
   token: string | null
@@ -32,6 +41,8 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (token, user) => {
         localStorage.setItem('auth_token', token)
+        // Clear stale caches from any previous session before populating new data
+        resetAllCaches()
         set({ token, user, isAuthenticated: true })
       },
 
@@ -46,6 +57,7 @@ export const useAuthStore = create<AuthState>()(
         }
         localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
+        resetAllCaches()
         set({
           token: null, user: null, isAuthenticated: false,
           impersonating: false, originalToken: null, originalUser: null, impersonatingCompany: null,
@@ -60,6 +72,7 @@ export const useAuthStore = create<AuthState>()(
       startImpersonation: (newToken, newUser, company) => {
         const { token, user } = get()
         localStorage.setItem('auth_token', newToken)
+        resetAllCaches()
         set({
           originalToken: token,
           originalUser: user,
@@ -75,6 +88,7 @@ export const useAuthStore = create<AuthState>()(
         const { originalToken, originalUser } = get()
         if (originalToken && originalUser) {
           localStorage.setItem('auth_token', originalToken)
+          resetAllCaches()
           set({
             token: originalToken,
             user: originalUser,

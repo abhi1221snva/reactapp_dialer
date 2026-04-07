@@ -15,7 +15,7 @@ import { dispositionService } from '../../services/disposition.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface RecycleRuleItem {
@@ -389,7 +389,7 @@ export function RecycleRules() {
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
             <RefreshCw size={13} className="text-indigo-600" />
           </div>
-          <span className="text-sm font-medium text-slate-900">{row.campaign || `#${row.campaign_id}`}</span>
+          <span className="text-sm font-medium text-slate-900">{capFirst(row.campaign || `#${row.campaign_id}`)}</span>
         </div>
       ),
     },

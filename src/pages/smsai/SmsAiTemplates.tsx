@@ -9,6 +9,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface TemplateItem {
@@ -181,7 +182,7 @@ export function SmsAiTemplates() {
             <FileText size={13} className="text-indigo-600" />
           </div>
           <div className="min-w-0">
-            <span className="text-sm font-medium text-slate-900 block truncate">{row.template_name}</span>
+            <span className="text-sm font-medium text-slate-900 block truncate">{capFirst(row.template_name)}</span>
             {row.introduction && (
               <span className="text-xs text-slate-400 block truncate max-w-[250px]">{row.introduction}</span>
             )}

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { calltimeService, DAY_KEYS, type DayKey, type DaySchedule } from '../../services/calltime.service'
-import { cn } from '../../utils/cn'
+import { cn, capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -265,7 +265,7 @@ export function CallTimes() {
                           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
                             <Clock size={14} className="text-white" />
                           </div>
-                          <span className="font-semibold text-sm text-slate-900">{dept.name}</span>
+                          <span className="font-semibold text-sm text-slate-900">{capFirst(dept.name)}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-xs text-slate-500">{dept.description || '—'}</td>
@@ -390,7 +390,7 @@ export function CallTimes() {
                     className="input"
                     placeholder="e.g. Main Office, Night Shift"
                     value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    onChange={e => { const v = e.target.value; setForm(f => ({ ...f, name: v.charAt(0).toUpperCase() + v.slice(1) })) }}
                   />
                 </div>
                 <div className="form-group mb-0">

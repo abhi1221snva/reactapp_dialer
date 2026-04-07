@@ -9,6 +9,7 @@ import { ringgroupService } from '../../services/ringgroup.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface RingGroup {
@@ -326,7 +327,7 @@ function RingGroupFormModal({
           <div>
             <label className="label">Name <span className="text-red-500">*</span></label>
             <input className="input" value={form.title}
-              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              onChange={e => { const v = e.target.value; setForm(p => ({ ...p, title: v.charAt(0).toUpperCase() + v.slice(1) })) }}
               placeholder="e.g. Sales Team" />
           </div>
           <div>
@@ -423,7 +424,7 @@ export function RingGroups() {
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-50">
             <Users size={14} className="text-emerald-600" />
           </div>
-          <p className="font-medium text-slate-900 text-sm">{row.title ?? row.name}</p>
+          <p className="font-medium text-slate-900 text-sm">{capFirst(row.title ?? row.name)}</p>
         </div>
       ),
     },

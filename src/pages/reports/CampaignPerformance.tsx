@@ -13,6 +13,7 @@ import api from '../../api/axios'
 import { campaignService } from '../../services/campaign.service'
 import { formatDuration } from '../../utils/format'
 import { cn } from '../../utils/cn'
+import { ReportViewTabs } from '../../components/ui/ReportViewTabs'
 import toast from 'react-hot-toast'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
@@ -449,82 +450,90 @@ export const CampaignPerformance: React.FC = () => {
         </div>
       </div>
 
-      {/* Chart */}
-      {(isLoading || chartData.length > 0) && (
-        <div className="card">
-          <div className="flex items-center gap-2 pb-4 mb-2 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <BarChart3 size={14} className="text-indigo-600" />
+      {/* Tabbed Graph / Table views */}
+      <ReportViewTabs
+        graphContent={
+          <div className="card">
+            <div className="flex items-center gap-2 pb-4 mb-2 border-b border-slate-100">
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                <BarChart3 size={14} className="text-indigo-600" />
+              </div>
+              <h3 className="font-semibold text-slate-900">Top Campaigns — Call Volume</h3>
+              {!isLoading && chartData.length > 0 && (
+                <span className="text-xs text-slate-400 ml-auto">
+                  Top {Math.min(chartData.length, 10)} campaigns
+                </span>
+              )}
             </div>
-            <h3 className="font-semibold text-slate-900">Top Campaigns — Call Volume</h3>
-            {!isLoading && (
-              <span className="text-xs text-slate-400 ml-auto">
-                Top {Math.min(chartData.length, 10)} campaigns
-              </span>
+            {isLoading ? (
+              <div className="h-64 bg-slate-100 rounded-xl animate-pulse" />
+            ) : chartData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <BarChart3 size={40} className="mb-3 text-slate-300" />
+                <p className="text-sm font-medium">No campaign data for the selected period</p>
+                <p className="text-xs mt-1">Adjust your date range or filters above</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={chartData} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    angle={-20}
+                    textAnchor="end"
+                    height={50}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f8fafc' }} />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                  <Bar dataKey="Total Calls" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Answered"    fill="#22c55e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </div>
-          {isLoading ? (
-            <div className="h-64 bg-slate-100 rounded-xl animate-pulse" />
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartData} barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                  height={50}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={40}
-                />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f8fafc' }} />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Total Calls" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Answered"    fill="#22c55e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-          <span className="text-xs text-slate-500 font-medium">
-            {isLoading ? 'Loading…' : `${total} campaign${total !== 1 ? 's' : ''}`}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin" /> Refreshing…
-            </span>
-          )}
-          {!isLoading && overallRate > 0 && (
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <TrendingUp size={12} className="text-emerald-500" />
-              {overallRate}% overall answer rate
+        }
+        tableContent={
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+              <span className="text-xs text-slate-500 font-medium">
+                {isLoading ? 'Loading…' : `${total} campaign${total !== 1 ? 's' : ''}`}
+              </span>
+              {isFetching && !isLoading && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <RefreshCw size={11} className="animate-spin" /> Refreshing…
+                </span>
+              )}
+              {!isLoading && overallRate > 0 && (
+                <div className="flex items-center gap-1 text-xs text-slate-500">
+                  <TrendingUp size={12} className="text-emerald-500" />
+                  {overallRate}% overall answer rate
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <DataTable
-          columns={columns}
-          data={paginated}
-          loading={isLoading}
-          keyField="campaign_id"
-          emptyText="No campaign data found for the selected period"
-          pagination={total > PER_PAGE ? { page, total, perPage: PER_PAGE, onChange: setPage } : undefined}
-          sortKey={sortField}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
+            <DataTable
+              columns={columns}
+              data={paginated}
+              loading={isLoading}
+              keyField="campaign_id"
+              emptyText="No campaign data found for the selected period"
+              pagination={total > PER_PAGE ? { page, total, perPage: PER_PAGE, onChange: setPage } : undefined}
+              sortKey={sortField}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        }
+      />
     </div>
   )
 }

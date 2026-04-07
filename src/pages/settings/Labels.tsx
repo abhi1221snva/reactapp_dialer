@@ -12,6 +12,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface LabelItem {
@@ -315,7 +316,7 @@ export function Labels() {
           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
             <Tag size={13} className="text-indigo-600" />
           </div>
-          <span className="text-sm font-medium text-slate-900">{row.title}</span>
+          <span className="text-sm font-medium text-slate-900">{capFirst(row.title)}</span>
         </div>
       ),
     },

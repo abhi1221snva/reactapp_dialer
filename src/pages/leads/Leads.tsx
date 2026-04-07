@@ -15,22 +15,7 @@ import { cn } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface LeadItem {
-  id: number
   lead_id?: number
-  first_name?: string
-  last_name?: string
-  phone_number?: string
-  email?: string
-  list_id?: number
-  list_title?: string
-  lead_status?: string
-  status?: string | number
-  disposition?: string
-  address?: string
-  city?: string
-  state?: string
-  zip_code?: string
-  created_at?: string
   [key: string]: unknown
 }
 
@@ -45,17 +30,6 @@ interface ListOption {
 function getListName(l: ListOption) {
   return l.l_title || l.title || l.list_name || `List #${l.id}`
 }
-
-const SEARCH_BY_OPTIONS = [
-  { value: 'first_name', label: 'First Name' },
-  { value: 'last_name', label: 'Last Name' },
-  { value: 'phone_number', label: 'Phone Number' },
-  { value: 'email', label: 'Email' },
-  { value: 'address', label: 'Address' },
-  { value: 'city', label: 'City' },
-  { value: 'state', label: 'State' },
-  { value: 'zip_code', label: 'Zip Code' },
-]
 
 const PAGE_LIMIT = 15
 
@@ -215,6 +189,9 @@ export function Leads() {
     listId: number; searchBy: string; searchValue: string
   } | null>(null)
 
+  // Dynamic column headers from API response
+  const [columnHeaders, setColumnHeaders] = useState<string[]>([])
+
   // Pagination
   const [page, setPage] = useState(1)
 
@@ -224,6 +201,23 @@ export function Leads() {
     queryFn: () => listService.getAll(),
     staleTime: 5 * 60 * 1000,
   })
+
+  // Fetch headers for the selected list (for Search By dropdown)
+  const { data: headersRaw } = useQuery({
+    queryKey: ['list-headers', selectedListId],
+    queryFn: () => listService.getHeadersByList(selectedListId!),
+    enabled: !!selectedListId,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Extract label titles from headers response
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const listLabelTitles: string[] = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = (headersRaw as any)?.data?.data ?? (headersRaw as any)?.data ?? []
+    if (!Array.isArray(raw)) return []
+    return raw.map((h: { title?: string }) => h.title).filter(Boolean) as string[]
+  }, [headersRaw])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lists: ListOption[] = (() => {
@@ -247,20 +241,34 @@ export function Leads() {
         start: (page - 1) * PAGE_LIMIT,
         limit: PAGE_LIMIT,
         ...(appliedFilters.searchValue ? { search: appliedFilters.searchValue } : {}),
+        ...(appliedFilters.searchBy ? { search_by: appliedFilters.searchBy } : {}),
       })
     },
     enabled: !!appliedFilters,
     placeholderData: (prev) => prev,
   })
 
+  // Extract data from the API response: { success, message, data: { list_data, list_header, total_records, ... } }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leadsData = leadsRaw as any
+  const responseData = (leadsRaw as any)?.data?.data
   const leads: LeadItem[] = (() => {
-    const arr = leadsData?.data?.data ?? leadsData?.data ?? []
+    const arr = responseData?.list_data
     return Array.isArray(arr) ? arr : []
   })()
-  const total: number = leadsData?.data?.total_rows ?? leadsData?.data?.total ?? leads.length ?? 0
+  const total: number = responseData?.total_records ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_LIMIT))
+
+  // Update column headers from API response
+  useEffect(() => {
+    const headers = responseData?.list_header
+    if (Array.isArray(headers) && headers.length > 0) {
+      setColumnHeaders(headers)
+    }
+  }, [responseData?.list_header])
+
+  // Max columns to show in table (first N + actions)
+  const MAX_COLS = 6
+  const visibleHeaders = columnHeaders.slice(0, MAX_COLS)
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => leadService.delete(id),
@@ -289,15 +297,15 @@ export function Leads() {
     setSearchBy('')
     setSearchValue('')
     setAppliedFilters(null)
+    setColumnHeaders([])
     setPage(1)
   }, [])
 
   const handleListChange = (id: number | null) => {
     setSelectedListId(id)
-    if (!id) {
-      setSearchBy('')
-      setSearchValue('')
-    }
+    setSearchBy('')
+    setSearchValue('')
+    setColumnHeaders([])
   }
 
   const selectedListName = (() => {
@@ -333,6 +341,10 @@ export function Leads() {
     return () => setToolbar(undefined)
   })
 
+  // Build Search By options: use pre-fetched headers, fall back to response headers
+  const searchBySource = listLabelTitles.length > 0 ? listLabelTitles : columnHeaders
+  const searchByOptions = searchBySource.map(h => ({ value: h, label: h }))
+
   return (
     <div className="space-y-4">
       {/* Filter Card */}
@@ -350,7 +362,7 @@ export function Leads() {
               />
             </div>
 
-            {/* Search By Dropdown — visible after list is selected */}
+            {/* Search By Dropdown */}
             <div className={cn('md:col-span-3 transition-opacity', selectedListId ? 'opacity-100' : 'opacity-40 pointer-events-none')}>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Search By</label>
               <select
@@ -360,7 +372,7 @@ export function Leads() {
                 disabled={!selectedListId}
               >
                 <option value="">All Fields</option>
-                {SEARCH_BY_OPTIONS.map(opt => (
+                {searchByOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -422,9 +434,7 @@ export function Leads() {
               <span className="text-xs text-slate-500">Showing results for:</span>
               <Badge variant="blue">{selectedListName || `List #${appliedFilters.listId}`}</Badge>
               {appliedFilters.searchBy && (
-                <Badge variant="purple">
-                  {SEARCH_BY_OPTIONS.find(o => o.value === appliedFilters.searchBy)?.label || appliedFilters.searchBy}
-                </Badge>
+                <Badge variant="purple">{appliedFilters.searchBy}</Badge>
               )}
               {appliedFilters.searchValue && (
                 <Badge variant="gray">&quot;{appliedFilters.searchValue}&quot;</Badge>
@@ -454,92 +464,86 @@ export function Leads() {
               )}
             </div>
 
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="text-left">Lead</th>
-                  <th className="text-left">Email</th>
-                  <th className="text-left">Disposition</th>
-                  <th className="text-left">Status</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leadsLoading ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className={cn('h-4 bg-slate-200 rounded animate-pulse', j === 0 ? 'w-3/4' : 'w-1/2')} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : leads.length === 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
                   <tr>
-                    <td colSpan={5}>
-                      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                        <div className="mb-3 opacity-40"><Target size={40} /></div>
-                        <p className="font-medium text-slate-500">No leads found</p>
-                        <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria</p>
-                      </div>
-                    </td>
+                    {visibleHeaders.map(h => (
+                      <th key={h} className="text-left">{h}</th>
+                    ))}
+                    <th className="text-right">Actions</th>
                   </tr>
-                ) : (
-                  leads.map((row, i) => {
-                    const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || '—'
-                    const st = row.lead_status || row.status
-                    return (
-                      <tr key={row.id ?? row.lead_id ?? i}>
-                        <td>
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
-                              <Target size={14} className="text-indigo-600" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
-                              {row.phone_number && (
-                                <p className="text-[11px] text-slate-500 mt-0.5">{row.phone_number}</p>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="text-sm text-slate-600 truncate">{row.email || '—'}</span>
-                        </td>
-                        <td>
-                          <span className="text-sm text-slate-600">{row.disposition || '—'}</span>
-                        </td>
-                        <td>
-                          <Badge variant={st === 'active' || st === 'new' || Number(st) === 1 ? 'green' : 'gray'}>
-                            {String(st || 'Unknown')}
-                          </Badge>
-                        </td>
-                        <td className="w-px whitespace-nowrap">
-                          <RowActions actions={[
-                            {
-                              label: 'View',
-                              icon: <Eye size={13} />,
-                              variant: 'view',
-                              onClick: () => navigate(`/lists/${row.list_id || appliedFilters.listId}/leads`),
-                            },
-                            {
-                              label: 'Delete',
-                              icon: <Trash2 size={13} />,
-                              variant: 'delete',
-                              onClick: async () => {
-                                if (await confirmDelete('this lead')) deleteMutation.mutate(row.id ?? row.lead_id ?? 0)
-                              },
-                              disabled: deleteMutation.isPending,
-                            },
-                          ]} />
-                        </td>
+                </thead>
+                <tbody>
+                  {leadsLoading ? (
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i}>
+                        {Array.from({ length: visibleHeaders.length + 1 }).map((_, j) => (
+                          <td key={j} className="px-4 py-3">
+                            <div className={cn('h-4 bg-slate-200 rounded animate-pulse', j === 0 ? 'w-3/4' : 'w-1/2')} />
+                          </td>
+                        ))}
                       </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                    ))
+                  ) : leads.length === 0 ? (
+                    <tr>
+                      <td colSpan={visibleHeaders.length + 1}>
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                          <div className="mb-3 opacity-40"><Target size={40} /></div>
+                          <p className="font-medium text-slate-500">No leads found</p>
+                          <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    leads.map((row, i) => {
+                      const leadId = row.lead_id ?? 0
+                      return (
+                        <tr key={leadId || i}>
+                          {visibleHeaders.map((h, ci) => (
+                            <td key={h}>
+                              {ci === 0 ? (
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
+                                    <Target size={14} className="text-indigo-600" />
+                                  </div>
+                                  <span className="text-sm font-medium text-slate-900 truncate">
+                                    {String(row[h] ?? '—')}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-slate-600 truncate">
+                                  {String(row[h] ?? '—')}
+                                </span>
+                              )}
+                            </td>
+                          ))}
+                          <td className="w-px whitespace-nowrap">
+                            <RowActions actions={[
+                              {
+                                label: 'View',
+                                icon: <Eye size={13} />,
+                                variant: 'view',
+                                onClick: () => navigate(`/lists/${appliedFilters.listId}/leads`),
+                              },
+                              {
+                                label: 'Delete',
+                                icon: <Trash2 size={13} />,
+                                variant: 'delete',
+                                onClick: async () => {
+                                  if (await confirmDelete('this lead')) deleteMutation.mutate(leadId as number)
+                                },
+                                disabled: deleteMutation.isPending,
+                              },
+                            ]} />
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             {/* Pagination */}
             {!leadsLoading && total > 0 && (

@@ -11,6 +11,7 @@ import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
+import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
 interface CampaignItem {
@@ -383,7 +384,7 @@ export function SmsAiCampaigns() {
             <Radio size={13} className="text-indigo-600" />
           </div>
           <div className="min-w-0">
-            <span className="text-sm font-medium text-slate-900 block truncate">{row.title}</span>
+            <span className="text-sm font-medium text-slate-900 block truncate">{capFirst(row.title)}</span>
             {row.description && (
               <span className="text-xs text-slate-400 block truncate max-w-[200px]">{row.description}</span>
             )}
