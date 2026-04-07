@@ -15,6 +15,8 @@ export interface Campaign {
   call_time_start?: string | null
   call_time_end?: string | null
   timezone?: string | null
+  // Feature toggles
+  call_transfer?: '1' | '0' | number
 }
 
 export interface Lead {

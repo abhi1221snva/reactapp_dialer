@@ -453,9 +453,10 @@
   }
   .auth-social-btn:active:not(:disabled) { transform: translateY(0); }
   .auth-social-icon-btn {
-    @apply inline-flex items-center justify-center flex-1 h-11 rounded-xl
+    @apply inline-flex items-center justify-center w-11 h-11 rounded-full
            transition-all duration-150
            focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed;
+    flex: 0 0 44px;
     color: #94a3b8;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.10);

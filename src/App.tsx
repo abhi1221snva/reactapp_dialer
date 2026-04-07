@@ -107,6 +107,8 @@ import { Leads } from './pages/leads/Leads'
 import { TwoFactorSetup } from './pages/settings/TwoFactorSetup'
 import { SecuritySettings } from './pages/settings/SecuritySettings'
 import { DispositionList } from './modules/dispositions/DispositionList'
+import { EmailTemplates } from './pages/settings/EmailTemplates'
+import { SmsTemplates } from './pages/settings/SmsTemplates'
 import { DncList } from './modules/dnc/DncList'
 import { ExcludeList } from './modules/excludeList/ExcludeList'
 import { FaxList } from './modules/fax/FaxList'
@@ -275,6 +277,8 @@ export default function App() {
           <Route path="/settings/recycle-rules" element={<RecycleRules />} />
           <Route path="/settings/custom-field-labels" element={<CustomFieldLabels />} />
           <Route path="/settings/lead-activity" element={<LeadActivity />} />
+          <Route path="/settings/email-templates" element={<EmailTemplates />} />
+          <Route path="/settings/sms-templates" element={<SmsTemplates />} />
 
           {/* Profile */}
           <Route path="/profile" element={<Profile />} />

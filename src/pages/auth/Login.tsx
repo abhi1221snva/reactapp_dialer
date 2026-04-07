@@ -285,15 +285,12 @@ export function Login() {
         callback: googleCallback,
         auto_select: false,
       })
-      // Render a hidden Google button as fallback — prompt() can be blocked by cooldown
       if (googleBtnRef.current) {
         window.google.accounts.id.renderButton(googleBtnRef.current, {
           theme: 'outline',
-          size: 'large',
-          type: 'standard',
-          width: 250,
-          text: 'signin_with',
-          shape: 'rectangular',
+          size: 'medium',
+          type: 'icon',
+          shape: 'circle',
         })
       }
     }
@@ -301,7 +298,6 @@ export function Login() {
     if (window.google?.accounts?.id) {
       initGoogle()
     } else {
-      // Poll for GSI library (async/defer script may miss load event)
       const interval = setInterval(() => {
         if (window.google?.accounts?.id) {
           clearInterval(interval)
@@ -463,36 +459,31 @@ export function Login() {
         <p className="text-sm text-slate-400 mt-1">Sign in to your account to continue</p>
       </div>
 
-      {/* Social login */}
-      <div className="space-y-2.5">
-        {/* Google Sign-In — rendered by GSI library */}
-        <div className="flex justify-center">
-          <div ref={googleBtnRef} className="min-h-[44px]" />
-        </div>
-        {googleLoading && (
-          <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
-            <Spinner /> Signing in with Google...
-          </div>
-        )}
-        {/* Other social logins */}
-        <div className="flex gap-2.5 justify-center">
-          <button
-            type="button"
-            onClick={() => toast('LinkedIn sign-in coming soon')}
-            className="auth-social-icon-btn"
-            title="Continue with LinkedIn"
-          >
-            <LinkedInIcon />
-          </button>
-          <button
-            type="button"
-            onClick={() => toast('Microsoft sign-in coming soon')}
-            className="auth-social-icon-btn"
-            title="Continue with Microsoft"
-          >
-            <MicrosoftIcon />
-          </button>
-        </div>
+      {/* Social login — icon only, centered row */}
+      <div className="flex justify-center gap-3">
+        {/* Google — native rendered button inside a styled container */}
+        <div
+          ref={googleBtnRef}
+          className="auth-social-icon-btn"
+          style={{ overflow: 'hidden', padding: 0, position: 'relative' }}
+          title="Continue with Google"
+        />
+        <button
+          type="button"
+          onClick={() => toast('LinkedIn sign-in coming soon')}
+          className="auth-social-icon-btn"
+          title="Continue with LinkedIn"
+        >
+          <LinkedInIcon />
+        </button>
+        <button
+          type="button"
+          onClick={() => toast('Microsoft sign-in coming soon')}
+          className="auth-social-icon-btn"
+          title="Continue with Microsoft"
+        >
+          <MicrosoftIcon />
+        </button>
       </div>
 
       {/* Divider */}

@@ -111,6 +111,7 @@ export function Dialer() {
     call_time_start:    (c.call_time_start ?? null) as string | null,
     call_time_end:      (c.call_time_end ?? null) as string | null,
     timezone:           (c.timezone ?? null) as string | null,
+    call_transfer:      c.call_transfer as Campaign['call_transfer'],
   }))
 
   // ── Timer helpers ────────────────────────────────────────────────────────────
@@ -675,7 +676,7 @@ export function Dialer() {
               onHangUp={() => hangUpMutation.mutate()}
               onMute={handleMute}
               onHold={handleHold}
-              onTransfer={() => setShowTransfer(true)}
+              onTransfer={String(activeCampaign?.call_transfer) === '1' ? () => setShowTransfer(true) : undefined}
               onVoicemail={() => voicemailMutation.mutate()}
             />
 

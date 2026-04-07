@@ -163,7 +163,7 @@ function NavSubGroup({
             const active = isRouteActive(to, location)
             return (
             <NavLink key={to} to={to} onClick={onItemClick}
-              className={cn(
+              className={() => cn(
                 'group flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150',
                 active ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               )}
@@ -214,7 +214,7 @@ function NavGroup({
     return (
       <div className="mb-1">
         {collapsedItems.map(({ to, label, icon: ItemIcon }) => (
-          <NavLink key={to} to={to} onClick={onItemClick}
+          <NavLink key={to} to={to} end onClick={onItemClick}
             onMouseEnter={(e) => showTooltip(label, e.currentTarget)}
             onMouseLeave={hideTooltip}
             className={({ isActive }) => cn(
@@ -258,7 +258,7 @@ function NavGroup({
             const active = isRouteActive(to, location)
             return (
             <NavLink key={to} to={to} onClick={onItemClick}
-              className={cn(
+              className={() => cn(
                 'group flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150',
                 active ? accent.active : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               )}
@@ -280,6 +280,59 @@ function NavGroup({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Flat item list (non-expandable sections) — uses isRouteActive for query-param-aware matching
+function FlatItems({ items, collapsed, accent, unreadSms, onItemClick, showTooltip, hideTooltip }: {
+  items: NavItem[]; collapsed: boolean; accent: AccentSet; unreadSms: number
+  onItemClick: () => void
+  showTooltip: (label: string, el: HTMLElement) => void; hideTooltip: () => void
+}) {
+  const location = useLocation()
+  return (
+    <div className={cn('space-y-0.5', collapsed && 'flex flex-col items-center')}>
+      {items.map(({ to, label, icon: ItemIcon, badge }) => {
+        const active = isRouteActive(to, location)
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onItemClick}
+            onMouseEnter={collapsed ? (e) => showTooltip(label, e.currentTarget) : undefined}
+            onMouseLeave={collapsed ? hideTooltip : undefined}
+            className={() => cn(
+              'group/nav relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
+              'transition-all duration-150',
+              collapsed && 'lg:justify-center lg:px-2.5 w-full',
+              active ? accent.active : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            )}
+          >
+            <>
+              {active && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
+              <div className="relative flex-shrink-0">
+                <ItemIcon size={17} className={cn('transition-colors duration-150', active ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
+                {label === 'SMS Center' && unreadSms > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
+                    {unreadSms > 9 ? '9+' : unreadSms}
+                  </span>
+                )}
+              </div>
+              {!collapsed && (
+                <>
+                  <span className="truncate leading-none flex-1">{label}</span>
+                  {badge !== undefined && badge > 0 && (
+                    <span className="min-w-[18px] px-1 py-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+                      {badge}
+                    </span>
+                  )}
+                </>
+              )}
+            </>
+          </NavLink>
+        )
+      })}
     </div>
   )
 }
@@ -460,47 +513,15 @@ export function Sidebar() {
                     hideTooltip={hideTooltip}
                   />
                 ) : (
-                  <div className={cn('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
-                    {visibleItems.map(({ to, label, icon: ItemIcon, badge }) => (
-                      <NavLink
-                        key={to}
-                        to={to}
-                        onClick={() => { closeMobileSidebar() }}
-                        onMouseEnter={sidebarCollapsed ? (e) => showTooltip(label, e.currentTarget) : undefined}
-                        onMouseLeave={sidebarCollapsed ? hideTooltip : undefined}
-                        className={({ isActive }) => cn(
-                          'group/nav relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium outline-none',
-                          'transition-all duration-150',
-                          sidebarCollapsed && 'lg:justify-center lg:px-2.5 w-full',
-                          isActive ? accent.active : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                        )}
-                      >
-                        {({ isActive }) => (
-                          <>
-                            {isActive && <span className={cn('absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full', accent.activeBar)} />}
-                            <div className="relative flex-shrink-0">
-                              <ItemIcon size={17} className={cn('transition-colors duration-150', isActive ? accent.activeIcon : 'text-slate-400 group-hover/nav:text-slate-600')} />
-                              {label === 'SMS Center' && unreadSms > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
-                                  {unreadSms > 9 ? '9+' : unreadSms}
-                                </span>
-                              )}
-                            </div>
-                            {!sidebarCollapsed && (
-                              <>
-                                <span className="truncate leading-none flex-1">{label}</span>
-                                {badge !== undefined && badge > 0 && (
-                                  <span className="min-w-[18px] px-1 py-0.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
-                                    {badge}
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </>
-                        )}
-                      </NavLink>
-                    ))}
-                  </div>
+                  <FlatItems
+                    items={visibleItems}
+                    collapsed={sidebarCollapsed}
+                    accent={accent}
+                    unreadSms={unreadSms}
+                    onItemClick={() => { closeMobileSidebar() }}
+                    showTooltip={showTooltip}
+                    hideTooltip={hideTooltip}
+                  />
                 )}
               </div>
             )

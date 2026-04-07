@@ -31,6 +31,8 @@ const DIALER_TITLES: Record<string, string> = {
   '/settings/recycle-rules':        'Recycle Rules',
   '/settings/custom-field-labels':  'Custom Field Labels',
   '/settings/lead-activity':        'Lead Activity',
+  '/settings/email-templates':      'Email Templates',
+  '/settings/sms-templates':        'SMS Templates',
   '/ivr':                           'IVR Menus',
   '/ringless':                      'Ringless Campaigns',
   '/ai/settings':                   'AI Settings',
