@@ -83,7 +83,7 @@ export function LeadDetail() {
             )}
           </div>
           <div className="divider" />
-          <button className="btn-primary w-full text-sm gap-2">
+          <button className="btn-success w-full text-sm gap-2">
             <Phone size={14} /> Call Now
           </button>
         </div>
@@ -144,7 +144,7 @@ export function LeadDetail() {
             <div className="card space-y-3">
               <h3 className="font-semibold text-slate-900">Notes</h3>
               <textarea className="input resize-none" rows={4} placeholder="Add a note..." />
-              <button className="btn-primary text-sm">Save Note</button>
+              <button className="btn-success text-sm">Save Note</button>
             </div>
           )}
         </div>

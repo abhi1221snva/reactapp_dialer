@@ -69,4 +69,11 @@ export const userService = {
   getRoles: () => api.get('/role'),
 
   checkEmail: (email: string) => api.post('/check-email', { email }),
+
+  // User detail drill-down with SIP extension mappings (System Admin only)
+  getDetails: (id: number) => api.get(`/extension/${id}/details`),
+
+  // Admin change another user's password (syncs users.password + user_extensions.secret)
+  changePasswordByAdmin: (userId: number, password: string) =>
+    api.post('/update-agent-password-by-admin', { ext_id: userId, password }),
 }

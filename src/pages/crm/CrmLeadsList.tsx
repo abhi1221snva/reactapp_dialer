@@ -65,6 +65,7 @@ interface MyAffiliateLink {
 }
 
 function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -143,8 +144,14 @@ function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
               </div>
               <p className="text-sm font-bold text-slate-700">No affiliate code yet</p>
               <p className="text-xs text-slate-400 mt-1.5 max-w-xs mx-auto">
-                Go to <strong className="text-slate-600">Partners → Affiliate Links</strong> to generate your personal referral code.
+                Generate your personal referral code to start tracking leads.
               </p>
+              <button
+                onClick={() => { onClose(); navigate('/crm/affiliate-links') }}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm"
+              >
+                <Link2 size={14} /> Generate Affiliate Code
+              </button>
             </div>
           ) : (
             <div className="space-y-4">

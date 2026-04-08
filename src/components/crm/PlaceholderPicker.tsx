@@ -587,7 +587,7 @@ function AddVariableModal({
         <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
           <button
             onClick={onSave}
-            className="btn-primary flex items-center gap-2"
+            className="btn-success flex items-center gap-2"
           >
             <Check size={13} />
             Add Variable

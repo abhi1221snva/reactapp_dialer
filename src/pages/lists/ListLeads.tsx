@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, Search, X, RefreshCw, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, List,
+  ChevronsLeft, ChevronsRight, List, Pencil,
 } from 'lucide-react'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 import { listService } from '../../services/list.service'
@@ -266,8 +266,22 @@ export function ListLeads() {
                   <td colSpan={10}>
                     <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                       <List size={40} className="mb-3 opacity-40" />
-                      <p className="font-medium text-slate-500">No data available</p>
-                      <p className="text-sm mt-1">This list may have no headers configured</p>
+                      <p className="font-medium text-slate-500">No headers found for this list</p>
+                      <p className="text-sm mt-1">This list may have no headers configured. Edit the list to fix this.</p>
+                      <div className="flex items-center gap-2 mt-4">
+                        <button
+                          onClick={() => navigate(`/lists/${id}/edit`)}
+                          className="btn-primary inline-flex items-center gap-1.5 text-xs"
+                        >
+                          <Pencil size={12} /> Edit List
+                        </button>
+                        <button
+                          onClick={() => navigate(`/lists/${id}/mapping`)}
+                          className="btn-outline inline-flex items-center gap-1.5 text-xs"
+                        >
+                          Edit Mapping
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>

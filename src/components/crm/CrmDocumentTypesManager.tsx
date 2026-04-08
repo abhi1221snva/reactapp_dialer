@@ -107,7 +107,7 @@ function DocTypeForm({ initial, onSave, onCancel, saving }: FormProps) {
         <button
           onClick={() => title.trim() && onSave(title.trim(), tags)}
           disabled={!title.trim() || saving}
-          className="btn-primary text-xs px-4 py-1.5 disabled:opacity-50"
+          className="btn-success text-xs px-4 py-1.5 disabled:opacity-50"
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : 'Save'}
         </button>
@@ -210,7 +210,7 @@ export function CrmDocumentTypesManager({ onClose }: Props) {
             {!showAdd && (
               <button
                 onClick={() => { setShowAdd(true); setEditId(null) }}
-                className="btn-primary text-xs px-3 py-1.5"
+                className="btn-success text-xs px-3 py-1.5"
               >
                 <Plus size={13} /> Add Type
               </button>

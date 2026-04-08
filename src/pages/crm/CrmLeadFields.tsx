@@ -711,7 +711,7 @@ function FieldModal({ editing, onClose, onSaved }: FieldModalProps) {
           <button
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create Field'}
@@ -892,7 +892,7 @@ function ReorderModal({ allFields, onClose, onSaved }: ReorderModalProps) {
           <button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {saveMutation.isPending
               ? <><Loader2 size={14} className="animate-spin" /> Saving…</>

@@ -360,7 +360,7 @@ function StatusModal({
         {/* Footer */}
         <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center gap-3">
           <button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50">
+            className="btn-success flex items-center gap-2 disabled:opacity-50">
             {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create Status'}
           </button>

@@ -408,7 +408,7 @@ function ConfigModal({
           <button
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create Configuration'}
@@ -452,7 +452,7 @@ export function CrmLenderApis() {
   useEffect(() => {
     setDescription(`${configs?.length ?? 0} API configuration${configs?.length !== 1 ? 's' : ''}`)
     setActions(
-      <button onClick={() => { setEditing(null); setShowModal(true) }} className="btn-primary flex items-center gap-2">
+      <button onClick={() => { setEditing(null); setShowModal(true) }} className="btn-success flex items-center gap-2">
         <Plus size={15} /> Add API Config
       </button>
     )

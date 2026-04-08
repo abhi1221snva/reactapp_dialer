@@ -167,7 +167,7 @@ function FieldModal({
           <button
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create Field'}
@@ -267,7 +267,7 @@ export function CrmCustomFields() {
             className="btn-ghost btn-sm p-2 h-9 w-9" title="Refresh">
             <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           </button>
-          <button onClick={openAdd} className="btn-primary">
+          <button onClick={openAdd} className="btn-success">
             <Plus size={15} /> Add Field
           </button>
         </div>

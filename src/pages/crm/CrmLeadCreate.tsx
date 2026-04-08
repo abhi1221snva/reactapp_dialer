@@ -17,6 +17,8 @@ import { scrollToFirstError } from '../../utils/publicFormValidation'
 import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
 import { resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 
 const schema = z.object({
   lead_status:    z.string().min(1, 'Status is required'),
@@ -102,6 +104,8 @@ export function CrmLeadCreate() {
   const formScrollRef    = useRef<HTMLDivElement>(null)
   const owner2Ref        = useRef<HTMLElement>(null)
   const [formErrorCount, setFormErrorCount] = useState(0)
+  const authLevel = useAuthStore(s => s.user?.level) ?? 0
+  const isAgentRole = authLevel < LEVELS.MANAGER
 
   const {
     register, handleSubmit, setValue, watch, getValues, setError, unregister,
@@ -400,7 +404,7 @@ export function CrmLeadCreate() {
             form="lead-form"
             type="submit"
             disabled={isPending}
-            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 h-auto disabled:opacity-50"
+            className="btn-success flex items-center gap-1.5 text-xs px-3 py-1.5 h-auto disabled:opacity-50"
           >
             {isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
             {isEdit ? 'Save Changes' : 'Create Lead'}
@@ -658,8 +662,8 @@ export function CrmLeadCreate() {
                   })}
                 </div>
 
-                {/* Assigned Agent */}
-                <div>
+                {/* Assigned Agent — hidden for agent role */}
+                {!isAgentRole && <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <UserCheck size={10} className="text-slate-400" />
                     <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Assigned To</span>
@@ -755,7 +759,7 @@ export function CrmLeadCreate() {
                         </div>
                       )}
                     </div>
-                </div>
+                </div>}
 
                 {/* Audit Trail (edit mode) */}
                 {isEdit && existing && (
@@ -805,7 +809,7 @@ export function CrmLeadCreate() {
           form="lead-form"
           type="submit"
           disabled={isPending}
-          className="btn-primary flex-1 justify-center disabled:opacity-50"
+          className="btn-success flex-1 justify-center disabled:opacity-50"
         >
           {isPending && <Loader2 size={14} className="animate-spin" />}
           {isEdit ? 'Save Changes' : 'Create Lead'}

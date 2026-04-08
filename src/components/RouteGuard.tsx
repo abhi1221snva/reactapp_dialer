@@ -63,7 +63,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   )
 
   if (!isAllowed) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={engine === 'crm' ? '/crm/dashboard' : '/dashboard'} replace />
   }
 
   return <>{children}</>

@@ -75,15 +75,18 @@ export interface ParsedPlace {
 export interface NominatimResult {
   place_id: number
   display_name: string
+  name?: string
   lat: string
   lon: string
   address: {
     house_number?: string
     road?: string
+    building?: string
     city?: string
     town?: string
     village?: string
     municipality?: string
+    county?: string
     state?: string
     postcode?: string
     country?: string
@@ -94,8 +97,13 @@ export interface NominatimResult {
 /** Extract structured address from a Nominatim result */
 export function parseNominatimResult(result: NominatimResult): ParsedPlace {
   const a = result.address
-  const street = [a.house_number, a.road].filter(Boolean).join(' ')
-  const city = a.city || a.town || a.village || a.municipality || ''
+  // Build street from house_number + road; fall back to building, name, or display_name
+  const streetParts = [a.house_number, a.road].filter(Boolean).join(' ')
+  const street = streetParts
+    || a.building
+    || result.name
+    || result.display_name.split(', ').slice(0, 2).join(', ')
+  const city = a.city || a.town || a.village || a.municipality || a.county || ''
 
   return {
     street,

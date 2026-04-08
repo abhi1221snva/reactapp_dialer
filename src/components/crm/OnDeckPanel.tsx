@@ -366,7 +366,7 @@ function ApplicationTab({
         <button
           onClick={() => submitMut.mutate()}
           disabled={submitMut.isPending}
-          className="w-full btn-primary flex items-center justify-center gap-2 py-2.5 disabled:opacity-50"
+          className="w-full btn-success flex items-center justify-center gap-2 py-2.5 disabled:opacity-50"
         >
           {submitMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           Submit to OnDeck
@@ -897,7 +897,7 @@ function OffersTab({
                       ) : (
                         <button
                           onClick={() => setConfirmId(offer.offer_id!)}
-                          className="w-full btn-primary flex items-center justify-center gap-2 text-sm py-2.5"
+                          className="w-full btn-success flex items-center justify-center gap-2 text-sm py-2.5"
                         >
                           <FileCheck2 size={14} /> Accept This Offer
                         </button>

@@ -429,7 +429,7 @@ function BonusModal({ editing, onClose, onSaved }: {
 
         <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
           <button onClick={() => saveMutation.mutate()} disabled={!isValid || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50">
+            className="btn-success flex items-center gap-2 disabled:opacity-50">
             {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Add Bonus'}
           </button>
@@ -469,7 +469,7 @@ function BonusesTab() {
     <>
       <div className="flex items-center justify-end mb-4">
         <button onClick={() => { setEditing(null); setShowModal(true) }}
-          className="btn-primary flex items-center gap-2">
+          className="btn-success flex items-center gap-2">
           <Plus size={15} /> Add Bonus
         </button>
       </div>

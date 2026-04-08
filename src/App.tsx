@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthStore } from './stores/auth.store'
+import { useEngineStore } from './stores/engine.store'
 import { usePusher } from './hooks/usePusher'
 import { usePresence } from './hooks/usePresence'
 
@@ -61,6 +62,7 @@ import { EditCampaignReview } from './modules/campaigns/EditCampaignReview'
 import { AddCampaignReview } from './modules/campaigns/AddCampaignReview'
 import { Users } from './pages/users/Users'
 import { UserForm } from './pages/users/UserForm'
+import { UserDetail } from './pages/users/UserDetail'
 import { Dids } from './pages/dids/Dids'
 import { DidForm } from './pages/dids/DidForm'
 import { Lists } from './pages/lists/Lists'
@@ -135,16 +137,32 @@ import { CrmAgentPerformance } from './pages/crm/CrmAgentPerformance'
 import { CrmCommissions } from './pages/crm/CrmCommissions'
 import { CrmRenewals } from './pages/crm/CrmRenewals'
 import { CrmIntegrations } from './pages/crm/CrmIntegrations'
+import { NotFound } from './pages/NotFound'
+import { LEVELS } from './utils/permissions'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+/** Renders children only if user meets minimum level; otherwise shows 404 */
+function RoleGuard({ minLevel, children }: { minLevel: number; children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const level = user?.level ?? 0
+  if (level < minLevel) return <NotFound />
+  return <>{children}</>
+}
+
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
+  const engine = useEngineStore(s => s.engine)
   if (!isAuthenticated) return <>{children}</>
-  return <Navigate to={user?.level === 7 ? '/crm/dashboard' : '/dashboard'} replace />
+  return <Navigate to={engine === 'crm' ? '/crm/dashboard' : '/dashboard'} replace />
+}
+
+function RootRedirect() {
+  const engine = useEngineStore(s => s.engine)
+  return <Navigate to={engine === 'crm' ? '/crm/dashboard' : '/dashboard'} replace />
 }
 
 function LegacyMerchantRedirect() {
@@ -234,8 +252,9 @@ export default function App() {
 
           {/* Users */}
           <Route path="/users" element={<Users />} />
-          <Route path="/users/create" element={<UserForm />} />
+          <Route path="/users/create" element={<RoleGuard minLevel={LEVELS.MANAGER}><UserForm /></RoleGuard>} />
           <Route path="/users/:id/edit" element={<UserForm />} />
+          <Route path="/users/:id/details" element={<UserDetail />} />
 
           {/* DIDs */}
           <Route path="/dids" element={<Dids />} />
@@ -255,7 +274,7 @@ export default function App() {
           <Route path="/reports/agent-summary" element={<AgentSummary />} />
           <Route path="/reports/disposition" element={<DispositionReport />} />
           <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
-          <Route path="/reports/live" element={<LiveCalls />} />
+          <Route path="/reports/live" element={<RoleGuard minLevel={LEVELS.MANAGER}><LiveCalls /></RoleGuard>} />
           <Route path="/reports/recordings" element={<CallRecordingReport />} />
           <Route path="/sms" element={<SMSCenter />} />
           <Route path="/chat" element={<TeamChat />} />
@@ -272,7 +291,7 @@ export default function App() {
           <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
 
           {/* Lead Management */}
-          <Route path="/leads" element={<Leads />} />
+          <Route path="/leads" element={<RoleGuard minLevel={LEVELS.MANAGER}><Leads /></RoleGuard>} />
           <Route path="/settings/lead-sources" element={<LeadSources />} />
           <Route path="/settings/recycle-rules" element={<RecycleRules />} />
           <Route path="/settings/custom-field-labels" element={<CustomFieldLabels />} />
@@ -366,8 +385,8 @@ export default function App() {
       </Route>
 
       {/* Default redirect */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

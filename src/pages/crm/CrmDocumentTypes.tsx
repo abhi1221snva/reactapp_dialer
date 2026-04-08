@@ -186,7 +186,7 @@ function DocTypeModal({ editing, onClose, onSaved }: ModalProps) {
           <button
             onClick={() => saveMut.mutate()}
             disabled={!canSave || saveMut.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {saveMut.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create Type'}

@@ -208,7 +208,7 @@ function RuleModal({
           <button
             onClick={() => saveMutation.mutate()}
             disabled={!isValid || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save Changes' : 'Add Rule'}
@@ -253,7 +253,7 @@ function RulesTab() {
       <div className="flex items-center justify-end mb-4">
         <button
           onClick={() => { setEditing(null); setShowModal(true) }}
-          className="btn-primary flex items-center gap-2"
+          className="btn-success flex items-center gap-2"
         >
           <Plus size={15} /> Add Rule
         </button>
@@ -544,7 +544,7 @@ function LedgerTab() {
                       <button
                         onClick={() => markPaidMutation.mutate(item.id)}
                         disabled={markPaidMutation.isPending}
-                        className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1 ml-auto disabled:opacity-50"
+                        className="btn-success text-xs px-3 py-1.5 flex items-center gap-1 ml-auto disabled:opacity-50"
                       >
                         {markPaidMutation.isPending
                           ? <Loader2 size={11} className="animate-spin" />

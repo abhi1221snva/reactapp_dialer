@@ -623,7 +623,7 @@ function TemplateModal({
           <button
             onClick={() => mutation.mutate()}
             disabled={!name.trim() || !html.trim() || mutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="btn-success flex items-center gap-2 disabled:opacity-50"
           >
             {mutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
             {isEdit ? 'Save Changes' : 'Create Template'}
@@ -932,7 +932,7 @@ export function CrmPdfTemplates() {
           <p className="text-sm mt-1.5 text-slate-400 max-w-xs mx-auto">
             Create your first template with the editor and placeholder picker
           </p>
-          <button onClick={openCreate} className="btn-primary mt-5 inline-flex items-center gap-2">
+          <button onClick={openCreate} className="btn-success mt-5 inline-flex items-center gap-2">
             <Plus size={14} /> Create Template
           </button>
         </div>

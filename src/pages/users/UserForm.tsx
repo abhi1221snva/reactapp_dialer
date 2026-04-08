@@ -8,7 +8,8 @@ import { didService } from '../../services/did.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import { useAuthStore } from '../../stores/auth.store'
-import { isSuperAdmin } from '../../utils/permissions'
+import { isSuperAdmin, LEVELS } from '../../utils/permissions'
+import { NotFound } from '../NotFound'
 import { TIMEZONES } from '../../constants/timezones'
 
 // ---------------------------------------------------------------------------
@@ -251,6 +252,14 @@ export function UserForm() {
   const qc = useQueryClient()
   const isEdit = Boolean(id)
   const clientId = useAuthStore(s => s.user?.parent_id)
+  const authUser = useAuthStore(s => s.user)
+  const authLevel = authUser?.level ?? 0
+  const isAgentRole = authLevel < LEVELS.MANAGER
+
+  // Agents can only edit their own record; block create and editing others
+  if (isAgentRole && (!isEdit || String(authUser?.id) !== id)) {
+    return <NotFound />
+  }
 
   const [form, setForm] = useState<FormState>(makeDefault)
   const [errors, setErrors] = useState<FormErrors>({})
@@ -260,7 +269,6 @@ export function UserForm() {
   const initialGroupSet = useRef(false)
   const formLoaded = useRef(false)
   const formRef = useRef<HTMLDivElement>(null)
-  const authUser = useAuthStore(s => s.user)
   const showServerField = isSuperAdmin(authUser)
 
   /* queries */

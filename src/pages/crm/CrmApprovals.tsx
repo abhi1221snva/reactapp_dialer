@@ -149,7 +149,7 @@ export function CrmApprovals() {
               <textarea {...reviewForm.register('review_note')} className="input w-full resize-none" rows={3} placeholder="Add a review note..." />
             </div>
             <div className="flex gap-2">
-              <button type="submit" disabled={reviewMutation.isPending} className="btn-primary text-sm disabled:opacity-50">
+              <button type="submit" disabled={reviewMutation.isPending} className="btn-success text-sm disabled:opacity-50">
                 {reviewMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : 'Submit'}
               </button>
               <button type="button" onClick={() => setReviewing(null)} className="btn-outline text-sm">

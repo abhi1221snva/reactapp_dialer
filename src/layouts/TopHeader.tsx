@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Settings, Building2, Clock, Trash2 } from 'lucide-react'
+import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Building2, Clock, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useAuthStore } from '../stores/auth.store'
@@ -347,13 +347,7 @@ export function TopHeader() {
                 >
                   <User size={14} className="flex-shrink-0 text-slate-400" /> My Profile
                 </button>
-                <button
-                  onClick={() => { navigate('/settings'); setShowProfileMenu(false) }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
-                >
-                  <Settings size={14} className="flex-shrink-0 text-slate-400" /> Settings
-                </button>
-                {user.level >= 7 && (
+{user.level >= 7 && (
                   <button
                     onClick={() => { navigate('/crm/company-settings'); setShowProfileMenu(false) }}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"

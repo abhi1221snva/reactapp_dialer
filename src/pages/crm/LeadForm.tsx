@@ -300,7 +300,7 @@ export function LeadForm() {
             saveMutation.mutate()
           }}
           disabled={!form.phone_number || saveMutation.isPending}
-          className="btn-primary flex-1"
+          className="btn-success flex-1"
         >
           <Save size={16} />
           {saveMutation.isPending ? 'Saving...' : isEdit ? 'Update Lead' : 'Create Lead'}

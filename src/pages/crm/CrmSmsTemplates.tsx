@@ -392,7 +392,7 @@ function SmsModal({ editing, onClose, onSaved }: {
         {/* ── Sticky Footer ── */}
         <div className="flex items-center gap-3 px-6 py-3.5 border-t border-slate-100 bg-white flex-shrink-0">
           <button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50">
+            className="btn-success flex items-center gap-2 disabled:opacity-50">
             {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
             {isEdit ? 'Save Changes' : 'Create Template'}
           </button>
@@ -717,7 +717,7 @@ export function CrmSmsTemplates() {
           <p className="text-sm mt-1.5 text-slate-400 max-w-xs mx-auto">
             Create templates to quickly send personalized text messages to your leads
           </p>
-          <button onClick={openCreate} className="btn-primary mt-5 inline-flex items-center gap-2">
+          <button onClick={openCreate} className="btn-success mt-5 inline-flex items-center gap-2">
             <Plus size={14} /> Create First Template
           </button>
         </div>

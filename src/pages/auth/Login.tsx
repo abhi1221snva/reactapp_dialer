@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, Shield, Key } from 'lucide-react'
 import { useAuthStore } from '../../stores/auth.store'
+import { useEngineStore } from '../../stores/engine.store'
 import { authService } from '../../services/auth.service'
 import { twoFactorService } from '../../services/twoFactor.service'
 import axios from 'axios'
@@ -250,7 +251,8 @@ export function Login() {
       }
       const user = await buildUser(payload as Record<string, unknown>)
       setAuth(payload.token as string, user)
-      navigate(user.level === LEVELS.ADMIN ? '/crm/dashboard' : '/dashboard')
+      const engine = useEngineStore.getState().engine
+      navigate(engine === 'crm' ? '/crm/dashboard' : '/dashboard')
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { code?: string; message?: string } } }
       const code = axiosErr?.response?.data?.code
@@ -341,7 +343,9 @@ export function Login() {
     localStorage.setItem('auth_token', payload.token as string)
     const user = await buildUser(payload)
     setAuth(payload.token as string, user)
-    navigate(user.level === LEVELS.ADMIN ? '/crm/dashboard' : '/dashboard')
+    // Respect persisted engine preference — navigate to CRM or dialer dashboard
+    const engine = useEngineStore.getState().engine
+    navigate(engine === 'crm' ? '/crm/dashboard' : '/dashboard')
   }
 
   const handleLogin = async (e: React.FormEvent) => {

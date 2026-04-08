@@ -321,7 +321,7 @@ export function CrmLeads() {
             >
               <Link2 size={14} /> Affiliate Link
             </button>
-            <button onClick={() => navigate('/crm/create')} className="btn-primary">
+            <button onClick={() => navigate('/crm/create')} className="btn-success">
               <Plus size={15} /> Add Lead
             </button>
           </div>

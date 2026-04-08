@@ -255,7 +255,7 @@ export function CrmRenewals() {
                     <td className="text-right">
                       <button
                         onClick={() => navigate('/crm/leads/create')}
-                        className="btn-primary text-xs px-3 py-1.5 whitespace-nowrap"
+                        className="btn-success text-xs px-3 py-1.5 whitespace-nowrap"
                       >
                         Create Renewal Lead
                       </button>

@@ -134,19 +134,41 @@ export default function AddressAutocomplete({
     }
   }
 
-  const handleBlur = () => {
-    // Delay to allow click on dropdown item
-    setTimeout(() => {
-      setOpen(false)
-      if (value && !selected) setWarning(true)
-    }, 200)
-  }
-
   const handleFocus = () => {
     if (suggestions.length > 0 && !selected) {
       updateDropdownPos()
       setOpen(true)
     }
+  }
+
+  // Close dropdown on click outside (replaces fragile blur-timing approach)
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (
+        wrapperRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) return
+      setOpen(false)
+      if (!selected) setWarning(true)
+    }
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
+  }, [open, selected])
+
+  // Close dropdown when input loses focus to a non-dropdown element (keyboard tab)
+  const handleBlur = (e: React.FocusEvent) => {
+    const related = e.relatedTarget as Node | null
+    // If focus moved to something inside the dropdown, keep it open
+    if (related && dropdownRef.current?.contains(related)) return
+    setTimeout(() => {
+      // Only close if dropdown is still open (not already closed by click handler)
+      setOpen(prev => {
+        if (prev && !selected) setWarning(true)
+        return false
+      })
+    }, 150)
   }
 
   // Update dropdown position when open changes or on scroll/resize
@@ -194,6 +216,7 @@ export default function AddressAutocomplete({
     <div
       className="addr-dd"
       ref={dropdownRef}
+      onMouseDown={e => e.preventDefault()}
       style={{
         position: 'fixed',
         top: dropdownPos.top,
@@ -215,7 +238,7 @@ export default function AddressAutocomplete({
           <div
             key={result.place_id}
             className={`addr-dd-item${i === activeIdx ? ' active' : ''}`}
-            onMouseDown={() => selectResult(result)}
+            onClick={() => selectResult(result)}
             onMouseEnter={() => setActiveIdx(i)}
           >
             <MapPin size={13} style={{ color: '#94a3b8', marginTop: 2, flexShrink: 0 }} />

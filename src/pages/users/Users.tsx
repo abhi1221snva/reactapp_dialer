@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, UserCircle, Eye, X, Search,
   Phone, Globe, Users as UsersIcon, Settings, Hash,
-  PhoneForwarded, Shield, Mail, Lock,
+  PhoneForwarded, Shield, Mail, Lock, KeyRound,
   CheckCircle2, XCircle, Smartphone,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -11,6 +11,8 @@ import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
 import { Badge } from '../../components/ui/Badge'
 import { userService } from '../../services/user.service'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 import { initials } from '../../utils/format'
 import { getTimezoneLabel } from '../../constants/timezones'
 import { useServerTable } from '../../hooks/useServerTable'
@@ -18,6 +20,7 @@ import { cn } from '../../utils/cn'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { useDialerHeader } from '../../layouts/DialerLayout'
+import { ChangePasswordModal } from './ChangePasswordModal'
 
 interface Agent {
   id: number
@@ -268,8 +271,12 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
 export function Users() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const authUser = useAuthStore(s => s.user)
+  const authLevel = authUser?.level ?? 0
+  const isAgentRole = authLevel < LEVELS.MANAGER
   const table = useServerTable({ defaultLimit: 15 })
   const [viewUser, setViewUser] = useState<Agent | null>(null)
+  const [pwUser, setPwUser] = useState<Agent | null>(null)
   const { setToolbar } = useDialerHeader()
 
   useEffect(() => {
@@ -284,12 +291,16 @@ export function Users() {
             </button>
           )}
         </div>
-        <div className="lt-divider" />
-        <div className="lt-right">
-          <button onClick={() => navigate('/users/create')} className="lt-b lt-p">
-            <Plus size={13} /> Add User
-          </button>
-        </div>
+        {!isAgentRole && (
+          <>
+            <div className="lt-divider" />
+            <div className="lt-right">
+              <button onClick={() => navigate('/users/create')} className="lt-b lt-p">
+                <Plus size={13} /> Add User
+              </button>
+            </div>
+          </>
+        )}
       </>
     )
     return () => setToolbar(undefined)
@@ -339,6 +350,7 @@ export function Users() {
         const lvl = (row.user_level || row.level || 1) as number
         const label = levelLabel(lvl)
         const gradient = ROLE_COLORS[label] ?? 'from-slate-400 to-slate-500'
+        const canDrillDown = (authUser?.level ?? 0) >= LEVELS.SYSTEM_ADMIN
         return (
           <div className="flex items-center gap-3">
             <div className={cn(
@@ -348,7 +360,14 @@ export function Users() {
               {initials(name)}
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">{name}</p>
+              {canDrillDown ? (
+                <button onClick={() => navigate(`/users/${row.id}/details`)}
+                  className="text-sm font-semibold text-slate-900 hover:text-indigo-600 transition-colors text-left">
+                  {name}
+                </button>
+              ) : (
+                <p className="text-sm font-semibold text-slate-900">{name}</p>
+              )}
               <p className="text-xs text-slate-400">{row.email}</p>
             </div>
           </div>
@@ -363,14 +382,14 @@ export function Users() {
         </code>
       ),
     },
-    {
-      key: 'role', header: 'Role',
-      render: (row) => {
+    ...(!isAgentRole ? [{
+      key: 'role' as const, header: 'Role',
+      render: (row: Agent) => {
         const lvl = (row.user_level || row.level || 1) as number
         const variant = lvl >= 7 ? 'blue' as const : lvl >= 5 ? 'purple' as const : 'gray' as const
         return <Badge variant={variant}>{levelLabel(lvl)}</Badge>
       },
-    },
+    }] : []),
     {
       key: 'status', header: 'Status',
       render: (row) => (
@@ -390,7 +409,9 @@ export function Users() {
       key: 'actions', header: 'Action',
       headerClassName: 'text-right',
       className: 'w-px whitespace-nowrap',
-      render: (row) => (
+      render: (row) => {
+        const isSelf = authUser?.id === row.id
+        return (
         <RowActions actions={[
           {
             label: 'View',
@@ -399,20 +420,30 @@ export function Users() {
             onClick: () => setViewUser(row),
           },
           {
+            label: 'Change Password',
+            icon: <KeyRound size={13} />,
+            variant: 'warning' as const,
+            onClick: () => setPwUser(row),
+            hidden: !((authUser?.level ?? 0) >= LEVELS.ADMIN || isSelf),
+          },
+          {
             label: 'Edit',
             icon: <Pencil size={13} />,
             variant: 'edit' as const,
             onClick: () => navigate(`/users/${row.id}/edit`),
+            hidden: isAgentRole && !isSelf,
           },
           {
             label: 'Delete',
             icon: <Trash2 size={13} />,
             variant: 'delete' as const,
             onClick: async () => { if (await confirmDelete()) deleteMutation.mutate(row.id) },
-            disabled: deleteMutation.isPending,
+            disabled: deleteMutation.isPending || (isAgentRole && isSelf),
+            hidden: isAgentRole,
           },
         ]} />
-      ),
+        )
+      },
     },
   ]
 
@@ -452,6 +483,15 @@ export function Users() {
         <ViewUserModal
           userId={viewUser.id}
           onClose={() => setViewUser(null)}
+        />
+      )}
+
+      {pwUser && (
+        <ChangePasswordModal
+          userId={pwUser.id}
+          userName={[pwUser.first_name, pwUser.last_name].filter(Boolean).join(' ') || pwUser.email}
+          isSelf={authUser?.id === pwUser.id}
+          onClose={() => setPwUser(null)}
         />
       )}
     </div>

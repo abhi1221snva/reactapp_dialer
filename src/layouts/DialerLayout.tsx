@@ -74,6 +74,7 @@ function titleFromPath(pathname: string): string {
   if (/^\/campaigns\/\d+\/add-review$/.test(pathname))  return 'Review Campaign'
   if (/^\/users\/create$/.test(pathname))         return 'Add User'
   if (/^\/users\/\d+\/edit$/.test(pathname))      return 'Edit User'
+  if (/^\/users\/\d+\/details$/.test(pathname))  return 'User Details'
   if (/^\/dids\/create$/.test(pathname))          return 'Add Phone Number'
   if (/^\/dids\/\d+\/edit$/.test(pathname))       return 'Edit Phone Number'
   if (/^\/lists\/create$/.test(pathname))         return 'Create List'
