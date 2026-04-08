@@ -137,6 +137,10 @@ import { CrmAgentPerformance } from './pages/crm/CrmAgentPerformance'
 import { CrmCommissions } from './pages/crm/CrmCommissions'
 import { CrmRenewals } from './pages/crm/CrmRenewals'
 import { CrmIntegrations } from './pages/crm/CrmIntegrations'
+import { CrmBankStatements } from './pages/crm/CrmBankStatements'
+import { CrmBankStatementDetail } from './pages/crm/CrmBankStatementDetail'
+import { CrmBankStatementLogs } from './pages/crm/CrmBankStatementLogs'
+import { BaljiApiExplorer } from './pages/crm/BaljiApiExplorer'
 import { NotFound } from './pages/NotFound'
 import { LEVELS } from './utils/permissions'
 
@@ -232,6 +236,10 @@ export default function App() {
           <Route path="/crm/commissions" element={<CrmCommissions />} />
           <Route path="/crm/renewals" element={<CrmRenewals />} />
           <Route path="/crm/integrations" element={<CrmIntegrations />} />
+          <Route path="/crm/bank-statements" element={<CrmBankStatements />} />
+          <Route path="/crm/bank-statements/logs" element={<CrmBankStatementLogs />} />
+          <Route path="/crm/bank-statements/:sessionId" element={<CrmBankStatementDetail />} />
+          <Route path="/crm/balji/api-explorer" element={<BaljiApiExplorer />} />
         </Route>
 
         {/* All Dialer / Phone System routes — wrapped in DialerLayout */}

@@ -131,6 +131,25 @@ export const PROVIDER_META: ProviderMeta[] = [
       { key: 'client_code', label: 'Client Code', type: 'text', target: 'extra_config', extraKey: 'client_code', placeholder: 'Enter Client Code' },
     ],
   },
+  {
+    slug: 'easify_bank_analysis',
+    label: 'Balji Bank Analysis',
+    description: 'AI-powered bank statement analysis, fraud detection, and MCA identification.',
+    icon: 'BA',
+    color: 'bg-teal-600',
+    fields: [
+      { key: 'email', label: 'Balji Email', type: 'text', target: 'api_key', placeholder: 'your@email.com' },
+      { key: 'password', label: 'Balji Password', type: 'password', target: 'api_secret', placeholder: 'Enter password' },
+      {
+        key: 'model_tier', label: 'Default Model Tier', type: 'select', target: 'extra_config', extraKey: 'model_tier',
+        options: [
+          { value: 'lsc_basic', label: 'LSC Basic (Fastest)' },
+          { value: 'lsc_pro', label: 'LSC Pro (Balanced)' },
+          { value: 'lsc_max', label: 'LSC Max (Most Accurate)' },
+        ],
+      },
+    ],
+  },
 ]
 
 // ── API service ─────────────────────────────────────────────────────────────────

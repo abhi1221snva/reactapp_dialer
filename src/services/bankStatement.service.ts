@@ -1,0 +1,81 @@
+import api from '../api/axios'
+
+export interface BankStatementSession {
+  id: number
+  lead_id: number | null
+  batch_id: string | null
+  session_id: string
+  file_name: string | null
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  model_tier: 'lsc_basic' | 'lsc_pro' | 'lsc_max'
+  summary_data: Record<string, unknown> | null
+  mca_analysis: Record<string, unknown> | null
+  monthly_data: Record<string, unknown>[] | null
+  fraud_score: number | null
+  total_revenue: number | null
+  total_deposits: number | null
+  nsf_count: number | null
+  error_message: string | null
+  uploaded_by: number | null
+  analyzed_at: string | null
+  created_at: string
+  updated_at: string | null
+  [key: string]: unknown
+}
+
+export const bankStatementService = {
+  // ── Standalone page ────────────────────────────────────────────────────────
+  getAll: (params?: { lead_id?: number; status?: string; page?: number; per_page?: number }) =>
+    api.get('/crm/bank-statements', { params }),
+
+  uploadStandalone: (formData: FormData) =>
+    api.post('/crm/bank-statements/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000,
+    }),
+
+  // ── Lead-specific ──────────────────────────────────────────────────────────
+  getLeadSessions: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/bank-statements`),
+
+  upload: (leadId: number, formData: FormData) =>
+    api.post(`/crm/lead/${leadId}/bank-statements/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000,
+    }),
+
+  analyzeDocument: (leadId: number, documentId: number, modelTier = 'lsc_pro') =>
+    api.post(`/crm/lead/${leadId}/bank-statements/analyze-document`, {
+      document_id: documentId,
+      model_tier: modelTier,
+    }, { timeout: 120_000 }),
+
+  getByDocuments: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/by-documents`),
+
+  getSummary: (leadId: number, sessionId: string) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/summary`),
+
+  getTransactions: (leadId: number, sessionId: string, params?: { type?: string; date_from?: string; date_to?: string }) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/transactions`, { params }),
+
+  getMcaAnalysis: (leadId: number, sessionId: string) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/mca-analysis`),
+
+  getMonthly: (leadId: number, sessionId: string) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/monthly`),
+
+  refresh: (leadId: number, sessionId: string) =>
+    api.post(`/crm/lead/${leadId}/bank-statements/${sessionId}/refresh`, {}),
+
+  destroy: (leadId: number, sessionId: string) =>
+    api.delete(`/crm/lead/${leadId}/bank-statements/${sessionId}`),
+
+  // ── Logs ──────────────────────────────────────────────────────────────────
+  getLogs: (params?: { date?: string; search?: string; level?: string; page?: number; per_page?: number }) =>
+    api.get('/crm/bank-statements/logs', { params }),
+
+  // ── API Explorer ─────────────────────────────────────────────────────────
+  apiExplorer: (params: { session_id: string; endpoint: string }) =>
+    api.get('/crm/balji/api-explorer', { params }),
+}

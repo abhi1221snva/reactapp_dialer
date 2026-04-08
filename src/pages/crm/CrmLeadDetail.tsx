@@ -11,7 +11,7 @@ import {
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
   Activity, Search, Wrench, RefreshCw, AlertTriangle, CheckCircle,
   ArrowDownLeft, ArrowUpRight, Paperclip, Users, SlidersHorizontal, ArrowUpDown,
-  Copy,
+  Copy, FileBarChart, BarChart3, ShieldAlert,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -28,6 +28,8 @@ import { MerchantPortalSection } from '../../components/crm/MerchantPortalSectio
 import { OffersStipsTab } from '../../components/crm/OffersStipsTab'
 import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
+import { BankStatementTab } from '../../components/crm/BankStatementTab'
+import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { OnDeckPanel } from '../../components/crm/OnDeckPanel'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
@@ -43,7 +45,7 @@ import { CRM_FIELD_LABELS, COMPUTED_FIELDS, autoLabel as sharedAutoLabel } from 
 import { useUIStore } from '../../stores/ui.store'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
-type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance' | 'approvals'
+type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance' | 'approvals' | 'bank-statements'
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'details',   label: 'Lead Info',       icon: Hash         },
@@ -56,6 +58,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'deal',       label: 'Deal',             icon: TrendingUp    },
   { id: 'compliance', label: 'Compliance',       icon: ShieldCheck   },
   { id: 'approvals',  label: 'Approvals',        icon: CheckCircle   },
+  { id: 'bank-statements', label: 'Bank Statements', icon: FileBarChart },
 ]
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -462,6 +465,210 @@ function DocViewerModal({ doc, leadId, onClose }: { doc: CrmDocument; leadId: nu
   )
 }
 
+// ── Bank Statement Analysis Modal ──────────────────────────────────────────────
+
+function fmtCurrency(n: number | string | null | undefined): string {
+  if (n === null || n === undefined || n === '') return '—'
+  const num = typeof n === 'string' ? parseFloat(n) : n
+  if (isNaN(num)) return '—'
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num)
+}
+
+function BankStatementAnalysisModal({ session, leadId, onClose }: { session: BankStatementSession; leadId: number; onClose: () => void }) {
+  const navigate = useNavigate()
+  const summary = (typeof session.summary_data === 'string' ? JSON.parse(session.summary_data as string) : session.summary_data) as Record<string, any> | null
+  const mca = (typeof session.mca_analysis === 'string' ? JSON.parse(session.mca_analysis as string) : session.mca_analysis) as Record<string, any> | null
+  const monthlyRaw = (typeof session.monthly_data === 'string' ? JSON.parse(session.monthly_data as string) : session.monthly_data) as Record<string, any> | null
+  const monthly = (monthlyRaw?.months ?? (Array.isArray(monthlyRaw) ? monthlyRaw : [])) as Record<string, any>[]
+
+  const fraudScore = summary?.fraud_score ?? session.fraud_score
+  const nsfCount = summary?.nsf?.nsf_fee_count ?? summary?.nsf_count ?? session.nsf_count ?? 0
+  const mcaDetected = mca?.total_mca_count > 0
+  const mcaLenders = mca?.lenders ?? []
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center"><BarChart3 size={16} className="text-emerald-600" /></div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate">{session.file_name ?? 'Bank Statement Analysis'}</p>
+              <p className="text-[10px] text-slate-400">Session: {session.session_id}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+            <button onClick={() => { onClose(); navigate(`/crm/bank-statements/${session.session_id}`) }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+              <ExternalLink size={12} /> Full Details
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {/* Pending / Failed */}
+          {(session.status === 'pending' || session.status === 'processing') && (
+            <div className="flex items-center gap-3 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3">
+              <Loader2 size={16} className="text-sky-600 shrink-0 animate-spin" />
+              <div>
+                <p className="text-sm font-semibold text-sky-800">Analysis in Progress</p>
+                <p className="text-xs text-sky-700 mt-0.5">Results will appear once the analysis is complete.</p>
+              </div>
+            </div>
+          )}
+
+          {session.status === 'failed' && (
+            <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <AlertCircle size={16} className="text-red-600 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-red-800">Analysis Failed</p>
+                <p className="text-xs text-red-700 mt-0.5">{session.error_message || 'Unknown error'}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Completed Results */}
+          {session.status === 'completed' && (
+            <>
+              {/* Key Metrics */}
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="bg-indigo-50 rounded-lg p-2.5 text-center">
+                  <p className="text-[9px] text-indigo-500 font-bold uppercase">Fraud Score</p>
+                  <p className={`text-xl font-bold mt-0.5 ${fraudScore != null ? (fraudScore >= 70 ? 'text-red-700' : fraudScore >= 40 ? 'text-amber-700' : 'text-emerald-700') : 'text-slate-400'}`}>
+                    {fraudScore ?? '—'}
+                  </p>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-2.5 text-center">
+                  <p className="text-[9px] text-emerald-500 font-bold uppercase">Revenue</p>
+                  <p className="text-xl font-bold text-emerald-700 mt-0.5">{fmtCurrency(summary?.true_revenue ?? session.total_revenue)}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-2.5 text-center">
+                  <p className="text-[9px] text-blue-500 font-bold uppercase">Deposits</p>
+                  <p className="text-xl font-bold text-blue-700 mt-0.5">{fmtCurrency(summary?.total_credits ?? session.total_deposits)}</p>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-2.5 text-center">
+                  <p className="text-[9px] text-amber-500 font-bold uppercase">NSF Count</p>
+                  <p className={`text-xl font-bold mt-0.5 ${nsfCount > 0 ? 'text-amber-700' : 'text-slate-400'}`}>{nsfCount}</p>
+                </div>
+                <div className="bg-violet-50 rounded-lg p-2.5 text-center">
+                  <p className="text-[9px] text-violet-500 font-bold uppercase">Avg Daily Bal</p>
+                  <p className="text-xl font-bold text-violet-700 mt-0.5">{fmtCurrency(summary?.average_daily_balance)}</p>
+                </div>
+                <div className={`${mcaDetected ? 'bg-red-50' : 'bg-slate-50'} rounded-lg p-2.5 text-center`}>
+                  <p className={`text-[9px] font-bold uppercase ${mcaDetected ? 'text-red-500' : 'text-slate-500'}`}>MCA Detected</p>
+                  <p className={`text-xl font-bold mt-0.5 ${mcaDetected ? 'text-red-700' : 'text-emerald-700'}`}>{mcaDetected ? 'Yes' : 'No'}</p>
+                </div>
+              </div>
+
+              {/* Statement Details */}
+              {summary && (
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Statement Details</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
+                    {summary.bank_name && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Bank</span><span className="font-semibold text-slate-700">{summary.bank_name}</span></div>}
+                    {summary.total_transactions != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Total Transactions</span><span className="font-semibold text-slate-700">{summary.total_transactions}</span></div>}
+                    {summary.net_flow != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Net Cash Flow</span><span className="font-semibold text-slate-700">{fmtCurrency(summary.net_flow)}</span></div>}
+                    {summary.negative_days != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Negative Days</span><span className={`font-semibold ${summary.negative_days > 0 ? 'text-red-600' : 'text-slate-700'}`}>{summary.negative_days}</span></div>}
+                    {summary.beginning_balance != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Begin Balance</span><span className="font-semibold text-slate-700">{fmtCurrency(summary.beginning_balance)}</span></div>}
+                    {summary.ending_balance != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">End Balance</span><span className="font-semibold text-slate-700">{fmtCurrency(summary.ending_balance)}</span></div>}
+                    {summary.pages != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Pages</span><span className="font-semibold text-slate-700">{summary.pages}</span></div>}
+                    {summary.credit_count != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Credits</span><span className="font-semibold text-slate-700">{summary.credit_count}</span></div>}
+                    {summary.debit_count != null && <div className="flex justify-between py-1 text-xs"><span className="text-slate-500">Debits</span><span className="font-semibold text-slate-700">{summary.debit_count}</span></div>}
+                  </div>
+                </div>
+              )}
+
+              {/* MCA Warning */}
+              {mcaDetected && (
+                <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                  <ShieldAlert size={16} className="text-red-600 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800">MCA Lenders Detected ({mca?.total_mca_count})</p>
+                    {mcaLenders.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5">
+                        {mcaLenders.map((l: any, i: number) => (
+                          <div key={i} className="flex justify-between text-xs">
+                            <span className="text-red-700">{l.name ?? l.lender ?? `Lender ${i + 1}`}</span>
+                            {l.estimated_payment && <span className="font-semibold text-red-800">{fmtCurrency(l.estimated_payment)}/mo</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {mca?.total_mca_payments > 0 && (
+                      <p className="text-xs text-red-600 mt-1.5">Total Payments: {fmtCurrency(mca.total_mca_payments)} · Total Amount: {fmtCurrency(mca.total_mca_amount)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly Breakdown Table */}
+              {monthly.length > 0 && (
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Monthly Breakdown</p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200">
+                        <th className="text-left py-1.5 text-slate-500 font-semibold">Month</th>
+                        <th className="text-right py-1.5 text-slate-500 font-semibold">Deposits</th>
+                        <th className="text-right py-1.5 text-slate-500 font-semibold">Withdrawals</th>
+                        <th className="text-right py-1.5 text-slate-500 font-semibold">Revenue</th>
+                        <th className="text-right py-1.5 text-slate-500 font-semibold">NSFs</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {monthly.map((m: any, i: number) => (
+                        <tr key={i}>
+                          <td className="py-1.5 text-slate-700 font-medium">{m.month_name ?? m.month_key}</td>
+                          <td className="py-1.5 text-right text-emerald-700">{fmtCurrency(m.deposits)}</td>
+                          <td className="py-1.5 text-right text-red-600">{fmtCurrency(m.debits)}</td>
+                          <td className="py-1.5 text-right text-slate-700 font-medium">{fmtCurrency(m.true_revenue)}</td>
+                          <td className="py-1.5 text-right text-slate-700">{m.nsf?.nsf_fee_count ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* MCA Capacity */}
+              {monthlyRaw?.mca_capacity && (
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">MCA Capacity</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className={`${monthlyRaw.mca_capacity.can_take_position ? 'bg-emerald-50' : 'bg-red-50'} rounded-lg p-2.5 text-center`}>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">Can Take Position</p>
+                      <p className={`text-base font-bold mt-0.5 ${monthlyRaw.mca_capacity.can_take_position ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {monthlyRaw.mca_capacity.can_take_position ? 'Yes' : 'No'}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2.5 text-center border border-slate-100">
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">Max Daily Payment</p>
+                      <p className="text-base font-bold text-slate-700 mt-0.5">{fmtCurrency(monthlyRaw.mca_capacity.max_daily_payment)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2.5 text-center border border-slate-100">
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">Remaining Cap.</p>
+                      <p className="text-base font-bold text-slate-700 mt-0.5">{fmtCurrency(monthlyRaw.mca_capacity.remaining_daily_capacity)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2.5 text-center border border-slate-100">
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">Withhold %</p>
+                      <p className="text-base font-bold text-slate-700 mt-0.5">{monthlyRaw.mca_capacity.current_withhold_percent}% / {monthlyRaw.mca_capacity.max_withhold_percentage}%</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Documents Panel ────────────────────────────────────────────────────────────
 function DocumentsPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
@@ -472,6 +679,35 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [viewDoc, setViewDoc] = useState<CrmDocument | null>(null)
   const [showTypeManager, setShowTypeManager] = useState(false)
+  const [analysisModal, setAnalysisModal] = useState<BankStatementSession | null>(null)
+  const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null)
+
+  // Bank statement sessions linked to documents
+  const { data: docSessions } = useQuery({
+    queryKey: ['bs-by-documents', leadId],
+    queryFn: async () => {
+      const res = await bankStatementService.getByDocuments(leadId)
+      return (res.data?.data ?? []) as BankStatementSession[]
+    },
+    refetchInterval: (query) => {
+      const sessions = query.state.data ?? []
+      return sessions.some(s => s.status === 'pending' || s.status === 'processing') ? 5000 : false
+    },
+  })
+  const sessionByDocId = new Map((docSessions ?? []).map(s => [s.document_id as number, s]))
+
+  const analyzeMut = useMutation({
+    mutationFn: (docId: number) => bankStatementService.analyzeDocument(leadId, docId),
+    onSuccess: () => {
+      toast.success('Analysis started')
+      qc.invalidateQueries({ queryKey: ['bs-by-documents', leadId] })
+      setAnalyzingDocId(null)
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? 'Analysis failed')
+      setAnalyzingDocId(null)
+    },
+  })
 
   const { data: typeData } = useQuery({
     queryKey: ['document-types'],
@@ -534,6 +770,7 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
     <>
       {viewDoc && <DocViewerModal doc={viewDoc} leadId={leadId} onClose={() => setViewDoc(null)} />}
       {showTypeManager && <CrmDocumentTypesManager onClose={() => setShowTypeManager(false)} />}
+      {analysisModal && <BankStatementAnalysisModal session={analysisModal} leadId={leadId} onClose={() => setAnalysisModal(null)} />}
 
     <div className="flex gap-0 divide-x divide-slate-100 h-full">
 
@@ -559,39 +796,126 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
           <div className="space-y-1.5">
             {docs.map(doc => {
               const ic = getFileIcon(doc.file_path)
+              const isPdf = getFileType(doc.file_path) === 'pdf'
+              const isBankStatement = isPdf && /bank.?statement/i.test(doc.document_type)
+              const bsSession = sessionByDocId.get(doc.id)
+              const isAnalyzing = analyzingDocId === doc.id && analyzeMut.isPending
+
               return (
-                <div key={doc.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-emerald-200 hover:shadow-sm transition-all group">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
-                    <FileText size={14} className={ic.color} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{doc.document_type}</p>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">{doc.file_name}</span>
-                      {doc.file_size ? <span className="text-[10px] text-slate-400">· {formatBytes(Number(doc.file_size))}</span> : null}
-                      <span className="text-[10px] text-slate-400">· {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
+                <div key={doc.id} className="rounded-lg border border-slate-200 bg-white hover:border-emerald-200 hover:shadow-sm transition-all group">
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
+                      <FileText size={14} className={ic.color} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{doc.document_type}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">{doc.file_name}</span>
+                        {doc.file_size ? <span className="text-[10px] text-slate-400">· {formatBytes(Number(doc.file_size))}</span> : null}
+                        <span className="text-[10px] text-slate-400">· {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {/* Analyze button — Bank Statement PDFs only, not yet analyzed */}
+                      {isBankStatement && !bsSession && (
+                        <button
+                          onClick={() => { setAnalyzingDocId(doc.id); analyzeMut.mutate(doc.id) }}
+                          disabled={isAnalyzing || analyzeMut.isPending}
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors text-[11px] font-semibold disabled:opacity-50"
+                          title="Analyze with Balji"
+                        >
+                          {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <BarChart3 size={12} />}
+                          Analyze
+                        </button>
+                      )}
+                      {/* Analysis status pill + eye button for analyzed docs */}
+                      {bsSession && (
+                        <>
+                          {bsSession.status === 'completed' && (
+                            <button onClick={() => setAnalysisModal(bsSession)}
+                              className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors" title="View Analysis">
+                              <BarChart3 size={13} />
+                            </button>
+                          )}
+                          {(bsSession.status === 'pending' || bsSession.status === 'processing') && (
+                            <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 text-sky-700 text-[10px] font-bold">
+                              <Loader2 size={10} className="animate-spin" /> Analyzing
+                            </span>
+                          )}
+                          {bsSession.status === 'failed' && (
+                            <>
+                              <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 text-[10px] font-bold" title={bsSession.error_message ?? 'Failed'}>
+                                <AlertCircle size={10} /> Failed
+                              </span>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await bankStatementService.destroy(leadId, bsSession.session_id)
+                                    qc.invalidateQueries({ queryKey: ['bs-by-documents', leadId] })
+                                    toast.success('Cleared — you can re-analyze')
+                                  } catch { toast.error('Failed to clear') }
+                                }}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-semibold transition-colors"
+                                title="Clear failed analysis and retry"
+                              >
+                                <RefreshCw size={10} /> Retry
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+                      <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
+                      <button
+                        disabled={!doc.file_path}
+                        className="p-1.5 rounded-md bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-30"
+                        title="Download"
+                        onClick={async () => {
+                          if (!doc.file_path) return
+                          try {
+                            const res = await crmService.downloadLeadDocument(leadId, doc.id)
+                            const url = URL.createObjectURL(res.data as Blob)
+                            const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a)
+                            setTimeout(() => URL.revokeObjectURL(url), 1000)
+                          } catch { toast.error('Download failed') }
+                        }}
+                      ><Download size={13} /></button>
+                      <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Delete"><Trash2 size={13} /></button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
-                    <button
-                      disabled={!doc.file_path}
-                      className="p-1.5 rounded-md bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-30"
-                      title="Download"
-                      onClick={async () => {
-                        if (!doc.file_path) return
-                        try {
-                          const res = await crmService.downloadLeadDocument(leadId, doc.id)
-                          const url = URL.createObjectURL(res.data as Blob)
-                          const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
-                          document.body.appendChild(a); a.click(); document.body.removeChild(a)
-                          setTimeout(() => URL.revokeObjectURL(url), 1000)
-                        } catch { toast.error('Download failed') }
-                      }}
-                    ><Download size={13} /></button>
-                    <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Delete"><Trash2 size={13} /></button>
-                  </div>
+
+                  {/* Inline analysis summary under the document */}
+                  {bsSession && bsSession.status === 'completed' && (() => {
+                    const s = bsSession
+                    const sum = (typeof s.summary_data === 'string' ? JSON.parse(s.summary_data as string) : s.summary_data) as Record<string, any> | null
+                    const mcaRaw = (typeof s.mca_analysis === 'string' ? JSON.parse(s.mca_analysis as string) : s.mca_analysis) as Record<string, any> | null
+                    const hasMca = (mcaRaw?.total_mca_count ?? 0) > 0
+                    const fs = sum?.fraud_score ?? s.fraud_score
+                    const nsfCount = sum?.nsf?.nsf_fee_count ?? sum?.nsf_count ?? s.nsf_count ?? 0
+                    return (
+                      <div className="border-t border-slate-100 px-3 py-1.5 bg-slate-50/50">
+                        <div className="flex items-center gap-1 flex-wrap text-[11px] leading-none">
+                          <span className="bg-slate-700 text-white font-bold px-1.5 py-[3px] rounded text-[10px] uppercase tracking-wide">Analysis</span>
+                          <span className="bg-emerald-50 text-emerald-800 font-bold px-1.5 py-[3px] rounded"><span className="text-emerald-500 font-medium">Rev</span> {fmtCurrency(sum?.true_revenue ?? s.total_revenue)}</span>
+                          <span className="bg-green-50 text-green-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-green-500 font-medium">Dep</span> {fmtCurrency(sum?.total_credits ?? s.total_deposits)}</span>
+                          <span className="bg-red-50 text-red-700 font-semibold px-1.5 py-[3px] rounded"><span className="text-red-400 font-medium">Deb</span> {fmtCurrency(sum?.total_debits)}</span>
+                          <span className="bg-orange-50 text-orange-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-orange-400 font-medium">Adj</span> {fmtCurrency(sum?.adjustments)}</span>
+                          <span className="bg-blue-50 text-blue-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-blue-400 font-medium">Avg</span> {fmtCurrency(sum?.average_daily_balance)}</span>
+                          <span className="bg-indigo-50 text-indigo-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-indigo-400 font-medium">Ledger</span> {fmtCurrency(sum?.average_ledger_balance ?? sum?.ending_balance)}</span>
+                          <span className="bg-slate-100 text-slate-700 font-semibold px-1.5 py-[3px] rounded"><span className="text-slate-400 font-medium">Tx</span> {sum?.total_transactions ?? 0}</span>
+                          <span className={`font-semibold px-1.5 py-[3px] rounded ${nsfCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}><span className={nsfCount > 0 ? 'text-amber-500 font-medium' : 'text-slate-400 font-medium'}>NSF</span> {nsfCount}</span>
+                          {fs != null && (
+                            <span className={`font-bold px-1.5 py-[3px] rounded ${fs >= 70 ? 'bg-red-100 text-red-800' : fs >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>Fraud {fs}</span>
+                          )}
+                          {hasMca && <span className="font-bold text-red-800 bg-red-100 px-1.5 py-[3px] rounded flex items-center gap-0.5"><ShieldAlert size={9} /> MCA</span>}
+                          <button onClick={() => setAnalysisModal(s)} className="text-indigo-600 font-bold hover:text-indigo-700 ml-auto text-[10px]">
+                            Details &rarr;
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}
@@ -4943,6 +5267,7 @@ export function CrmLeadDetail() {
             {activeTab === 'deal'       && <ErrorBoundary fallbackTitle="Deal failed to load"><div className="p-5"><DealTab leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'compliance' && <ErrorBoundary fallbackTitle="Compliance failed to load"><div className="p-5"><ComplianceTab leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'approvals' && <ErrorBoundary fallbackTitle="Approvals failed to load"><div className="p-5"><ApprovalsSection leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'bank-statements' && <ErrorBoundary fallbackTitle="Bank statements failed to load"><div className="p-5"><BankStatementTab leadId={leadId} /></div></ErrorBoundary>}
 
           </div>
 

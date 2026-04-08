@@ -125,14 +125,14 @@ function IntegrationCard({
               type="button"
               onClick={onToggle}
               className={cn(
-                'p-1.5 rounded-md transition-colors',
+                'inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors',
                 config?.is_enabled
-                  ? 'text-emerald-600 hover:bg-emerald-50'
-                  : 'text-slate-400 hover:bg-slate-100',
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100',
               )}
-              title={config?.is_enabled ? 'Disable' : 'Enable'}
             >
-              <Power className="h-4 w-4" />
+              <Power className="h-3.5 w-3.5" />
+              {config?.is_enabled ? 'Enabled' : 'Disabled'}
             </button>
           )}
           <button
@@ -201,6 +201,7 @@ function ConfigModal({
       }
 
       payload.extra_config = extra
+      payload.is_enabled = true // auto-enable when saving credentials
       return integrationConfigService.upsert(payload)
     },
     onSuccess: (res) => {

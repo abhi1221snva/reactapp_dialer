@@ -20,12 +20,16 @@ const CRM_TITLES: Record<string, string> = {
   '/crm/commissions':         'Commissions',
   '/crm/renewals':            'Renewal Pipeline',
   '/crm/integrations':        'API Integrations',
+  '/crm/bank-statements':       'Bank Statement Analysis',
+  '/crm/bank-statements/logs':  'API Logs',
+  '/crm/balji/api-explorer':    'Balji API Explorer',
 }
 
 function titleFromPath(pathname: string): string {
   if (CRM_TITLES[pathname]) return CRM_TITLES[pathname]
   if (/^\/crm\/leads\/\d+\/edit$/.test(pathname)) return 'Edit Lead'
   if (/^\/crm\/leads\/\d+$/.test(pathname)) return 'Lead Detail'
+  if (/^\/crm\/bank-statements\/[a-f0-9-]+$/.test(pathname)) return 'Statement Analysis'
   return 'CRM'
 }
 

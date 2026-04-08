@@ -67,6 +67,10 @@ api.interceptors.response.use(
     const status = error.response?.status
     const message: string = error.response?.data?.message || 'An error occurred'
 
+    // If no auth token exists we're already logged out — suppress all error toasts
+    // to avoid "Token not provided" flashing on the login page.
+    const hasToken = !!localStorage.getItem('auth_token')
+
     if (status === 401) {
       // Skip logout for Gmail/integration routes — their 401s mean Gmail token expired, not JWT expired
       const url = error.config?.url ?? ''
@@ -78,6 +82,8 @@ api.interceptors.response.use(
         sessionStorage.clear()
         window.location.href = '/login'
       }
+    } else if (!hasToken) {
+      // Already logged out — silently reject without toasts
     } else if (status === 403) {
       if (!error.config?._silent403) {
         toast.error(safeMsg(message, 'You do not have permission to perform this action'))
