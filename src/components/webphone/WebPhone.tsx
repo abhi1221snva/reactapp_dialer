@@ -96,6 +96,7 @@ export function WebPhone() {
   const setPhoneRegistered  = useFloatingStore(s => s.setPhoneRegistered)
   const registerSipAnswer   = useFloatingStore(s => s.registerSipAnswer)
   const registerSipDecline  = useFloatingStore(s => s.registerSipDecline)
+  const registerSipDial     = useFloatingStore(s => s.registerSipDial)
   const campaignDialActive  = useFloatingStore(s => s.campaignDialActive)
   const setIsOpen = setPhoneOpen
   const { phoneRight } = useWidgetPositions()
@@ -347,6 +348,22 @@ export function WebPhone() {
     } catch { setStatusMsg('Call failed to initiate') }
   }, [number, countryCode, onSipEventSession])
 
+  // ── Outbound campaign dial (called by Dialer for WebRTC mode) ────────────
+  const sipDialOutbound = useCallback((phoneNumber: string) => {
+    if (!sipStack.current) return
+    const digits = phoneNumber.replace(/[^0-9+]/g, '')
+    if (digits.length < 3) return
+    try {
+      sipCallSess.current = sipStack.current.newSession('call-audio', {
+        audio_remote: audioRemote.current,
+        events_listener: { events: '*', listener: onSipEventSession },
+        sip_caps: [{ name: '+g.oma.sip-im' }, { name: 'language', value: '"en,fr"' }],
+      })
+      sipCallSess.current.call(digits)
+      setPhoneState('calling'); setStatusMsg(`Calling ${digits}…`)
+    } catch { setStatusMsg('Call failed to initiate') }
+  }, [onSipEventSession])
+
   const sipAnswerIncoming = useCallback(() => {
     if (!sipCallSess.current) return
     try {
@@ -457,6 +474,16 @@ export function WebPhone() {
     registerSipDecline(() => {
       sipDeclineRef.current()
       useDialerStore.getState().setIncomingCall(null)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Register SIP outbound dial so Dialer can trigger WebRTC campaign calls
+  const sipDialOutboundRef = useRef(sipDialOutbound)
+  sipDialOutboundRef.current = sipDialOutbound
+  useEffect(() => {
+    registerSipDial((phoneNumber: string) => {
+      sipDialOutboundRef.current(phoneNumber)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -647,17 +674,9 @@ export function WebPhone() {
                 <ShieldAlert size={13} style={{ color: '#F87171', flexShrink: 0 }} />
                 <p style={{ fontSize: 12, fontWeight: 600, color: '#F87171' }}>{statusMsg}</p>
               </div>
-              {sipConfig.certUrl && (
-                <>
-                  <p style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.55, marginBottom: 6 }}>
-                    Certificate error? Accept the SIP cert first, then retry.
-                  </p>
-                  <a href={sipConfig.certUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 11, color: '#FCA5A5', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
-                    <ExternalLink size={9} /> {sipConfig.certUrl}
-                  </a>
-                </>
-              )}
+              <p style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.55, marginBottom: 8 }}>
+                Check your SIP credentials and server connectivity, then retry.
+              </p>
               <button
                 onClick={() => { setPhoneState('idle'); setTimeout(sipEnable, 100) }}
                 style={{

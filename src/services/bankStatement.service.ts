@@ -71,6 +71,51 @@ export const bankStatementService = {
   destroy: (leadId: number, sessionId: string) =>
     api.delete(`/crm/lead/${leadId}/bank-statements/${sessionId}`),
 
+  // ── CSV / PDF Downloads ──────────────────────────────────────────────────
+  downloadCsv: (leadId: number, sessionId: string) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/download-csv`, {
+      responseType: 'blob',
+    }),
+
+  viewPdf: (leadId: number, sessionId: string, download = false) =>
+    api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/pdf`, {
+      params: { download: download ? 1 : 0 },
+      responseType: 'blob',
+    }),
+
+  // ── Transaction Toggles ────────────────────────────────────────────────
+  toggleTransactionType: (transactionId: number) =>
+    api.post(`/crm/bank-statements/transactions/${transactionId}/toggle-type`, {}),
+
+  toggleRevenueClassification: (transactionId: number, currentClassification: 'true_revenue' | 'adjustment') =>
+    api.post(`/crm/bank-statements/transactions/${transactionId}/toggle-revenue`, {
+      current_classification: currentClassification,
+    }),
+
+  toggleMcaStatus: (transactionId: number, isMca: boolean, lenderId?: string, lenderName?: string) =>
+    api.post(`/crm/bank-statements/transactions/${transactionId}/toggle-mca`, {
+      is_mca: isMca,
+      lender_id: lenderId,
+      lender_name: lenderName,
+    }),
+
+  // ── Reference Data ─────────────────────────────────────────────────────
+  getMcaLenders: () =>
+    api.get('/crm/bank-statements/mca-lenders'),
+
+  getStats: () =>
+    api.get('/crm/bank-statements/stats'),
+
+  // ── Learned Patterns ───────────────────────────────────────────────────
+  getLearnedPatterns: (params?: { page?: number; per_page?: number }) =>
+    api.get('/crm/bank-statements/learned-patterns', { params }),
+
+  clearLearnedPatterns: () =>
+    api.delete('/crm/bank-statements/learned-patterns'),
+
+  deleteLearnedPattern: (patternId: number) =>
+    api.delete(`/crm/bank-statements/learned-patterns/${patternId}`),
+
   // ── Logs ──────────────────────────────────────────────────────────────────
   getLogs: (params?: { date?: string; search?: string; level?: string; page?: number; per_page?: number }) =>
     api.get('/crm/bank-statements/logs', { params }),

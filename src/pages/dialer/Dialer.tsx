@@ -329,7 +329,7 @@ export function Dialer() {
         return
       }
 
-      await dialerService.callNumber({
+      const callRes = await dialerService.callNumber({
         campaign_id: activeCampaign.id,
         lead_id: leadId,
         number: phoneNum,
@@ -353,9 +353,18 @@ export function Dialer() {
         campaign_id: activeCampaign.id,
       })
 
-      // WebPhone will auto-answer the SIP INVITE from Asterisk.
-      // Transition to in-call happens when phoneInCall becomes true.
       setPhoneOpen(true)
+
+      // WebRTC mode: backend skips AMI — we must initiate the SIP call from the browser
+      const dialMode = callRes.data?.dial_mode
+      if (dialMode === 'webrtc') {
+        const sipDial = useFloatingStore.getState().sipDialHandler
+        if (sipDial) {
+          sipDial(callRes.data?.number || phoneNum)
+        }
+      }
+      // Hardware mode: WebPhone auto-answers the SIP INVITE from Asterisk.
+      // Transition to in-call happens when phoneInCall becomes true.
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -375,7 +384,7 @@ export function Dialer() {
 
     setIsDialing(true)
     try {
-      await dialerService.callNumber({
+      const callRes = await dialerService.callNumber({
         campaign_id: campId,
         lead_id: leadId ?? 0,
         number: phoneNumber,
@@ -396,8 +405,13 @@ export function Dialer() {
         campaign_id: campId,
       })
 
-      // WebPhone will auto-answer the SIP INVITE from Asterisk
       setPhoneOpen(true)
+
+      // WebRTC mode: initiate SIP call from browser
+      if (callRes.data?.dial_mode === 'webrtc') {
+        const sipDial = useFloatingStore.getState().sipDialHandler
+        if (sipDial) sipDial(callRes.data?.number || phoneNumber)
+      }
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??

@@ -12,7 +12,7 @@ export const authService = {
     api.post('/auth/google/callback', { credential }),
 
   forgotPassword: (email: string) =>
-    api.post('/forget_password', { email }),
+    api.post('/forgot-password', { email }),
 
   resetPassword: (data: { token: string; email: string; password: string; password_confirmation: string }) =>
     api.post('/reset_password', data),

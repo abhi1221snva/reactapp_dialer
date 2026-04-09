@@ -29,6 +29,7 @@ import { OffersStipsTab } from '../../components/crm/OffersStipsTab'
 import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
 import { BankStatementTab } from '../../components/crm/BankStatementTab'
+import { DripLeadPanel } from '../../components/crm/DripLeadPanel'
 import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { OnDeckPanel } from '../../components/crm/OnDeckPanel'
@@ -45,7 +46,7 @@ import { CRM_FIELD_LABELS, COMPUTED_FIELDS, autoLabel as sharedAutoLabel } from 
 import { useUIStore } from '../../stores/ui.store'
 
 // ── Tab System ─────────────────────────────────────────────────────────────────
-type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance' | 'approvals' | 'bank-statements'
+type TabId = 'details' | 'activity' | 'documents' | 'lenders' | 'ondeck' | 'merchant' | 'offers' | 'deal' | 'compliance' | 'approvals' | 'bank-statements' | 'drip' | 'drip'
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'details',   label: 'Lead Info',       icon: Hash         },
@@ -59,6 +60,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'compliance', label: 'Compliance',       icon: ShieldCheck   },
   { id: 'approvals',  label: 'Approvals',        icon: CheckCircle   },
   { id: 'bank-statements', label: 'Bank Statements', icon: FileBarChart },
+  { id: 'drip', label: 'Drip Campaigns', icon: Send },
 ]
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -5268,6 +5270,7 @@ export function CrmLeadDetail() {
             {activeTab === 'compliance' && <ErrorBoundary fallbackTitle="Compliance failed to load"><div className="p-5"><ComplianceTab leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'approvals' && <ErrorBoundary fallbackTitle="Approvals failed to load"><div className="p-5"><ApprovalsSection leadId={leadId} /></div></ErrorBoundary>}
             {activeTab === 'bank-statements' && <ErrorBoundary fallbackTitle="Bank statements failed to load"><div className="p-5"><BankStatementTab leadId={leadId} /></div></ErrorBoundary>}
+            {activeTab === 'drip' && <ErrorBoundary fallbackTitle="Drip campaigns failed to load"><div className="p-5"><DripLeadPanel leadId={leadId} /></div></ErrorBoundary>}
 
           </div>
 

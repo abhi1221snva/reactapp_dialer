@@ -54,7 +54,7 @@ declare global {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Step = 'details' | 'google-business' | 'email-verify' | 'phone-verify' | 'success'
+type Step = 'details' | 'google-business' | 'email-verify' | 'phone-verify' | 'provisioning' | 'success'
 
 interface FormData {
   name: string
@@ -145,7 +145,7 @@ export function Register() {
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>('details')
   const [loading, setLoading] = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
+
   const [showPass, setShowPass] = useState(false)
 
   const [googleFlow, setGoogleFlow] = useState(false)
@@ -198,10 +198,10 @@ export function Register() {
         },
       })
       window.google.accounts.id.renderButton(googleBtnRef.current, {
-        theme: 'filled_black',
-        size: 'large',
+        theme: 'outline',
+        size: 'medium',
         type: 'icon',
-        shape: 'square',
+        shape: 'circle',
       })
     }
 
@@ -329,17 +329,25 @@ export function Register() {
   }
 
   // ── Verify phone OTP ──────────────────────────────────────────────────────
+  const [progressId, setProgressId] = useState<string | null>(null)
+
   const handleVerifyPhone = async (e: React.FormEvent) => {
     e.preventDefault()
     if (phoneOtp.length < 6) { toast.error('Enter the 6-digit code'); return }
     setLoading(true)
     try {
-      // Use the exact values that were sent during Send OTP — never recompute them
       const snap = sentOtpPayload ?? { registration_id: registrationId, country_code: form.country_code, phone: form.phone }
-      console.log('SEND OTP:', snap)
-      console.log('VERIFY OTP:', { ...snap, otp: phoneOtp })
-      await registerService.verifyPhoneOtp(snap.registration_id, snap.country_code, snap.phone, phoneOtp)
-      setStep('success')
+      const res = await registerService.verifyPhoneOtp(snap.registration_id, snap.country_code, snap.phone, phoneOtp)
+      const data = res.data?.data as Record<string, unknown> | undefined
+
+      if (data?.path === 'slow' && data?.progress_id) {
+        // Slow path — show provisioning progress screen
+        setProgressId(String(data.progress_id))
+        setStep('provisioning')
+      } else {
+        // Fast path — account ready instantly
+        setStep('success')
+      }
     } catch {
       // handled by interceptor
     } finally {
@@ -355,6 +363,103 @@ export function Register() {
       phoneTimer.start()
       toast.success('Code resent!')
     } catch { /* handled */ }
+  }
+
+  // ── Provisioning polling (slow path) ──────────────────────────────────────
+  const [provStage, setProvStage] = useState('queued')
+  const [provPct, setProvPct] = useState(5)
+  const [provLabel, setProvLabel] = useState('Waiting in queue...')
+  const [provFailed, setProvFailed] = useState(false)
+
+  useEffect(() => {
+    if (step !== 'provisioning' || !progressId) return
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const res = await registerService.getRegistrationStatus(progressId)
+        const d = res.data?.data
+        if (cancelled) return
+
+        setProvStage(d.stage)
+        setProvPct(d.progress_pct)
+        setProvLabel(d.stage_label)
+
+        if (d.ready) {
+          setStep('success')
+          return
+        }
+        if (d.failed) {
+          setProvFailed(true)
+          return
+        }
+      } catch {
+        // Silently retry
+      }
+      if (!cancelled) {
+        setTimeout(poll, 2500) // Poll every 2.5 seconds
+      }
+    }
+
+    poll()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, progressId])
+
+  // ── Provisioning progress screen ───────────────────────────────────────
+  if (step === 'provisioning') {
+    return (
+      <div className="text-center space-y-5 animate-fadeIn">
+        {!provFailed ? (
+          <>
+            {/* Animated spinner */}
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
+              style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.22)' }}>
+              <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin" />
+            </div>
+
+            <h2 className="text-xl font-bold text-white">Setting up your account</h2>
+            <p className="text-sm text-slate-400">{provLabel}</p>
+
+            {/* Progress bar */}
+            <div className="w-full rounded-full h-2.5 overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${provPct}%`,
+                  background: 'linear-gradient(90deg, #6366f1, #818cf8)',
+                }}
+              />
+            </div>
+            <p className="text-xs text-slate-500">{provPct}% complete</p>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              This usually takes about 30 seconds. Please don't close this page.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
+              style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.22)' }}>
+              <Shield className="w-7 h-7 text-red-400" />
+            </div>
+            <h2 className="text-xl font-bold text-white">Setup encountered an issue</h2>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              We couldn't complete your account setup automatically. Our team has been notified
+              and will resolve this shortly. Please try logging in — if your account isn't ready yet,
+              contact support.
+            </p>
+            <button
+              onClick={() => navigate('/login')}
+              className="auth-btn-primary mt-2"
+            >
+              Go to Login <ArrowRight size={16} />
+            </button>
+          </>
+        )}
+      </div>
+    )
   }
 
   // ── Success screen ────────────────────────────────────────────────────────
@@ -463,22 +568,15 @@ export function Register() {
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
           </div>
 
-          {/* Social sign-up — icon only, one row */}
-          <div className="flex gap-2.5">
-            {/* Google — native GSI icon button */}
+          {/* Social sign-up — icon only, centered row (matches login page) */}
+          <div className="flex justify-center gap-3">
+            {/* Google — native rendered button inside a styled container */}
             <div
-              className="flex-1 flex items-center justify-center h-11 rounded-xl overflow-hidden"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.10)',
-              }}
+              ref={googleBtnRef}
+              className="auth-social-icon-btn"
+              style={{ overflow: 'hidden', padding: 0, position: 'relative' }}
               title="Sign up with Google"
-            >
-              {googleLoading
-                ? <Spinner />
-                : <div ref={googleBtnRef} />
-              }
-            </div>
+            />
             <button
               type="button"
               onClick={() => toast('LinkedIn sign-up coming soon')}

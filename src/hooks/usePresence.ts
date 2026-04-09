@@ -55,7 +55,10 @@ export function usePresence() {
     return () => {
       ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, onActivity))
       if (intervalRef.current) clearInterval(intervalRef.current)
-      chatService.updatePresence('offline').catch(() => {})
+      // Only send offline if token still exists — avoids 400 when logout already cleared it
+      if (localStorage.getItem('auth_token')) {
+        chatService.updatePresence('offline').catch(() => {})
+      }
     }
   }, [user?.id])
 }

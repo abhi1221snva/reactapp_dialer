@@ -24,7 +24,7 @@ export const dialerService = {
   // GET /get-lead — backend resolves extension from JWT; no body required.
   // Response: { data: Lead } — `id` = queue row ID, `lead_id` = CRM ID (may differ).
   getLead: () =>
-    api.get('/get-lead'),
+    api.get('/get-lead', { params: { dialer_mode: 2 } }),
 
   // ── Call Lifecycle ──────────────────────────────────────────────────────────
   /**
@@ -52,7 +52,7 @@ export const dialerService = {
 
   // ── Disposition ─────────────────────────────────────────────────────────────
   saveDisposition: (data: SaveDispositionRequest) =>
-    api.post('/save-disposition', data),
+    api.post('/save-disposition', { ...data, dialer_mode: 2 }),
 
   // POST /disposition-by-campaign-id { campaign_id }
   getDispositionsByCampaign: (campaign_id: number) =>

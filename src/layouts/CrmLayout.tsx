@@ -23,6 +23,8 @@ const CRM_TITLES: Record<string, string> = {
   '/crm/bank-statements':       'Bank Statement Analysis',
   '/crm/bank-statements/logs':  'API Logs',
   '/crm/balji/api-explorer':    'Balji API Explorer',
+  '/crm/drip-campaigns':         'Drip Campaigns',
+  '/crm/drip-campaigns/create':  'Create Drip Campaign',
 }
 
 function titleFromPath(pathname: string): string {
@@ -30,6 +32,8 @@ function titleFromPath(pathname: string): string {
   if (/^\/crm\/leads\/\d+\/edit$/.test(pathname)) return 'Edit Lead'
   if (/^\/crm\/leads\/\d+$/.test(pathname)) return 'Lead Detail'
   if (/^\/crm\/bank-statements\/[a-f0-9-]+$/.test(pathname)) return 'Statement Analysis'
+  if (/^\/crm\/drip-campaigns\/\d+\/edit$/.test(pathname)) return 'Edit Drip Campaign'
+  if (/^\/crm\/drip-campaigns\/\d+$/.test(pathname)) return 'Campaign Detail'
   return 'CRM'
 }
 
@@ -73,11 +77,13 @@ export function CrmLayout() {
     '/crm/dashboard', '/crm/sms-inbox', '/crm/leads', '/crm/leads/create',
     '/crm/lead-fields', '/crm/lead-status', '/crm/document-types',
     '/crm/email-templates', '/crm/sms-templates', '/crm/pdf-templates', '/crm/lenders',
+    '/crm/drip-campaigns', '/crm/drip-campaigns/create',
   ])
   const showHeader = !OWN_HEADER.has(pathname)
     && !/^\/crm\/leads\/\d+$/.test(pathname)
     && !/^\/crm\/leads\/\d+\/edit$/.test(pathname)
     && !/^\/crm\/lenders\//.test(pathname)
+    && !/^\/crm\/drip-campaigns\//.test(pathname)
 
   return (
     <CrmHeaderContext.Provider value={{ setDescription, setActions, headerKey }}>

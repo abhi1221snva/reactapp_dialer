@@ -48,6 +48,9 @@ import { CrmLenderApis } from './pages/crm/CrmLenderApis'
 import { CrmLenderApiLogs } from './pages/crm/CrmLenderApiLogs'
 import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
 import { CrmAutomations } from './pages/crm/CrmAutomations'
+import { CrmDripCampaigns } from './pages/crm/CrmDripCampaigns'
+import { CrmDripCampaignBuilder } from './pages/crm/CrmDripCampaignBuilder'
+import { CrmDripCampaignDetail } from './pages/crm/CrmDripCampaignDetail'
 import { CrmSmsInbox } from './pages/crm/CrmSmsInbox'
 import { CrmDocumentTypes } from './pages/crm/CrmDocumentTypes'
 import { CrmEmailSettings } from './pages/crm/CrmEmailSettings'
@@ -126,6 +129,7 @@ import { GmailMailbox } from './pages/gmail/GmailMailbox'
 import EmailParser from './pages/email-parser/EmailParser'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
+import { SystemEmailTemplates } from './pages/admin/SystemEmailTemplates'
 import { SystemMonitor } from './pages/admin/SystemMonitor'
 import { SwaggerDocs } from './pages/admin/SwaggerDocs'
 import { WorkforceDashboard } from './pages/workforce/WorkforceDashboard'
@@ -229,6 +233,10 @@ export default function App() {
           <Route path="/crm/lender-api-configs" element={<CrmLenderApis />} />
           <Route path="/crm/lender-api-logs" element={<CrmLenderApiLogs />} />
           <Route path="/crm/automations" element={<CrmAutomations />} />
+          <Route path="/crm/drip-campaigns" element={<CrmDripCampaigns />} />
+          <Route path="/crm/drip-campaigns/create" element={<CrmDripCampaignBuilder />} />
+          <Route path="/crm/drip-campaigns/:id" element={<CrmDripCampaignDetail />} />
+          <Route path="/crm/drip-campaigns/:id/edit" element={<CrmDripCampaignBuilder />} />
           <Route path="/crm/sms-inbox" element={<CrmSmsInbox />} />
           <Route path="/crm/document-types"  element={<CrmDocumentTypes />} />
           <Route path="/crm/email-settings" element={<CrmEmailSettings />} />
@@ -387,6 +395,7 @@ export default function App() {
 
           {/* System Admin */}
           <Route path="/admin/clients" element={<AdminClients />} />
+          <Route path="/admin/email-templates" element={<SystemEmailTemplates />} />
           <Route path="/admin/system-monitor" element={<SystemMonitor />} />
           <Route path="/system/swagger" element={<SwaggerDocs />} />
         </Route>

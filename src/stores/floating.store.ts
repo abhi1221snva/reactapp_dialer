@@ -53,6 +53,10 @@ interface FloatingState {
   registerSipAnswer: (fn: () => void) => void
   registerSipDecline: (fn: () => void) => void
 
+  // ── SIP outbound dial ── (WebPhone registers, Dialer calls for WebRTC campaign calls) ──
+  sipDialHandler: ((phoneNumber: string) => void) | null
+  registerSipDial: (fn: (phoneNumber: string) => void) => void
+
   // ── Chat unread ────────────────────────────────────────────────────────────
   chatUnread: number
   setChatUnread: (n: number) => void
@@ -115,6 +119,9 @@ export const useFloatingStore = create<FloatingState>((set) => ({
   sipDeclineHandler: null,
   registerSipAnswer: (fn) => set({ sipAnswerHandler: fn }),
   registerSipDecline: (fn) => set({ sipDeclineHandler: fn }),
+
+  sipDialHandler: null,
+  registerSipDial: (fn) => set({ sipDialHandler: fn }),
 
   chatUnread: 0,
   setChatUnread: (n) => set({ chatUnread: n }),

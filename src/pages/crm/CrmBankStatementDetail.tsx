@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -7,6 +7,7 @@ import {
   AlertTriangle, Banknote, Calendar,
   CheckCircle2, XCircle, Search,
   ArrowUpRight, ArrowDownRight, Timer, Receipt, ChevronDown, ChevronUp,
+  Download, Eye, ToggleLeft, ToggleRight, Tag, Landmark,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -154,13 +155,15 @@ export function CrmBankStatementDetail() {
     },
   })
 
+  const leadId = session?.lead_id ?? 0
+
   const refreshMut = useMutation({
-    mutationFn: () => bankStatementService.refresh(session?.lead_id ?? 0, sessionId!),
+    mutationFn: () => bankStatementService.refresh(leadId, sessionId!),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['bank-statement-detail', sessionId] }); toast.success('Refreshed') },
     onError: () => toast.error('Refresh failed'),
   })
 
-  const leadId = session?.lead_id ?? 0
+  // ── Transactions ─────────────────────────────────────────────────────────
   const { data: txData, isLoading: txLoading } = useQuery({
     queryKey: ['bs-transactions', sessionId, txTab],
     queryFn: async () => {
@@ -176,6 +179,81 @@ export function CrmBankStatementDetail() {
   const filteredTx = txSearch
     ? transactions.filter(tx => (tx.description ?? '').toLowerCase().includes(txSearch.toLowerCase()))
     : transactions
+
+  // ── MCA Lenders (for toggle dropdown) ─────────────────────────────────────
+  const { data: mcaLendersMap } = useQuery<Record<string, string>>({
+    queryKey: ['bs-mca-lenders'],
+    queryFn: async () => {
+      const res = await bankStatementService.getMcaLenders()
+      return res.data?.data ?? res.data?.lenders ?? {}
+    },
+    enabled: session?.status === 'completed',
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // ── Transaction Toggles ────────────────────────────────────────────────────
+  const toggleTypeMut = useMutation({
+    mutationFn: (txId: number) => bankStatementService.toggleTransactionType(txId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['bs-transactions', sessionId] }); toast.success('Transaction type toggled') },
+    onError: () => toast.error('Toggle type failed'),
+  })
+
+  const toggleRevenueMut = useMutation({
+    mutationFn: ({ txId, current }: { txId: number; current: 'true_revenue' | 'adjustment' }) =>
+      bankStatementService.toggleRevenueClassification(txId, current),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['bs-transactions', sessionId] }); toast.success('Revenue classification toggled') },
+    onError: () => toast.error('Toggle revenue failed'),
+  })
+
+  const toggleMcaMut = useMutation({
+    mutationFn: ({ txId, isMca, lenderId, lenderName }: { txId: number; isMca: boolean; lenderId?: string; lenderName?: string }) =>
+      bankStatementService.toggleMcaStatus(txId, isMca, lenderId, lenderName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bs-transactions', sessionId] })
+      qc.invalidateQueries({ queryKey: ['bank-statement-detail', sessionId] })
+      toast.success('MCA status toggled')
+    },
+    onError: () => toast.error('Toggle MCA failed'),
+  })
+
+  // ── CSV / PDF Downloads ────────────────────────────────────────────────────
+  const handleDownloadCsv = useCallback(async () => {
+    if (!leadId) return toast.error('Lead ID required for CSV export')
+    try {
+      const res = await bankStatementService.downloadCsv(leadId, sessionId!)
+      const blob = new Blob([res.data], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `bank-statement-${sessionId}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('CSV downloaded')
+    } catch {
+      toast.error('CSV download failed')
+    }
+  }, [leadId, sessionId])
+
+  const handleViewPdf = useCallback(async (download = false) => {
+    if (!leadId) return toast.error('Lead ID required for PDF')
+    try {
+      const res = await bankStatementService.viewPdf(leadId, sessionId!, download)
+      const blob = new Blob([res.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      if (download) {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = session?.file_name ?? `bank-statement-${sessionId}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+        toast.success('PDF downloaded')
+      } else {
+        window.open(url, '_blank')
+      }
+    } catch {
+      toast.error('PDF load failed')
+    }
+  }, [leadId, sessionId, session?.file_name])
 
   // ── Loading / Empty ─────────────────────────────────────────────────────
 
@@ -255,10 +333,24 @@ export function CrmBankStatementDetail() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {session.status === 'completed' && leadId > 0 && (
-              <button onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-                <RefreshCw size={12} className={refreshMut.isPending ? 'animate-spin' : ''} />Re-sync
-              </button>
+              <>
+                <button onClick={() => handleViewPdf(false)} title="View PDF"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <Eye size={12} />View PDF
+                </button>
+                <button onClick={() => handleViewPdf(true)} title="Download PDF"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <Download size={12} />PDF
+                </button>
+                <button onClick={handleDownloadCsv} title="Export CSV"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 border border-green-200 rounded-lg hover:bg-green-50">
+                  <Download size={12} />CSV
+                </button>
+                <button onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                  <RefreshCw size={12} className={refreshMut.isPending ? 'animate-spin' : ''} />Re-sync
+                </button>
+              </>
             )}
             <StatusPill status={session.status} />
           </div>
@@ -331,6 +423,11 @@ export function CrmBankStatementDetail() {
               setTxSearch={setTxSearch}
               txLoading={txLoading}
               filteredTx={filteredTx}
+              onToggleType={(txId) => toggleTypeMut.mutate(txId)}
+              onToggleRevenue={(txId, current) => toggleRevenueMut.mutate({ txId, current })}
+              onToggleMca={(txId, isMca, lenderId, lenderName) => toggleMcaMut.mutate({ txId, isMca, lenderId, lenderName })}
+              mcaLenders={mcaLendersMap ?? {}}
+              isToggling={toggleTypeMut.isPending || toggleRevenueMut.isPending || toggleMcaMut.isPending}
             />
           )}
         </>
@@ -725,14 +822,21 @@ function CategorySection({ summary, transactions }: { summary: Record<string, an
 
 // ── Transactions Section ────────────────────────────────────────────────────────
 
-function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading, filteredTx }: {
+function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading, filteredTx, onToggleType, onToggleRevenue, onToggleMca, mcaLenders, isToggling }: {
   txTab: string
   setTxTab: (t: 'all' | 'credit' | 'debit') => void
   txSearch: string
   setTxSearch: (s: string) => void
   txLoading: boolean
   filteredTx: Record<string, any>[]
+  onToggleType: (txId: number) => void
+  onToggleRevenue: (txId: number, current: 'true_revenue' | 'adjustment') => void
+  onToggleMca: (txId: number, isMca: boolean, lenderId?: string, lenderName?: string) => void
+  mcaLenders: Record<string, string>
+  isToggling: boolean
 }) {
+  const [mcaDropdownTxId, setMcaDropdownTxId] = useState<number | null>(null)
+
   return (
     <div className="rounded-lg border-2 border-sky-500 overflow-hidden">
       <div className="bg-sky-600 px-4 py-2.5 flex items-center justify-between">
@@ -776,16 +880,24 @@ function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading
                   <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-500 uppercase">Category</th>
                   <th className="px-3 py-2.5 text-right text-xs font-bold text-gray-500 uppercase">Amount</th>
                   <th className="px-3 py-2.5 text-center text-xs font-bold text-gray-500 uppercase w-20">Type</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-bold text-gray-500 uppercase w-28">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTx.map((tx: any, i: number) => {
                   const isCredit = tx.type === 'credit'
+                  const txId = tx.id ?? tx.transaction_id
+                  const isRevenue = !tx.exclude_from_revenue && tx.type === 'credit'
+                  const isMca = !!tx.is_mca_payment || !!tx.is_mca
+                  const txDate = tx.transaction_date ?? tx.date ?? null
+                  const displayDate = txDate
+                    ? new Date(txDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : '—'
                   return (
-                    <tr key={i} className={cn('border-b border-gray-100 last:border-0 hover:bg-sky-50/40 transition-colors', i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40')}>
+                    <tr key={txId ?? i} className={cn('border-b border-gray-100 last:border-0 hover:bg-sky-50/40 transition-colors', i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40')}>
                       <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono">{i + 1}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{tx.date ?? '—'}</td>
-                      <td className="px-3 py-2 text-sm text-gray-800 font-medium max-w-[320px] truncate">{tx.description ?? '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{displayDate}</td>
+                      <td className="px-3 py-2 text-sm text-gray-800 font-medium max-w-[260px] truncate">{tx.description ?? '—'}</td>
                       <td className="px-3 py-2">
                         {tx.category ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{tx.category}</span>
@@ -802,6 +914,91 @@ function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading
                           {isCredit ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />}
                           {isCredit ? 'Credit' : 'Debit'}
                         </span>
+                      </td>
+                      {/* ── Action Buttons ── */}
+                      <td className="px-2 py-2 text-center">
+                        {txId ? (
+                          <div className="flex items-center justify-center gap-1 relative">
+                            {/* Toggle Type (credit/debit) */}
+                            <button
+                              onClick={() => onToggleType(txId)}
+                              disabled={isToggling}
+                              title={`Switch to ${isCredit ? 'Debit' : 'Credit'}`}
+                              className={cn(
+                                'p-1 rounded transition-colors disabled:opacity-40',
+                                isCredit
+                                  ? 'text-green-500 hover:bg-green-50 hover:text-green-700'
+                                  : 'text-red-500 hover:bg-red-50 hover:text-red-700'
+                              )}
+                            >
+                              {isCredit ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                            </button>
+
+                            {/* Toggle Revenue */}
+                            <button
+                              onClick={() => onToggleRevenue(txId, tx.exclude_from_revenue ? 'adjustment' : 'true_revenue')}
+                              disabled={isToggling}
+                              title={isRevenue ? 'Mark as Adjustment' : 'Mark as True Revenue'}
+                              className={cn(
+                                'p-1 rounded transition-colors disabled:opacity-40',
+                                isRevenue
+                                  ? 'text-emerald-600 hover:bg-emerald-50'
+                                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                              )}
+                            >
+                              <Tag size={14} />
+                            </button>
+
+                            {/* Toggle MCA */}
+                            <div className="relative">
+                              <button
+                                onClick={() => {
+                                  if (isMca) {
+                                    onToggleMca(txId, false, tx.mca_lender_id, tx.mca_lender_name)
+                                  } else {
+                                    setMcaDropdownTxId(mcaDropdownTxId === txId ? null : txId)
+                                  }
+                                }}
+                                disabled={isToggling}
+                                title={isMca ? 'Remove MCA flag' : 'Flag as MCA'}
+                                className={cn(
+                                  'p-1 rounded transition-colors disabled:opacity-40',
+                                  isMca
+                                    ? 'text-orange-600 hover:bg-orange-50'
+                                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                                )}
+                              >
+                                <Landmark size={14} />
+                              </button>
+                              {/* MCA Lender Dropdown */}
+                              {mcaDropdownTxId === txId && !isMca && (
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-30 py-1 max-h-48 overflow-y-auto">
+                                  {Object.entries(mcaLenders).length > 0 ? (
+                                    Object.entries(mcaLenders).map(([id, name]) => (
+                                      <button
+                                        key={id}
+                                        onClick={() => { onToggleMca(txId, true, id, name); setMcaDropdownTxId(null) }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-orange-50 hover:text-orange-700 truncate"
+                                      >
+                                        {name}
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <p className="px-3 py-2 text-xs text-gray-400">No lenders loaded</p>
+                                  )}
+                                  <button
+                                    onClick={() => setMcaDropdownTxId(null)}
+                                    className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-t border-gray-100 mt-1"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
                       </td>
                     </tr>
                   )

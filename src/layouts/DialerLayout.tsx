@@ -56,6 +56,7 @@ const DIALER_TITLES: Record<string, string> = {
   '/workforce/reports':             'Workforce Reports',
   '/workforce/analytics':           'Workforce Analytics',
   '/admin/clients':                 'Client Management',
+  '/admin/email-templates':         'Email Templates',
   '/admin/system-monitor':          'System Monitor',
   '/system/swagger':                'API Docs',
   '/profile':                       'Profile',

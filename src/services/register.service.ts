@@ -118,4 +118,26 @@ export const registerService = {
       '/register/google',
       { credential, business_name }
     ),
+
+  /**
+   * Poll registration provisioning status (slow-path only).
+   * GET /register/status/{id}
+   * Returns: { status, data: { stage, progress_pct, ready, failed, stage_label, client_id?, user_id?, error_message? } }
+   */
+  getRegistrationStatus: (progressId: number | string) =>
+    api.get<{
+      status: boolean
+      data: {
+        stage: string
+        progress_pct: number
+        path: 'fast' | 'slow'
+        ready: boolean
+        failed: boolean
+        stage_label: string
+        client_id?: number
+        user_id?: number
+        error_message?: string
+        retry_count?: number
+      }
+    }>(`/register/status/${progressId}`),
 }

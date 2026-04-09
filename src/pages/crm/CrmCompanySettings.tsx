@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import api from '../../api/axios'
+import { useAuthStore } from '../../stores/auth.store'
 
 interface CompanySettings {
   id: number | null
@@ -267,6 +268,8 @@ export function CrmCompanySettings() {
     setDirty(true)
   }
 
+  const updateUser = useAuthStore(s => s.updateUser)
+
   const mutation = useMutation({
     mutationFn: () => settingsApi.update(form),
     onSuccess: () => {
@@ -274,6 +277,10 @@ export function CrmCompanySettings() {
       qc.invalidateQueries({ queryKey: ['company-settings'] })
       setInitialized(false)
       setDirty(false)
+      // Sync company name to auth store so the header updates immediately
+      if (form.company_name) {
+        updateUser({ companyName: form.company_name })
+      }
     },
     onError: () => toast.error('Failed to save settings'),
   })
