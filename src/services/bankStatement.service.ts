@@ -28,20 +28,22 @@ export const bankStatementService = {
   getAll: (params?: { lead_id?: number; status?: string; page?: number; per_page?: number }) =>
     api.get('/crm/bank-statements', { params }),
 
-  uploadStandalone: (formData: FormData) =>
+  uploadStandalone: (formData: FormData, onUploadProgress?: (evt: { loaded: number; total?: number }) => void) =>
     api.post('/crm/bank-statements/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120_000,
+      onUploadProgress,
     }),
 
   // ── Lead-specific ──────────────────────────────────────────────────────────
   getLeadSessions: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/bank-statements`),
 
-  upload: (leadId: number, formData: FormData) =>
+  upload: (leadId: number, formData: FormData, onUploadProgress?: (evt: { loaded: number; total?: number }) => void) =>
     api.post(`/crm/lead/${leadId}/bank-statements/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120_000,
+      onUploadProgress,
     }),
 
   analyzeDocument: (leadId: number, documentId: number, modelTier = 'lsc_pro') =>
@@ -52,6 +54,15 @@ export const bankStatementService = {
 
   getByDocuments: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/bank-statements/by-documents`),
+
+  /**
+   * Consolidated compliance report: combined totals + per-statement list.
+   * Filters to document-linked sessions only (matches Documents tab exactly).
+   */
+  getBankStatementsAnalysis: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/bank-statements-analysis`, {
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    }),
 
   getSummary: (leadId: number, sessionId: string) =>
     api.get(`/crm/lead/${leadId}/bank-statements/${sessionId}/summary`),

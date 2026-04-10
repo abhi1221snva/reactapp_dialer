@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { ReactNode, ChangeEvent, RefObject, ComponentType } from 'react'
+import type { ReactNode, ComponentType, ChangeEvent } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -30,14 +30,13 @@ import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
 import { BankStatementTab } from '../../components/crm/BankStatementTab'
 import { DripLeadPanel } from '../../components/crm/DripLeadPanel'
+import { DocumentUploadButton, type StagedFile } from '../../components/crm/DocumentUploadButton'
 import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
 import { OnDeckPanel } from '../../components/crm/OnDeckPanel'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
-import { CrmDocumentTypesManager, parseValues } from '../../components/crm/CrmDocumentTypesManager'
 import { RichEmailEditor } from '../../components/crm/RichEmailEditor'
 import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
-import type { DocumentType } from '../../components/crm/CrmDocumentTypesManager'
 import { ErrorBoundary } from '../../components/ui/ErrorBoundary'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
@@ -66,40 +65,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
 // ── Constants ──────────────────────────────────────────────────────────────────
 const AVATAR_BG = ['bg-emerald-600','bg-teal-600','bg-sky-600','bg-violet-600','bg-rose-600','bg-amber-600']
 
-const ALLOWED_MIMES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'image/jpeg', 'image/png',
-  // Some browsers/OS report these for Office files
-  'application/zip', 'application/octet-stream', 'application/x-cfb',
-])
-const ALLOWED_EXTS = new Set(['pdf','doc','docx','xls','xlsx','jpg','jpeg','png'])
-const ALLOWED_EXT  = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png'
-const MAX_FILE_MB  = 20
-const MAX_FILES    = 10
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function getFileExt(name: string): string {
-  return (name.split('.').pop() ?? '').toLowerCase()
-}
-
-function validateFiles(files: File[]): { valid: File[]; errors: string[] } {
-  const valid: File[] = []; const errors: string[] = []
-  if (files.length > MAX_FILES) { errors.push(`Maximum ${MAX_FILES} files allowed.`); return { valid, errors } }
-  for (const f of files) {
-    const ext = getFileExt(f.name)
-    const mimeOk = ALLOWED_MIMES.has(f.type) || !f.type  // empty type = trust extension
-    const extOk  = ALLOWED_EXTS.has(ext)
-    if (!mimeOk && !extOk) errors.push(`"${f.name}" — unsupported type. Allowed: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.`)
-    else if (f.size > MAX_FILE_MB * 1024 * 1024) errors.push(`"${f.name}" — exceeds ${MAX_FILE_MB} MB.`)
-    else valid.push(f)
-  }
-  return { valid, errors }
-}
-
 function formatBytes(b: number) {
   if (b < 1024) return b + ' B'
   if (b < 1048576) return (b / 1024).toFixed(1) + ' KB'
@@ -119,18 +85,6 @@ function getFileIcon(p: string | null | undefined) {
   if (t === 'pdf') return { bg: 'bg-red-50', color: 'text-red-500' }
   if (t === 'image') return { bg: 'bg-sky-50', color: 'text-sky-500' }
   return { bg: 'bg-emerald-50', color: 'text-emerald-600' }
-}
-
-async function downloadFile(url: string, fileName: string) {
-  try {
-    const res = await fetch(url); const blob = await res.blob()
-    const href = URL.createObjectURL(blob)
-    const a = Object.assign(document.createElement('a'), { href, download: fileName })
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(href)
-  } catch {
-    const a = Object.assign(document.createElement('a'), { href: url, download: fileName, target: '_blank' })
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-  }
 }
 
 function initials(name: string) {
@@ -671,18 +625,153 @@ function BankStatementAnalysisModal({ session, leadId, onClose }: { session: Ban
   )
 }
 
+// ── Document Analysis Panel ────────────────────────────────────────────────────
+// Clean, readable analysis grid rendered beneath each analyzed bank statement doc.
+// Features: full-name labels, larger bold values, refresh button, loading spinner,
+// error handling, auto-refresh every 45s, responsive grid layout.
+function DocumentAnalysisPanel({ session, leadId, onOpenDetails }: {
+  session: BankStatementSession
+  leadId: number
+  onOpenDetails: () => void
+}) {
+  const qc = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date())
+
+  const handleRefresh = async (showToast = true) => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    setError(null)
+    try {
+      // Invalidate + refetch the by-documents query to bypass any cached data.
+      await qc.refetchQueries({ queryKey: ['bs-by-documents', leadId], exact: true })
+      setLastRefreshedAt(new Date())
+      if (showToast) toast.success('Analysis refreshed')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
+        ?? (err as { message?: string })?.message
+        ?? 'Failed to refresh analysis'
+      setError(msg)
+      if (showToast) toast.error(msg)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  // Auto-refresh every 45 seconds for near real-time updates (silent).
+  useEffect(() => {
+    const timer = setInterval(() => { handleRefresh(false) }, 45_000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadId])
+
+  // Parse session payload
+  const sum = (typeof session.summary_data === 'string' ? JSON.parse(session.summary_data as string) : session.summary_data) as Record<string, any> | null
+  const mcaRaw = (typeof session.mca_analysis === 'string' ? JSON.parse(session.mca_analysis as string) : session.mca_analysis) as Record<string, any> | null
+  const hasMca = (mcaRaw?.total_mca_count ?? 0) > 0
+  const fs = sum?.fraud_score ?? session.fraud_score
+  const nsfCount = sum?.nsf?.nsf_fee_count ?? sum?.nsf_count ?? session.nsf_count ?? 0
+
+  const metrics: Array<{ label: string; value: string | number; labelColor: string; valueColor: string; bg: string; border: string }> = [
+    { label: 'Revenue',            value: fmtCurrency(sum?.true_revenue ?? session.total_revenue),                         labelColor: 'text-emerald-600', valueColor: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    { label: 'Deposits',           value: fmtCurrency(sum?.total_credits ?? session.total_deposits),                       labelColor: 'text-green-600',   valueColor: 'text-green-800',   bg: 'bg-green-50',   border: 'border-green-200'   },
+    { label: 'Debits',             value: fmtCurrency(sum?.total_debits),                                                  labelColor: 'text-red-500',     valueColor: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200'     },
+    { label: 'Adjustments',        value: fmtCurrency(sum?.adjustments),                                                   labelColor: 'text-orange-500',  valueColor: 'text-orange-800',  bg: 'bg-orange-50',  border: 'border-orange-200'  },
+    { label: 'Average Balance',    value: fmtCurrency(sum?.average_daily_balance),                                         labelColor: 'text-blue-500',    valueColor: 'text-blue-800',    bg: 'bg-blue-50',    border: 'border-blue-200'    },
+    { label: 'Ledger Balance',     value: fmtCurrency(sum?.average_ledger_balance ?? sum?.ending_balance),                 labelColor: 'text-indigo-500',  valueColor: 'text-indigo-800',  bg: 'bg-indigo-50',  border: 'border-indigo-200'  },
+    { label: 'Total Transactions', value: sum?.total_transactions ?? 0,                                                    labelColor: 'text-slate-500',   valueColor: 'text-slate-800',   bg: 'bg-slate-50',   border: 'border-slate-200'   },
+    { label: 'Non-Sufficient Funds', value: nsfCount,                                                                      labelColor: nsfCount > 0 ? 'text-amber-600' : 'text-slate-500', valueColor: nsfCount > 0 ? 'text-amber-800' : 'text-slate-700', bg: nsfCount > 0 ? 'bg-amber-50' : 'bg-slate-50', border: nsfCount > 0 ? 'border-amber-200' : 'border-slate-200' },
+  ]
+
+  return (
+    <div className="border-t border-slate-100 bg-gradient-to-b from-slate-50/60 to-white px-4 py-3">
+      {/* Header: title + status chips + refresh */}
+      <div className="flex items-start justify-between gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="bg-slate-800 text-white font-bold px-2 py-1 rounded text-[10px] uppercase tracking-wider">Analysis</span>
+          {fs != null && (
+            <span className={`font-bold px-2 py-1 rounded text-[10px] ${fs >= 70 ? 'bg-red-100 text-red-800' : fs >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+              Fraud Score {fs}
+            </span>
+          )}
+          {hasMca && (
+            <span className="font-bold text-red-800 bg-red-100 px-2 py-1 rounded flex items-center gap-1 text-[10px]">
+              <ShieldAlert size={10} /> MCA Detected
+            </span>
+          )}
+          <span className="text-[10px] text-slate-400 font-medium">
+            Updated {lastRefreshedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            type="button"
+            onClick={() => handleRefresh(true)}
+            disabled={isRefreshing}
+            title="Refresh analysis data"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 transition-colors text-[11px] font-semibold disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+          >
+            {isRefreshing
+              ? <><Loader2 size={11} className="animate-spin" /> Refreshing…</>
+              : <><RefreshCw size={11} /> Refresh</>}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenDetails}
+            className="text-indigo-600 font-bold hover:text-indigo-700 text-[11px]"
+          >
+            Details &rarr;
+          </button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs">
+          <AlertCircle size={13} className="flex-shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-500 hover:text-red-700 font-semibold"
+            title="Dismiss"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Metrics grid — responsive card layout */}
+      <div className={`grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 transition-opacity ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}>
+        {metrics.map((m, i) => (
+          <div
+            key={i}
+            className={`rounded-lg border ${m.border} ${m.bg} px-3 py-2.5 flex flex-col items-start justify-center min-w-0`}
+          >
+            <span className={`text-[10px] font-semibold uppercase tracking-wide leading-tight ${m.labelColor}`}>
+              {m.label}
+            </span>
+            <span className={`mt-1 text-sm sm:text-[15px] font-extrabold tabular-nums leading-tight truncate w-full ${m.valueColor}`}>
+              {m.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Documents Panel ────────────────────────────────────────────────────────────
+type SortKey = 'date_desc' | 'date_asc' | 'name_asc' | 'name_desc'
+
 function DocumentsPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [selectedTypeId, setSelectedTypeId] = useState('')
-  const [subValue, setSubValue] = useState('')
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [viewDoc, setViewDoc] = useState<CrmDocument | null>(null)
-  const [showTypeManager, setShowTypeManager] = useState(false)
   const [analysisModal, setAnalysisModal] = useState<BankStatementSession | null>(null)
   const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<SortKey>('date_desc')
 
   // Bank statement sessions linked to documents
   const { data: docSessions } = useQuery({
@@ -711,47 +800,54 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
     },
   })
 
-  const { data: typeData } = useQuery({
-    queryKey: ['document-types'],
-    queryFn: async () => {
-      const res = await crmService.getDocumentTypes()
-      return (res.data?.data ?? res.data ?? []) as DocumentType[]
-    },
-    staleTime: 2 * 60 * 1000,
-  })
-
-  const activeTypes = (typeData ?? []).filter((t: DocumentType) => String(t.status) === '1')
-  const selectedType = activeTypes.find((t: DocumentType) => String(t.id) === selectedTypeId) ?? null
-  const subValues = parseValues(selectedType?.values)
-  const computedDocType = selectedType ? (subValue ? `${selectedType.title} - ${subValue}` : selectedType.title) : ''
-
   const { data, isLoading } = useQuery({
     queryKey: ['lead-documents', leadId],
     queryFn: async () => (res => (res.data?.data ?? res.data ?? []) as CrmDocument[])(await crmService.getLeadDocuments(leadId)),
   })
   const docs = data ?? []
 
-  const uploadMutation = useMutation({
-    mutationFn: (files: File[]) => {
-      const fd = new FormData()
-      files.forEach(f => fd.append('files[]', f))
-      fd.append('document_type', computedDocType)
-      return crmService.uploadLeadDocuments(leadId, fd)
-    },
-    onSuccess: (res) => {
-      const count: number = res.data?.data?.count ?? 1
-      const failed: string[] = res.data?.data?.failed ?? []
-      toast.success(`${count} file${count !== 1 ? 's' : ''} uploaded`)
-      if (failed.length) toast.error(`Failed: ${failed.join(', ')}`)
-      setSelectedFiles([]); setValidationErrors([]); setSubValue('')
-      qc.invalidateQueries({ queryKey: ['lead-documents', leadId] })
-      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast.error(msg ? `Upload failed: ${msg}` : 'Upload failed — please try again.')
-    },
-  })
+  // Filter + sort pipeline (search + sort only — no tag filter)
+  const visibleDocs = (() => {
+    const q = search.trim().toLowerCase()
+    let list = docs.filter(d => {
+      if (!q) return true
+      return (
+        (d.file_name ?? '').toLowerCase().includes(q) ||
+        (d.document_type ?? '').toLowerCase().includes(q)
+      )
+    })
+    list = [...list].sort((a, b) => {
+      switch (sortBy) {
+        case 'date_asc':  return +new Date(a.created_at) - +new Date(b.created_at)
+        case 'name_asc':  return (a.file_name ?? '').localeCompare(b.file_name ?? '')
+        case 'name_desc': return (b.file_name ?? '').localeCompare(a.file_name ?? '')
+        case 'date_desc':
+        default:          return +new Date(b.created_at) - +new Date(a.created_at)
+      }
+    })
+    return list
+  })()
+
+  const allVisibleIds = visibleDocs.map(d => d.id)
+  const allSelected  = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
+  async function uploadLeadDocs(items: StagedFile[], onProgress: (pct: number) => void) {
+    const fd = new FormData()
+    items.forEach(it => {
+      fd.append('files[]', it.file)
+      fd.append('document_type[]', it.documentType)
+      fd.append('sub_type[]', it.subType ?? '')
+    })
+    const res = await crmService.uploadLeadDocuments(leadId, fd, (evt) => {
+      if (evt.total) onProgress(Math.round((evt.loaded / evt.total) * 100))
+    })
+    const failed: string[] = res.data?.data?.failed ?? []
+    if (failed.length) toast.error(`Failed: ${failed.join(', ')}`)
+    qc.invalidateQueries({ queryKey: ['lead-documents', leadId] })
+    qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+    return res
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (docId: number) => crmService.deleteLeadDocument(leadId, docId),
@@ -759,30 +855,122 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
     onError: () => toast.error('Delete failed'),
   })
 
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const raw = Array.from(e.target.files ?? []); e.target.value = ''
-    if (!raw.length) return
-    const { valid, errors } = validateFiles([...selectedFiles, ...raw])
-    setValidationErrors(errors); setSelectedFiles(valid)
+  const bulkDeleteMut = useMutation({
+    mutationFn: (ids: number[]) =>
+      crmService.bulkLeadDocumentAction(leadId, { action: 'delete', doc_ids: ids }),
+    onSuccess: (res) => {
+      const count = res.data?.data?.count ?? 0
+      toast.success(`Deleted ${count} document${count !== 1 ? 's' : ''}`)
+      setSelectedIds(new Set())
+      qc.invalidateQueries({ queryKey: ['lead-documents', leadId] })
+    },
+    onError: () => toast.error('Bulk delete failed'),
+  })
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  function toggleSelectAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(allVisibleIds))
   }
 
-  const canUpload = !!selectedTypeId && selectedFiles.length > 0
+  async function bulkDownload() {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+    toast.success(`Downloading ${ids.length} file${ids.length !== 1 ? 's' : ''}…`)
+    for (const id of ids) {
+      const doc = docs.find(d => d.id === id)
+      if (!doc || !doc.file_path) continue
+      try {
+        const res = await crmService.downloadLeadDocument(leadId, id)
+        const url = URL.createObjectURL(res.data as Blob)
+        const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch {
+        toast.error(`Failed to download ${doc.file_name}`)
+      }
+    }
+    setSelectedIds(new Set())
+  }
+
+  async function bulkDelete() {
+    if (!selectedIds.size) return
+    if (!(await confirmDelete())) return
+    bulkDeleteMut.mutate([...selectedIds])
+  }
 
   return (
     <>
       {viewDoc && <DocViewerModal doc={viewDoc} leadId={leadId} onClose={() => setViewDoc(null)} />}
-      {showTypeManager && <CrmDocumentTypesManager onClose={() => setShowTypeManager(false)} />}
       {analysisModal && <BankStatementAnalysisModal session={analysisModal} leadId={leadId} onClose={() => setAnalysisModal(null)} />}
 
-    <div className="flex gap-0 divide-x divide-slate-100 h-full">
+    <div className="flex flex-col h-full">
 
-      {/* ── Left: Document list ── */}
-      <div className="flex-1 min-w-0 pr-5 overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-            {isLoading ? 'Documents' : `${docs.length} Document${docs.length !== 1 ? 's' : ''}`}
+      {/* ── Full-width documents list ── */}
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        {/* Toolbar: count + search + sort + Upload button */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mr-auto">
+            {isLoading ? 'Documents' : `${visibleDocs.length} of ${docs.length}`}
           </span>
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="pl-7 pr-2 py-1.5 text-xs rounded-lg border border-slate-200 focus:border-emerald-400 focus:outline-none w-40"
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as SortKey)}
+            className="text-xs rounded-lg border border-slate-200 py-1.5 px-2 focus:border-emerald-400 focus:outline-none"
+          >
+            <option value="date_desc">Newest first</option>
+            <option value="date_asc">Oldest first</option>
+            <option value="name_asc">Name A–Z</option>
+            <option value="name_desc">Name Z–A</option>
+          </select>
+          <DocumentUploadButton onUpload={uploadLeadDocs} />
         </div>
+
+        {/* Bulk actions toolbar (delete + download only) */}
+        {someSelected && (
+          <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200">
+            <span className="text-xs font-semibold text-emerald-700">
+              {selectedIds.size} selected
+            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                onClick={bulkDownload}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold transition-colors"
+              >
+                <Download size={11} /> Download
+              </button>
+              <button
+                onClick={bulkDelete}
+                disabled={bulkDeleteMut.isPending}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-white border border-red-300 text-red-600 hover:bg-red-100 text-[11px] font-semibold transition-colors disabled:opacity-50"
+              >
+                <Trash2 size={11} /> Delete
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 transition-colors"
+                title="Clear selection"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin text-emerald-500" /></div>
@@ -792,210 +980,157 @@ function DocumentsPanel({ leadId }: { leadId: number }) {
               <FolderOpen size={22} className="text-slate-300" />
             </div>
             <p className="text-sm font-semibold text-slate-500">No documents yet</p>
-            <p className="text-xs text-slate-400 mt-1">Upload files using the panel on the right</p>
+            <p className="text-xs text-slate-400 mt-1">Click <strong>Upload Files</strong> to add one</p>
+            <div className="mt-4">
+              <DocumentUploadButton
+                onUpload={uploadLeadDocs}
+                buttonClassName="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors"
+              />
+            </div>
+          </div>
+        ) : visibleDocs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <Search size={22} className="text-slate-300 mb-2" />
+            <p className="text-sm font-semibold text-slate-500">No matches</p>
+            <p className="text-xs text-slate-400 mt-1">Try a different search or filter</p>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {docs.map(doc => {
-              const ic = getFileIcon(doc.file_path)
-              const isPdf = getFileType(doc.file_path) === 'pdf'
-              const isBankStatement = isPdf && /bank.?statement/i.test(doc.document_type)
-              const bsSession = sessionByDocId.get(doc.id)
-              const isAnalyzing = analyzingDocId === doc.id && analyzeMut.isPending
+          <>
+            {/* Select all header */}
+            <div className="flex items-center gap-3 px-3 py-1.5 mb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-400 cursor-pointer"
+              />
+              <span>Select all</span>
+            </div>
 
-              return (
-                <div key={doc.id} className="rounded-lg border border-slate-200 bg-white hover:border-emerald-200 hover:shadow-sm transition-all group">
-                  <div className="flex items-center gap-3 px-3 py-2.5">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
-                      <FileText size={14} className={ic.color} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{doc.document_type}</p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">{doc.file_name}</span>
-                        {doc.file_size ? <span className="text-[10px] text-slate-400">· {formatBytes(Number(doc.file_size))}</span> : null}
-                        <span className="text-[10px] text-slate-400">· {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
+            <div className="space-y-1.5">
+              {visibleDocs.map(doc => {
+                const ic = getFileIcon(doc.file_path)
+                const isPdf = getFileType(doc.file_path) === 'pdf'
+                const isBankStatement = isPdf && /bank.?statement/i.test(doc.document_type)
+                const bsSession = sessionByDocId.get(doc.id)
+                const isAnalyzing = analyzingDocId === doc.id && analyzeMut.isPending
+                const isChecked = selectedIds.has(doc.id)
+
+                return (
+                  <div
+                    key={doc.id}
+                    className={`rounded-lg border bg-white hover:shadow-sm transition-all group ${
+                      isChecked ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200 hover:border-emerald-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSelect(doc.id)}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-400 cursor-pointer flex-shrink-0"
+                      />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ic.bg}`}>
+                        <FileText size={14} className={ic.color} />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {/* Analyze button — Bank Statement PDFs only, not yet analyzed */}
-                      {isBankStatement && !bsSession && (
-                        <button
-                          onClick={() => { setAnalyzingDocId(doc.id); analyzeMut.mutate(doc.id) }}
-                          disabled={isAnalyzing || analyzeMut.isPending}
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors text-[11px] font-semibold disabled:opacity-50"
-                          title="Analyze with Balji"
-                        >
-                          {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <BarChart3 size={12} />}
-                          Analyze
-                        </button>
-                      )}
-                      {/* Analysis status pill + eye button for analyzed docs */}
-                      {bsSession && (
-                        <>
-                          {bsSession.status === 'completed' && (
-                            <button onClick={() => setAnalysisModal(bsSession)}
-                              className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors" title="View Analysis">
-                              <BarChart3 size={13} />
-                            </button>
-                          )}
-                          {(bsSession.status === 'pending' || bsSession.status === 'processing') && (
-                            <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 text-sky-700 text-[10px] font-bold">
-                              <Loader2 size={10} className="animate-spin" /> Analyzing
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap leading-tight">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{doc.document_type}</p>
+                          {doc.sub_type && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {doc.sub_type}
                             </span>
                           )}
-                          {bsSession.status === 'failed' && (
-                            <>
-                              <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 text-[10px] font-bold" title={bsSession.error_message ?? 'Failed'}>
-                                <AlertCircle size={10} /> Failed
-                              </span>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await bankStatementService.destroy(leadId, bsSession.session_id)
-                                    qc.invalidateQueries({ queryKey: ['bs-by-documents', leadId] })
-                                    toast.success('Cleared — you can re-analyze')
-                                  } catch { toast.error('Failed to clear') }
-                                }}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-semibold transition-colors"
-                                title="Clear failed analysis and retry"
-                              >
-                                <RefreshCw size={10} /> Retry
-                              </button>
-                            </>
-                          )}
-                        </>
-                      )}
-                      <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
-                      <button
-                        disabled={!doc.file_path}
-                        className="p-1.5 rounded-md bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-30"
-                        title="Download"
-                        onClick={async () => {
-                          if (!doc.file_path) return
-                          try {
-                            const res = await crmService.downloadLeadDocument(leadId, doc.id)
-                            const url = URL.createObjectURL(res.data as Blob)
-                            const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
-                            document.body.appendChild(a); a.click(); document.body.removeChild(a)
-                            setTimeout(() => URL.revokeObjectURL(url), 1000)
-                          } catch { toast.error('Download failed') }
-                        }}
-                      ><Download size={13} /></button>
-                      <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Delete"><Trash2 size={13} /></button>
-                    </div>
-                  </div>
-
-                  {/* Inline analysis summary under the document */}
-                  {bsSession && bsSession.status === 'completed' && (() => {
-                    const s = bsSession
-                    const sum = (typeof s.summary_data === 'string' ? JSON.parse(s.summary_data as string) : s.summary_data) as Record<string, any> | null
-                    const mcaRaw = (typeof s.mca_analysis === 'string' ? JSON.parse(s.mca_analysis as string) : s.mca_analysis) as Record<string, any> | null
-                    const hasMca = (mcaRaw?.total_mca_count ?? 0) > 0
-                    const fs = sum?.fraud_score ?? s.fraud_score
-                    const nsfCount = sum?.nsf?.nsf_fee_count ?? sum?.nsf_count ?? s.nsf_count ?? 0
-                    return (
-                      <div className="border-t border-slate-100 px-3 py-1.5 bg-slate-50/50">
-                        <div className="flex items-center gap-1 flex-wrap text-[11px] leading-none">
-                          <span className="bg-slate-700 text-white font-bold px-1.5 py-[3px] rounded text-[10px] uppercase tracking-wide">Analysis</span>
-                          <span className="bg-emerald-50 text-emerald-800 font-bold px-1.5 py-[3px] rounded"><span className="text-emerald-500 font-medium">Rev</span> {fmtCurrency(sum?.true_revenue ?? s.total_revenue)}</span>
-                          <span className="bg-green-50 text-green-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-green-500 font-medium">Dep</span> {fmtCurrency(sum?.total_credits ?? s.total_deposits)}</span>
-                          <span className="bg-red-50 text-red-700 font-semibold px-1.5 py-[3px] rounded"><span className="text-red-400 font-medium">Deb</span> {fmtCurrency(sum?.total_debits)}</span>
-                          <span className="bg-orange-50 text-orange-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-orange-400 font-medium">Adj</span> {fmtCurrency(sum?.adjustments)}</span>
-                          <span className="bg-blue-50 text-blue-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-blue-400 font-medium">Avg</span> {fmtCurrency(sum?.average_daily_balance)}</span>
-                          <span className="bg-indigo-50 text-indigo-800 font-semibold px-1.5 py-[3px] rounded"><span className="text-indigo-400 font-medium">Ledger</span> {fmtCurrency(sum?.average_ledger_balance ?? sum?.ending_balance)}</span>
-                          <span className="bg-slate-100 text-slate-700 font-semibold px-1.5 py-[3px] rounded"><span className="text-slate-400 font-medium">Tx</span> {sum?.total_transactions ?? 0}</span>
-                          <span className={`font-semibold px-1.5 py-[3px] rounded ${nsfCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}><span className={nsfCount > 0 ? 'text-amber-500 font-medium' : 'text-slate-400 font-medium'}>NSF</span> {nsfCount}</span>
-                          {fs != null && (
-                            <span className={`font-bold px-1.5 py-[3px] rounded ${fs >= 70 ? 'bg-red-100 text-red-800' : fs >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>Fraud {fs}</span>
-                          )}
-                          {hasMca && <span className="font-bold text-red-800 bg-red-100 px-1.5 py-[3px] rounded flex items-center gap-0.5"><ShieldAlert size={9} /> MCA</span>}
-                          <button onClick={() => setAnalysisModal(s)} className="text-indigo-600 font-bold hover:text-indigo-700 ml-auto text-[10px]">
-                            Details &rarr;
-                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">{doc.file_name}</span>
+                          {doc.file_size ? <span className="text-[10px] text-slate-400">· {formatBytes(Number(doc.file_size))}</span> : null}
+                          <span className="text-[10px] text-slate-400">· {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          {doc.uploaded_by_name && <span className="text-[10px] text-slate-400">· {doc.uploaded_by_name}</span>}
                         </div>
                       </div>
-                    )
-                  })()}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* Analyze button — Bank Statement PDFs only, not yet analyzed */}
+                        {isBankStatement && !bsSession && (
+                          <button
+                            onClick={() => { setAnalyzingDocId(doc.id); analyzeMut.mutate(doc.id) }}
+                            disabled={isAnalyzing || analyzeMut.isPending}
+                            className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors text-[11px] font-semibold disabled:opacity-50"
+                            title="Analyze with Balji"
+                          >
+                            {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <BarChart3 size={12} />}
+                            Analyze
+                          </button>
+                        )}
+                        {/* Analysis status pill + eye button for analyzed docs */}
+                        {bsSession && (
+                          <>
+                            {bsSession.status === 'completed' && (
+                              <button onClick={() => setAnalysisModal(bsSession)}
+                                className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors" title="View Analysis">
+                                <BarChart3 size={13} />
+                              </button>
+                            )}
+                            {(bsSession.status === 'pending' || bsSession.status === 'processing') && (
+                              <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 text-sky-700 text-[10px] font-bold">
+                                <Loader2 size={10} className="animate-spin" /> Analyzing
+                              </span>
+                            )}
+                            {bsSession.status === 'failed' && (
+                              <>
+                                <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 text-[10px] font-bold" title={bsSession.error_message ?? 'Failed'}>
+                                  <AlertCircle size={10} /> Failed
+                                </span>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await bankStatementService.destroy(leadId, bsSession.session_id)
+                                      qc.invalidateQueries({ queryKey: ['bs-by-documents', leadId] })
+                                      toast.success('Cleared — you can re-analyze')
+                                    } catch { toast.error('Failed to clear') }
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-semibold transition-colors"
+                                  title="Clear failed analysis and retry"
+                                >
+                                  <RefreshCw size={10} /> Retry
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
+                        <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
+                        <button
+                          disabled={!doc.file_path}
+                          className="p-1.5 rounded-md bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-30"
+                          title="Download"
+                          onClick={async () => {
+                            if (!doc.file_path) return
+                            try {
+                              const res = await crmService.downloadLeadDocument(leadId, doc.id)
+                              const url = URL.createObjectURL(res.data as Blob)
+                              const a = Object.assign(document.createElement('a'), { href: url, download: doc.file_name })
+                              document.body.appendChild(a); a.click(); document.body.removeChild(a)
+                              setTimeout(() => URL.revokeObjectURL(url), 1000)
+                            } catch { toast.error('Download failed') }
+                          }}
+                        ><Download size={13} /></button>
+                        <button onClick={async () => { if (await confirmDelete()) deleteMutation.mutate(doc.id) }} className="p-1.5 rounded-md bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Delete"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
 
-      {/* ── Right: Upload panel ── */}
-      <div className="w-72 flex-shrink-0 pl-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Upload</span>
-        </div>
-
-        {/* Type + conditional sub-type */}
-        <div className="space-y-2 mb-3">
-          <select value={selectedTypeId} onChange={e => { setSelectedTypeId(e.target.value); setSubValue('') }} className="input text-sm w-full">
-            <option value="">— Document type —</option>
-            {activeTypes.map((t: DocumentType) => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
-          </select>
-          {subValues.length > 0 && (
-            <select value={subValue} onChange={e => setSubValue(e.target.value)} className="input text-sm w-full">
-              <option value="">Select {selectedType?.title} month</option>
-              {subValues.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          )}
-        </div>
-
-        {/* Drop zone */}
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={!selectedTypeId || uploadMutation.isPending}
-          className="w-full rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 bg-slate-50/50 py-6 flex flex-col items-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-            <Upload size={15} className="text-emerald-500" />
-          </div>
-          <span className="text-xs font-semibold text-slate-500">Choose files</span>
-          <span className="text-[10px] text-slate-400">
-            {selectedTypeId ? 'PDF, DOC, XLS, JPG, PNG' : 'Select a document type first'}
-          </span>
-        </button>
-        <input ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden" onChange={handleFileChange} />
-
-        <p className="text-[10px] text-slate-400 mt-2 text-center">Max {MAX_FILE_MB} MB · up to {MAX_FILES} files</p>
-
-        {/* Validation errors */}
-        {validationErrors.length > 0 && (
-          <div className="mt-3 rounded-lg bg-red-50 border border-red-100 p-2.5 space-y-1">
-            {validationErrors.map((err, i) => (
-              <p key={i} className="flex items-start gap-1.5 text-xs text-red-600"><AlertCircle size={11} className="mt-0.5 flex-shrink-0" />{err}</p>
-            ))}
-          </div>
-        )}
-
-        {/* Staged files */}
-        {selectedFiles.length > 0 && (
-          <div className="mt-3 space-y-1.5">
-            {selectedFiles.map((f, i) => {
-              const ic = getFileIcon(f.name)
-              return (
-                <div key={i} className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2">
-                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${ic.bg}`}><FileText size={11} className={ic.color} /></div>
-                  <span className="flex-1 text-xs text-slate-700 truncate">{f.name}</span>
-                  <span className="text-[10px] text-slate-400 flex-shrink-0">{formatBytes(f.size)}</span>
-                  <button onClick={() => { setSelectedFiles(p => p.filter((_, j) => j !== i)); setValidationErrors([]) }} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><X size={11} /></button>
-                </div>
-              )
-            })}
-            <button
-              onClick={() => uploadMutation.mutate(selectedFiles)}
-              disabled={!canUpload || uploadMutation.isPending}
-              className="w-full mt-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
-            >
-              {uploadMutation.isPending
-                ? <><Loader2 size={13} className="animate-spin" /> Uploading…</>
-                : <><Upload size={13} /> Upload {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}</>}
-            </button>
-          </div>
+                    {/* Inline analysis summary under the document */}
+                    {bsSession && bsSession.status === 'completed' && (
+                      <DocumentAnalysisPanel
+                        session={bsSession}
+                        leadId={leadId}
+                        onOpenDetails={() => setAnalysisModal(bsSession)}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -2620,7 +2755,7 @@ function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (
     }
   }
 
-  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files?.length) return
     const fd = new FormData()

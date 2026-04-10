@@ -1,12 +1,13 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Loader2, Upload, FileText, RefreshCw, Trash2, Eye, Calendar,
+  Loader2, FileText, Trash2, Eye, Calendar,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { DocumentUploadButton, type StagedFile } from './DocumentUploadButton'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,6 @@ export function BankStatementTab({ leadId }: Props) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [tier, setTier] = useState('lsc_pro')
-  const [dragging, setDragging] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['lead-bank-statements', leadId],
@@ -65,19 +65,16 @@ export function BankStatementTab({ leadId }: Props) {
 
   const sessions = data ?? []
 
-  const uploadMut = useMutation({
-    mutationFn: (files: File[]) => {
-      const fd = new FormData()
-      files.forEach(f => fd.append('files[]', f))
-      fd.append('model_tier', tier)
-      return bankStatementService.upload(leadId, fd)
-    },
-    onSuccess: () => {
-      toast.success('Files uploaded — analysis started')
-      qc.invalidateQueries({ queryKey: ['lead-bank-statements', leadId] })
-    },
-    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Upload failed'),
-  })
+  async function uploadBankStatements(items: StagedFile[], onProgress: (pct: number) => void) {
+    const fd = new FormData()
+    items.forEach(it => fd.append('files[]', it.file))
+    fd.append('model_tier', tier)
+    const res = await bankStatementService.upload(leadId, fd, (evt: { loaded: number; total?: number }) => {
+      if (evt.total) onProgress(Math.round((evt.loaded / evt.total) * 100))
+    })
+    qc.invalidateQueries({ queryKey: ['lead-bank-statements', leadId] })
+    return res
+  }
 
   const deleteMut = useMutation({
     mutationFn: (sessionId: string) => bankStatementService.destroy(leadId, sessionId),
@@ -88,59 +85,45 @@ export function BankStatementTab({ leadId }: Props) {
     onError: () => toast.error('Failed to delete'),
   })
 
-  const handleFiles = useCallback((files: FileList | File[]) => {
-    const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'))
-    if (!pdfs.length) { toast.error('Only PDF files are accepted'); return }
-    uploadMut.mutate(pdfs)
-  }, [uploadMut])
-
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragging(false)
-    handleFiles(e.dataTransfer.files)
-  }, [handleFiles])
-
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-300" /></div>
   }
+
+  const tierSelector = (
+    <div>
+      <label className="text-xs font-semibold text-slate-600 mb-1 block">Model Tier</label>
+      <select
+        value={tier}
+        onChange={(e) => setTier(e.target.value)}
+        className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+      >
+        {TIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <p className="text-[11px] text-slate-400 mt-1">Applied to all files in this batch</p>
+    </div>
+  )
 
   return (
     <div className="space-y-5">
 
       {/* Upload */}
-      <div className="flex flex-wrap items-end gap-3 mb-1">
+      <div className="flex items-center justify-between">
         <div>
-          <label className="text-xs text-slate-500 mb-1 block">Model Tier</label>
-          <select value={tier} onChange={(e) => setTier(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-            {TIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <h3 className="text-sm font-bold text-slate-800">Bank Statement Analysis</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Upload PDF bank statements to run AI analysis</p>
         </div>
-      </div>
-
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer
-          ${dragging ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'}`}
-        onClick={() => {
-          const inp = document.createElement('input')
-          inp.type = 'file'; inp.accept = '.pdf'; inp.multiple = true
-          inp.onchange = () => inp.files && handleFiles(inp.files)
-          inp.click()
-        }}
-      >
-        {uploadMut.isPending ? (
-          <div className="flex items-center justify-center gap-2 text-emerald-600">
-            <Loader2 size={18} className="animate-spin" /> Uploading…
-          </div>
-        ) : (
-          <>
-            <Upload size={24} className="mx-auto mb-1.5 text-slate-400" />
-            <p className="text-sm text-slate-600">Drop PDF bank statements here or <span className="text-emerald-600 font-semibold underline">browse</span></p>
-            <p className="text-xs text-slate-400 mt-1">Up to 20 MB per file</p>
-          </>
-        )}
+        <DocumentUploadButton
+          onUpload={uploadBankStatements}
+          buttonLabel="Upload Statements"
+          modalTitle="Upload Bank Statements"
+          modalSubtitle="Only PDF bank statements are accepted. All files use the selected model tier."
+          showDocumentType={false}
+          allowedExt=".pdf"
+          allowedExts={new Set(['pdf'])}
+          allowedMimes={new Set(['application/pdf'])}
+          headerExtra={tierSelector}
+          successMessage={(c) => `${c} file${c !== 1 ? 's' : ''} uploaded — analysis started`}
+        />
       </div>
 
       {/* Sessions */}

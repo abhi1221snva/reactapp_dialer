@@ -129,7 +129,9 @@ export interface CrmDocument {
   id: number
   lead_id: number
   document_type: string
+  sub_type?: string | null
   document_name?: string
+  tag?: string | null
   file_name: string
   file_path: string | null
   file_size?: number | string

@@ -349,10 +349,24 @@ export const crmService = {
   getLeadDocuments: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/documents`),
 
-  uploadLeadDocuments: (leadId: number, formData: FormData) =>
+  uploadLeadDocuments: (
+    leadId: number,
+    formData: FormData,
+    onUploadProgress?: (progressEvent: { loaded: number; total?: number }) => void,
+  ) =>
     api.post(`/crm/lead/${leadId}/documents`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
     }),
+
+  updateLeadDocument: (leadId: number, docId: number, data: { tag?: string | null; document_type?: string }) =>
+    api.patch(`/crm/lead/${leadId}/documents/${docId}`, data),
+
+  bulkLeadDocumentAction: (
+    leadId: number,
+    payload: { action: 'delete' | 'tag'; doc_ids: number[]; tag?: string | null },
+  ) =>
+    api.post(`/crm/lead/${leadId}/documents/bulk`, payload),
 
   deleteLeadDocument: (leadId: number, docId: number) =>
     api.delete(`/crm/lead/${leadId}/documents/${docId}`),

@@ -4,12 +4,15 @@ import {
   ShieldCheck, AlertTriangle,
   CheckCircle2, Clock, XCircle, AlertCircle,
   FileText, Database, CreditCard, UserCheck, FileSearch,
-  ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus,
+  ChevronDown, ChevronUp, TrendingUp,
   Building2, Hash, Calendar, DollarSign, Scale, Fingerprint,
-  FileCheck, Globe, BadgeCheck, Ban, Eye,
+  FileCheck, Globe, BadgeCheck, Ban, Eye, RefreshCw, Loader2, FileX,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
-import type { ComplianceCheck, ComplianceResult, StackingWarning } from '../../types/crm.types'
+import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
+import type { ComplianceCheck, StackingWarning } from '../../types/crm.types'
+import { BankStatementAnalysisView } from './BankStatementAnalysisView'
 
 interface Props { leadId: number }
 
@@ -68,124 +71,320 @@ function StatusPill({ status, label }: { status: 'pass' | 'fail' | 'warn' | 'pen
   )
 }
 
-/* ── 1. Bank Statements Analysis Panel ── */
-function BankStatementsPanel() {
+/* ── Bank Statements Analysis (combined + individual) ────────────────────── */
+
+interface StatementSummary {
+  revenue: number
+  deposits: number
+  debits: number
+  adjustments: number
+  avg_balance: number
+  ledger_balance: number
+  total_transactions: number
+  nsf: number
+}
+interface CombinedSummary extends StatementSummary {
+  statement_count: number
+}
+interface StatementItem {
+  session_id: string
+  document_id: number | null
+  file_name: string | null
+  status: string
+  fraud_score: number | null
+  analyzed_at: string | null
+  created_at: string | null
+  summary: StatementSummary
+  raw: {
+    summary_data: unknown
+    mca_analysis: unknown
+    monthly_data: unknown
+  }
+}
+interface CombinedRaw {
+  summary_data: unknown
+  mca_analysis: unknown
+  monthly_data: unknown
+}
+interface BankStatementsAnalysisResponse {
+  combined: CombinedSummary
+  combined_raw?: CombinedRaw
+  statements: StatementItem[]
+}
+
+type ViewMode = 'both' | 'combined' | 'individual'
+
+/** Metric card — reused by combined and individual views. */
+function MetricCard({ label, value, labelColor, valueColor, bg, border }: {
+  label: string; value: string; labelColor: string; valueColor: string; bg: string; border: string
+}) {
   return (
-    <div className="space-y-5">
-      {/* Score / Positions / Obligation summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-indigo-50 rounded-lg p-3 text-center">
-          <p className="text-[10px] text-indigo-500 font-bold uppercase">Score</p>
-          <p className="text-2xl font-bold text-indigo-700 mt-1">680</p>
-          <p className="text-[10px] text-indigo-400 mt-0.5">out of 850</p>
+    <div className={`rounded-lg border ${border} ${bg} px-3 py-3 flex flex-col items-start justify-center min-w-0`}>
+      <span className={`text-[10px] font-semibold uppercase tracking-wide leading-tight ${labelColor}`}>{label}</span>
+      <span className={`mt-1.5 text-base font-extrabold tabular-nums leading-tight truncate w-full ${valueColor}`}>{value}</span>
+    </div>
+  )
+}
+
+/** Build the 8 metric cards for a summary object. */
+function buildMetrics(s: StatementSummary) {
+  const nsfActive = s.nsf > 0
+  return [
+    { label: 'Revenue',              value: fmtDec(s.revenue),        labelColor: 'text-emerald-600', valueColor: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    { label: 'Deposits',             value: fmtDec(s.deposits),       labelColor: 'text-green-600',   valueColor: 'text-green-800',   bg: 'bg-green-50',   border: 'border-green-200'   },
+    { label: 'Debits',               value: fmtDec(s.debits),         labelColor: 'text-red-500',     valueColor: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200'     },
+    { label: 'Adjustments',          value: fmtDec(s.adjustments),    labelColor: 'text-orange-500',  valueColor: 'text-orange-800',  bg: 'bg-orange-50',  border: 'border-orange-200'  },
+    { label: 'Average Balance',      value: fmtDec(s.avg_balance),    labelColor: 'text-blue-500',    valueColor: 'text-blue-800',    bg: 'bg-blue-50',    border: 'border-blue-200'    },
+    { label: 'Ledger Balance',       value: fmtDec(s.ledger_balance), labelColor: 'text-indigo-500',  valueColor: 'text-indigo-800',  bg: 'bg-indigo-50',  border: 'border-indigo-200'  },
+    { label: 'Total Transactions',   value: new Intl.NumberFormat('en-US').format(s.total_transactions), labelColor: 'text-slate-500', valueColor: 'text-slate-800', bg: 'bg-slate-50', border: 'border-slate-200' },
+    { label: 'Non-Sufficient Funds', value: new Intl.NumberFormat('en-US').format(s.nsf),                labelColor: nsfActive ? 'text-amber-600' : 'text-slate-500', valueColor: nsfActive ? 'text-amber-800' : 'text-slate-700', bg: nsfActive ? 'bg-amber-50' : 'bg-slate-50', border: nsfActive ? 'border-amber-200' : 'border-slate-200' },
+  ]
+}
+
+/** Hydrate a StatementItem's raw payload into a shape BankStatementAnalysisView expects. */
+function toSessionShape(s: StatementItem): BankStatementSession {
+  return {
+    id: 0,
+    lead_id: null,
+    batch_id: null,
+    session_id: s.session_id,
+    file_name: s.file_name,
+    status: (s.status as BankStatementSession['status']) ?? 'completed',
+    model_tier: 'lsc_pro',
+    summary_data: s.raw.summary_data as BankStatementSession['summary_data'],
+    mca_analysis: s.raw.mca_analysis as BankStatementSession['mca_analysis'],
+    monthly_data: s.raw.monthly_data as BankStatementSession['monthly_data'],
+    fraud_score: s.fraud_score,
+    total_revenue: s.summary.revenue,
+    total_deposits: s.summary.deposits,
+    nsf_count: s.summary.nsf,
+    error_message: null,
+    uploaded_by: null,
+    analyzed_at: s.analyzed_at,
+    created_at: s.created_at ?? '',
+    updated_at: null,
+  }
+}
+
+/** Build a synthetic "combined" session from the aggregated raw payload. */
+function toCombinedSessionShape(combined: CombinedSummary, raw: CombinedRaw | undefined): BankStatementSession {
+  return {
+    id: 0,
+    lead_id: null,
+    batch_id: null,
+    session_id: '__combined__',
+    file_name: `Combined (${combined.statement_count} statement${combined.statement_count !== 1 ? 's' : ''})`,
+    status: 'completed',
+    model_tier: 'lsc_pro',
+    summary_data: (raw?.summary_data ?? null) as BankStatementSession['summary_data'],
+    mca_analysis: (raw?.mca_analysis ?? null) as BankStatementSession['mca_analysis'],
+    monthly_data: (raw?.monthly_data ?? null) as BankStatementSession['monthly_data'],
+    fraud_score: null,
+    total_revenue: combined.revenue,
+    total_deposits: combined.deposits,
+    nsf_count: combined.nsf,
+    error_message: null,
+    uploaded_by: null,
+    analyzed_at: null,
+    created_at: '',
+    updated_at: null,
+  }
+}
+
+/** Individual statement card — collapsed summary + expand-to-full-details. */
+function StatementCard({ statement, index, leadId }: { statement: StatementItem; index: number; leadId: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const metrics = buildMetrics(statement.summary)
+  const fileLabel = statement.file_name || `Bank Statement #${index + 1}`
+  const createdDate = statement.created_at
+    ? new Date(statement.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-md bg-emerald-100 flex items-center justify-center shrink-0">
+            <FileText size={13} className="text-emerald-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-slate-800 truncate">{fileLabel}</p>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {createdDate && <span className="text-[10px] text-slate-500">{createdDate}</span>}
+              {statement.fraud_score != null && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${statement.fraud_score >= 70 ? 'bg-red-100 text-red-700' : statement.fraud_score >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  Fraud {statement.fraud_score}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="bg-slate-50 rounded-lg p-3 text-center">
-          <p className="text-[10px] text-slate-500 font-bold uppercase">Active Positions</p>
-          <p className="text-2xl font-bold text-slate-800 mt-1">3</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">current MCAs</p>
-        </div>
-        <div className="bg-amber-50 rounded-lg p-3 text-center">
-          <p className="text-[10px] text-amber-600 font-bold uppercase">Daily Obligation</p>
-          <p className="text-2xl font-bold text-amber-700 mt-1">$1,240</p>
-          <p className="text-[10px] text-amber-500 mt-0.5">combined daily</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 text-[11px] font-semibold text-slate-600 transition-colors"
+        >
+          {expanded
+            ? <><ChevronUp size={12} /> Hide Details</>
+            : <><Eye size={12} /> View Details</>}
+        </button>
       </div>
 
-      {/* Revenue & Account Health */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Revenue & Deposits</p>
-          <DetailRow label="Avg Monthly Revenue" value="$87,450.00" icon={TrendingUp} accent="text-emerald-500" />
-          <DetailRow label="Avg Monthly Deposits" value="142" icon={Hash} />
-          <DetailRow label="Highest Monthly Revenue" value="$112,300.00" icon={TrendingUp} accent="text-emerald-500" />
-          <DetailRow label="Lowest Monthly Revenue" value="$63,200.00" icon={TrendingDown} accent="text-red-500" />
-          <DetailRow label="Revenue Trend (3mo)" value="Increasing" icon={TrendingUp} accent="text-emerald-500" />
+      {/* Body: 8 metric cards */}
+      <div className="p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+          {metrics.map((m, i) => <MetricCard key={i} {...m} />)}
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Account Health</p>
-          <DetailRow label="Avg Daily Balance" value="$24,180.00" icon={DollarSign} accent="text-blue-500" />
-          <DetailRow label="NSF / Overdrafts (90 days)" value="2" icon={AlertCircle} accent="text-amber-500" />
-          <DetailRow label="Negative Days (90 days)" value="0" icon={CheckCircle2} accent="text-emerald-500" />
-          <DetailRow label="Avg Ending Balance" value="$18,640.00" icon={DollarSign} accent="text-blue-500" />
-          <DetailRow label="Account Age" value="4 yrs 7 mo" icon={Calendar} />
+
+        {/* Expanded full detail view */}
+        {expanded && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <BankStatementAnalysisView session={toSessionShape(statement)} leadId={leadId} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── 1. Bank Statements Analysis Panel ── */
+function BankStatementsPanel({ leadId }: { leadId: number }) {
+  const [viewMode, setViewMode] = useState<ViewMode>('both')
+
+  const { data, isLoading, isError, isFetching, error, refetch } = useQuery<BankStatementsAnalysisResponse>({
+    queryKey: ['lead-bank-statements-analysis', leadId],
+    queryFn: async () => {
+      const r = await bankStatementService.getBankStatementsAnalysis(leadId)
+      const payload = r.data?.data ?? r.data
+      return payload as BankStatementsAnalysisResponse
+    },
+    enabled: !!leadId,
+    staleTime: 30_000,
+  })
+
+  const handleRefresh = async () => {
+    try {
+      await refetch()
+      toast.success('Bank statement analysis refreshed')
+    } catch {
+      toast.error('Refresh failed')
+    }
+  }
+
+  const combined = data?.combined
+  const statements = data?.statements ?? []
+  const hasData = statements.length > 0
+
+  const errorMessage = (() => {
+    if (!isError) return null
+    const e = error as { response?: { data?: { message?: string } }; message?: string } | null
+    return e?.response?.data?.message ?? e?.message ?? 'Failed to load bank statement analysis'
+  })()
+
+  const showCombined   = viewMode === 'combined'   || viewMode === 'both'
+  const showIndividual = viewMode === 'individual' || viewMode === 'both'
+
+  const toggleOptions: Array<{ key: ViewMode; label: string }> = [
+    { key: 'both',       label: 'Both' },
+    { key: 'combined',   label: 'Combined Only' },
+    { key: 'individual', label: 'Individual Only' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* ═══ Toolbar: view toggle + refresh ═══ */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+          {toggleOptions.map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setViewMode(opt.key)}
+              disabled={!hasData && opt.key !== 'both'}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                viewMode === opt.key
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
-      {/* Monthly Breakdown */}
-      <div className="bg-slate-50 rounded-lg p-3">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Monthly Breakdown</p>
-        <table className="w-full text-xs">
-          <thead><tr className="border-b border-slate-200">
-            <th className="text-left py-1.5 text-slate-500 font-semibold">Month</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">Revenue</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">Deposits</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">Ending Bal</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">NSFs</th>
-          </tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {[
-              { mo: 'Jan 2026', rev: '$92,100', dep: '156', bal: '$22,400', nsf: '0' },
-              { mo: 'Feb 2026', rev: '$78,250', dep: '131', bal: '$15,880', nsf: '1' },
-              { mo: 'Mar 2026', rev: '$91,980', dep: '139', bal: '$17,640', nsf: '1' },
-            ].map(r => (
-              <tr key={r.mo} className="hover:bg-white">
-                <td className="py-1.5 text-slate-700 font-medium">{r.mo}</td>
-                <td className="py-1.5 text-right text-slate-700">{r.rev}</td>
-                <td className="py-1.5 text-right text-slate-500">{r.dep}</td>
-                <td className="py-1.5 text-right text-slate-700">{r.bal}</td>
-                <td className="py-1.5 text-right">{r.nsf === '0' ? <span className="text-emerald-600">0</span> : <span className="text-amber-600 font-semibold">{r.nsf}</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Existing Positions */}
-      <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Existing Positions</p>
-        <table className="w-full text-xs">
-          <thead><tr className="border-b border-slate-200">
-            <th className="text-left py-1.5 text-slate-500 font-semibold">Funder</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">Funded Amt</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">Balance</th>
-            <th className="text-right py-1.5 text-slate-500 font-semibold">Daily Pmt</th>
-            <th className="text-center py-1.5 text-slate-500 font-semibold">Status</th>
-          </tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {[
-              { funder: 'Libertas Funding',  funded: '$75,000', bal: '$28,400', daily: '$580',  status: 'Active' },
-              { funder: 'Clearco Capital',   funded: '$40,000', bal: '$15,200', daily: '$410',  status: 'Active' },
-              { funder: 'Rapid Finance',     funded: '$25,000', bal: '$8,100',  daily: '$250',  status: 'Active' },
-            ].map(r => (
-              <tr key={r.funder} className="hover:bg-slate-50">
-                <td className="py-1.5 text-slate-700 font-medium">{r.funder}</td>
-                <td className="py-1.5 text-right text-slate-700">{r.funded}</td>
-                <td className="py-1.5 text-right text-slate-700">{r.bal}</td>
-                <td className="py-1.5 text-right text-red-600 font-semibold">{r.daily}</td>
-                <td className="py-1.5 text-center"><span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full">{r.status}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Payment History & Industry Intel */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Payment History</p>
-          <DetailRow label="On-Time Payments (12mo)" value="96%" icon={CheckCircle2} accent="text-emerald-500" />
-          <DetailRow label="Late Payments" value="2" icon={AlertCircle} accent="text-amber-500" />
-          <DetailRow label="Defaults" value="0" icon={CheckCircle2} accent="text-emerald-500" />
-          <DetailRow label="Renewals" value="1" icon={Minus} />
+      {/* ═══ Loading ═══ */}
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <Loader2 size={24} className="animate-spin text-emerald-500" />
+          <p className="text-sm text-slate-500">Loading bank statement analysis...</p>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Industry Intel</p>
-          <DetailRow label="Industry" value="Retail / E-Commerce" icon={Building2} />
-          <DetailRow label="Time in Business" value="6 yrs 3 mo" icon={Calendar} />
-          <DetailRow label="SIC Code" value="5999" icon={Hash} />
-          <DetailRow label="Risk Tier" value="B+" icon={Scale} accent="text-blue-500" />
+      )}
+
+      {/* ═══ Error ═══ */}
+      {!isLoading && isError && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          <XCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Failed to load bank statement analysis</p>
+            <p className="text-xs text-red-600 mt-0.5">{errorMessage}</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ═══ Empty ═══ */}
+      {!isLoading && !isError && !hasData && (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+          <FileX size={28} className="text-slate-300" />
+          <p className="text-sm font-semibold text-slate-600">No data available</p>
+          <p className="text-xs text-slate-400">Upload and analyze bank statements in the Documents tab to see them here.</p>
+        </div>
+      )}
+
+      {/* ═══ Combined Analysis ═══ */}
+      {!isLoading && !isError && hasData && combined && showCombined && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-1 rounded-full bg-emerald-500" />
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Combined Analysis</h4>
+            <span className="text-[10px] font-semibold text-slate-400">
+              {combined.statement_count} statement{combined.statement_count !== 1 ? 's' : ''} aggregated
+            </span>
+          </div>
+          <div className={`transition-opacity ${isFetching ? 'opacity-60' : 'opacity-100'}`}>
+            <BankStatementAnalysisView
+              session={toCombinedSessionShape(combined, data?.combined_raw)}
+              title="Combined Bank Statement Analysis"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Individual Statements ═══ */}
+      {!isLoading && !isError && hasData && showIndividual && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-1 rounded-full bg-slate-400" />
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Individual Bank Statements</h4>
+            <span className="text-[10px] font-semibold text-slate-400">
+              {statements.length} statement{statements.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className={`space-y-3 transition-opacity ${isFetching ? 'opacity-60' : 'opacity-100'}`}>
+            {statements.map((s, i) => <StatementCard key={s.session_id} statement={s} index={i} leadId={leadId} />)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -505,12 +704,12 @@ function UccFilingPanel() {
   )
 }
 
-const PANEL_MAP: Record<string, () => JSX.Element> = {
-  bank_statements: BankStatementsPanel,
-  data_merch:      DataMerchPanel,
-  credit_biz:      ExperianPanel,
-  identity_kyc:    PersonaPanel,
-  ucc_lien:        UccFilingPanel,
+const PANEL_MAP: Record<string, (props: { leadId: number }) => JSX.Element> = {
+  bank_statements: ({ leadId }) => <BankStatementsPanel leadId={leadId} />,
+  data_merch:      () => <DataMerchPanel />,
+  credit_biz:      () => <ExperianPanel />,
+  identity_kyc:    () => <PersonaPanel />,
+  ucc_lien:        () => <UccFilingPanel />,
 }
 
 function CoreComplianceChecks({ leadId }: { leadId: number }) {
@@ -567,9 +766,8 @@ function CoreComplianceChecks({ leadId }: { leadId: number }) {
           <div className="flex items-center gap-2 mb-4">
             <expandedCheck.icon size={15} className={COLOR_MAP[expandedCheck.color].iconText} />
             <h4 className="text-sm font-semibold text-slate-800">{expandedCheck.label}</h4>
-            <span className="text-[10px] text-slate-400 ml-auto">Hardcoded sample data</span>
           </div>
-          <Panel />
+          <Panel leadId={leadId} />
         </div>
       )}
     </div>

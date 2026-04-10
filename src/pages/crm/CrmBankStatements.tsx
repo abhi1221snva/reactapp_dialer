@@ -1,14 +1,15 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Loader2, Upload, FileText, RefreshCw, Trash2, AlertCircle,
-  BarChart3, Eye, Calendar,
+  Loader2, FileText, RefreshCw, Trash2,
+  BarChart3, Eye,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { DocumentUploadButton, type StagedFile } from '../../components/crm/DocumentUploadButton'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 
@@ -53,9 +54,8 @@ export function CrmBankStatements() {
   const qc = useQueryClient()
   const navigate = useNavigate()
 
-  const [page, setPage] = useState(1)
+  const [page] = useState(1)
   const [tier, setTier] = useState('lsc_pro')
-  const [dragging, setDragging] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['bank-statements', page],
@@ -72,19 +72,16 @@ export function CrmBankStatements() {
 
   const sessions = data?.sessions ?? []
 
-  const uploadMut = useMutation({
-    mutationFn: (files: File[]) => {
-      const fd = new FormData()
-      files.forEach(f => fd.append('files[]', f))
-      fd.append('model_tier', tier)
-      return bankStatementService.uploadStandalone(fd)
-    },
-    onSuccess: () => {
-      toast.success('Files uploaded — analysis started')
-      qc.invalidateQueries({ queryKey: ['bank-statements'] })
-    },
-    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Upload failed'),
-  })
+  async function uploadBankStatements(items: StagedFile[], onProgress: (pct: number) => void) {
+    const fd = new FormData()
+    items.forEach(it => fd.append('files[]', it.file))
+    fd.append('model_tier', tier)
+    const res = await bankStatementService.uploadStandalone(fd, (evt) => {
+      if (evt.total) onProgress(Math.round((evt.loaded / evt.total) * 100))
+    })
+    qc.invalidateQueries({ queryKey: ['bank-statements'] })
+    return res
+  }
 
   const deleteMut = useMutation({
     mutationFn: (s: BankStatementSession) => bankStatementService.destroy(s.lead_id ?? 0, s.session_id),
@@ -95,56 +92,46 @@ export function CrmBankStatements() {
     onError: () => toast.error('Failed to delete'),
   })
 
-  const handleFiles = useCallback((files: FileList | File[]) => {
-    const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'))
-    if (!pdfs.length) { toast.error('Only PDF files are accepted'); return }
-    uploadMut.mutate(pdfs)
-  }, [uploadMut])
-
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragging(false)
-    handleFiles(e.dataTransfer.files)
-  }, [handleFiles])
+  const tierSelector = (
+    <div>
+      <label className="text-xs font-semibold text-slate-600 mb-1 block">Model Tier</label>
+      <select
+        value={tier}
+        onChange={(e) => setTier(e.target.value)}
+        className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+      >
+        {TIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <p className="text-[11px] text-slate-400 mt-1">Applied to all files in this batch</p>
+    </div>
+  )
 
   return (
     <div className="space-y-5">
 
       {/* Upload Zone */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="flex flex-wrap items-end gap-4 mb-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <BarChart3 size={18} className="text-emerald-600" />
+          </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Model Tier</label>
-            <select value={tier} onChange={(e) => setTier(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-              {TIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <h2 className="text-sm font-bold text-slate-800">Bank Statement Analysis</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Upload PDF bank statements to run AI analysis</p>
           </div>
         </div>
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer
-            ${dragging ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'}`}
-          onClick={() => {
-            const inp = document.createElement('input')
-            inp.type = 'file'; inp.accept = '.pdf'; inp.multiple = true
-            inp.onchange = () => inp.files && handleFiles(inp.files)
-            inp.click()
-          }}
-        >
-          {uploadMut.isPending ? (
-            <div className="flex items-center justify-center gap-2 text-emerald-600">
-              <Loader2 size={20} className="animate-spin" /> Uploading…
-            </div>
-          ) : (
-            <>
-              <Upload size={28} className="mx-auto mb-2 text-slate-400" />
-              <p className="text-sm text-slate-600">Drop PDF bank statements here or <span className="text-emerald-600 font-semibold underline">browse</span></p>
-              <p className="text-xs text-slate-400 mt-1">Up to 20 MB per file</p>
-            </>
-          )}
-        </div>
+        <DocumentUploadButton
+          onUpload={uploadBankStatements}
+          buttonLabel="Upload Statements"
+          modalTitle="Upload Bank Statements"
+          modalSubtitle="Only PDF bank statements are accepted. All files use the selected model tier."
+          showDocumentType={false}
+          allowedExt=".pdf"
+          allowedExts={new Set(['pdf'])}
+          allowedMimes={new Set(['application/pdf'])}
+          headerExtra={tierSelector}
+          successMessage={(c) => `${c} file${c !== 1 ? 's' : ''} uploaded — analysis started`}
+        />
       </div>
 
       {/* Sessions Table */}

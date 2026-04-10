@@ -10,6 +10,7 @@ import {
 import {
   publicAppService, extractPdfFilename,
   PublicFormSection, PublicFormField, PublicCompany, SubmitResult,
+  PublicDocumentType,
 } from '../../services/publicApp.service'
 import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
 import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
@@ -72,10 +73,16 @@ const US_STATES = [
   'Wisconsin','Wyoming',
 ]
 
-const DOC_TYPES = [
-  'Bank Statement','Driver License','Business License',
-  'Tax Return','Voided Check','Profit & Loss Statement','Other',
-]
+function parseSubValues(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return (raw as unknown as string[]).filter(Boolean)
+  if (typeof raw !== 'string') return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+  } catch { /* fall through */ }
+  return raw.split(',').map(s => s.trim()).filter(Boolean)
+}
 
 // ─── FormField (matches MerchantPage style) ───────────────────────────────────
 function FormField({ f, value, onChange, error }: {
@@ -269,22 +276,30 @@ function SigPad({ onSave, saved }: { onSave: (d: string) => void; saved: boolean
 }
 
 // ─── Document upload (local queue, styled like DocStep) ───────────────────────
-interface UploadFile { id: string; file: File; docType: string }
+interface UploadFile { id: string; file: File; docType: string; subType: string }
 
 const APPLY_MAX_FILE_MB  = 10
 const APPLY_MAX_TOTAL_MB = 25
 const APPLY_MAX_FILE_B   = APPLY_MAX_FILE_MB * 1024 * 1024
 const APPLY_MAX_TOTAL_B  = APPLY_MAX_TOTAL_MB * 1024 * 1024
 
-function DocUpload({ files, onChange }: { files: UploadFile[]; onChange: (f: UploadFile[]) => void }) {
+function DocUpload({ files, onChange, docTypes }: {
+  files: UploadFile[]
+  onChange: (f: UploadFile[]) => void
+  docTypes: PublicDocumentType[]
+}) {
   const [over, setOver]           = useState(false)
   const [err, setErr]             = useState('')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const inp = useRef<HTMLInputElement>(null)
 
   const confirmFile = confirmId ? files.find(f => f.id === confirmId) : null
+  const defaultType = docTypes[0]?.title ?? ''
 
   const add = (fs: File[]) => {
+    if (!docTypes.length) {
+      setErr('No document types are configured. Please contact support.'); return
+    }
     // PDF-only validation
     for (const f of fs) {
       if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') {
@@ -301,7 +316,7 @@ function DocUpload({ files, onChange }: { files: UploadFile[]; onChange: (f: Upl
     setErr('')
     onChange([
       ...files,
-      ...fs.map(f => ({ id: Math.random().toString(36).slice(2), file: f, docType: 'Bank Statement' })),
+      ...fs.map(f => ({ id: Math.random().toString(36).slice(2), file: f, docType: defaultType, subType: '' })),
     ])
   }
 
@@ -377,6 +392,8 @@ function DocUpload({ files, onChange }: { files: UploadFile[]; onChange: (f: Upl
               {files.map(f => {
                 const e2 = fileExt(f.file.name)
                 const ec = EXT_COLORS[e2] ?? C.indigo
+                const selType = docTypes.find(t => t.title === f.docType) ?? null
+                const subValues = parseSubValues(selType?.values)
                 return (
                   <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: `${ec}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -390,10 +407,18 @@ function DocUpload({ files, onChange }: { files: UploadFile[]; onChange: (f: Upl
                       </div>
                     </div>
                     <select value={f.docType}
-                      onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, docType: e.target.value } : x))}
-                      style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer' }}>
-                      {DOC_TYPES.map(t => <option key={t}>{t}</option>)}
+                      onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, docType: e.target.value, subType: '' } : x))}
+                      style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 140 }}>
+                      {docTypes.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
                     </select>
+                    {subValues.length > 0 && (
+                      <select value={f.subType}
+                        onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, subType: e.target.value } : x))}
+                        style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 120 }}>
+                        <option value="">Select…</option>
+                        {subValues.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    )}
                     <button type="button" onClick={() => setConfirmId(f.id)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtle, padding: 4, display: 'flex', flexShrink: 0 }}>
                       <X size={15} />
@@ -495,6 +520,15 @@ export function ApplyPage() {
     enabled: !!affiliateCode,
     retry: false,
   })
+
+  // Dynamic document types — same data as the CRM document type manager.
+  const { data: docTypeData } = useQuery({
+    queryKey: ['pub-apply-doc-types', affiliateCode],
+    queryFn: async () => (await publicAppService.getAffiliateDocumentTypes(affiliateCode!)).data?.data ?? [],
+    enabled: !!affiliateCode,
+    staleTime: 5 * 60 * 1000,
+  })
+  const docTypes: PublicDocumentType[] = docTypeData ?? []
 
   const company: PublicCompany | null = data?.company ?? null
   const sections: PublicFormSection[] = data?.sections ?? []
@@ -603,6 +637,9 @@ export function ApplyPage() {
     try {
       const payload = { ...form }
       if (sig) payload['signature_image'] = sig
+      // Tell the backend whether an Owner 2 is being submitted so it can
+      // skip required validation for Owner 2 fields when absent.
+      payload['has_owner_2'] = hasOwner2 ? '1' : '0'
       // Only include Owner 2 data if toggle is checked
       if (hasOwner2 && sig2) payload['owner_2_signature_image'] = sig2
       if (!hasOwner2 && owner2SecIdx >= 0) {
@@ -619,7 +656,8 @@ export function ApplyPage() {
 
       if (docs.length && out.lead_token) {
         for (const d of docs) {
-          try { await publicAppService.uploadDocument(out.lead_token, d.file, d.docType) } catch { /* non-fatal */ }
+          const label = d.subType ? `${d.docType} - ${d.subType}` : d.docType
+          try { await publicAppService.uploadDocument(out.lead_token, d.file, label) } catch { /* non-fatal */ }
         }
       }
       setResult(out)
@@ -954,7 +992,7 @@ export function ApplyPage() {
             ) : (
               /* ── Documents step ── */
               <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
-                <DocUpload files={docs} onChange={setDocs} />
+                <DocUpload files={docs} onChange={setDocs} docTypes={docTypes} />
               </div>
             )}
           </div>

@@ -125,6 +125,13 @@ export const publicAppService = {
     )
   },
 
+  /** Fetch active CRM document types for the affiliate's tenant (same table as CRM document type manager). */
+  getAffiliateDocumentTypes(affiliateCode: string) {
+    return http.get<{ success: boolean; data: PublicDocumentType[] }>(
+      `/public/apply/${affiliateCode}/document-types`,
+    )
+  },
+
   renderApplicationPdf(leadToken: string): string {
     return `${API}/public/apply/${leadToken}/pdf`
   },
