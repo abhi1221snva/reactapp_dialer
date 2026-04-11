@@ -48,6 +48,39 @@ export interface RollbackAllResponse {
   affected: Array<{ client_id: number; previous_mode: PipelineMode }>
 }
 
+// Bulk mode change — legacy/shadow/dry_run only. Promotion to live is
+// deliberately single-tenant on the backend (needs per-tenant readiness
+// check + provider/cap selection), so this type enforces the subset.
+export type BulkPipelineMode = Exclude<PipelineMode, 'live'>
+
+export interface BulkSetModePayload {
+  client_ids: number[]
+  pipeline_mode: BulkPipelineMode
+  notes?: string | null
+}
+
+export interface BulkSetModeRowSuccess {
+  client_id: number
+  company_name: string
+  previous_mode: PipelineMode | null
+  new_mode: PipelineMode
+}
+
+export interface BulkSetModeRowFailure {
+  client_id: number
+  error: string
+  message: string
+}
+
+export interface BulkSetModeResponse {
+  mode: BulkPipelineMode
+  requested_count: number
+  succeeded_count: number
+  failed_count: number
+  succeeded: BulkSetModeRowSuccess[]
+  failed: BulkSetModeRowFailure[]
+}
+
 export interface ShadowLogRow {
   id: number
   legacy_rvm_cdr_log_id: number | null
@@ -187,5 +220,11 @@ export const adminRvmCutoverService = {
   rollbackAll: () =>
     api.post<{ success: boolean; message: string; data: RollbackAllResponse }>(
       '/admin/rvm/cutover/rollback-all',
+    ),
+
+  bulkSetMode: (payload: BulkSetModePayload) =>
+    api.post<{ success: boolean; message: string; data: BulkSetModeResponse }>(
+      '/admin/rvm/cutover/bulk',
+      payload,
     ),
 }

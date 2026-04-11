@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Radio, RefreshCw, Edit, Activity, AlertTriangle, ShieldAlert,
   CheckCircle2, XCircle, Clock, MinusCircle, Building2, ExternalLink,
+  Layers, X,
 } from 'lucide-react'
 import {
   adminRvmCutoverService,
@@ -13,6 +14,8 @@ import {
   type UpdateFlagPayload,
   type ReadinessReport,
   type CheckStatus,
+  type BulkPipelineMode,
+  type BulkSetModeResponse,
 } from '../../services/adminRvmCutover.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -339,6 +342,13 @@ export function AdminRvmCutover() {
   const [editing,  setEditing]  = useState<RvmTenantFlag | null>(null)
   const [checking, setChecking] = useState<RvmTenantFlag | null>(null)
 
+  // Bulk-select state: set of client_ids the operator has ticked. Kept
+  // separate from the list query so it survives refetches, but we clear
+  // it after a successful bulk mutation to avoid stale selections.
+  const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const [bulkMode, setBulkMode] = useState<BulkPipelineMode>('shadow')
+  const [bulkNotes, setBulkNotes] = useState<string>('')
+
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['admin-rvm-cutover'],
     queryFn: () => adminRvmCutoverService.list(),
@@ -374,6 +384,46 @@ export function AdminRvmCutover() {
     },
   })
 
+  const bulkMutation = useMutation({
+    mutationFn: (args: { clientIds: number[]; mode: BulkPipelineMode; notes: string | null }) =>
+      adminRvmCutoverService.bulkSetMode({
+        client_ids:    args.clientIds,
+        pipeline_mode: args.mode,
+        notes:         args.notes,
+      }),
+    onSuccess: (res) => {
+      const data: BulkSetModeResponse | undefined = res.data?.data
+      const ok   = data?.succeeded_count ?? 0
+      const fail = data?.failed_count    ?? 0
+
+      if (fail === 0) {
+        toast.success(`Bulk update: ${ok} tenant${ok === 1 ? '' : 's'} set to ${data?.mode}`)
+      } else if (ok === 0) {
+        toast.error(`Bulk update failed: 0 succeeded, ${fail} failed`)
+      } else {
+        // Mixed result — surface as a warning toast with both counts so
+        // the operator knows to check the details.
+        toast(`Bulk update: ${ok} succeeded, ${fail} failed`, { icon: '⚠️' })
+      }
+
+      // Log per-row failures to the console so operators can inspect
+      // which client ids refused — keeps the toast compact.
+      if (data?.failed?.length) {
+        // eslint-disable-next-line no-console
+        console.warn('[rvm-cutover] bulk failures', data.failed)
+      }
+
+      setSelected(new Set())
+      setBulkNotes('')
+      qc.invalidateQueries({ queryKey: ['admin-rvm-cutover'] })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? 'Bulk update failed'
+      toast.error(msg)
+    },
+  })
+
   const rollbackMutation = useMutation({
     mutationFn: () => adminRvmCutoverService.rollbackAll(),
     onSuccess: (res) => {
@@ -392,9 +442,49 @@ export function AdminRvmCutover() {
     },
   })
 
+  // ── Selection helpers ──────────────────────────────────────────────────────
+
+  const allSelected = tenants.length > 0 && selected.size === tenants.length
+  const someSelected = selected.size > 0 && !allSelected
+
+  const toggleRow = (clientId: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(clientId)) next.delete(clientId)
+      else next.add(clientId)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(tenants.map((t) => t.client_id)))
+    }
+  }
+
   // ── Columns ────────────────────────────────────────────────────────────────
 
   const columns: Column<RvmTenantFlag>[] = [
+    {
+      key: 'select', header: '',
+      headerClassName: 'w-10',
+      render: (r) => (
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          checked={selected.has(r.client_id)}
+          onChange={(e) => {
+            // Stop this from bubbling into any row-level click handler
+            // the parent might add later.
+            e.stopPropagation()
+            toggleRow(r.client_id)
+          }}
+          aria-label={`Select ${r.company_name}`}
+        />
+      ),
+    },
     {
       key: 'client_id', header: 'Client',
       render: (r) => (
@@ -604,11 +694,104 @@ export function AdminRvmCutover() {
 
       {/* Table */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-          <span className="text-xs text-slate-500 font-medium">
-            {isLoading ? 'Loading…' : `${totals.total.toLocaleString()} tenants`}
-          </span>
-        </div>
+        {/* Bulk action bar — takes over the table header when at least
+            one row is selected. Otherwise shows the plain count + a
+            "select all" checkbox so operators can enter bulk mode with
+            one click. */}
+        {selected.size === 0 ? (
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                checked={false}
+                onChange={toggleAll}
+                aria-label="Select all tenants"
+                disabled={tenants.length === 0}
+              />
+              <span className="text-xs text-slate-500 font-medium">
+                {isLoading ? 'Loading…' : `${totals.total.toLocaleString()} tenants`}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-indigo-100 bg-indigo-50/60 flex-wrap">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected
+                }}
+                onChange={toggleAll}
+                aria-label="Select all tenants"
+              />
+              <span className="text-xs font-semibold text-indigo-900">
+                <Layers size={12} className="inline mr-1" />
+                {selected.size} selected
+              </span>
+              <button
+                onClick={() => {
+                  setSelected(new Set())
+                  setBulkNotes('')
+                }}
+                className="text-xs text-slate-500 hover:text-slate-700 inline-flex items-center gap-1"
+                title="Clear selection"
+              >
+                <X size={11} /> Clear
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={bulkMode}
+                onChange={(e) => setBulkMode(e.target.value as BulkPipelineMode)}
+                className="input input-sm py-1.5 text-xs min-w-[150px]"
+                disabled={bulkMutation.isPending}
+              >
+                <option value="legacy">Legacy</option>
+                <option value="shadow">Shadow</option>
+                <option value="dry_run">Dry Run</option>
+              </select>
+
+              <input
+                type="text"
+                value={bulkNotes}
+                onChange={(e) => setBulkNotes(e.target.value)}
+                placeholder="Notes (optional)"
+                maxLength={1000}
+                className="input input-sm py-1.5 text-xs min-w-[200px]"
+                disabled={bulkMutation.isPending}
+              />
+
+              <button
+                onClick={async () => {
+                  const ids = Array.from(selected).sort((a, b) => a - b)
+                  if (ids.length === 0) return
+                  const ok = await showConfirm({
+                    title:   'Apply bulk mode change?',
+                    message: `Flip ${ids.length} tenant${ids.length === 1 ? '' : 's'} to ${MODE_LABEL[bulkMode]} mode. This is reversible but will affect every selected tenant immediately.`,
+                    confirmText: `Yes, set ${ids.length} to ${MODE_LABEL[bulkMode]}`,
+                    danger: bulkMode === 'legacy',
+                  })
+                  if (!ok) return
+                  bulkMutation.mutate({
+                    clientIds: ids,
+                    mode:      bulkMode,
+                    notes:     bulkNotes.trim() === '' ? null : bulkNotes.trim(),
+                  })
+                }}
+                disabled={bulkMutation.isPending}
+                className="btn-sm gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center text-xs"
+              >
+                <Layers size={12} />
+                {bulkMutation.isPending ? 'Applying…' : `Apply to ${selected.size}`}
+              </button>
+            </div>
+          </div>
+        )}
+
         <DataTable
           columns={columns}
           data={tenants}
