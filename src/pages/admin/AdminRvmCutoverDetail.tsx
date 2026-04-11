@@ -2,12 +2,14 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, Building2, RefreshCw, AlertTriangle, Activity,
-  CheckCircle2, XCircle, Radio, Clock,
+  CheckCircle2, XCircle, Radio, Clock, History, User,
 } from 'lucide-react'
 import {
   adminRvmCutoverService,
   type ShadowLogRow,
   type PipelineMode,
+  type AuditHistoryRow,
+  type AuditActionType,
 } from '../../services/adminRvmCutover.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -27,6 +29,61 @@ const MODE_LABEL: Record<PipelineMode, string> = {
   live:    'Live',
 }
 
+const ACTION_LABEL: Record<AuditActionType, string> = {
+  set_mode:        'Set Mode',
+  check_readiness: 'Readiness Check',
+  rollback_all:    'Rollback All',
+}
+
+const ACTION_VARIANT: Record<AuditActionType, 'blue' | 'gray' | 'red'> = {
+  set_mode:        'blue',
+  check_readiness: 'gray',
+  rollback_all:    'red',
+}
+
+/**
+ * Human-readable summary of an audit row's payload. Works hand-in-hand with
+ * the compact Change History table — we don't dump raw JSON on operators.
+ */
+function summarizeHistoryRow(row: AuditHistoryRow): React.ReactNode {
+  if (row.action_type === 'check_readiness') {
+    return <span className="text-xs text-slate-400">—</span>
+  }
+  if (row.action_type === 'rollback_all') {
+    return <span className="text-xs text-red-600">All tenants → legacy</span>
+  }
+  // set_mode
+  const p = row.payload ?? {}
+  const mode = (p.pipeline_mode as PipelineMode | undefined) ?? null
+  const provider = (p.live_provider as string | null | undefined) ?? null
+  const cap = p.live_daily_cap as number | null | undefined
+  const notes = (p.notes as string | null | undefined) ?? null
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {mode && <Badge variant={MODE_VARIANT[mode]}>{MODE_LABEL[mode]}</Badge>}
+      {provider && (
+        <span className="font-mono text-xs text-slate-500">
+          via {provider}
+        </span>
+      )}
+      {cap !== null && cap !== undefined && (
+        <span className="font-mono text-xs text-slate-500">
+          cap {cap.toLocaleString()}
+        </span>
+      )}
+      {notes && (
+        <span
+          className="text-xs text-slate-500 italic truncate max-w-[240px]"
+          title={notes}
+        >
+          "{notes}"
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ShadowLogRow from the backend doesn't have a `keyField` type constraint; we
 // alias it through Record<string, unknown> for the DataTable generic.
 type ShadowRow = ShadowLogRow & Record<string, unknown>
@@ -43,9 +100,16 @@ export function AdminRvmCutoverDetail() {
     enabled: Number.isFinite(id) && id > 0,
   })
 
+  const historyQuery = useQuery({
+    queryKey: ['admin-rvm-cutover-history', id],
+    queryFn: () => adminRvmCutoverService.history(id),
+    enabled: Number.isFinite(id) && id > 0,
+  })
+
   const detail = data?.data?.data
   const flag = detail?.flag
   const recent: ShadowRow[] = (detail?.recent_shadow ?? []) as ShadowRow[]
+  const historyRows: AuditHistoryRow[] = historyQuery.data?.data?.data?.history ?? []
 
   // 24h summary totals derived from the breakdown rows.
   const total24h = detail?.breakdown_24h?.reduce((sum, r) => sum + r.total, 0) ?? 0
@@ -369,6 +433,78 @@ export function AdminRvmCutoverDetail() {
               loading={false}
               emptyText="No shadow rows recorded yet"
             />
+          </div>
+
+          {/* Change history — audit_log entries for this tenant */}
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <History size={14} className="text-slate-500" />
+                <span className="text-xs text-slate-700 font-semibold">
+                  Change History
+                </span>
+                <span className="text-xs text-slate-400">
+                  · last {historyRows.length}
+                </span>
+              </div>
+              {historyQuery.isFetching && (
+                <RefreshCw size={13} className="animate-spin text-slate-400" />
+              )}
+            </div>
+
+            {historyQuery.isError ? (
+              <div className="py-6 px-4 text-center text-xs text-red-500">
+                Failed to load history: {(historyQuery.error as Error)?.message ?? 'unknown'}
+              </div>
+            ) : historyRows.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No audit log entries for this tenant yet.
+              </div>
+            ) : (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '170px' }}>When</th>
+                    <th style={{ width: '180px' }}>Actor</th>
+                    <th style={{ width: '140px' }}>Action</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <Clock size={11} className="text-slate-300" />
+                          {formatDateTime(row.created_at)}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-1.5">
+                          <User size={12} className="text-slate-300" />
+                          <div className="leading-tight">
+                            <div className="text-xs text-slate-700 font-medium">
+                              {row.actor_name ?? `user #${row.user_id}`}
+                            </div>
+                            {row.actor_email && (
+                              <div className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">
+                                {row.actor_email}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <Badge variant={ACTION_VARIANT[row.action_type]}>
+                          {ACTION_LABEL[row.action_type]}
+                        </Badge>
+                      </td>
+                      <td>{summarizeHistoryRow(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </>
       )}

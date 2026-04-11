@@ -127,6 +127,26 @@ export interface DashboardResponse {
   hourly_buckets: DashboardHourlyBucket[]
 }
 
+export type AuditActionType = 'set_mode' | 'check_readiness' | 'rollback_all'
+
+export interface AuditHistoryRow extends Record<string, unknown> {
+  id: number
+  created_at: string
+  user_id: number
+  actor_name: string | null
+  actor_email: string | null
+  method: string
+  path: string
+  action_type: AuditActionType
+  payload: Record<string, unknown> | null
+  ip: string
+}
+
+export interface HistoryResponse {
+  client_id: number
+  history: AuditHistoryRow[]
+}
+
 export const adminRvmCutoverService = {
   list: () =>
     api.get<{ success: boolean; message: string; data: TenantListResponse }>(
@@ -136,6 +156,11 @@ export const adminRvmCutoverService = {
   show: (clientId: number) =>
     api.get<{ success: boolean; message: string; data: TenantDetailResponse }>(
       `/admin/rvm/cutover/${clientId}`,
+    ),
+
+  history: (clientId: number) =>
+    api.get<{ success: boolean; message: string; data: HistoryResponse }>(
+      `/admin/rvm/cutover/${clientId}/history`,
     ),
 
   dashboard: (window: DashboardWindow = '24h') =>
