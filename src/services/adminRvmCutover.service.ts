@@ -163,6 +163,11 @@ export const adminRvmCutoverService = {
       `/admin/rvm/cutover/${clientId}/history`,
     ),
 
+  historyCsv: (clientId: number) =>
+    api.get<Blob>(`/admin/rvm/cutover/${clientId}/history?format=csv`, {
+      responseType: 'blob',
+    }),
+
   dashboard: (window: DashboardWindow = '24h') =>
     api.get<{ success: boolean; message: string; data: DashboardResponse }>(
       `/admin/rvm/dashboard?window=${window}`,

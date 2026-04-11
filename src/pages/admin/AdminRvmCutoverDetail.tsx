@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import {
   ArrowLeft, Building2, RefreshCw, AlertTriangle, Activity,
-  CheckCircle2, XCircle, Radio, Clock, History, User,
+  CheckCircle2, XCircle, Radio, Clock, History, User, Download,
 } from 'lucide-react'
 import {
   adminRvmCutoverService,
@@ -105,6 +106,35 @@ export function AdminRvmCutoverDetail() {
     queryFn: () => adminRvmCutoverService.history(id),
     enabled: Number.isFinite(id) && id > 0,
   })
+
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleExportHistory = async () => {
+    if (!Number.isFinite(id) || id <= 0) return
+    setIsExporting(true)
+    try {
+      const resp = await adminRvmCutoverService.historyCsv(id)
+      // axios with responseType:'blob' returns the blob at resp.data.
+      const blob = resp.data instanceof Blob
+        ? resp.data
+        : new Blob([resp.data as BlobPart], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ts = new Date().toISOString().replace(/[:T]/g, '').slice(0, 15)
+      a.download = `rvm-cutover-history-client-${id}-${ts}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      // Non-fatal — show to the user via a simple alert.
+      // eslint-disable-next-line no-alert
+      alert('Failed to download history CSV: ' + ((e as Error)?.message ?? 'unknown'))
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const detail = data?.data?.data
   const flag = detail?.flag
@@ -447,9 +477,21 @@ export function AdminRvmCutoverDetail() {
                   · last {historyRows.length}
                 </span>
               </div>
-              {historyQuery.isFetching && (
-                <RefreshCw size={13} className="animate-spin text-slate-400" />
-              )}
+              <div className="flex items-center gap-2">
+                {historyQuery.isFetching && (
+                  <RefreshCw size={13} className="animate-spin text-slate-400" />
+                )}
+                <button
+                  type="button"
+                  onClick={handleExportHistory}
+                  disabled={isExporting || historyRows.length === 0}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200 rounded-md hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Download the current audit history as CSV"
+                >
+                  <Download size={12} />
+                  {isExporting ? 'Exporting…' : 'CSV'}
+                </button>
+              </div>
             </div>
 
             {historyQuery.isError ? (
