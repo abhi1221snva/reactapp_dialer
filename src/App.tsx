@@ -129,6 +129,9 @@ import { GmailMailbox } from './pages/gmail/GmailMailbox'
 import EmailParser from './pages/email-parser/EmailParser'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
+import { AdminRvmCutover } from './pages/admin/AdminRvmCutover'
+import { AdminRvmCutoverDetail } from './pages/admin/AdminRvmCutoverDetail'
+import { AdminRvmDashboard } from './pages/admin/AdminRvmDashboard'
 import { SystemEmailTemplates } from './pages/admin/SystemEmailTemplates'
 import { SystemMonitor } from './pages/admin/SystemMonitor'
 import { SwaggerDocs } from './pages/admin/SwaggerDocs'
@@ -395,6 +398,9 @@ export default function App() {
 
           {/* System Admin */}
           <Route path="/admin/clients" element={<AdminClients />} />
+          <Route path="/admin/rvm/dashboard" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmDashboard /></RoleGuard>} />
+          <Route path="/admin/rvm/cutover" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutover /></RoleGuard>} />
+          <Route path="/admin/rvm/cutover/:clientId" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutoverDetail /></RoleGuard>} />
           <Route path="/admin/email-templates" element={<SystemEmailTemplates />} />
           <Route path="/admin/system-monitor" element={<SystemMonitor />} />
           <Route path="/system/swagger" element={<SwaggerDocs />} />
