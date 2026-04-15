@@ -20,7 +20,7 @@ import {
   TrendingUp, ShieldCheck, CheckCircle, Send, FileBarChart,
   Pencil, Trash2, Download, Copy, ExternalLink, Upload, Search,
   Hash, MessageSquare, Activity, MoreVertical,
-  Tag, Calendar, Check, Eye, SlidersHorizontal,
+  Tag, Calendar, Check, Eye, SlidersHorizontal, Sparkles,
   PanelRightClose, PanelRightOpen, Zap, MapPin, Globe,
   ArrowUpRight, PhoneCall, Star, LayoutDashboard,
 } from 'lucide-react'
@@ -498,6 +498,23 @@ const OV_CORE_FIELDS: { key: string; label: string; type?: string; isWide?: bool
   { key: 'state',        label: 'State'         },
 ]
 
+// ─── Field icon map ───────────────────────────────────────────────────────────
+const FIELD_ICON_MAP: Record<string, LucideIcon> = {
+  first_name: User, last_name: User,
+  email: Mail,
+  phone_number: Phone,
+  company_name: Building2,
+  address: MapPin, city: MapPin, state: MapPin,
+  country: Globe,
+}
+function resolveFieldIcon(key: string, type?: string): LucideIcon {
+  if (FIELD_ICON_MAP[key]) return FIELD_ICON_MAP[key]
+  if (type === 'email') return Mail
+  if (type === 'phone' || type === 'phone_number') return Phone
+  if (type === 'url') return Globe
+  return Sparkles
+}
+
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
@@ -505,7 +522,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
 
-  const { register, handleSubmit, setValue, watch, reset, formState: { errors, isDirty } } = useForm<Record<string, unknown>>({
+  const { register, handleSubmit, reset, formState: { isDirty } } = useForm<Record<string, unknown>>({
     defaultValues: lead as Record<string, unknown>,
   })
 
@@ -526,123 +543,162 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   const lr = lead as Record<string, unknown>
 
   const { personal, business, secondOwner } = useMemo(() => bucketLeadFields(leadFields), [leadFields])
-  const labelKeys = useMemo(() => new Set(leadFields.map(f => f.field_key)), [leadFields])
-  const visibleCoreFields = useMemo(() => OV_CORE_FIELDS.filter(f => !labelKeys.has(f.key)), [labelKeys])
+  const labelKeys   = useMemo(() => new Set(leadFields.map(f => f.field_key)), [leadFields])
+  const visibleCore = useMemo(() => OV_CORE_FIELDS.filter(f => !labelKeys.has(f.key)), [labelKeys])
 
-  const hasOwnerSection    = visibleCoreFields.length > 0 || personal.length > 0
+  const hasOwnerSection    = visibleCore.length > 0 || personal.length > 0
   const hasBusinessSection = business.length > 0
   const hasOwner2          = secondOwner.length > 0
 
-  // ── Core field: flat label/value in view mode, input in edit mode ──
-  function coreField(f: typeof OV_CORE_FIELDS[0]) {
-    const raw = lr[f.key]
-    const displayVal = f.key === 'phone_number' && raw
+  // Avatar for identity card
+  const fullName   = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${leadId}`
+  const avatarGrad = AVATAR_COLORS[leadId % AVATAR_COLORS.length]
+  const leadInits  = initials(fullName)
+
+  // ── Single bordered field card — view or edit ──────────────────────────────
+  function fieldCard(key: string, label: string, type?: string) {
+    const raw       = lr[key]
+    const displayVal = key === 'phone_number' && raw
       ? formatPhoneNumber(String(raw))
-      : raw ? String(raw) : ''
+      : raw != null && String(raw).trim() !== '' ? String(raw) : ''
+    const FIcon     = resolveFieldIcon(key, type)
+    const copyable  = /^(email|phone_number)$/.test(key) || type === 'email' || type === 'phone' || type === 'phone_number'
+    const inputType = type === 'phone' || type === 'phone_number' ? 'tel'
+      : type === 'email' ? 'email'
+      : type === 'number' ? 'number'
+      : type === 'date' ? 'date'
+      : 'text'
+
+    if (editing) {
+      return (
+        <div key={key} className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-indigo-200 bg-indigo-50/30 ring-1 ring-indigo-100/60 transition-all">
+          <FIcon size={11} className="shrink-0 text-indigo-400" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-semibold text-indigo-300 uppercase tracking-wider leading-none mb-0.5">{label}</p>
+            <input
+              type={inputType}
+              {...register(key)}
+              className="w-full text-[12px] font-semibold text-slate-800 outline-none bg-transparent leading-tight placeholder:text-slate-300"
+              placeholder={label}
+            />
+          </div>
+        </div>
+      )
+    }
 
     return (
-      <div key={f.key} className={f.isWide ? 'col-span-2' : ''}>
-        <p style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 5 }}>
-          {f.label}
-        </p>
-        {editing
-          ? <input type={f.type ?? 'text'} {...register(f.key)} className="crm-fi" placeholder={f.label} />
-          : <p className="text-[13px] font-semibold text-slate-700 leading-snug">
-              {displayVal || <span className="text-slate-400 font-normal text-xs">—</span>}
-            </p>
-        }
+      <div key={key} className="group relative flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/20 cursor-default">
+        <FIcon size={11} className="shrink-0 transition-colors text-slate-400 group-hover:text-indigo-500" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider leading-none">{label}</p>
+          {displayVal
+            ? <p className="text-[12px] font-semibold text-slate-800 mt-0.5 truncate leading-tight transition-colors group-hover:text-indigo-700" title={displayVal}>{displayVal}</p>
+            : <p className="text-[12px] font-semibold mt-0.5 leading-tight text-slate-300">Not set</p>
+          }
+        </div>
+        {/* Hover actions */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {copyable && displayVal && (
+            <button onClick={() => copyToClipboard(String(raw!), label)} title="Copy"
+              className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
+              <Copy size={10} />
+            </button>
+          )}
+          <button onClick={() => setEditing(true)} title="Edit"
+            className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors">
+            <Pencil size={10} />
+          </button>
+        </div>
       </div>
     )
   }
 
-  // ── Merchant-style Edit / Cancel / Save bar ──
-  const editActions = !editing ? (
+  // ── Edit / Cancel / Save in identity card ──────────────────────────────────
+  const editBar = !editing ? (
     <button onClick={() => setEditing(true)}
-      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all flex-shrink-0"
-      style={{ color: G[600], borderColor: '#bbf7d0', background: G[50] }}>
+      className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-colors border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300">
       <Pencil size={11} /> Edit
     </button>
   ) : (
-    <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="flex items-center gap-1.5 shrink-0">
       <button onClick={() => { setEditing(false); reset(lr) }}
-        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
-        Cancel
+        className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-500 bg-white hover:bg-slate-50 transition-colors">
+        <X size={11} /> Cancel
       </button>
-      <button onClick={handleSubmit(data => saveMut.mutate(data))}
-        disabled={saveMut.isPending || !isDirty}
-        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-50 transition-all"
+      <button onClick={handleSubmit(data => saveMut.mutate(data))} disabled={saveMut.isPending || !isDirty}
+        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-semibold text-white disabled:opacity-50 transition-all"
         style={{ background: G[600] }}>
-        {saveMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save Changes
+        {saveMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
       </button>
     </div>
   )
 
-  // ── Card header (merchant/company-settings style: white bg, colored icon) ──
-  function cardHeader(iconBg: string, iconColor: string, Icon: LucideIcon, title: string) {
+  // ── Section header bar ─────────────────────────────────────────────────────
+  function sectionBar(Icon: LucideIcon, iconClass: string, title: string, count: number) {
     return (
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
-            <Icon size={15} style={{ color: iconColor }} />
-          </div>
-          <span className="text-sm font-bold text-slate-800">{title}</span>
-        </div>
-        {editActions}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 bg-slate-50/40">
+        <Icon size={12} className={iconClass} />
+        <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">{title}</h3>
+        <span className="text-[10px] font-bold text-slate-400">{count}</span>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+
+      {/* ── Lead identity card ── */}
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+        <div className="relative shrink-0">
+          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-sm font-bold text-white shadow-sm`}>
+            {leadInits}
+          </div>
+          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">{fullName}</h2>
+          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+            {lead.email && <span className="font-medium text-slate-600">{String(lead.email)}</span>}
+            {lead.email && lead.phone_number && <span className="mx-1 text-slate-300">·</span>}
+            {lead.phone_number && <span>{formatPhoneNumber(String(lead.phone_number))}</span>}
+          </p>
+        </div>
+        {editBar}
+      </div>
 
       {/* ── Contact Information ── */}
       {hasOwnerSection && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          {cardHeader('#ecfdf5', G[600], User, 'Contact Information')}
-          <div className="p-5 space-y-4">
-            {visibleCoreFields.length > 0 && (
-              <div className="grid grid-cols-4 gap-x-4 gap-y-4">
-                {visibleCoreFields.map(f => coreField(f))}
-              </div>
-            )}
-            {personal.length > 0 && (
-              <DynamicFieldForm
-                register={register} setValue={setValue}
-                defaultValues={lr} errors={errors}
-                labels={personal} formValues={watch() as Record<string, unknown>}
-                readOnly={!editing} columns={4} hideSectionHeaders
-              />
-            )}
+        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
+          {sectionBar(User, 'text-indigo-500', 'Contact Information', visibleCore.length + personal.length)}
+          <div className="p-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {visibleCore.map(f => fieldCard(f.key, f.label, f.type))}
+              {personal.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+            </div>
           </div>
         </div>
       )}
 
       {/* ── Business Information ── */}
       {hasBusinessSection && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          {cardHeader('#eff6ff', '#2563eb', Building2, 'Business Information')}
-          <div className="p-5">
-            <DynamicFieldForm
-              register={register} setValue={setValue}
-              defaultValues={lr} errors={errors}
-              labels={business} formValues={watch() as Record<string, unknown>}
-              readOnly={!editing} columns={4} hideSectionHeaders
-            />
+        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
+          {sectionBar(Building2, 'text-blue-500', 'Business Information', business.length)}
+          <div className="p-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {business.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Owner 2 ── */}
+      {/* ── Owner 2 Information ── */}
       {hasOwner2 && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          {cardHeader('#f5f3ff', '#7c3aed', Users, 'Owner 2 Information')}
-          <div className="p-5">
-            <DynamicFieldForm
-              register={register} setValue={setValue}
-              defaultValues={lr} errors={errors}
-              labels={secondOwner} formValues={watch() as Record<string, unknown>}
-              readOnly={!editing} columns={4} hideSectionHeaders
-            />
+        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
+          {sectionBar(Users, 'text-violet-500', 'Owner 2 Information', secondOwner.length)}
+          <div className="p-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {secondOwner.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+            </div>
           </div>
         </div>
       )}
