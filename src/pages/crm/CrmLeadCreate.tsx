@@ -439,107 +439,101 @@ export function CrmLeadCreate() {
 
                 <div className="space-y-4">
 
-                  {/* ═══ Owner + Business — side by side cards ═══ */}
-                  {(hasOwnerSection || hasBusinessSection) && (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-
-                      {/* Owner Information card */}
-                      {hasOwnerSection && (
-                        <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-                          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#f0fdf4' }}>
-                            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: '#dcfce7' }}>
-                              <User size={11} style={{ color: '#059669' }} />
-                            </div>
-                            <span className="text-[11px] font-bold text-slate-700">Owner Information</span>
+                  {/* ─── Owner / Contact Information ─── */}
+                  {hasOwnerSection && (
+                    <section className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-100">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#ecfdf5' }}>
+                          <User size={15} style={{ color: '#059669' }} />
+                        </div>
+                        <span className="text-sm font-bold text-slate-800">Owner Information</span>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        {visibleCoreFields.length > 0 && (
+                          <div className="grid grid-cols-4 gap-x-4 gap-y-4">
+                            {visibleCoreFields.map(f => {
+                              const isWide = f.key === 'company_name' || f.key === 'address'
+                              return (
+                                <div key={f.key} className={isWide ? 'col-span-2' : ''} data-field-key={f.key}>
+                                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 5 }}>{f.label}</label>
+                                  {f.key === 'address' ? (
+                                    <AddressAutocomplete
+                                      value={watch('address') ?? ''}
+                                      onChange={v => setValue('address', v)}
+                                      onPlaceSelect={(parsed: ParsedPlace) => {
+                                        const group = resolveAddressGroup('address')
+                                        if (group) {
+                                          setValue('city', parsed.city)
+                                          setValue('state', parsed.state)
+                                        }
+                                      }}
+                                      placeholder={f.placeholder}
+                                    />
+                                  ) : (
+                                    <input
+                                      type={f.type ?? 'text'}
+                                      {...register(f.key as keyof FormData)}
+                                      className="crm-fi"
+                                      placeholder={f.placeholder}
+                                      maxLength={f.maxLength}
+                                      autoComplete={f.type === 'email' ? 'email' : undefined}
+                                    />
+                                  )}
+                                  {errors[f.key as keyof FormData]?.message && (
+                                    <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                                      <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
-                          <div className="p-4 space-y-3">
-                            {visibleCoreFields.length > 0 && (
-                              <div className="grid grid-cols-2 gap-3">
-                                {visibleCoreFields.map(f => {
-                                  const isWide = f.key === 'company_name' || f.key === 'address'
-                                  return (
-                                    <div key={f.key} className={isWide ? 'col-span-2' : ''} data-field-key={f.key}>
-                                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{f.label}</label>
-                                      {f.key === 'address' ? (
-                                        <AddressAutocomplete
-                                          value={watch('address') ?? ''}
-                                          onChange={v => setValue('address', v)}
-                                          onPlaceSelect={(parsed: ParsedPlace) => {
-                                            const group = resolveAddressGroup('address')
-                                            if (group) {
-                                              setValue('city', parsed.city)
-                                              setValue('state', parsed.state)
-                                            }
-                                          }}
-                                          placeholder={f.placeholder}
-                                        />
-                                      ) : (
-                                        <input
-                                          type={f.type ?? 'text'}
-                                          {...register(f.key as keyof FormData)}
-                                          className="crm-fi"
-                                          placeholder={f.placeholder}
-                                          maxLength={f.maxLength}
-                                          autoComplete={f.type === 'email' ? 'email' : undefined}
-                                        />
-                                      )}
-                                      {errors[f.key as keyof FormData]?.message && (
-                                        <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                                          <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                            {personal.length > 0 && (
-                              <DynamicFieldForm
-                                register={register}
-                                setValue={setValue}
-                                defaultValues={existing as Record<string, unknown> | undefined}
-                                labels={personal}
-                                errors={errors}
-                                formValues={watch() as Record<string, unknown>}
-                                columns={2}
-                                hideSectionHeaders
-                              />
-                            )}
-                          </div>
-                        </section>
-                      )}
-
-                      {/* Business Information card */}
-                      {hasBusinessSection && (
-                        <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-                          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#eff6ff' }}>
-                            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: '#dbeafe' }}>
-                              <Building2 size={11} style={{ color: '#1d4ed8' }} />
-                            </div>
-                            <span className="text-[11px] font-bold text-slate-700">Business Information</span>
-                          </div>
-                          <div className="p-4">
-                            <DynamicFieldForm
-                              register={register}
-                              setValue={setValue}
-                              defaultValues={existing as Record<string, unknown> | undefined}
-                              labels={business}
-                              errors={errors}
-                              formValues={watch() as Record<string, unknown>}
-                              columns={2}
-                              hideSectionHeaders
-                            />
-                          </div>
-                        </section>
-                      )}
-                    </div>
+                        )}
+                        {personal.length > 0 && (
+                          <DynamicFieldForm
+                            register={register}
+                            setValue={setValue}
+                            defaultValues={existing as Record<string, unknown> | undefined}
+                            labels={personal}
+                            errors={errors}
+                            formValues={watch() as Record<string, unknown>}
+                            columns={4}
+                            hideSectionHeaders
+                          />
+                        )}
+                      </div>
+                    </section>
                   )}
 
-                  {/* ═══ Owner 2 — collapsible card ═══ */}
+                  {/* ─── Business Information ─── */}
+                  {hasBusinessSection && (
+                    <section className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-100">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#eff6ff' }}>
+                          <Building2 size={15} style={{ color: '#2563eb' }} />
+                        </div>
+                        <span className="text-sm font-bold text-slate-800">Business Information</span>
+                      </div>
+                      <div className="p-5">
+                        <DynamicFieldForm
+                          register={register}
+                          setValue={setValue}
+                          defaultValues={existing as Record<string, unknown> | undefined}
+                          labels={business}
+                          errors={errors}
+                          formValues={watch() as Record<string, unknown>}
+                          columns={4}
+                          hideSectionHeaders
+                        />
+                      </div>
+                    </section>
+                  )}
+
+                  {/* ─── Owner 2 — collapsible ─── */}
                   {hasOwner2Section && (
-                    <section ref={owner2Ref} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#faf5ff' }}>
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <section ref={owner2Ref} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-100">
+                        <label className="flex items-center gap-3 cursor-pointer select-none">
                           <input
                             type="checkbox"
                             checked={hasSecondOwner}
@@ -553,17 +547,19 @@ export function CrmLeadCreate() {
                                 owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                               }, 50)
                             }}
-                            className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
                           />
-                          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: '#ede9fe' }}>
-                            <Users size={11} style={{ color: '#7c3aed' }} />
+                          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#f5f3ff' }}>
+                            <Users size={15} style={{ color: '#7c3aed' }} />
                           </div>
-                          <span className="text-[11px] font-bold text-slate-700">Owner 2 Information</span>
-                          <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+                          <div>
+                            <span className="text-sm font-bold text-slate-800">Owner 2 Information</span>
+                            <span className="text-xs text-slate-400 font-normal ml-2">(optional)</span>
+                          </div>
                         </label>
                       </div>
                       {hasSecondOwner && (
-                        <div className="p-4">
+                        <div className="p-5">
                           <DynamicFieldForm
                             register={register}
                             setValue={setValue}
