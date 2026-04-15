@@ -498,7 +498,14 @@ const OV_CORE_FIELDS: { key: string; label: string; type?: string; isWide?: bool
   { key: 'state',        label: 'State'         },
 ]
 
-// ─── Overview Tab — card layout matching CrmLeadCreate.tsx ───────────────────
+// ─── Section header gradient presets ─────────────────────────────────────────
+const SEC_HDR = {
+  owner:    'linear-gradient(90deg, #059669 0%, #047857 100%)',
+  business: 'linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%)',
+  owner2:   'linear-gradient(90deg, #7c3aed 0%, #6d28d9 100%)',
+}
+
+// ─── Overview Tab ─────────────────────────────────────────────────────────────
 function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
 }) {
@@ -525,10 +532,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
 
   const lr = lead as Record<string, unknown>
 
-  // Bucket EAV fields by section (stable references via useMemo)
   const { personal, business, secondOwner } = useMemo(() => bucketLeadFields(leadFields), [leadFields])
-
-  // Core fields not already covered by a crm_label (avoids duplicate registration)
   const labelKeys = useMemo(() => new Set(leadFields.map(f => f.field_key)), [leadFields])
   const visibleCoreFields = useMemo(() => OV_CORE_FIELDS.filter(f => !labelKeys.has(f.key)), [labelKeys])
 
@@ -536,7 +540,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   const hasBusinessSection = business.length > 0
   const hasOwner2          = secondOwner.length > 0
 
-  // ── Render a single core field (view = styled div, edit = actual input) ──
+  // ── Core field: flat label/value in view mode, input in edit mode ──
   function coreField(f: typeof OV_CORE_FIELDS[0]) {
     const raw = lr[f.key]
     const displayVal = f.key === 'phone_number' && raw
@@ -545,72 +549,75 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
 
     return (
       <div key={f.key} className={f.isWide ? 'col-span-2' : ''}>
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: 0.8, marginBottom: 4 }}>
           {f.label}
-        </label>
+        </p>
         {editing
           ? <input type={f.type ?? 'text'} {...register(f.key)} className="crm-fi" placeholder={f.label} />
-          : (
-            <div className="crm-fi text-xs text-slate-700" style={{ cursor: 'default', display: 'flex', alignItems: 'center', minHeight: 32 }}>
-              {displayVal || <span className="text-slate-400">—</span>}
-            </div>
-          )
+          : <p className="text-[13px] font-semibold text-slate-700 leading-snug">
+              {displayVal || <span className="text-slate-400 font-normal text-xs">—</span>}
+            </p>
         }
       </div>
     )
   }
 
-  // ── Card section header icon box ──
-  function iconBox(bg: string, clr: string, Icon: LucideIcon) {
-    return (
-      <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-        <Icon size={11} style={{ color: clr }} />
-      </div>
-    )
-  }
-
-  // ── Single shared Edit / Cancel / Save bar ──
+  // ── Edit / Cancel / Save — white text on colored section header ──
   const editActions = !editing ? (
     <button onClick={() => setEditing(true)}
-      className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded hover:bg-emerald-50 transition-colors flex-shrink-0"
-      style={{ color: G[600] }}>
+      className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded transition-all flex-shrink-0"
+      style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.9)' }}
+      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.25)'}
+      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.15)'}>
       <Pencil size={10} /> Edit
     </button>
   ) : (
     <div className="flex items-center gap-1 flex-shrink-0">
       <button onClick={() => { setEditing(false); reset(lr) }}
-        className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 transition-colors">
+        className="text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors"
+        style={{ color: 'rgba(255,255,255,0.75)' }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.15)'}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
         Cancel
       </button>
       <button onClick={handleSubmit(data => saveMut.mutate(data))}
         disabled={saveMut.isPending || !isDirty}
         className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded text-white disabled:opacity-60"
-        style={{ background: G[600] }}>
+        style={{ background: 'rgba(255,255,255,0.25)' }}>
         {saveMut.isPending ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
       </button>
     </div>
   )
 
-  return (
-    <div className="space-y-4">
+  // ── Section card header ──
+  function sectionHeader(gradient: string, Icon: LucideIcon, title: string) {
+    return (
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5" style={{ background: gradient }}>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.2)' }}>
+            <Icon size={11} className="text-white" />
+          </div>
+          <span className="text-[11px] font-bold text-white uppercase tracking-wider">{title}</span>
+        </div>
+        {editActions}
+      </div>
+    )
+  }
 
-      {/* ── Owner + Business — side by side cards ── */}
+  return (
+    <div className="space-y-3">
+
+      {/* ── Owner + Business — side by side ── */}
       {(hasOwnerSection || hasBusinessSection) && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
 
           {/* Owner Information */}
           {hasOwnerSection && (
-            <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#f0fdf4' }}>
-                <div className="flex items-center gap-2">
-                  {iconBox('#dcfce7', '#059669', User)}
-                  <span className="text-[11px] font-bold text-slate-700">Owner Information</span>
-                </div>
-                {editActions}
-              </div>
-              <div className="p-4 space-y-3">
+            <section className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
+              {sectionHeader(SEC_HDR.owner, User, 'Contact Information')}
+              <div className="p-4 space-y-4">
                 {visibleCoreFields.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                     {visibleCoreFields.map(f => coreField(f))}
                   </div>
                 )}
@@ -628,14 +635,8 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
 
           {/* Business Information */}
           {hasBusinessSection && (
-            <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#eff6ff' }}>
-                <div className="flex items-center gap-2">
-                  {iconBox('#dbeafe', '#1d4ed8', Building2)}
-                  <span className="text-[11px] font-bold text-slate-700">Business Information</span>
-                </div>
-                {editActions}
-              </div>
+            <section className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
+              {sectionHeader(SEC_HDR.business, Building2, 'Business Information')}
               <div className="p-4">
                 <DynamicFieldForm
                   register={register} setValue={setValue}
@@ -649,16 +650,10 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
         </div>
       )}
 
-      {/* ── Owner 2 Information ── */}
+      {/* ── Owner 2 ── */}
       {hasOwner2 && (
-        <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#faf5ff' }}>
-            <div className="flex items-center gap-2">
-              {iconBox('#ede9fe', '#7c3aed', Users)}
-              <span className="text-[11px] font-bold text-slate-700">Owner 2 Information</span>
-            </div>
-            {editActions}
-          </div>
+        <section className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
+          {sectionHeader(SEC_HDR.owner2, Users, 'Owner 2 Information')}
           <div className="p-4">
             <DynamicFieldForm
               register={register} setValue={setValue}
