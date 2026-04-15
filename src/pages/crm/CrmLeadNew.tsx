@@ -48,7 +48,7 @@ const G = {
   700: '#047857',   // emerald-700 — darker
   50:  '#f0fdf4',   // emerald-50
   100: '#dcfce7',   // emerald-100
-  HDR: 'linear-gradient(135deg, #022c22 0%, #064e3b 60%, #022c22 100%)', // header bg
+  HDR: 'linear-gradient(135deg, #043d2c 0%, #065f46 55%, #043d2c 100%)', // header bg
 }
 
 // ─── Tab system ───────────────────────────────────────────────────────────────
@@ -470,7 +470,10 @@ function LendersTab({ leadId }: { leadId: number }) {
   )
 }
 
-// ─── Overview Tab — dense 4-column grid ──────────────────────────────────────
+// ─── Field def type ───────────────────────────────────────────────────────────
+type FieldDef = { key: string; label: string; fmt?: (v: string) => string }
+
+// ─── Overview Tab — Business + Owner sections (horizontal grid) ───────────────
 function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
 }) {
@@ -497,123 +500,182 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
 
   const lr = lead as Record<string, unknown>
 
-  const FIELDS = [
-    { key: 'first_name',   label: 'First Name' },
-    { key: 'last_name',    label: 'Last Name'  },
-    { key: 'phone_number', label: 'Phone',      fmt: (v: string) => formatPhoneNumber(v) },
-    { key: 'email',        label: 'Email'      },
-    { key: 'company_name', label: 'Company'    },
-    { key: 'lead_type',    label: 'Lead Type'  },
-    { key: 'city',         label: 'City'       },
-    { key: 'state',        label: 'State'      },
-    { key: 'address',      label: 'Address'    },
-    { key: 'dob',          label: 'Date of Birth' },
-    { key: 'zip',          label: 'ZIP'        },
-    { key: 'country',      label: 'Country'    },
-  ] as { key: string; label: string; fmt?: (v: string) => string }[]
+  // ── Field sets ──────────────────────────────────────────────────────────────
+  const BIZ_FIELDS: FieldDef[] = [
+    { key: 'company_name', label: 'Business Name' },
+    { key: 'lead_type',    label: 'Business Type' },
+    { key: 'city',         label: 'City'          },
+    { key: 'state',        label: 'State'         },
+    { key: 'address',      label: 'Address'       },
+    { key: 'zip',          label: 'ZIP'           },
+    { key: 'country',      label: 'Country'       },
+  ]
 
-  // Card wrapper
-  const Card = ({ title, icon: Icon, iconBg = G[50], iconClr = G[600], children, action }: {
-    title: string; icon: LucideIcon; iconBg?: string; iconClr?: string; children: React.ReactNode; action?: React.ReactNode
-  }) => (
-    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-50" style={{ background: '#fafafa' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
-            <Icon size={12} style={{ color: iconClr }} />
-          </div>
-          <span className="text-xs font-bold text-slate-700">{title}</span>
-        </div>
-        {action}
+  const OWNER_FIELDS: FieldDef[] = [
+    { key: 'first_name',   label: 'First Name'    },
+    { key: 'last_name',    label: 'Last Name'     },
+    { key: 'phone_number', label: 'Phone',        fmt: (v) => formatPhoneNumber(v) },
+    { key: 'email',        label: 'Email'         },
+    { key: 'dob',          label: 'Date of Birth' },
+  ]
+
+  const OWNER2_FIELDS: FieldDef[] = [
+    { key: 'owner2_first_name', label: 'First Name'    },
+    { key: 'owner2_last_name',  label: 'Last Name'     },
+    { key: 'owner2_phone',      label: 'Phone',        fmt: (v) => formatPhoneNumber(v) },
+    { key: 'owner2_email',      label: 'Email'         },
+    { key: 'owner2_dob',        label: 'Date of Birth' },
+  ]
+
+  // Detect Owner 2: static record fields OR EAV fields with owner2/co-applicant prefix
+  const owner2EavFields = leadFields.filter(f =>
+    /^(owner2_|co_owner_|co_applicant_|second_owner_)/i.test(f.field_key ?? '')
+  )
+  const hasOwner2 = OWNER2_FIELDS.some(f => !!lr[f.key]) || owner2EavFields.length > 0
+
+  // EAV custom fields (excluding owner2 variants shown in their own section)
+  const customEavFields = leadFields.filter(f =>
+    !/^(owner2_|co_owner_|co_applicant_|second_owner_)/i.test(f.field_key ?? '')
+  )
+
+  // ── Plain render helpers (no hooks — safe to call as functions) ──────────────
+
+  function viewGrid(fields: FieldDef[]) {
+    return (
+      <div className="grid grid-cols-4 gap-x-4 gap-y-2.5">
+        {fields.map(f => {
+          const raw = lr[f.key]
+          const val = raw ? (f.fmt ? f.fmt(String(raw)) : String(raw)) : null
+          const copyable = /phone|email/i.test(f.key)
+          return (
+            <div key={f.key} className="min-w-0 group">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">{f.label}</p>
+              <div className="flex items-center gap-1">
+                {val
+                  ? <p className="text-[12px] font-semibold text-slate-800 truncate leading-tight">{val}</p>
+                  : <span className="text-[11px] text-slate-300">—</span>
+                }
+                {val && copyable && (
+                  <button onClick={() => copyToClipboard(String(raw), f.label)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-300 hover:text-emerald-600 transition-all flex-shrink-0"
+                    title={`Copy ${f.label}`}><Copy size={9} /></button>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
-      <div className="p-3">{children}</div>
+    )
+  }
+
+  function editGrid(fields: FieldDef[]) {
+    return (
+      <div className="grid grid-cols-4 gap-2">
+        {fields.map(f => (
+          <div key={f.key}>
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">{f.label}</label>
+            <input {...register(f.key)}
+              className="w-full px-2 py-1 text-[12px] rounded-md border border-slate-200 focus:outline-none focus:ring-1 text-slate-800 bg-white"
+              style={{ '--tw-ring-color': G[500] } as React.CSSProperties}
+            />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function iconBox(bg: string, clr: string, Icon: LucideIcon) {
+    return (
+      <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+        <Icon size={11} style={{ color: clr }} />
+      </div>
+    )
+  }
+
+  function sectionCard(
+    title: string,
+    icon: React.ReactNode,
+    fields: FieldDef[],
+    action?: React.ReactNode,
+  ) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-50" style={{ background: '#fafafa' }}>
+          <div className="flex items-center gap-1.5">
+            {icon}
+            <span className="text-[11px] font-bold text-slate-700">{title}</span>
+          </div>
+          {action}
+        </div>
+        <div className="px-4 py-3">
+          {editing ? editGrid(fields) : viewGrid(fields)}
+        </div>
+      </div>
+    )
+  }
+
+  // Single shared edit/save bar — controls all sections at once
+  const editActions = !editing ? (
+    <button onClick={() => setEditing(true)}
+      className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded hover:bg-emerald-50 transition-colors"
+      style={{ color: G[600] }}>
+      <Pencil size={10} /> Edit
+    </button>
+  ) : (
+    <div className="flex items-center gap-1">
+      <button onClick={() => { setEditing(false); reset(lr) }}
+        className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 transition-colors">
+        Cancel
+      </button>
+      <button onClick={handleSubmit(data => saveMut.mutate(data))}
+        disabled={saveMut.isPending || !isDirty}
+        className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded text-white disabled:opacity-60"
+        style={{ background: G[600] }}>
+        {saveMut.isPending ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+      </button>
     </div>
   )
 
   return (
-    <div className="space-y-3">
-      {/* Contact & Business — 4-column dense grid */}
-      <Card
-        title="Contact & Business"
-        icon={User}
-        action={
-          !editing ? (
-            <button onClick={() => setEditing(true)}
-              className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md transition-colors hover:bg-emerald-50"
-              style={{ color: G[600] }}>
-              <Pencil size={11} /> Edit
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => { setEditing(false); reset(lr) }}
-                className="text-[11px] font-semibold px-2 py-1 rounded-md text-slate-500 hover:bg-slate-100 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleSubmit(data => saveMut.mutate(data))}
-                disabled={saveMut.isPending || !isDirty}
-                className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md text-white disabled:opacity-60"
-                style={{ background: G[600] }}>
-                {saveMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
-              </button>
-            </div>
-          )
-        }
-      >
-        {!editing ? (
-          /* 4-column read view */
-          <div className="grid grid-cols-4 gap-x-4 gap-y-3">
-            {FIELDS.map(f => {
-              const val = lr[f.key]
-              if (!val) return null
-              const display = f.fmt ? f.fmt(String(val)) : String(val)
-              const isPhone = f.key === 'phone_number'
-              const isEmail = f.key === 'email'
-              return (
-                <div key={f.key} className="min-w-0 group">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{f.label}</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{display}</p>
-                    {(isPhone || isEmail) && (
-                      <button
-                        onClick={() => copyToClipboard(String(val), f.label)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-300 hover:text-emerald-600 transition-all flex-shrink-0"
-                        title={`Copy ${f.label}`}
-                      >
-                        <Copy size={10} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          /* 4-column edit mode */
-          <div className="grid grid-cols-4 gap-2">
-            {FIELDS.map(f => (
-              <div key={f.key}>
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">{f.label}</label>
-                <input {...register(f.key)}
-                  className="w-full px-2 py-1 text-xs rounded-md border border-slate-200 focus:outline-none focus:ring-1 text-slate-800"
-                  style={{ '--tw-ring-color': G[500] } as React.CSSProperties}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+    <div className="space-y-2">
 
-      {/* Dynamic EAV fields */}
-      {leadFields.length > 0 && (
-        <Card title="Custom Fields" icon={SlidersHorizontal}
-          iconBg="#f5f3ff" iconClr="#7c3aed">
-          <DynamicFieldForm
-            register={register} setValue={setValue}
-            defaultValues={lr} errors={errors}
-            labels={leadFields} formValues={watch() as Record<string, unknown>}
-            readOnly={!editing} columns={4}
-          />
-        </Card>
+      {/* ── Business Information (full width) ── */}
+      {sectionCard(
+        'Business Information',
+        iconBox('#eff6ff', '#1d4ed8', Building2),
+        BIZ_FIELDS,
+        editActions,
+      )}
+
+      {/* ── Owner row — side by side when Owner 2 exists ── */}
+      {hasOwner2 ? (
+        <div className="grid grid-cols-2 gap-2">
+          {sectionCard('Owner Information',   iconBox(G[50], G[600], User),       OWNER_FIELDS)}
+          {sectionCard('Owner 2 Information', iconBox('#f5f3ff', '#7c3aed', Users), OWNER2_FIELDS)}
+        </div>
+      ) : (
+        sectionCard('Owner Information', iconBox(G[50], G[600], User), OWNER_FIELDS)
+      )}
+
+      {/* ── Custom / EAV Fields ── */}
+      {customEavFields.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-50" style={{ background: '#fafafa' }}>
+            <div className="flex items-center gap-1.5">
+              {iconBox('#f5f3ff', '#7c3aed', SlidersHorizontal)}
+              <span className="text-[11px] font-bold text-slate-700">Custom Fields</span>
+            </div>
+            {editActions}
+          </div>
+          <div className="px-4 py-3">
+            <DynamicFieldForm
+              register={register} setValue={setValue}
+              defaultValues={lr} errors={errors}
+              labels={customEavFields} formValues={watch() as Record<string, unknown>}
+              readOnly={!editing} columns={4}
+            />
+          </div>
+        </div>
       )}
     </div>
   )
@@ -820,7 +882,7 @@ export function CrmLeadNew() {
 
             {/* Temperature */}
             {tempCfg && (
-              <span className="hidden sm:inline-flex items-center gap-1 h-[18px] px-2 rounded-full text-[10px] font-bold flex-shrink-0"
+              <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full text-[10px] font-bold flex-shrink-0 shadow-sm"
                 style={{ background: tempCfg.bg, color: tempCfg.text }}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: tempCfg.dot }} />
                 {temp!.charAt(0).toUpperCase() + temp!.slice(1)}
@@ -828,34 +890,34 @@ export function CrmLeadNew() {
             )}
 
             {/* Separator */}
-            <span className="text-white/10 hidden md:inline">|</span>
+            <span className="text-white/20 hidden md:inline">|</span>
 
             {/* Contact meta inline */}
             {lead.company_name && (
-              <span className="hidden md:flex items-center gap-1 text-[11px] text-white/40">
-                <Briefcase size={10} className="text-white/25" />{String(lead.company_name)}
+              <span className="hidden md:flex items-center gap-1 text-[11px] text-white/60">
+                <Briefcase size={10} className="text-white/40" />{String(lead.company_name)}
               </span>
             )}
             {lead.phone_number && (
               <button onClick={() => copyToClipboard(String(lead.phone_number), 'Phone')}
-                className="hidden lg:flex items-center gap-1 text-[11px] text-white/40 hover:text-emerald-300 transition-colors group">
-                <Phone size={10} className="text-emerald-500/50" />
+                className="hidden lg:flex items-center gap-1 text-[11px] text-white/60 hover:text-emerald-300 transition-colors group">
+                <Phone size={10} className="text-emerald-400" />
                 {formatPhoneNumber(String(lead.phone_number))}
                 <Copy size={9} className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" />
               </button>
             )}
             {lead.email && (
               <button onClick={() => copyToClipboard(String(lead.email), 'Email')}
-                className="hidden xl:flex items-center gap-1 text-[11px] text-white/40 hover:text-sky-300 transition-colors truncate max-w-[160px] group">
-                <Mail size={10} className="text-sky-400/50 flex-shrink-0" />
+                className="hidden xl:flex items-center gap-1 text-[11px] text-white/60 hover:text-sky-300 transition-colors truncate max-w-[160px] group">
+                <Mail size={10} className="text-sky-400 flex-shrink-0" />
                 <span className="truncate">{String(lead.email)}</span>
                 <Copy size={9} className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 flex-shrink-0" />
               </button>
             )}
 
             {/* KPI pills */}
-            <span className="hidden sm:flex items-center gap-1 text-[11px] text-white/30">
-              <Clock size={10} className="text-white/20" />{daysInPipe}d
+            <span className="hidden sm:flex items-center gap-1 text-[11px] text-white/55">
+              <Clock size={10} className="text-white/40" />{daysInPipe}d
             </span>
             {loanFmt && (
               <span className="hidden sm:flex items-center gap-1 text-[11px] font-semibold"
@@ -864,8 +926,8 @@ export function CrmLeadNew() {
               </span>
             )}
             {submissions.length > 0 && (
-              <span className="hidden sm:flex items-center gap-1 text-[11px] text-white/30">
-                <Building2 size={10} className="text-white/20" />
+              <span className="hidden sm:flex items-center gap-1 text-[11px] text-white/55">
+                <Building2 size={10} className="text-white/40" />
                 <span className="font-semibold" style={{ color: G[500] }}>{approvedCount}</span>/{submissions.length}
               </span>
             )}
