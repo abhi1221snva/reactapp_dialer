@@ -10,7 +10,7 @@
  *   • No backend changes — same API, same services
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -470,10 +470,35 @@ function LendersTab({ leadId }: { leadId: number }) {
   )
 }
 
-// ─── Field def type ───────────────────────────────────────────────────────────
-type FieldDef = { key: string; label: string; fmt?: (v: string) => string }
+// ─── Overview Tab — section buckets (mirrors CrmLeadCreate.tsx) ──────────────
+const OV_PERSONAL_SECTIONS  = new Set(['owner', 'contact', 'address', 'general', 'other'])
+const OV_BUSINESS_SECTIONS  = new Set(['business', 'funding', 'financial', 'documents', 'custom'])
+const OV_OWNER2_SECTIONS    = new Set(['second_owner'])
 
-// ─── Overview Tab — Business + Owner sections (horizontal grid) ───────────────
+function bucketLeadFields(fields: CrmLabel[]) {
+  const personal: CrmLabel[] = [], business: CrmLabel[] = [], secondOwner: CrmLabel[] = []
+  for (const f of fields) {
+    const sec = f.section || 'other'
+    if (OV_OWNER2_SECTIONS.has(sec))      secondOwner.push(f)
+    else if (OV_BUSINESS_SECTIONS.has(sec)) business.push(f)
+    else                                    personal.push(f)
+  }
+  return { personal, business, secondOwner }
+}
+
+// Core owner fields (static, defined outside component so references stay stable)
+const OV_CORE_FIELDS: { key: string; label: string; type?: string; isWide?: boolean }[] = [
+  { key: 'first_name',   label: 'First Name'   },
+  { key: 'last_name',    label: 'Last Name'     },
+  { key: 'email',        label: 'Email',        type: 'email' },
+  { key: 'phone_number', label: 'Phone',        type: 'tel'   },
+  { key: 'company_name', label: 'Company Name', isWide: true  },
+  { key: 'address',      label: 'Address',      isWide: true  },
+  { key: 'city',         label: 'City'          },
+  { key: 'state',        label: 'State'         },
+]
+
+// ─── Overview Tab — card layout matching CrmLeadCreate.tsx ───────────────────
 function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
 }) {
@@ -500,90 +525,42 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
 
   const lr = lead as Record<string, unknown>
 
-  // ── Field sets ──────────────────────────────────────────────────────────────
-  const BIZ_FIELDS: FieldDef[] = [
-    { key: 'company_name', label: 'Business Name' },
-    { key: 'lead_type',    label: 'Business Type' },
-    { key: 'city',         label: 'City'          },
-    { key: 'state',        label: 'State'         },
-    { key: 'address',      label: 'Address'       },
-    { key: 'zip',          label: 'ZIP'           },
-    { key: 'country',      label: 'Country'       },
-  ]
+  // Bucket EAV fields by section (stable references via useMemo)
+  const { personal, business, secondOwner } = useMemo(() => bucketLeadFields(leadFields), [leadFields])
 
-  const OWNER_FIELDS: FieldDef[] = [
-    { key: 'first_name',   label: 'First Name'    },
-    { key: 'last_name',    label: 'Last Name'     },
-    { key: 'phone_number', label: 'Phone',        fmt: (v) => formatPhoneNumber(v) },
-    { key: 'email',        label: 'Email'         },
-    { key: 'dob',          label: 'Date of Birth' },
-  ]
+  // Core fields not already covered by a crm_label (avoids duplicate registration)
+  const labelKeys = useMemo(() => new Set(leadFields.map(f => f.field_key)), [leadFields])
+  const visibleCoreFields = useMemo(() => OV_CORE_FIELDS.filter(f => !labelKeys.has(f.key)), [labelKeys])
 
-  const OWNER2_FIELDS: FieldDef[] = [
-    { key: 'owner2_first_name', label: 'First Name'    },
-    { key: 'owner2_last_name',  label: 'Last Name'     },
-    { key: 'owner2_phone',      label: 'Phone',        fmt: (v) => formatPhoneNumber(v) },
-    { key: 'owner2_email',      label: 'Email'         },
-    { key: 'owner2_dob',        label: 'Date of Birth' },
-  ]
+  const hasOwnerSection    = visibleCoreFields.length > 0 || personal.length > 0
+  const hasBusinessSection = business.length > 0
+  const hasOwner2          = secondOwner.length > 0
 
-  // Detect Owner 2: static record fields OR EAV fields with owner2/co-applicant prefix
-  const owner2EavFields = leadFields.filter(f =>
-    /^(owner2_|co_owner_|co_applicant_|second_owner_)/i.test(f.field_key ?? '')
-  )
-  const hasOwner2 = OWNER2_FIELDS.some(f => !!lr[f.key]) || owner2EavFields.length > 0
+  // ── Render a single core field (view = styled div, edit = actual input) ──
+  function coreField(f: typeof OV_CORE_FIELDS[0]) {
+    const raw = lr[f.key]
+    const displayVal = f.key === 'phone_number' && raw
+      ? formatPhoneNumber(String(raw))
+      : raw ? String(raw) : ''
 
-  // EAV custom fields (excluding owner2 variants shown in their own section)
-  const customEavFields = leadFields.filter(f =>
-    !/^(owner2_|co_owner_|co_applicant_|second_owner_)/i.test(f.field_key ?? '')
-  )
-
-  // ── Plain render helpers (no hooks — safe to call as functions) ──────────────
-
-  function viewGrid(fields: FieldDef[]) {
     return (
-      <div className="grid grid-cols-4 gap-x-4 gap-y-2.5">
-        {fields.map(f => {
-          const raw = lr[f.key]
-          const val = raw ? (f.fmt ? f.fmt(String(raw)) : String(raw)) : null
-          const copyable = /phone|email/i.test(f.key)
-          return (
-            <div key={f.key} className="min-w-0 group">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">{f.label}</p>
-              <div className="flex items-center gap-1">
-                {val
-                  ? <p className="text-[12px] font-semibold text-slate-800 truncate leading-tight">{val}</p>
-                  : <span className="text-[11px] text-slate-300">—</span>
-                }
-                {val && copyable && (
-                  <button onClick={() => copyToClipboard(String(raw), f.label)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-300 hover:text-emerald-600 transition-all flex-shrink-0"
-                    title={`Copy ${f.label}`}><Copy size={9} /></button>
-                )}
-              </div>
+      <div key={f.key} className={f.isWide ? 'col-span-2' : ''}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
+          {f.label}
+        </label>
+        {editing
+          ? <input type={f.type ?? 'text'} {...register(f.key)} className="crm-fi" placeholder={f.label} />
+          : (
+            <div className="crm-fi text-xs text-slate-700" style={{ cursor: 'default', display: 'flex', alignItems: 'center', minHeight: 32 }}>
+              {displayVal || <span className="text-slate-400">—</span>}
             </div>
           )
-        })}
+        }
       </div>
     )
   }
 
-  function editGrid(fields: FieldDef[]) {
-    return (
-      <div className="grid grid-cols-4 gap-2">
-        {fields.map(f => (
-          <div key={f.key}>
-            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">{f.label}</label>
-            <input {...register(f.key)}
-              className="w-full px-2 py-1 text-[12px] rounded-md border border-slate-200 focus:outline-none focus:ring-1 text-slate-800 bg-white"
-              style={{ '--tw-ring-color': G[500] } as React.CSSProperties}
-            />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
+  // ── Card section header icon box ──
   function iconBox(bg: string, clr: string, Icon: LucideIcon) {
     return (
       <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
@@ -592,37 +569,15 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
     )
   }
 
-  function sectionCard(
-    title: string,
-    icon: React.ReactNode,
-    fields: FieldDef[],
-    action?: React.ReactNode,
-  ) {
-    return (
-      <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-50" style={{ background: '#fafafa' }}>
-          <div className="flex items-center gap-1.5">
-            {icon}
-            <span className="text-[11px] font-bold text-slate-700">{title}</span>
-          </div>
-          {action}
-        </div>
-        <div className="px-4 py-3">
-          {editing ? editGrid(fields) : viewGrid(fields)}
-        </div>
-      </div>
-    )
-  }
-
-  // Single shared edit/save bar — controls all sections at once
+  // ── Single shared Edit / Cancel / Save bar ──
   const editActions = !editing ? (
     <button onClick={() => setEditing(true)}
-      className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded hover:bg-emerald-50 transition-colors"
+      className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded hover:bg-emerald-50 transition-colors flex-shrink-0"
       style={{ color: G[600] }}>
       <Pencil size={10} /> Edit
     </button>
   ) : (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 flex-shrink-0">
       <button onClick={() => { setEditing(false); reset(lr) }}
         className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 transition-colors">
         Cancel
@@ -637,46 +592,84 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   )
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
 
-      {/* ── Business Information (full width) ── */}
-      {sectionCard(
-        'Business Information',
-        iconBox('#eff6ff', '#1d4ed8', Building2),
-        BIZ_FIELDS,
-        editActions,
-      )}
+      {/* ── Owner + Business — side by side cards ── */}
+      {(hasOwnerSection || hasBusinessSection) && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
-      {/* ── Owner row — side by side when Owner 2 exists ── */}
-      {hasOwner2 ? (
-        <div className="grid grid-cols-2 gap-2">
-          {sectionCard('Owner Information',   iconBox(G[50], G[600], User),       OWNER_FIELDS)}
-          {sectionCard('Owner 2 Information', iconBox('#f5f3ff', '#7c3aed', Users), OWNER2_FIELDS)}
+          {/* Owner Information */}
+          {hasOwnerSection && (
+            <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#f0fdf4' }}>
+                <div className="flex items-center gap-2">
+                  {iconBox('#dcfce7', '#059669', User)}
+                  <span className="text-[11px] font-bold text-slate-700">Owner Information</span>
+                </div>
+                {editActions}
+              </div>
+              <div className="p-4 space-y-3">
+                {visibleCoreFields.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {visibleCoreFields.map(f => coreField(f))}
+                  </div>
+                )}
+                {personal.length > 0 && (
+                  <DynamicFieldForm
+                    register={register} setValue={setValue}
+                    defaultValues={lr} errors={errors}
+                    labels={personal} formValues={watch() as Record<string, unknown>}
+                    readOnly={!editing} columns={2} hideSectionHeaders
+                  />
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Business Information */}
+          {hasBusinessSection && (
+            <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#eff6ff' }}>
+                <div className="flex items-center gap-2">
+                  {iconBox('#dbeafe', '#1d4ed8', Building2)}
+                  <span className="text-[11px] font-bold text-slate-700">Business Information</span>
+                </div>
+                {editActions}
+              </div>
+              <div className="p-4">
+                <DynamicFieldForm
+                  register={register} setValue={setValue}
+                  defaultValues={lr} errors={errors}
+                  labels={business} formValues={watch() as Record<string, unknown>}
+                  readOnly={!editing} columns={2} hideSectionHeaders
+                />
+              </div>
+            </section>
+          )}
         </div>
-      ) : (
-        sectionCard('Owner Information', iconBox(G[50], G[600], User), OWNER_FIELDS)
       )}
 
-      {/* ── Custom / EAV Fields ── */}
-      {customEavFields.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-50" style={{ background: '#fafafa' }}>
-            <div className="flex items-center gap-1.5">
-              {iconBox('#f5f3ff', '#7c3aed', SlidersHorizontal)}
-              <span className="text-[11px] font-bold text-slate-700">Custom Fields</span>
+      {/* ── Owner 2 Information ── */}
+      {hasOwner2 && (
+        <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#faf5ff' }}>
+            <div className="flex items-center gap-2">
+              {iconBox('#ede9fe', '#7c3aed', Users)}
+              <span className="text-[11px] font-bold text-slate-700">Owner 2 Information</span>
             </div>
             {editActions}
           </div>
-          <div className="px-4 py-3">
+          <div className="p-4">
             <DynamicFieldForm
               register={register} setValue={setValue}
               defaultValues={lr} errors={errors}
-              labels={customEavFields} formValues={watch() as Record<string, unknown>}
-              readOnly={!editing} columns={4}
+              labels={secondOwner} formValues={watch() as Record<string, unknown>}
+              readOnly={!editing} columns={2} hideSectionHeaders
             />
           </div>
-        </div>
+        </section>
       )}
+
     </div>
   )
 }
