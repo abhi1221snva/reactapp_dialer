@@ -28,6 +28,9 @@ export const bankStatementService = {
   getAll: (params?: { lead_id?: number; status?: string; page?: number; per_page?: number }) =>
     api.get('/crm/bank-statements', { params }),
 
+  getBySessionId: (sessionId: string) =>
+    api.get(`/crm/bank-statements/${sessionId}`),
+
   uploadStandalone: (formData: FormData, onUploadProgress?: (evt: { loaded: number; total?: number }) => void) =>
     api.post('/crm/bank-statements/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

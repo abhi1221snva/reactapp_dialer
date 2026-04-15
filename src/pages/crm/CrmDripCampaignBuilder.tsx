@@ -694,7 +694,7 @@ export function CrmDripCampaignBuilder() {
                               <div>
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">When this field is updated</label>
                                 <select
-                                  value={rule.field || ''}
+                                  value={String(rule.field ?? '')}
                                   onChange={e => updateTrigger(idx, 'field', e.target.value)}
                                   className="input-field-sm mt-1">
                                   <option value="">Select a field...</option>
@@ -719,7 +719,7 @@ export function CrmDripCampaignBuilder() {
                               <div>
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To value (optional)</label>
                                 <input type="text" placeholder="Any value (leave empty for any change)"
-                                  value={rule.value || ''}
+                                  value={String(rule.value ?? '')}
                                   onChange={e => updateTrigger(idx, 'value', e.target.value)}
                                   className="input-field-sm mt-1" />
                               </div>

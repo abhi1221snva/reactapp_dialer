@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Timer, Plus, Pencil, Trash2, X, CheckCircle2, AlertCircle,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2,
+  Megaphone,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
@@ -16,6 +17,16 @@ type CallTimer = {
   id: number
   title: string
   week_plan: Record<string, { start: string; end: string }>
+}
+
+type AssignedCampaign = {
+  id: number
+  title: string
+}
+
+type BlockedDeleteInfo = {
+  timer: CallTimer
+  campaigns: AssignedCampaign[]
 }
 
 type FormState = {
@@ -77,6 +88,7 @@ export function CallTimers() {
   const [form, setForm]           = useState<FormState>(DEFAULT_FORM)
   const [search, setSearch]       = useState('')
   const [page, setPage]           = useState(1)
+  const [blockedInfo, setBlockedInfo] = useState<BlockedDeleteInfo | null>(null)
   const { setToolbar } = useDialerHeader()
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -120,12 +132,20 @@ export function CallTimers() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => campaignService.deleteCallTimer(id),
+    mutationFn: (timer: CallTimer) => campaignService.deleteCallTimer(timer.id),
     onSuccess: () => {
       toast.success('Timer deleted')
       qc.invalidateQueries({ queryKey: ['call-timers-list'] })
     },
-    onError: () => toast.error('Failed to delete timer'),
+    onError: (err: unknown, timer) => {
+      const e = err as { response?: { status?: number; data?: { message?: string; campaigns?: AssignedCampaign[] } } }
+      const data = e.response?.data
+      if (e.response?.status === 400 && Array.isArray(data?.campaigns) && data!.campaigns!.length > 0) {
+        setBlockedInfo({ timer, campaigns: data!.campaigns! })
+        return
+      }
+      toast.error(data?.message || 'Failed to delete timer')
+    },
   })
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -145,7 +165,7 @@ export function CallTimers() {
 
   function handleDelete(timer: CallTimer) {
     if (!window.confirm(`Delete "${timer.title}"? This cannot be undone.`)) return
-    deleteMutation.mutate(timer.id)
+    deleteMutation.mutate(timer)
   }
 
   function setDay(day: DayKey, field: keyof DaySchedule, value: string | boolean) {
@@ -460,6 +480,56 @@ export function CallTimers() {
               >
                 {saveMutation.isPending ? 'Saving…' : form.timer_id ? 'Save Changes' : 'Create Timer'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blocked-delete popup: timer is in use by campaign(s) */}
+      {blockedInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
+            <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm flex-shrink-0">
+                  <AlertCircle size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Cannot delete timer</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    <span className="font-semibold text-slate-700">“{capFirst(blockedInfo.timer.title)}”</span> is assigned to {blockedInfo.campaigns.length === 1 ? 'this campaign' : `these ${blockedInfo.campaigns.length} campaigns`}. Detach it first.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBlockedInfo(null)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 flex-shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 max-h-[50vh] overflow-y-auto">
+              <ul className="space-y-2">
+                {blockedInfo.campaigns.map(c => (
+                  <li
+                    key={c.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-100 bg-slate-50/60"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <Megaphone size={13} className="text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{capFirst(c.title)}</p>
+                      <p className="text-[11px] text-slate-400">Campaign #{c.id}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100">
+              <button onClick={() => setBlockedInfo(null)} className="btn-primary w-full">Got it</button>
             </div>
           </div>
         </div>

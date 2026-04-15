@@ -15,60 +15,6 @@ import type {
   AgentBonus,
 } from '../../types/crm.types'
 
-// ─── Sample Data ────────────────────────────────────────────────────────────
-
-const SAMPLE_SUMMARY: AgentPerformanceSummary = {
-  total_funded_volume: 4_250_000,
-  total_deals: 47,
-  total_commissions: 212_500,
-  avg_deal_size: 90_425.53,
-  renewal_rate: 32.5,
-  default_rate: 4.2,
-}
-
-const SAMPLE_LEADERBOARD: AgentPerformanceRow[] = [
-  { agent_id: 1, agent_name: 'Marcus Rivera',    deals: 14, funded_volume: 1_450_000, commission: 72_500, conversion_rate: 28.5, avg_deal_size: 103_571 },
-  { agent_id: 2, agent_name: 'Sarah Chen',       deals: 12, funded_volume: 1_180_000, commission: 59_000, conversion_rate: 24.0, avg_deal_size: 98_333  },
-  { agent_id: 3, agent_name: 'James Okafor',     deals: 9,  funded_volume: 820_000,   commission: 41_000, conversion_rate: 22.1, avg_deal_size: 91_111  },
-  { agent_id: 4, agent_name: 'Emily Nguyen',     deals: 7,  funded_volume: 510_000,   commission: 25_500, conversion_rate: 18.7, avg_deal_size: 72_857  },
-  { agent_id: 5, agent_name: 'Derek Washington', deals: 5,  funded_volume: 290_000,   commission: 14_500, conversion_rate: 15.2, avg_deal_size: 58_000  },
-]
-
-const SAMPLE_DETAIL: AgentDetailResponse = {
-  agent_id: 1,
-  agent_name: 'Marcus Rivera',
-  summary: {
-    total_deals: 14,
-    funded_volume: 1_450_000,
-    total_commission: 72_500,
-    avg_deal_size: 103_571,
-    pipeline_value: 340_000,
-    conversion_rate: 28.5,
-  },
-  deals: [
-    { deal_id: 101, lead_id: 12210, company_name: 'Acme Trucking LLC',       lender_name: 'Libertas Funding',  funded_amount: 125_000, factor_rate: 1.35, commission: 6_250,  status: 'funded',        funding_date: '2026-03-15' },
-    { deal_id: 102, lead_id: 12215, company_name: 'Metro Plumbing Inc',      lender_name: 'OnDeck Capital',    funded_amount: 95_000,  factor_rate: 1.28, commission: 4_750,  status: 'in_repayment',  funding_date: '2026-03-10' },
-    { deal_id: 103, lead_id: 12220, company_name: 'Sunrise Bakery',          lender_name: 'Clearco',           funded_amount: 150_000, factor_rate: 1.42, commission: 7_500,  status: 'funded',        funding_date: '2026-03-22' },
-    { deal_id: 104, lead_id: 12225, company_name: 'Peak Fitness Studio',     lender_name: 'Rapid Finance',     funded_amount: 80_000,  factor_rate: 1.30, commission: 4_000,  status: 'in_repayment',  funding_date: '2026-02-28' },
-    { deal_id: 105, lead_id: 12230, company_name: 'Harbor Seafood Restaurant', lender_name: 'Libertas Funding', funded_amount: 200_000, factor_rate: 1.38, commission: 10_000, status: 'funded',        funding_date: '2026-03-25' },
-  ],
-  monthly_trend: [
-    { month: '2025-10', deals: 3, funded_volume: 280_000,  commission: 14_000  },
-    { month: '2025-11', deals: 4, funded_volume: 350_000,  commission: 17_500  },
-    { month: '2025-12', deals: 2, funded_volume: 190_000,  commission: 9_500   },
-    { month: '2026-01', deals: 5, funded_volume: 520_000,  commission: 26_000  },
-    { month: '2026-02', deals: 4, funded_volume: 410_000,  commission: 20_500  },
-    { month: '2026-03', deals: 5, funded_volume: 450_000,  commission: 22_500  },
-  ],
-}
-
-const SAMPLE_BONUSES: AgentBonus[] = [
-  { id: 1, agent_id: 1, agent_name: 'Marcus Rivera', bonus_type: 'monthly_target', description: 'March 2026 target bonus — 10+ deals', amount: 2_500, period: '2026-03', status: 'pending', created_at: '2026-03-01' },
-  { id: 2, agent_id: 2, agent_name: 'Sarah Chen', bonus_type: 'spiff', description: 'Libertas Funding SPIFF — $500 per deal', amount: 1_500, period: '2026-03', status: 'approved', created_at: '2026-03-05' },
-  { id: 3, agent_id: 3, agent_name: 'James Okafor', bonus_type: 'retention', description: 'Q1 retention bonus — 0 defaults', amount: 1_000, period: '2026-Q1', status: 'paid', paid_at: '2026-03-28', created_at: '2026-01-01' },
-  { id: 4, agent_id: 1, agent_name: 'Marcus Rivera', bonus_type: 'quarterly_target', description: 'Q1 top closer award', amount: 5_000, period: '2026-Q1', status: 'approved', created_at: '2026-01-01' },
-]
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Silently catch 403/404 from API and return null instead of throwing (avoids global toast). */
@@ -124,7 +70,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── Summary Cards ───────────────────────────────────────────────────────────
 
-function SummaryCards({ summary }: { summary: AgentPerformanceSummary }) {
+function SummaryCards({ summary }: { summary: AgentPerformanceSummary | null }) {
+  if (!summary) return null
   const cards = [
     { label: 'Total Funded Volume', value: usd(summary.total_funded_volume), icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Total Deals',         value: String(summary.total_deals),      icon: Target,     color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
@@ -225,7 +172,7 @@ function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void 
     retry: false,
   })
 
-  const detail = rawDetail ?? (agentId === 1 ? SAMPLE_DETAIL : null)
+  const detail = rawDetail ?? null
 
   if (isLoading && !detail) {
     return (
@@ -454,7 +401,7 @@ function BonusesTab() {
     retry: false,
   })
 
-  const bonuses = (rawBonuses ?? []).length > 0 ? rawBonuses! : SAMPLE_BONUSES
+  const bonuses = rawBonuses ?? []
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => crmService.deleteAgentBonus(id),
@@ -582,8 +529,8 @@ export function CrmAgentPerformance() {
     retry: false,
   })
 
-  const summary = rawSummary ?? SAMPLE_SUMMARY
-  const leaderboard = (rawLeaderboard ?? []).length > 0 ? rawLeaderboard! : SAMPLE_LEADERBOARD
+  const summary = rawSummary ?? null
+  const leaderboard = rawLeaderboard ?? []
 
   const handleAgentSelect = (agentId: number) => {
     setSelectedAgent(agentId)

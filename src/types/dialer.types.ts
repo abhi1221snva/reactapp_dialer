@@ -59,7 +59,13 @@ export interface SaveDispositionRequest {
   lead_id: number
   campaign_id: number
   disposition_id: number
-  notes?: string
+  /** Backend requires 0 (no API call) or 1 (trigger campaign API webhook) */
+  api_call: 0 | 1
+  /** Backend requires 0 (continue dialing) or 1 (pause agent after disposition) */
+  pause_calling: 0 | 1
+  /** Wrap-up notes saved as a comment on the CDR */
+  comment?: string
+  call_back?: string
   callback_date?: string
   callback_time?: string
 }

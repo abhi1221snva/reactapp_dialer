@@ -556,7 +556,7 @@ function BankStatementAnalysisModal({ session, leadId, onClose }: { session: Ban
                       </div>
                     )}
                     {mca?.total_mca_payments > 0 && (
-                      <p className="text-xs text-red-600 mt-1.5">Total Payments: {fmtCurrency(mca.total_mca_payments)} · Total Amount: {fmtCurrency(mca.total_mca_amount)}</p>
+                      <p className="text-xs text-red-600 mt-1.5">Total Payments: {fmtCurrency(mca?.total_mca_payments)} · Total Amount: {fmtCurrency(mca?.total_mca_amount)}</p>
                     )}
                   </div>
                 </div>
@@ -2228,10 +2228,10 @@ function LenderEmailHistory({ leadId }: { leadId: number }) {
                             {c.offer_detected && c.offer_details && (
                               <div className="px-4 py-2 bg-green-50 border-b border-green-200">
                                 <span className="text-[10px] font-semibold text-green-700">Offer Detected: </span>
-                                {c.offer_details.amount && <span className="text-[11px] text-green-800 mr-3">Amount: <strong>${Number(c.offer_details.amount).toLocaleString()}</strong></span>}
-                                {c.offer_details.factor_rate && <span className="text-[11px] text-green-800 mr-3">Rate: <strong>{String(c.offer_details.factor_rate)}</strong></span>}
-                                {c.offer_details.term && <span className="text-[11px] text-green-800 mr-3">Term: <strong>{String(c.offer_details.term)}</strong></span>}
-                                {c.offer_details.daily_payment && <span className="text-[11px] text-green-800">Daily: <strong>${Number(c.offer_details.daily_payment).toLocaleString()}</strong></span>}
+                                {!!c.offer_details.amount && <span className="text-[11px] text-green-800 mr-3">Amount: <strong>${Number(c.offer_details.amount).toLocaleString()}</strong></span>}
+                                {!!c.offer_details.factor_rate && <span className="text-[11px] text-green-800 mr-3">Rate: <strong>{String(c.offer_details.factor_rate)}</strong></span>}
+                                {!!c.offer_details.term && <span className="text-[11px] text-green-800 mr-3">Term: <strong>{String(c.offer_details.term)}</strong></span>}
+                                {!!c.offer_details.daily_payment && <span className="text-[11px] text-green-800">Daily: <strong>${Number(c.offer_details.daily_payment).toLocaleString()}</strong></span>}
                               </div>
                             )}
                             {/* Attachments */}

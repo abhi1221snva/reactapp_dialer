@@ -18,135 +18,6 @@ import { initials } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import type { AnalyticsPeriod } from '../../types/crm.types'
 
-// ─── Dummy / fallback data (shown when API returns empty) ─────────────────────
-function makeDailyDates(count: number) {
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (count - 1 - i))
-    return d.toISOString().slice(0, 10)
-  })
-}
-const _dates = makeDailyDates(20)
-const _seed  = [12,18,9,22,15,27,11,19,8,24,16,21,14,7,23,17,20,10,26,13]
-
-const DUMMY = {
-  distribution: {
-    total: 1024,
-    distribution: [
-      { status_name: 'New Lead',     count: 245, percentage: 24, color: '#6366f1' },
-      { status_name: 'Contacted',    count: 187, percentage: 18, color: '#06b6d4' },
-      { status_name: 'Submitted',    count: 134, percentage: 13, color: '#8b5cf6' },
-      { status_name: 'Under Review', count:  98, percentage: 10, color: '#f59e0b' },
-      { status_name: 'Approved',     count:  76, percentage:  7, color: '#10b981' },
-      { status_name: 'Funded',       count:  52, percentage:  5, color: '#22c55e' },
-      { status_name: 'Follow Up',    count: 143, percentage: 14, color: '#f97316' },
-      { status_name: 'Declined',     count:  89, percentage:  9, color: '#ef4444' },
-    ],
-  },
-  velocity: {
-    total_leads: 347,
-    avg_per_day: 17.4,
-    daily: _dates.map((date, i) => ({ date, new_leads: _seed[i] })),
-  },
-  agents: [
-    { user_name: 'Marcus Rivera',   total: 143, by_status: { funded: 18, closed_won: 4, submitted: 31, approved: 12 } },
-    { user_name: 'Samantha Cole',   total: 128, by_status: { funded: 15, closed_won: 3, submitted: 28, approved: 10 } },
-    { user_name: 'David Kim',       total: 119, by_status: { funded: 14, closed_won: 2, submitted: 24, approved: 9  } },
-    { user_name: 'Priya Sharma',    total: 107, by_status: { funded: 11, closed_won: 3, submitted: 22, approved: 8  } },
-    { user_name: 'Jason Torres',    total:  98, by_status: { funded: 10, closed_won: 2, submitted: 19, approved: 7  } },
-    { user_name: 'Emily Nguyen',    total:  87, by_status: { funded:  9, closed_won: 1, submitted: 17, approved: 6  } },
-    { user_name: 'Carlos Mendez',   total:  76, by_status: { funded:  7, closed_won: 2, submitted: 15, approved: 5  } },
-    { user_name: 'Rachel Brooks',   total:  65, by_status: { funded:  6, closed_won: 1, submitted: 12, approved: 4  } },
-  ],
-  funnel: {
-    funnel: [
-      { status_name: 'New Lead',     count: 1024, percentage: 100 },
-      { status_name: 'Contacted',    count:  812, percentage:  79 },
-      { status_name: 'Submitted',    count:  487, percentage:  60 },
-      { status_name: 'Under Review', count:  341, percentage:  70 },
-      { status_name: 'Approved',     count:  198, percentage:  58 },
-      { status_name: 'Funded',       count:   52, percentage:  26 },
-    ],
-  },
-  lenders: [
-    { lender_name: 'Greenfield Capital',  total_sent: 210, total_approved: 134, total_funded: 28, approval_rate: 64 },
-    { lender_name: 'Summit Funding',      total_sent: 185, total_approved: 108, total_funded: 21, approval_rate: 58 },
-    { lender_name: 'Apex MCA Partners',   total_sent: 162, total_approved:  89, total_funded: 18, approval_rate: 55 },
-    { lender_name: 'BlueSky Finance',     total_sent: 144, total_approved:  74, total_funded: 14, approval_rate: 51 },
-    { lender_name: 'Liberty Advance',     total_sent: 121, total_approved:  58, total_funded: 10, approval_rate: 48 },
-    { lender_name: 'Horizon Lending',     total_sent:  98, total_approved:  43, total_funded:  8, approval_rate: 44 },
-  ],
-  mca: {
-    funding: {
-      totalFunded:     2_840_000,
-      totalDeals:      52,
-      totalCommission:   142_000,
-      dailyFunding: _dates.slice(-14).map((date, i) => ({
-        date,
-        deals:  Math.max(1, Math.round(_seed[i] * 0.4)),
-        amount: Math.round(_seed[i] * 14000 + 80000),
-      })),
-    },
-    conversions: {
-      totalLeads:       1024,
-      contacted:         812,
-      submitted:         487,
-      approved:          198,
-      funded:             52,
-      overallConversion:  5.1,
-      contactRate:       79.3,
-      submissionRate:    60.0,
-      approvalRate:      40.7,
-      fundingRate:       26.3,
-    },
-    comparison: {
-      change: { leads: 12.4, volume: 8.7 },
-    },
-  },
-}
-
-const DUMMY_REVENUE = {
-  trend: Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(); d.setMonth(d.getMonth() - (11 - i))
-    return {
-      month: d.toISOString().slice(0, 7),
-      label: d.toLocaleString('default', { month: 'short', year: 'numeric' }),
-      total_funded: 80000 + _seed[i % _seed.length] * 12000,
-      deal_count: Math.max(1, Math.round(_seed[i % _seed.length] * 0.3)),
-    }
-  }),
-  total_annual: 1_680_000,
-  avg_monthly: 140_000,
-}
-
-const DUMMY_VELOCITY = {
-  stages: [
-    { status_slug: 'new_lead',     status_name: 'New Lead',     color: '#6366f1', avg_days: 2.1,  lead_count: 245 },
-    { status_slug: 'contacted',    status_name: 'Contacted',    color: '#06b6d4', avg_days: 4.7,  lead_count: 187 },
-    { status_slug: 'submitted',    status_name: 'Submitted',    color: '#8b5cf6', avg_days: 8.3,  lead_count: 134 },
-    { status_slug: 'under_review', status_name: 'Under Review', color: '#f59e0b', avg_days: 12.6, lead_count: 98  },
-    { status_slug: 'approved',     status_name: 'Approved',     color: '#10b981', avg_days: 3.2,  lead_count: 76  },
-  ],
-  max_days: 12.6,
-  bottleneck: { status_name: 'Under Review', avg_days: 12.6 },
-}
-
-const DUMMY_QUALITY = {
-  total_deals: 52, defaulted: 3, completed: 18, renewed: 9,
-  default_rate: 5.8, renewal_rate: 50.0,
-  avg_deal_size: 54615, avg_factor_rate: 1.32, avg_days_to_fund: 6.4,
-}
-
-const DUMMY_STALE = {
-  threshold_days: 14,
-  total_stale: 89,
-  by_stage: [
-    { status_slug: 'contacted', status_name: 'Contacted', color: '#06b6d4', count: 34, avg_days_stale: 21 },
-    { status_slug: 'new_lead',  status_name: 'New Lead',  color: '#6366f1', count: 28, avg_days_stale: 19 },
-    { status_slug: 'follow_up', status_name: 'Follow Up', color: '#f97316', count: 18, avg_days_stale: 17 },
-    { status_slug: 'submitted', status_name: 'Submitted', color: '#8b5cf6', count: 9,  avg_days_stale: 16 },
-  ],
-}
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const PIE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899']
@@ -377,8 +248,8 @@ export function CrmDashboard() {
     },
   })
 
-  // ── Derived data (falls back to DUMMY when API returns empty) ─────────────
-  const rawDist = distribution?.distribution?.length ? distribution.distribution : DUMMY.distribution.distribution
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const rawDist = distribution?.distribution ?? []
   const distItems: { status_name: string; count: number; percentage: number; color?: string }[] =
     rawDist.map((d: Record<string, unknown>) => ({
       status_name: String(d.title ?? d.status_name ?? d.status ?? ''),
@@ -387,7 +258,7 @@ export function CrmDashboard() {
       color:       d.color as string | undefined,
     }))
 
-  const rawVelDaily = velocity?.daily?.length ? velocity.daily : DUMMY.velocity.daily
+  const rawVelDaily = velocity?.daily ?? []
   const velocityItems: { date: string; count: number }[] =
     rawVelDaily.map((d: Record<string, unknown>) => ({
       date:  String(d.date ?? '').slice(5),
@@ -395,11 +266,11 @@ export function CrmDashboard() {
     }))
 
   const agents: { user_name: string; total: number; by_status: Record<string, number> }[] =
-    (Array.isArray(agentPerf) && agentPerf.length) ? agentPerf : DUMMY.agents
+    (Array.isArray(agentPerf) && agentPerf.length) ? agentPerf : []
 
   const rawFunnel = (funnel?.funnel ?? funnel?.stages ?? [])
   const funnelItems: { status_name: string; count: number; percentage: number }[] =
-    (rawFunnel.length ? rawFunnel : DUMMY.funnel.funnel).map((f: Record<string, unknown>) => ({
+    rawFunnel.map((f: Record<string, unknown>) => ({
       status_name: String(f.title ?? f.status_name ?? f.status ?? ''),
       count:       Number(f.count ?? 0),
       percentage:  Number(f.conversion_from_previous ?? f.percentage ?? 0),
@@ -407,15 +278,15 @@ export function CrmDashboard() {
 
   const rawLenders = Array.isArray(lenderPerf) ? lenderPerf : (lenderPerf?.lenders ?? [])
   const lenders: { lender_name?: string; name?: string; total_sent?: number; total_approved?: number; total_funded?: number; approval_rate?: number }[] =
-    rawLenders.length ? rawLenders : DUMMY.lenders
+    rawLenders
 
   // MCA-derived
-  const mcaFunding    = (mcaData?.funding?.totalFunded   != null) ? mcaData.funding    : DUMMY.mca.funding
-  const mcaConv       = (mcaData?.conversions?.totalLeads != null) ? mcaData.conversions : DUMMY.mca.conversions
-  const mcaComparison = mcaData?.comparison ?? DUMMY.mca.comparison
+  const mcaFunding    = mcaData?.funding ?? {}
+  const mcaConv       = mcaData?.conversions ?? {}
+  const mcaComparison = mcaData?.comparison ?? null
 
-  const distTotal     = (distribution?.total ?? 0) || DUMMY.distribution.total
-  const velocityTotal = (velocity?.total_leads ?? 0) || DUMMY.velocity.total_leads
+  const distTotal     = distribution?.total ?? 0
+  const velocityTotal = velocity?.total_leads ?? 0
   const activeAgents  = agents.length
   const topDistItem   = distItems.reduce(
     (prev, cur) => cur.count > prev.count ? cur : prev,
@@ -430,7 +301,7 @@ export function CrmDashboard() {
 
   // ── Status meta map: slug → { name, color } — for agent stacked bar ───────
   const statusMeta: Record<string, { name: string; color: string }> = {}
-  ;(distribution?.distribution ?? DUMMY.distribution.distribution).forEach(
+  ;(distribution?.distribution ?? []).forEach(
     (d: Record<string, unknown>, i: number) => {
       const slug  = String(d.status ?? d.lead_title_url ?? '')
       const name  = String(d.title ?? d.status_name ?? slug).replace(/_/g, ' ')
@@ -440,10 +311,10 @@ export function CrmDashboard() {
   )
 
   // ── New insight derived data ───────────────────────────────────────────────
-  const revenueData  = revenueTrend?.trend?.length   ? revenueTrend   : DUMMY_REVENUE
-  const velocityData = pipelineVelocity?.stages?.length ? pipelineVelocity : DUMMY_VELOCITY
-  const qualityData  = dealQuality?.total_deals != null ? dealQuality  : DUMMY_QUALITY
-  const staleData    = staleLeads?.by_stage != null   ? staleLeads    : DUMMY_STALE
+  const revenueData  = revenueTrend    ?? {}
+  const velocityData = pipelineVelocity ?? {}
+  const qualityData  = dealQuality     ?? {}
+  const staleData    = staleLeads      ?? {}
 
   return (
     <div className="space-y-5 pb-6">

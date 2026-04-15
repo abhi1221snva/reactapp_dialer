@@ -265,7 +265,7 @@ export function LeadActivity() {
       ) : (
         <div className="space-y-2">
           {activities.map((entry, idx) => {
-            const type = (entry.type || entry.activity_type || 'note').toLowerCase()
+            const type = String(entry.type || entry.activity_type || 'note').toLowerCase()
             const IconComponent = TYPE_ICONS[type] || Activity
             const colorClass = TYPE_COLORS[type] || TYPE_COLORS.note
             const content = entry.body || entry.description || entry.note || entry.subject || ''
@@ -288,7 +288,7 @@ export function LeadActivity() {
                       }>
                         {type.replace(/_/g, ' ')}
                       </Badge>
-                      {(entry.pinned || entry.is_pinned) && <Badge variant="yellow">Pinned</Badge>}
+                      {!!(entry.pinned || entry.is_pinned) && <Badge variant="yellow">Pinned</Badge>}
                     </div>
                     {content && (
                       <p className="text-sm text-slate-600 mt-1 line-clamp-3">{content}</p>

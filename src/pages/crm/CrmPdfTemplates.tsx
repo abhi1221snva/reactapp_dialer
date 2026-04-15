@@ -317,7 +317,7 @@ function TemplateModal({
       // Insert into visual editor iframe at cursor
       const doc = iframeRef.current?.contentDocument
       if (doc) {
-        doc.focus()
+        ;(doc.body as HTMLElement)?.focus()
         doc.execCommand('insertText', false, key)
         debouncedSync()
       }

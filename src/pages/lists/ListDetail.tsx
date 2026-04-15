@@ -126,7 +126,7 @@ export function ListDetail() {
   const mappedColumns = mappingRows.filter(r => r.label_id)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="space-y-4">
 
       {/* ── List Info Card ──────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -233,10 +233,10 @@ export function ListDetail() {
               <span>Campaign: <strong className="text-slate-600">{campaignName}</strong></span>
             )}
             <span>Dialing: <strong className="text-slate-600">{list.is_dialing === 1 ? 'Enabled' : 'Disabled'}</strong></span>
-            {list.updated_at && (
+            {!!list.updated_at && (
               <span>Updated: <strong className="text-slate-600">{formatDateTime(list.updated_at as string)}</strong></span>
             )}
-            {list.created_at && (
+            {!!list.created_at && (
               <span>Created: <strong className="text-slate-600">{formatDateTime(list.created_at as string)}</strong></span>
             )}
           </div>

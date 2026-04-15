@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, PhoneCall, Music, X,
   Mic, Upload, Volume2, AlertCircle,
-  CheckCircle2, Loader2, Play, Square,
+  Loader2, Square,
+  Search, ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ivrService } from '../../services/ivr.service'
@@ -1140,23 +1141,19 @@ function IvrMenuModal({
   )
 }
 
-// ── IVR Menu Tab ───────────────────────────────────────────────────────────────
+// ── IVR Menu Panel (right side of split layout) ────────────────────────────────
 
-function IvrMenuTab() {
+function IvrMenuPanel({
+  selectedIvr,
+  allIvrs,
+}: {
+  selectedIvr: Ivr | null
+  allIvrs: Ivr[]
+}) {
   const qc = useQueryClient()
-  const clientId = useAuthStore(s => s.user?.parent_id)
-  // Use numeric id as select value to avoid string/type-mismatch with ivr_id
-  const [selectedNumId, setSelectedNumId] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState<IvrMenuItem | null>(null)
 
-  const { data: ivrRaw, isLoading: ivrLoading } = useQuery({
-    queryKey: ['ivr-list', 'all', clientId],
-    queryFn: () => ivrService.list({ page: 1, limit: 200, search: '', filters: {} }),
-  })
-
-  const allIvrs = extractList<Ivr>(ivrRaw)
-  const selectedIvr = allIvrs.find(iv => String(iv.id ?? iv.auto_id) === selectedNumId)
   const menuQueryKey = selectedIvr?.ivr_id ?? ''
 
   const { data: menuRaw, isLoading: menuLoading } = useQuery({
@@ -1176,147 +1173,148 @@ function IvrMenuTab() {
 
   const menuItems = extractList<IvrMenuItem>(menuRaw).filter(m => m.dtmf != null)
   const usedDtmf = menuItems.map(m => m.dtmf)
+  const sortedItems = menuItems.slice().sort((a, b) => {
+    const aId = Number(a.ivr_m_id ?? a.id ?? 0)
+    const bId = Number(b.ivr_m_id ?? b.id ?? 0)
+    return bId - aId
+  })
 
-  const dtmfLabel = (key: string | null) => !key ? '' : key === '*' ? '★ Star' : key === '#' ? '# Hash' : key
+  const dtmfLabel = (key: string | null) => !key ? '' : key === '*' ? '★' : key === '#' ? '#' : key
+
+  useEffect(() => {
+    setShowModal(false)
+    setEditingItem(null)
+  }, [selectedIvr?.ivr_id])
+
+  if (!selectedIvr) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-white rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col items-center gap-4 text-slate-400 max-w-xs text-center px-6">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+            <PhoneCall size={28} className="opacity-30" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-600">No IVR selected</p>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Click on any IVR from the list to view and configure its DTMF menu routes
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="py-4">
-      {/* IVR Selector */}
-      <div className="mb-5 flex items-end gap-3 flex-wrap">
-        <div className="flex-1 max-w-sm">
-          <label className="label">Select IVR</label>
-          {ivrLoading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-400 h-9">
-              <Loader2 size={14} className="animate-spin" /> Loading…
+    <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Panel header */}
+      <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
+            <PhoneCall size={13} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">{capFirst(selectedIvr.ivr_desc)}</p>
+            <p className="text-[11px] text-slate-400 font-mono">{selectedIvr.ivr_id}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-slate-400">
+            {usedDtmf.length}/{KEYPAD_KEYS.length} keys used
+          </span>
+          <button
+            onClick={() => { setEditingItem(null); setShowModal(true) }}
+            disabled={usedDtmf.length >= KEYPAD_KEYS.length}
+            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-50"
+          >
+            <Plus size={12} /> Add Route
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        {menuLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 size={22} className="animate-spin text-indigo-400" />
+          </div>
+        ) : sortedItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+              <PhoneCall size={20} className="text-slate-300" />
             </div>
-          ) : (
-            <select className="input" value={selectedNumId}
-              onChange={e => { setSelectedNumId(e.target.value); setEditingItem(null) }}>
-              <option value="">— Choose an IVR —</option>
-              {allIvrs.map(ivr => {
-                const numId = String(ivr.id ?? ivr.auto_id ?? ivr.ivr_id)
+            <div className="text-center">
+              <p className="text-sm font-semibold text-slate-500">No routes configured</p>
+              <p className="text-xs text-slate-400 mt-1">Click "Add Route" to configure your first DTMF key</p>
+            </div>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-slate-100 bg-slate-50/90">
+                {['Key', 'Title', 'Destination Type', 'Destination', ''].map((h, i) => (
+                  <th key={i} className={cn(
+                    'px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider',
+                    i === 4 ? 'text-right w-24' : 'text-left'
+                  )}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedItems.map((menuItem, i) => {
+                const meta = DEST_TYPE_META[String(menuItem.dest_type)] ?? DEST_TYPE_META['0']
                 return (
-                  <option key={numId} value={numId}>
-                    {ivr.ivr_desc} ({ivr.ivr_id})
-                  </option>
+                  <tr
+                    key={menuItem.ivr_m_id ?? menuItem.id ?? i}
+                    className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/60 transition-colors"
+                  >
+                    <td className="px-4 py-3.5">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                        {dtmfLabel(menuItem.dtmf)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="text-sm font-medium text-slate-700">
+                        {menuItem.dtmf_title || <span className="text-slate-300 italic text-xs">No label</span>}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', meta.bg, meta.color)}>
+                        {meta.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="text-sm font-mono text-slate-600">
+                        {menuItem.dest || <span className="text-slate-300 italic text-xs">—</span>}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => { setEditingItem(menuItem); setShowModal(true) }}
+                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (await confirmDelete(`key ${menuItem.dtmf} route`))
+                              deleteMutation.mutate(menuItem.ivr_m_id ?? menuItem.id ?? 0)
+                          }}
+                          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 )
               })}
-            </select>
-          )}
-        </div>
-        {selectedIvr && (
-          <button onClick={() => { setEditingItem(null); setShowModal(true) }}
-            disabled={usedDtmf.length >= KEYPAD_KEYS.length}
-            className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50">
-            <Plus size={14} /> Add IVR Menu
-          </button>
+            </tbody>
+          </table>
         )}
       </div>
 
-      {!selectedIvr ? (
-        allIvrs.length === 0 && !ivrLoading ? (
-          <div className="flex items-center gap-2.5 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
-            <AlertCircle size={16} className="flex-shrink-0" />
-            No IVRs found. Go to the <strong className="mx-1">IVR</strong> tab to create one first.
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
-            <PhoneCall size={32} className="opacity-30" />
-            <p className="text-sm font-medium">Select an IVR above to manage its menu routes</p>
-          </div>
-        )
-      ) : menuLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 size={24} className="animate-spin text-indigo-400" />
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Table header bar */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
-            <span className="text-xs font-medium text-slate-500">
-              {menuItems.length} route{menuItems.length !== 1 ? 's' : ''} configured
-              {' '}· {KEYPAD_KEYS.length - usedDtmf.length} key{KEYPAD_KEYS.length - usedDtmf.length !== 1 ? 's' : ''} available
-            </span>
-          </div>
-
-          {menuItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
-              <PhoneCall size={28} className="opacity-30" />
-              <p className="text-sm font-medium text-slate-500">No routes configured yet</p>
-              <p className="text-xs text-slate-400">Click "Add IVR Menu" to configure your first key route</p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  {['DTMF', 'DTMF Title', 'Destination Type', 'Destination', 'Actions'].map((h, i) => (
-                    <th key={h} className={cn(
-                      'px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider',
-                      i === 4 ? 'text-right' : 'text-left'
-                    )}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {menuItems
-                  .slice()
-                  .sort((a, b) => {
-                    const aId = Number(a.ivr_m_id ?? a.id ?? 0)
-                    const bId = Number(b.ivr_m_id ?? b.id ?? 0)
-                    return bId - aId   // newest first
-                  })
-                  .map((menuItem, i) => {
-                    const meta = DEST_TYPE_META[String(menuItem.dest_type)] ?? DEST_TYPE_META['0']
-                    return (
-                      <tr key={menuItem.ivr_m_id ?? menuItem.id ?? i}
-                        className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3.5">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                            {dtmfLabel(menuItem.dtmf).split(' ')[0]}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-sm text-slate-700 font-medium">
-                            {menuItem.dtmf_title || <span className="text-slate-300 italic">No label</span>}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', meta.bg, meta.color)}>
-                            {meta.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-sm font-mono text-slate-600">
-                            {menuItem.dest || <span className="text-slate-300 italic">—</span>}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => { setEditingItem(menuItem); setShowModal(true) }}
-                              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (await confirmDelete(`key ${menuItem.dtmf} route`))
-                                  deleteMutation.mutate(menuItem.ivr_m_id ?? menuItem.id ?? 0)
-                              }}
-                              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {showModal && selectedIvr && (
+      {showModal && (
         <IvrMenuModal
           ivrId={selectedIvr.ivr_id}
           ivrNumId={Number(selectedIvr.id ?? selectedIvr.auto_id ?? 0)}
@@ -1618,119 +1616,208 @@ function IvrFormModal({ ivr, onClose, formId = 'ivr-form', onSavingChange }: {
   )
 }
 
-// ── IVR Tab ────────────────────────────────────────────────────────────────────
+// ── IVR List Panel (left side of split layout) ────────────────────────────────
 
-function IvrTab() {
+function IvrListPanel({
+  selectedIvr,
+  onSelect,
+  allIvrs,
+  ivrLoading,
+  onEdit,
+  onDelete,
+  onAdd,
+}: {
+  selectedIvr: Ivr | null
+  onSelect: (ivr: Ivr) => void
+  allIvrs: Ivr[]
+  ivrLoading: boolean
+  onEdit: (ivr: Ivr) => void
+  onDelete: (ivr: Ivr) => void
+  onAdd: () => void
+}) {
+  const [search, setSearch] = useState('')
+
+  const filtered = search.trim()
+    ? allIvrs.filter(iv => iv.ivr_desc.toLowerCase().includes(search.toLowerCase()) || iv.ivr_id.toLowerCase().includes(search.toLowerCase()))
+    : allIvrs
+
+  return (
+    <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ height: '100%' }}>
+      {/* Header */}
+      <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center">
+            <PhoneCall size={13} className="text-indigo-600" />
+          </div>
+          <span className="text-sm font-bold text-slate-800">IVR List</span>
+          {!ivrLoading && (
+            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+              {allIvrs.length}
+            </span>
+          )}
+        </div>
+        <button onClick={onAdd} className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5">
+          <Plus size={12} /> Add IVR
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="px-3 py-2.5 border-b border-slate-100 flex-shrink-0">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className="input pl-8 py-1.5 text-xs"
+            placeholder="Search IVRs…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="overflow-y-auto flex-1">
+        {ivrLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={20} className="animate-spin text-indigo-400" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
+            <PhoneCall size={24} className="opacity-30" />
+            <p className="text-xs font-medium">
+              {search ? 'No IVRs match your search' : 'No IVRs yet — click Add IVR'}
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {filtered.map(ivr => {
+              const numId = String(ivr.id ?? ivr.auto_id)
+              const isSelected = !!selectedIvr && String(selectedIvr.id ?? selectedIvr.auto_id) === numId
+              return (
+                <li
+                  key={numId}
+                  onClick={() => onSelect(ivr)}
+                  className={cn(
+                    'group flex items-center gap-3 px-3 py-3 cursor-pointer transition-all border-l-2',
+                    isSelected
+                      ? 'bg-indigo-50 border-indigo-500'
+                      : 'border-transparent hover:bg-slate-50'
+                  )}
+                >
+                  <div className={cn(
+                    'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors',
+                    isSelected ? 'bg-indigo-600' : 'bg-indigo-50 group-hover:bg-indigo-100'
+                  )}>
+                    <PhoneCall size={13} className={isSelected ? 'text-white' : 'text-indigo-600'} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{capFirst(ivr.ivr_desc)}</p>
+                    <p className="text-[11px] text-slate-400 font-mono truncate">{ivr.ivr_id}</p>
+                  </div>
+                  {/* Hover actions */}
+                  <div className={cn(
+                    'flex items-center gap-1 transition-opacity',
+                    isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  )}>
+                    <button
+                      onClick={e => { e.stopPropagation(); onEdit(ivr) }}
+                      title="Edit IVR"
+                      className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); onDelete(ivr) }}
+                      title="Delete IVR"
+                      className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                  <ChevronRight size={14} className={cn(
+                    'flex-shrink-0 transition-opacity',
+                    isSelected ? 'text-indigo-500 opacity-100' : 'text-slate-300 opacity-0 group-hover:opacity-100'
+                  )} />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
+
+export function Ivr() {
   const qc = useQueryClient()
-  const table = useServerTable()
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState<Ivr | null>(null)
+  const clientId = useAuthStore(s => s.user?.parent_id)
+  const [selectedIvr, setSelectedIvr] = useState<Ivr | null>(null)
+  const [showIvrModal, setShowIvrModal] = useState(false)
+  const [editingIvr, setEditingIvr] = useState<Partial<Ivr> | null>(null)
   const [ivrSaving, setIvrSaving] = useState(false)
+  const { setToolbar } = useDialerHeader()
+
+  const { data: ivrRaw, isLoading: ivrLoading } = useQuery({
+    queryKey: ['ivr-list', 'all', clientId],
+    queryFn: () => ivrService.list({ page: 1, limit: 200, search: '', filters: {} }),
+  })
+
+  const allIvrs = extractList<Ivr>(ivrRaw)
+
+  // Keep selectedIvr in sync with fresh data after any create/edit/delete
+  useEffect(() => {
+    if (!selectedIvr || allIvrs.length === 0) return
+    const fresh = allIvrs.find(iv => (iv.id ?? iv.auto_id) === (selectedIvr.id ?? selectedIvr.auto_id))
+    if (fresh) setSelectedIvr(fresh)
+  }, [allIvrs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ivrService.delete(id),
-    onSuccess: () => { toast.success('IVR deleted'); qc.invalidateQueries({ queryKey: ['ivr-list'] }) },
+    onSuccess: (_data, id) => {
+      toast.success('IVR deleted')
+      qc.invalidateQueries({ queryKey: ['ivr-list'] })
+      setSelectedIvr(prev => {
+        if (prev && (prev.auto_id ?? prev.id) === id) return null
+        return prev
+      })
+    },
     onError: () => toast.error('Failed to delete IVR'),
   })
 
-  const greetingColors: Record<string, string> = {
-    '0': 'bg-blue-50 text-blue-700',
-    '1': 'bg-purple-50 text-purple-700',
-    '2': 'bg-rose-50 text-rose-700',
+  const handleDelete = async (ivr: Ivr) => {
+    if (await confirmDelete(ivr.ivr_desc)) {
+      deleteMutation.mutate(ivr.auto_id ?? ivr.id ?? 0)
+    }
   }
 
-  const columns: Column<Ivr>[] = [
-    {
-      key: 'ivr_desc',
-      header: 'IVR Name', sortable: true,
-      render: (ivr) => (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-            <PhoneCall size={13} className="text-indigo-600" />
-          </div>
-          <span className="text-sm font-semibold text-slate-800">{capFirst(ivr.ivr_desc)}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'prompt_option',
-      header: 'Greeting',
-      render: (ivr) => {
-        const pOpt = String(ivr.prompt_option ?? '1')
-        return (
-          <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', greetingColors[pOpt] ?? greetingColors['1'])}>
-            {PROMPT_LABEL[pOpt] ?? 'TTS'}
-          </span>
-        )
-      },
-    },
-    {
-      key: 'ann_id',
-      header: 'Preview',
-      render: (ivr) => {
-        const annId = String(ivr.ann_id ?? '')
-        return annId.includes('/')
-          ? <AudioPlayer annId={annId} />
-          : <span className="text-xs text-slate-300">—</span>
-      },
-    },
-    {
-      key: '_actions',
-      header: 'Action',
-      headerClassName: 'text-right',
-      className: 'text-right',
-      render: (ivr) => (
-        <div className="flex items-center justify-end gap-1.5">
-          <button onClick={() => { setEditing(ivr); setShowModal(true) }}
-            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={async () => {
-              if (await confirmDelete(ivr.ivr_desc))
-                deleteMutation.mutate(ivr.auto_id ?? ivr.id ?? 0)
-            }}
-            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors">
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ),
-    },
-  ]
+  useEffect(() => {
+    setToolbar(undefined)
+    return () => setToolbar(undefined)
+  }, [setToolbar])
 
   return (
-    <div className="py-4">
-      <ServerDataTable<Ivr>
-        queryKey={['ivr-list']}
-        queryFn={(params) => ivrService.list(params)}
-        dataExtractor={(res: unknown) => {
-          // IVR API returns: {success, total_rows, data: [...]} directly
-          const r = res as { data?: { data?: Ivr[]; total_rows?: number } }
-          return r?.data?.data ?? []
-        }}
-        totalExtractor={(res: unknown) => {
-          const r = res as { data?: { total_rows?: number } }
-          return r?.data?.total_rows ?? 0
-        }}
-        columns={columns}
-        keyField="ivr_id"
-        search={table.search}
-        onSearchChange={table.setSearch}
-        searchPlaceholder="Search IVRs…"
-        page={table.page}
-        limit={table.limit}
-        onPageChange={table.setPage}
-        headerActions={
-          <button onClick={() => { setEditing(null); setShowModal(true) }}
-            className="btn-primary flex items-center gap-1.5 text-sm">
-            <Plus size={14} /> Add IVR
-          </button>
-        }
-        emptyText="No IVRs yet — create your first IVR to build an automated phone menu"
-        emptyIcon={<PhoneCall size={28} />}
-      />
+    <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 140px)' }}>
+      {/* Left: IVR List */}
+      <div className="w-80 flex-shrink-0" style={{ minHeight: 'inherit' }}>
+        <IvrListPanel
+          selectedIvr={selectedIvr}
+          onSelect={setSelectedIvr}
+          allIvrs={allIvrs}
+          ivrLoading={ivrLoading}
+          onEdit={ivr => { setEditingIvr(ivr); setShowIvrModal(true) }}
+          onDelete={handleDelete}
+          onAdd={() => { setEditingIvr(null); setShowIvrModal(true) }}
+        />
+      </div>
 
-      {showModal && (
+      {/* Right: IVR Menu Panel */}
+      <div className="flex-1 min-w-0" style={{ minHeight: 'inherit' }}>
+        <IvrMenuPanel selectedIvr={selectedIvr} allIvrs={allIvrs} />
+      </div>
+
+      {/* IVR Create/Edit Modal */}
+      {showIvrModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
@@ -1738,67 +1825,25 @@ function IvrTab() {
                 <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center">
                   <PhoneCall size={14} className="text-indigo-600" />
                 </div>
-                <p className="text-sm font-bold text-slate-900">{editing ? 'Edit IVR' : 'New IVR'}</p>
+                <p className="text-sm font-bold text-slate-900">{editingIvr ? 'Edit IVR' : 'New IVR'}</p>
               </div>
-              <button onClick={() => setShowModal(false)}
+              <button onClick={() => setShowIvrModal(false)}
                 className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
                 <X size={15} />
               </button>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-5">
-              <IvrFormModal ivr={editing} onClose={() => setShowModal(false)} formId="ivr-form" onSavingChange={setIvrSaving} />
+              <IvrFormModal ivr={editingIvr} onClose={() => setShowIvrModal(false)} formId="ivr-form" onSavingChange={setIvrSaving} />
             </div>
             <div className="flex justify-end gap-3 px-6 pt-4 pb-4 border-t border-slate-100 flex-shrink-0">
-              <button type="button" onClick={() => setShowModal(false)} className="btn-outline">Cancel</button>
+              <button type="button" onClick={() => setShowIvrModal(false)} className="btn-outline">Cancel</button>
               <button type="submit" form="ivr-form" disabled={ivrSaving} className="btn-primary flex items-center gap-1.5">
-                {ivrSaving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : editing ? 'Save Changes' : 'Create IVR'}
+                {ivrSaving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : editingIvr ? 'Save Changes' : 'Create IVR'}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Main Page ──────────────────────────────────────────────────────────────────
-
-type MainTab = 'ivr' | 'menu' | 'audio'
-
-const TABS: { key: MainTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'ivr',   label: 'IVR',           icon: <PhoneCall size={14} /> },
-  { key: 'menu',  label: 'IVR Menu',       icon: <Music size={14} />     },
-  { key: 'audio', label: 'Audio Messages', icon: <Music size={14} />     },
-]
-
-export function Ivr() {
-  const [tab, setTab] = useState<MainTab>('ivr')
-  const { setToolbar } = useDialerHeader()
-
-  useEffect(() => {
-    setToolbar(
-      <div className="lt-right">
-        <div className="flex items-center gap-1" style={{ background: '#f1f5f9', borderRadius: 8, padding: 2 }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                tab === t.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              )}>
-              {t.icon}{t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-    return () => setToolbar(undefined)
-  })
-
-  return (
-    <div>
-      {tab === 'ivr'   && <IvrTab />}
-      {tab === 'menu'  && <IvrMenuTab />}
-      {tab === 'audio' && <AudioMessagesTab />}
     </div>
   )
 }

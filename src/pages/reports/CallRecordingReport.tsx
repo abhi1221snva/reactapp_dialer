@@ -308,7 +308,7 @@ function DetailDrawer({ callId, onClose }: { callId: number; onClose: () => void
               )}
 
               {/* Raw Analysis Data */}
-              {analysis && (analysis as Record<string, unknown>).response_data && (
+              {analysis && !!(analysis as Record<string, unknown>).response_data && (
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Analysis Summary</h3>
                   <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 text-xs text-slate-600 max-h-60 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>

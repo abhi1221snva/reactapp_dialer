@@ -789,10 +789,10 @@ function LenderEmailsTab() {
                               <div className="mb-3 p-3 rounded-lg bg-green-50 border border-green-200">
                                 <p className="text-xs font-semibold text-green-700 mb-1">Offer Details</p>
                                 <div className="flex flex-wrap gap-3 text-xs text-green-800">
-                                  {r.offer_details.amount && <span>Amount: <strong>${Number(r.offer_details.amount).toLocaleString()}</strong></span>}
-                                  {r.offer_details.factor_rate && <span>Factor Rate: <strong>{String(r.offer_details.factor_rate)}</strong></span>}
-                                  {r.offer_details.term && <span>Term: <strong>{String(r.offer_details.term)}</strong></span>}
-                                  {r.offer_details.daily_payment && <span>Daily Payment: <strong>${Number(r.offer_details.daily_payment).toLocaleString()}</strong></span>}
+                                  {!!r.offer_details.amount && <span>Amount: <strong>${Number(r.offer_details.amount).toLocaleString()}</strong></span>}
+                                  {!!r.offer_details.factor_rate && <span>Factor Rate: <strong>{String(r.offer_details.factor_rate)}</strong></span>}
+                                  {!!r.offer_details.term && <span>Term: <strong>{String(r.offer_details.term)}</strong></span>}
+                                  {!!r.offer_details.daily_payment && <span>Daily Payment: <strong>${Number(r.offer_details.daily_payment).toLocaleString()}</strong></span>}
                                 </div>
                               </div>
                             )}

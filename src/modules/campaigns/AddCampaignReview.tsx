@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, CheckCircle2, Radio, Phone, Clock, Tag, Zap, List,
-  Globe, Users, PartyPopper, Trash2,
+  Globe, Users, PartyPopper, Trash2, Pencil,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
@@ -182,18 +182,18 @@ export function AddCampaignReview() {
           ) : (
             <>
               {/* Table header */}
-              <div className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_2.5rem] gap-2 items-center px-4 py-2 border-b border-slate-100">
+              <div className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_5rem] gap-2 items-center px-4 py-2 border-b border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">#</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase">List Name</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase text-right">Leads</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase text-center">Status</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase text-center">Dialing</span>
-                <span />
+                <span className="text-[10px] font-bold text-slate-500 uppercase text-center">Actions</span>
               </div>
 
               <div className="divide-y divide-slate-100">
                 {attachedLists.map((row, idx) => (
-                  <div key={getListId(row)} className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_2.5rem] gap-2 items-center px-4 py-2.5 hover:bg-slate-50/50 transition-colors">
+                  <div key={getListId(row)} className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_5rem] gap-2 items-center px-4 py-2.5 hover:bg-slate-50/50 transition-colors">
                     <span className="w-5 h-5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 flex items-center justify-center">
                       {idx + 1}
                     </span>
@@ -214,15 +214,25 @@ export function AddCampaignReview() {
                         {row.is_dialing === 1 ? 'Yes' : 'No'}
                       </Badge>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDetach(row)}
-                      disabled={detachMutation.isPending}
-                      className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
-                      title="Remove from campaign"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/lists/${getListId(row)}/mapping`)}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                        title="Edit list"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDetach(row)}
+                        disabled={detachMutation.isPending}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                        title="Remove from campaign"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

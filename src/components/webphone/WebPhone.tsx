@@ -283,6 +283,12 @@ export function WebPhone() {
         setPhoneState('error'); setStatusMsg('Connection failed'); break
       case 'failed_to_stop': setPhoneState('error'); setStatusMsg('Connection failed'); break
 
+      case 'm_permission_refused':
+        // getUserMedia failed (no mic, or permission denied) — the call session
+        // will self-terminate; just surface a clear message here
+        setStatusMsg('Microphone access denied — check browser permissions')
+        break
+
       case 'i_registration_event': {
         const code: number = e.getSipResponseCode?.() ?? 0
         if (code === 200) { setPhoneState('ready'); setStatusMsg('Ready') }
@@ -313,7 +319,7 @@ export function WebPhone() {
         realm: domain, impi: ext, impu: `sip:${ext}@${domain}`,
         password: sipConfig.password, display_name: user?.name ?? ext,
         websocket_proxy_url: sipConfig.wsUri, ice_servers: null,
-        enable_rtcweb_breaker: true,
+        enable_rtcweb_breaker: false,
         events_listener: { events: '*', listener: onSipEventStack },
         sip_headers: [{ name: 'User-Agent', value: 'DialerCRM/1.0' }],
         bandwidth: null, video_size: null,
@@ -349,10 +355,24 @@ export function WebPhone() {
   }, [number, countryCode, onSipEventSession])
 
   // ── Outbound campaign dial (called by Dialer for WebRTC mode) ────────────
-  const sipDialOutbound = useCallback((phoneNumber: string) => {
-    if (!sipStack.current) return
+  const sipDialOutbound = useCallback(async (phoneNumber: string) => {
+    if (!sipStack.current) throw new Error('WebPhone not connected — please reconnect and try again')
     const digits = phoneNumber.replace(/[^0-9+]/g, '')
-    if (digits.length < 3) return
+    if (digits.length < 3) throw new Error('Invalid phone number')
+
+    // Pre-check: verify at least one audio input device exists before SIPml5
+    // tries getUserMedia internally (avoids silent ringback loop on headset-less machines)
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      if (!devices.some(d => d.kind === 'audioinput')) {
+        throw new Error('No microphone found — please connect a headset and try again')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Microphone check failed — connect a headset and try again'
+      setPhoneState('error'); setStatusMsg(msg)
+      throw new Error(msg)
+    }
+
     try {
       sipCallSess.current = sipStack.current.newSession('call-audio', {
         audio_remote: audioRemote.current,
@@ -361,7 +381,7 @@ export function WebPhone() {
       })
       sipCallSess.current.call(digits)
       setPhoneState('calling'); setStatusMsg(`Calling ${digits}…`)
-    } catch { setStatusMsg('Call failed to initiate') }
+    } catch (err) { setStatusMsg('Call failed to initiate'); throw err }
   }, [onSipEventSession])
 
   const sipAnswerIncoming = useCallback(() => {

@@ -69,7 +69,7 @@ function WidgetCallPanel({ phase, session, isMuted, callSeconds, onAccept, onDec
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%)' }}>
-      {phase === 'active' && <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />}
+      {phase === 'active' && <audio ref={remoteAudioRef as React.Ref<HTMLAudioElement>} autoPlay playsInline className="hidden" />}
       <div className={cn('w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-xl', bg, phase === 'incoming' && 'animate-pulse')}>
         {initials(session.remoteName)}
       </div>
@@ -157,8 +157,8 @@ interface VcoProps {
 export function VideoCallOverlay({ session, isMuted, isCameraOff, callSeconds, onMute, onCamera, onEnd, remoteVideoRef, localVideoRef }: VcoProps) {
   return (
     <div className="fixed inset-0 flex flex-col bg-black" style={{ zIndex: 100 }}>
-      <video ref={remoteVideoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
-      <video ref={localVideoRef} autoPlay playsInline muted className="absolute top-4 right-4 w-32 h-24 rounded-xl object-cover border-2 border-white/20 shadow-lg z-10" />
+      <video ref={remoteVideoRef as React.Ref<HTMLVideoElement>} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
+      <video ref={localVideoRef as React.Ref<HTMLVideoElement>} autoPlay playsInline muted className="absolute top-4 right-4 w-32 h-24 rounded-xl object-cover border-2 border-white/20 shadow-lg z-10" />
       <div className="relative z-10 text-center pt-8">
         <p className="text-white font-semibold">{session.remoteName}</p>
         <p className="text-white/60 text-sm mt-0.5 tabular-nums">{fmtDuration(callSeconds)}</p>
@@ -308,7 +308,7 @@ export function ThreadView({
           </div>
         )}
 
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef as React.Ref<HTMLDivElement>} />
       </div>
 
       {/* Input / read-only notice */}
@@ -357,7 +357,7 @@ export function ThreadView({
             <Paperclip className="w-4 h-4" />
           </button>
           <input
-            ref={fileInputRef}
+            ref={fileInputRef as React.Ref<HTMLInputElement>}
             type="file"
             className="hidden"
             accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar"

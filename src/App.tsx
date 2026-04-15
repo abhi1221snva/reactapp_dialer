@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthStore } from './stores/auth.store'
 import { useEngineStore } from './stores/engine.store'
+import { useMerchantAuthStore } from './stores/merchantAuth.store'
 import { usePusher } from './hooks/usePusher'
 import { usePresence } from './hooks/usePresence'
 
@@ -23,6 +24,8 @@ import { Agents } from './pages/agents/Agents'
 // App pages
 import { Dashboard } from './pages/dashboard/Dashboard'
 import { Dialer } from './pages/dialer/Dialer'
+import { DialerStudio } from './pages/dialer/DialerStudio'
+import { CampaignAutoDialer } from './pages/dialer/CampaignAutoDialer'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { CrmLeads } from './pages/crm/CrmLeads'
 import { LeadForm } from './pages/crm/LeadForm'
@@ -105,6 +108,7 @@ import { TelecomPage } from './pages/telecom/TelecomPage'
 
 import { Labels } from './pages/settings/Labels'
 import { LeadSources } from './pages/settings/LeadSources'
+import { LeadSourceFields } from './pages/settings/LeadSourceFields'
 import { RecycleRules } from './pages/settings/RecycleRules'
 import { CustomFieldLabels } from './pages/settings/CustomFieldLabels'
 import { LeadActivity } from './pages/settings/LeadActivity'
@@ -148,8 +152,12 @@ import { CrmBankStatements } from './pages/crm/CrmBankStatements'
 import { CrmBankStatementDetail } from './pages/crm/CrmBankStatementDetail'
 import { CrmBankStatementLogs } from './pages/crm/CrmBankStatementLogs'
 import { BaljiApiExplorer } from './pages/crm/BaljiApiExplorer'
+import { BankAnalysisViewer } from './pages/bank-analysis/BankAnalysisViewer'
 import { NotFound } from './pages/NotFound'
 import { LEVELS } from './utils/permissions'
+import { MerchantPortalLayout } from './layouts/MerchantPortalLayout'
+import { MerchantLogin } from './pages/merchant/MerchantLogin'
+import { MerchantApplications } from './pages/merchant/MerchantApplications'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -181,6 +189,11 @@ function LegacyMerchantRedirect() {
   return <Navigate to={`/merchant/${token}`} replace />
 }
 
+function MerchantProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useMerchantAuthStore()
+  return isAuthenticated ? <>{children}</> : <Navigate to="/merchant/login" replace />
+}
+
 function AppWithPusher() {
   usePusher()
   usePresence()
@@ -192,6 +205,15 @@ export default function App() {
     <Routes>
       {/* Fully public routes — no auth, no layout wrapper */}
       <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
+
+      {/* ── Merchant Portal (account-based) ─────────────────────────────── */}
+      {/* Static paths must come BEFORE the dynamic :leadToken catch-all */}
+      <Route path="/merchant/login" element={<MerchantLogin />} />
+      <Route element={<MerchantProtectedRoute><MerchantPortalLayout /></MerchantProtectedRoute>}>
+        <Route path="/merchant/applications" element={<MerchantApplications />} />
+      </Route>
+
+      {/* Individual application form (token-based, public) */}
       <Route path="/merchant/:leadToken"  element={<MerchantPage />} />
       {/* Legacy merchant URL — redirect to canonical form */}
       <Route path="/merchant/customer/app/index/:clientId/:leadId/:token" element={<LegacyMerchantRedirect />} />
@@ -251,12 +273,15 @@ export default function App() {
           <Route path="/crm/bank-statements/logs" element={<CrmBankStatementLogs />} />
           <Route path="/crm/bank-statements/:sessionId" element={<CrmBankStatementDetail />} />
           <Route path="/crm/balji/api-explorer" element={<BaljiApiExplorer />} />
+          <Route path="/crm/bank-analysis-viewer" element={<BankAnalysisViewer />} />
         </Route>
 
         {/* All Dialer / Phone System routes — wrapped in DialerLayout */}
         <Route element={<DialerLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dialer" element={<ErrorBoundary fallbackTitle="Dialer Error"><Dialer /></ErrorBoundary>} />
+          <Route path="/dialer-studio" element={<ErrorBoundary fallbackTitle="Dialer Studio Error"><DialerStudio /></ErrorBoundary>} />
+          <Route path="/dialer/campaign-auto" element={<CampaignAutoDialer />} />
 
           {/* Campaigns */}
           <Route path="/campaigns" element={<Campaigns />} />
@@ -312,6 +337,7 @@ export default function App() {
           {/* Lead Management */}
           <Route path="/leads" element={<RoleGuard minLevel={LEVELS.MANAGER}><Leads /></RoleGuard>} />
           <Route path="/settings/lead-sources" element={<LeadSources />} />
+          <Route path="/settings/lead-sources/:sourceId/fields" element={<LeadSourceFields />} />
           <Route path="/settings/recycle-rules" element={<RecycleRules />} />
           <Route path="/settings/custom-field-labels" element={<CustomFieldLabels />} />
           <Route path="/settings/lead-activity" element={<LeadActivity />} />

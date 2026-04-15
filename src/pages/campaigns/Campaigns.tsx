@@ -239,7 +239,7 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
                   {[
                     { icon: Users, val: totalLeads.toLocaleString(), lbl: 'Leads' },
                     { icon: Phone, val: dialedLeads.toLocaleString(), lbl: 'Dialed' },
-                    { icon: Globe, val: c.country_code ? `+${c.country_code}` : '—', lbl: 'Country' },
+                    { icon: Globe, val: d.country_code ? `+${d.country_code}` : '—', lbl: 'Country' },
                     { icon: LayoutList, val: String(listsCount), lbl: 'Lists' },
                     { icon: Tag, val: String(hopperCount), lbl: 'Hopper' },
                     { icon: Zap, val: hopperModeLabel, lbl: 'Mode' },

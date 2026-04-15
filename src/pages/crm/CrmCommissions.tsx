@@ -106,8 +106,8 @@ function RuleModal({
         split_agent_pct: Number(form.split_agent_pct),
       }
       return isEdit
-        ? crmService.updateCommissionRule(editing!.id, payload)
-        : crmService.createCommissionRule(payload)
+        ? crmService.updateCommissionRule(editing!.id, payload as Parameters<typeof crmService.updateCommissionRule>[1])
+        : crmService.createCommissionRule(payload as Parameters<typeof crmService.createCommissionRule>[0])
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Rule updated' : 'Rule created')

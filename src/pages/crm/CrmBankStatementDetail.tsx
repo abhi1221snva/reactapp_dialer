@@ -140,14 +140,14 @@ export function CrmBankStatementDetail() {
   const qc = useQueryClient()
   const [txTab, setTxTab] = useState<'all' | 'credit' | 'debit'>('all')
   const [txSearch, setTxSearch] = useState('')
+  const [txLenderFilter, setTxLenderFilter] = useState('')
 
   const { data: session, isLoading } = useQuery<BankStatementSession | null>({
     queryKey: ['bank-statement-detail', sessionId],
     queryFn: async () => {
-      const res = await bankStatementService.getAll({ per_page: 500 })
-      const payload = res.data?.data ?? res.data ?? {}
-      const sessions = (payload.sessions ?? payload.data ?? []) as BankStatementSession[]
-      return sessions.find(s => s.session_id === sessionId) ?? null
+      const res = await bankStatementService.getBySessionId(sessionId!)
+      const payload = res.data?.data ?? res.data ?? null
+      return payload as BankStatementSession | null
     },
     refetchInterval: (query) => {
       const s = query.state.data
@@ -176,11 +176,8 @@ export function CrmBankStatementDetail() {
     enabled: session?.status === 'completed' && !!leadId,
   })
   const transactions = (txData ?? []) as Record<string, any>[]
-  const filteredTx = txSearch
-    ? transactions.filter(tx => (tx.description ?? '').toLowerCase().includes(txSearch.toLowerCase()))
-    : transactions
 
-  // ── MCA Lenders (for toggle dropdown) ─────────────────────────────────────
+  // ── MCA Lenders (for toggle dropdown + filter options) ─────────────────────
   const { data: mcaLendersMap } = useQuery<Record<string, string>>({
     queryKey: ['bs-mca-lenders'],
     queryFn: async () => {
@@ -190,6 +187,21 @@ export function CrmBankStatementDetail() {
     enabled: session?.status === 'completed',
     staleTime: 5 * 60 * 1000,
   })
+
+  // Build lender options: API registry (mcaLendersMap) as primary source,
+  // supplemented by any names that appear in transaction data but aren't in the map.
+  const lenderOptions = useMemo(() => {
+    const fromApi = Object.values(mcaLendersMap ?? {}) as string[]
+    const fromTx  = transactions.map((tx) => tx.mca_lender_name as string | undefined).filter((n): n is string => Boolean(n))
+    return Array.from(new Set([...fromApi, ...fromTx]))
+  }, [mcaLendersMap, transactions])
+
+  const filteredTx = useMemo(() => {
+    let result = transactions
+    if (txSearch) result = result.filter(tx => (tx.description ?? '').toLowerCase().includes(txSearch.toLowerCase()))
+    if (txLenderFilter) result = result.filter(tx => tx.mca_lender_name === txLenderFilter)
+    return result
+  }, [transactions, txSearch, txLenderFilter])
 
   // ── Transaction Toggles ────────────────────────────────────────────────────
   const toggleTypeMut = useMutation({
@@ -421,6 +433,9 @@ export function CrmBankStatementDetail() {
               setTxTab={setTxTab}
               txSearch={txSearch}
               setTxSearch={setTxSearch}
+              txLenderFilter={txLenderFilter}
+              setTxLenderFilter={setTxLenderFilter}
+              lenderOptions={lenderOptions}
               txLoading={txLoading}
               filteredTx={filteredTx}
               onToggleType={(txId) => toggleTypeMut.mutate(txId)}
@@ -822,11 +837,14 @@ function CategorySection({ summary, transactions }: { summary: Record<string, an
 
 // ── Transactions Section ────────────────────────────────────────────────────────
 
-function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading, filteredTx, onToggleType, onToggleRevenue, onToggleMca, mcaLenders, isToggling }: {
+function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLenderFilter, setTxLenderFilter, lenderOptions, txLoading, filteredTx, onToggleType, onToggleRevenue, onToggleMca, mcaLenders, isToggling }: {
   txTab: string
   setTxTab: (t: 'all' | 'credit' | 'debit') => void
   txSearch: string
   setTxSearch: (s: string) => void
+  txLenderFilter: string
+  setTxLenderFilter: (v: string) => void
+  lenderOptions: string[]
   txLoading: boolean
   filteredTx: Record<string, any>[]
   onToggleType: (txId: number) => void
@@ -839,6 +857,7 @@ function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading
 
   return (
     <div className="rounded-lg border-2 border-sky-500 overflow-hidden">
+      {/* ── Row 1: Title + Search + Type toggle ── */}
       <div className="bg-sky-600 px-4 py-2.5 flex items-center justify-between">
         <h3 className="text-sm font-bold text-white">Transactions ({filteredTx.length})</h3>
         <div className="flex items-center gap-2">
@@ -861,13 +880,39 @@ function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading
         </div>
       </div>
 
+      {/* ── Row 2: MCA Lender Filter bar ── */}
+      <div className="bg-sky-50 border-b border-sky-200 px-4 py-2 flex items-center gap-3">
+        <Landmark size={13} className="text-sky-600 shrink-0" />
+        <span className="text-xs font-semibold text-sky-700 shrink-0">MCA Lender</span>
+        <select
+          value={txLenderFilter}
+          onChange={e => setTxLenderFilter(e.target.value)}
+          className="flex-1 max-w-xs py-1.5 px-3 text-xs bg-white text-gray-700 border border-sky-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400 cursor-pointer"
+        >
+          <option value="">All Lenders</option>
+          {lenderOptions.map(name => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+        {txLenderFilter && (
+          <button
+            onClick={() => setTxLenderFilter('')}
+            className="text-xs text-sky-600 hover:text-sky-800 font-medium underline shrink-0"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white">
         {txLoading ? (
           <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
         ) : !filteredTx.length ? (
           <div className="flex flex-col items-center py-12 gap-2">
             <Receipt size={24} className="text-gray-200" />
-            <p className="text-sm text-gray-400">{txSearch ? 'No matches found' : 'No transactions'}</p>
+            <p className="text-sm text-gray-400">
+              {txLenderFilter ? `No transactions for "${txLenderFilter}"` : txSearch ? 'No matches found' : 'No transactions'}
+            </p>
           </div>
         ) : (
           <div className="max-h-[600px] overflow-y-auto">
@@ -897,7 +942,15 @@ function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLoading
                     <tr key={txId ?? i} className={cn('border-b border-gray-100 last:border-0 hover:bg-sky-50/40 transition-colors', i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40')}>
                       <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono">{i + 1}</td>
                       <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{displayDate}</td>
-                      <td className="px-3 py-2 text-sm text-gray-800 font-medium max-w-[260px] truncate">{tx.description ?? '—'}</td>
+                      <td className="px-3 py-2 max-w-[260px]">
+                        <span className="text-sm text-gray-800 font-medium block truncate">{tx.description ?? '—'}</span>
+                        {isMca && tx.mca_lender_name && (
+                          <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700">
+                            <Landmark size={9} />
+                            {tx.mca_lender_name}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         {tx.category ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{tx.category}</span>

@@ -54,8 +54,8 @@ interface FloatingState {
   registerSipDecline: (fn: () => void) => void
 
   // ── SIP outbound dial ── (WebPhone registers, Dialer calls for WebRTC campaign calls) ──
-  sipDialHandler: ((phoneNumber: string) => void) | null
-  registerSipDial: (fn: (phoneNumber: string) => void) => void
+  sipDialHandler: ((phoneNumber: string) => void | Promise<void>) | null
+  registerSipDial: (fn: (phoneNumber: string) => void | Promise<void>) => void
 
   // ── Chat unread ────────────────────────────────────────────────────────────
   chatUnread: number

@@ -14,7 +14,13 @@ const ALWAYS_ALLOWED = new Set([
   '/settings/2fa-setup',
   '/onboarding',
   '/agents',
+  '/crm/bank-analysis-viewer',
 ])
+
+/** Route prefixes that are always accessible (matches any sub-path) */
+const ALWAYS_ALLOWED_PREFIXES = [
+  '/crm/bank-statements/',
+]
 
 /**
  * Wraps a route element and checks if the current path is in
@@ -38,8 +44,9 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   // System admin bypasses all frontend guards
   if (userLevel >= LEVELS.SYSTEM_ADMIN) return <>{children}</>
 
-  // Always-allowed routes
+  // Always-allowed routes (exact or prefix match)
   if (ALWAYS_ALLOWED.has(location.pathname)) return <>{children}</>
+  if (ALWAYS_ALLOWED_PREFIXES.some(p => location.pathname.startsWith(p))) return <>{children}</>
 
   // Block rendering until menu is loaded — show loading spinner
   if (!loaded) {

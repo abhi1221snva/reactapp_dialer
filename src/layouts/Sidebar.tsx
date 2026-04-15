@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
-  Phone, LayoutDashboard, Target,
+  Phone, LayoutDashboard, Target, Sparkles, Zap,
   ChevronDown, ArrowLeftToLine, ArrowRightFromLine, X,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
@@ -96,7 +96,9 @@ const FALLBACK_SECTIONS: NavSection[] = [
     label: 'CORE',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, minLevel: 1 },
-      { to: '/dialer',    label: 'Dialer',    icon: Phone,           minLevel: 1 },
+      { to: '/dialer',             label: 'Dialer',        icon: Phone,     minLevel: 1 },
+      { to: '/dialer-studio',      label: 'Dialer Studio', icon: Sparkles,  minLevel: 1 },
+      { to: '/dialer/campaign-auto', label: 'Auto Dialer', icon: Zap,       minLevel: 3 },
     ],
   },
 ]

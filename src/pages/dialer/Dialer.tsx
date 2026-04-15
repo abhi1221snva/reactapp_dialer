@@ -7,6 +7,7 @@ import { useDialerStore } from '../../stores/dialer.store'
 import { useAuthStore } from '../../stores/auth.store'
 import { useFloatingStore } from '../../stores/floating.store'
 import { useAuth } from '../../hooks/useAuth'
+import { useAgentLiveCall } from '../../hooks/useAgentLiveCall'
 import { CallControls } from '../../components/dialer/CallControls'
 import { LeadInfoPanel } from '../../components/dialer/LeadInfoPanel'
 import { DispositionForm } from '../../components/dialer/DispositionForm'
@@ -87,12 +88,20 @@ export function Dialer() {
   // ── Auto-transition: when agent answers WebPhone, move Dialer to "in-call" ─
   // Asterisk rings agent's extension first. When agent answers (phoneInCall=true)
   // Asterisk then dials the customer. Transition Dialer from ringing → in-call.
+  // Also handles campaign auto-dial mode where the call arrives while in 'ready' state
+  // (backend AMI originate rings agent directly without frontend initiating the dial).
   useEffect(() => {
-    if (phoneInCall && callState === 'ringing') {
+    if (phoneInCall && (callState === 'ringing' || callState === 'ready')) {
       setCallState('in-call')
       startCallTimer()
     }
   }, [phoneInCall, callState, setCallState, startCallTimer])
+
+  // ── Campaign auto-dialer: real-time lead data via Pusher ──────────────────
+  // When the backend campaign worker bridges a call, it pushes a Pusher event
+  // on channel "dialer-agent.{ext}" with the lead_id. This hook fetches the
+  // lead and populates activeLead so LeadInfoPanel shows data immediately.
+  useAgentLiveCall({ extension: user?.extension })
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: campaignsData, isLoading } = useQuery({
@@ -359,8 +368,23 @@ export function Dialer() {
       const dialMode = callRes.data?.dial_mode
       if (dialMode === 'webrtc') {
         const sipDial = useFloatingStore.getState().sipDialHandler
-        if (sipDial) {
-          sipDial(callRes.data?.number || phoneNum)
+        if (!sipDial) {
+          toast.error('WebPhone not initialized — please reload the page', { duration: 6000 })
+          setCallState('ready')
+          setCampaignDialActive(false)
+          dialerService.hangUp({ id: activeCampaign.id }).catch(() => {})
+          updateLastCallLog({ status: 'failed' })
+          return
+        }
+        try {
+          await sipDial(callRes.data?.number || phoneNum)
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'SIP call failed — reconnect WebPhone and try again'
+          toast.error(msg, { duration: 6000 })
+          setCallState('ready')
+          setCampaignDialActive(false)
+          dialerService.hangUp({ id: activeCampaign.id }).catch(() => {})
+          updateLastCallLog({ status: 'failed' })
         }
       }
       // Hardware mode: WebPhone auto-answers the SIP INVITE from Asterisk.
@@ -410,7 +434,20 @@ export function Dialer() {
       // WebRTC mode: initiate SIP call from browser
       if (callRes.data?.dial_mode === 'webrtc') {
         const sipDial = useFloatingStore.getState().sipDialHandler
-        if (sipDial) sipDial(callRes.data?.number || phoneNumber)
+        if (!sipDial) {
+          toast.error('WebPhone not initialized — please reload the page', { duration: 6000 })
+          setCallState('ready')
+          setCampaignDialActive(false)
+          return
+        }
+        try {
+          await sipDial(callRes.data?.number || phoneNumber)
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'SIP call failed — reconnect WebPhone and try again'
+          toast.error(msg, { duration: 6000 })
+          setCallState('ready')
+          setCampaignDialActive(false)
+        }
       }
     } catch (err: unknown) {
       const msg =
@@ -736,6 +773,8 @@ export function Dialer() {
                       saveDispositionMutation.mutate({
                         lead_id: activeLead?.lead_id ?? activeLead?.id ?? 0,
                         campaign_id: activeCampaign!.id,
+                        api_call: 0,
+                        pause_calling: 0,
                         ...d,
                       })
                     }

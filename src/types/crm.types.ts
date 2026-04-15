@@ -158,7 +158,7 @@ export interface LenderApiCredentials {
   sales_rep_email?: string
 }
 
-export interface Lender {
+export interface Lender extends Record<string, unknown> {
   id: number
   lender_name: string
   email: string

@@ -120,6 +120,7 @@ export function DialerLayout() {
   const OWN_HEADER = new Set([
     '/dashboard',
     '/dialer',
+    '/dialer-studio',
     '/sms',
     '/chat',
     '/telecom',

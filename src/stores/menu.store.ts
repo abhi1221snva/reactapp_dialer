@@ -40,7 +40,7 @@ export const useMenuStore = create<MenuState>()((set, get) => ({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load menu'
       console.error('[menu.store] fetchMenu error:', msg)
-      set({ error: msg, loading: false })
+      set({ error: msg, loading: false, loaded: true })
     }
   },
 

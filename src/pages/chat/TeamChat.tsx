@@ -1282,7 +1282,7 @@ export function TeamChat() {
           ...conv.last_message,
           body: data.preview,
           created_at: new Date().toISOString(),
-        }
+        } as typeof conv.last_message
         updated.splice(idx, 1)
         updated.unshift(conv)
         return updated
