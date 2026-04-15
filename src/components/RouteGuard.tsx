@@ -20,6 +20,7 @@ const ALWAYS_ALLOWED = new Set([
 /** Route prefixes that are always accessible (matches any sub-path) */
 const ALWAYS_ALLOWED_PREFIXES = [
   '/crm/bank-statements/',
+  '/crm/leads-new/',
 ]
 
 /**
