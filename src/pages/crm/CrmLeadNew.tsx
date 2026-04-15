@@ -669,7 +669,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
       {/* ── Contact Information ── */}
       {hasOwnerSection && (
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
-          {sectionBar(User, 'text-indigo-500', 'Contact Information', visibleCore.length + personal.length)}
+          {sectionBar(User, 'text-indigo-500', 'Owner Information', visibleCore.length + personal.length)}
           <div className="p-2">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {visibleCore.map(f => fieldCard(f.key, f.label, f.type))}
