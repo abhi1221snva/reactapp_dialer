@@ -84,6 +84,7 @@ export function CrmLayout() {
     && !/^\/crm\/leads\/\d+\/edit$/.test(pathname)
     && !/^\/crm\/lenders\//.test(pathname)
     && !/^\/crm\/drip-campaigns\//.test(pathname)
+    && !/^\/crm\/leads-new\/\d+$/.test(pathname)
 
   return (
     <CrmHeaderContext.Provider value={{ setDescription, setActions, headerKey }}>

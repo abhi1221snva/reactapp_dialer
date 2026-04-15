@@ -34,6 +34,7 @@ import { CrmDashboard } from './pages/crm/CrmDashboard'
 import { CrmPipeline } from './pages/crm/CrmPipeline'
 import { CrmLeadsList } from './pages/crm/CrmLeadsList'
 import { CrmLeadDetail } from './pages/crm/CrmLeadDetail'
+import { CrmLeadNew } from './pages/crm/CrmLeadNew'
 import { CrmLeadCreate } from './pages/crm/CrmLeadCreate'
 import { CrmAffiliateLinks } from './pages/crm/CrmAffiliateLinks'
 import { CrmCompanySettings } from './pages/crm/CrmCompanySettings'
@@ -243,6 +244,7 @@ export default function App() {
           <Route path="/crm/leads/create" element={<CrmLeadCreate />} />
           <Route path="/crm/leads/:id/edit" element={<CrmLeadCreate />} />
           <Route path="/crm/leads/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadDetail /></ErrorBoundary>} />
+          <Route path="/crm/leads-new/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadNew /></ErrorBoundary>} />
           <Route path="/crm/affiliate-links"   element={<CrmAffiliateLinks />} />
           <Route path="/crm/company-settings"  element={<CrmCompanySettings />} />
           <Route path="/crm/approvals" element={<CrmApprovals />} />
