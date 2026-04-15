@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Loader2, AlertCircle, Save,
   Thermometer, Snowflake, Flame, Clock,
-  UserCheck, Zap, User,
+  UserCheck, Zap, User, Building2, Users,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
@@ -437,128 +437,144 @@ export function CrmLeadCreate() {
                   </div>
                 )}
 
-                <div className="space-y-8">
+                <div className="space-y-4">
 
-                  {/* ═══ Section: Owner Information ═══ */}
-                  {hasOwnerSection && (
-                    <section>
-                      <div style={{ marginBottom: 16 }}>
-                        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3 }}>
-                          Owner Information
-                        </h3>
-                        <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
-                      </div>
+                  {/* ═══ Owner + Business — side by side cards ═══ */}
+                  {(hasOwnerSection || hasBusinessSection) && (
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
-                      {/* Core system fields */}
-                      {visibleCoreFields.length > 0 && (
-                        <div className={FIELD_GRID}>
-                          {visibleCoreFields.map(f => {
-                            const isWide = f.key === 'company_name' || f.key === 'address'
-                            return (
-                              <div key={f.key} className={isWide ? 'sm:col-span-2' : ''} data-field-key={f.key}>
-                                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{f.label}</label>
-                                {f.key === 'address' ? (
-                                  <AddressAutocomplete
-                                    value={watch('address') ?? ''}
-                                    onChange={v => setValue('address', v)}
-                                    onPlaceSelect={(parsed: ParsedPlace) => {
-                                      const group = resolveAddressGroup('address')
-                                      if (group) {
-                                        setValue('city', parsed.city)
-                                        setValue('state', parsed.state)
-                                      }
-                                    }}
-                                    placeholder={f.placeholder}
-                                  />
-                                ) : (
-                                  <input
-                                    type={f.type ?? 'text'}
-                                    {...register(f.key as keyof FormData)}
-                                    className="crm-fi"
-                                    placeholder={f.placeholder}
-                                    maxLength={f.maxLength}
-                                    autoComplete={f.type === 'email' ? 'email' : undefined}
-                                  />
-                                )}
-                                {errors[f.key as keyof FormData]?.message && (
-                                  <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                                    <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
-                                  </span>
-                                )}
+                      {/* Owner Information card */}
+                      {hasOwnerSection && (
+                        <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#f0fdf4' }}>
+                            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: '#dcfce7' }}>
+                              <User size={11} style={{ color: '#059669' }} />
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-700">Owner Information</span>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            {visibleCoreFields.length > 0 && (
+                              <div className="grid grid-cols-2 gap-3">
+                                {visibleCoreFields.map(f => {
+                                  const isWide = f.key === 'company_name' || f.key === 'address'
+                                  return (
+                                    <div key={f.key} className={isWide ? 'col-span-2' : ''} data-field-key={f.key}>
+                                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>{f.label}</label>
+                                      {f.key === 'address' ? (
+                                        <AddressAutocomplete
+                                          value={watch('address') ?? ''}
+                                          onChange={v => setValue('address', v)}
+                                          onPlaceSelect={(parsed: ParsedPlace) => {
+                                            const group = resolveAddressGroup('address')
+                                            if (group) {
+                                              setValue('city', parsed.city)
+                                              setValue('state', parsed.state)
+                                            }
+                                          }}
+                                          placeholder={f.placeholder}
+                                        />
+                                      ) : (
+                                        <input
+                                          type={f.type ?? 'text'}
+                                          {...register(f.key as keyof FormData)}
+                                          className="crm-fi"
+                                          placeholder={f.placeholder}
+                                          maxLength={f.maxLength}
+                                          autoComplete={f.type === 'email' ? 'email' : undefined}
+                                        />
+                                      )}
+                                      {errors[f.key as keyof FormData]?.message && (
+                                        <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                                          <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            )
-                          })}
-                        </div>
+                            )}
+                            {personal.length > 0 && (
+                              <DynamicFieldForm
+                                register={register}
+                                setValue={setValue}
+                                defaultValues={existing as Record<string, unknown> | undefined}
+                                labels={personal}
+                                errors={errors}
+                                formValues={watch() as Record<string, unknown>}
+                                columns={2}
+                                hideSectionHeaders
+                              />
+                            )}
+                          </div>
+                        </section>
                       )}
 
-                      {/* Dynamic owner/personal fields */}
-                      {personal.length > 0 && (
-                        <div className={visibleCoreFields.length > 0 ? 'mt-4' : ''}>
+                      {/* Business Information card */}
+                      {hasBusinessSection && (
+                        <section className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#eff6ff' }}>
+                            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: '#dbeafe' }}>
+                              <Building2 size={11} style={{ color: '#1d4ed8' }} />
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-700">Business Information</span>
+                          </div>
+                          <div className="p-4">
+                            <DynamicFieldForm
+                              register={register}
+                              setValue={setValue}
+                              defaultValues={existing as Record<string, unknown> | undefined}
+                              labels={business}
+                              errors={errors}
+                              formValues={watch() as Record<string, unknown>}
+                              columns={2}
+                              hideSectionHeaders
+                            />
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══ Owner 2 — collapsible card ═══ */}
+                  {hasOwner2Section && (
+                    <section ref={owner2Ref} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200" style={{ background: '#faf5ff' }}>
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={hasSecondOwner}
+                            onChange={e => {
+                              const checked = e.target.checked
+                              setHasSecondOwner(checked)
+                              if (!checked) {
+                                secondOwner.forEach(f => unregister(f.field_key as keyof FormData))
+                              }
+                              setTimeout(() => {
+                                owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              }, 50)
+                            }}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                          />
+                          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: '#ede9fe' }}>
+                            <Users size={11} style={{ color: '#7c3aed' }} />
+                          </div>
+                          <span className="text-[11px] font-bold text-slate-700">Owner 2 Information</span>
+                          <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+                        </label>
+                      </div>
+                      {hasSecondOwner && (
+                        <div className="p-4">
                           <DynamicFieldForm
                             register={register}
                             setValue={setValue}
                             defaultValues={existing as Record<string, unknown> | undefined}
-                            labels={personal}
+                            labels={secondOwner}
                             errors={errors}
                             formValues={watch() as Record<string, unknown>}
                             columns={4}
                             hideSectionHeaders
                           />
                         </div>
-                      )}
-                    </section>
-                  )}
-
-                  {/* ═══ Section: Business Information ═══ */}
-                  {hasBusinessSection && (
-                    <section>
-                      <DynamicFieldForm
-                        register={register}
-                        setValue={setValue}
-                        defaultValues={existing as Record<string, unknown> | undefined}
-                        labels={business}
-                        errors={errors}
-                        formValues={watch() as Record<string, unknown>}
-                        columns={4}
-                      />
-                    </section>
-                  )}
-
-                  {/* ═══ Section: Owner2 Information ═══ */}
-                  {hasOwner2Section && (
-                    <section ref={owner2Ref}>
-                      <label className="flex items-center gap-2 cursor-pointer select-none w-fit mb-3" title="Enable second owner fields">
-                        <input
-                          type="checkbox"
-                          checked={hasSecondOwner}
-                          onChange={e => {
-                            const checked = e.target.checked
-                            setHasSecondOwner(checked)
-                            if (!checked) {
-                              // Unregister Owner2 fields so their validation rules are removed
-                              secondOwner.forEach(f => unregister(f.field_key as keyof FormData))
-                            }
-                            setTimeout(() => {
-                              owner2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                            }, 50)
-                          }}
-                          className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
-                        />
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', lineHeight: 1 }}>
-                          Owner2 Information
-                        </span>
-                      </label>
-                      {hasSecondOwner && (
-                        <DynamicFieldForm
-                          register={register}
-                          setValue={setValue}
-                          defaultValues={existing as Record<string, unknown> | undefined}
-                          labels={secondOwner}
-                          errors={errors}
-                          formValues={watch() as Record<string, unknown>}
-                          columns={4}
-                          hideSectionHeaders
-                        />
                       )}
                     </section>
                   )}

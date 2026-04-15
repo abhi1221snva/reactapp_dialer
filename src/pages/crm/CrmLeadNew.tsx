@@ -19,7 +19,7 @@ import {
   User, Users, Clock, DollarSign, FileText, FolderOpen, Building2,
   TrendingUp, ShieldCheck, CheckCircle, Send, FileBarChart,
   Pencil, Trash2, Download, Copy, ExternalLink, Upload, Search,
-  ChevronDown, Hash, MessageSquare, Activity, MoreVertical,
+  Hash, MessageSquare, Activity, MoreVertical,
   Tag, Calendar, Check, Eye, SlidersHorizontal,
   PanelRightClose, PanelRightOpen, Zap, MapPin, Globe,
   ArrowUpRight, PhoneCall, Star, LayoutDashboard,
@@ -681,39 +681,6 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated }: {
   )
 }
 
-// ─── Status change dropdown (inline popover) ──────────────────────────────────
-function StatusDropdown({ statuses, current, onSelect, onClose }: {
-  statuses: LeadStatus[]; current: string; onSelect: (s: string) => void; onClose: () => void
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-100 w-72 max-h-[70vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
-          <span className="text-sm font-bold text-slate-800">Change Status</span>
-          <button onClick={onClose} className="p-0.5 text-slate-400 hover:text-slate-600"><X size={15} /></button>
-        </div>
-        <div className="overflow-y-auto py-1">
-          {statuses.map(s => {
-            const isAct = s.lead_title_url === current
-            const color = s.color_code ?? s.color ?? G[600]
-            return (
-              <button key={s.id}
-                onClick={() => { if (!isAct) onSelect(s.lead_title_url); onClose() }}
-                className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors text-left ${isAct ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                <span className={`flex-1 text-[13px] font-semibold ${isAct ? 'text-emerald-700' : 'text-slate-700'}`}>{s.lead_title}</span>
-                {isAct && <Check size={13} style={{ color: G[600] }} />}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export function CrmLeadNew() {
   const { id }  = useParams<{ id: string }>()
@@ -723,7 +690,6 @@ export function CrmLeadNew() {
 
   const [activeTab,    setActiveTab]    = useState<TabId>('overview')
   const [rightOpen,    setRightOpen]    = useState(true)
-  const [showStatus,   setShowStatus]   = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const tabContentRef = useRef<HTMLDivElement>(null)
 
@@ -771,12 +737,6 @@ export function CrmLeadNew() {
   })
 
   // ── Mutations ──────────────────────────────────────────────────────────────
-  const updateStatus = useMutation({
-    mutationFn: (s: string) => leadService.update(leadId, { lead_status: s }),
-    onSuccess: () => { toast.success('Status updated'); qc.invalidateQueries({ queryKey: ['crm-lead', leadId] }) },
-    onError: () => toast.error('Failed'),
-  })
-
   const genPortal = useMutation({
     mutationFn: () => crmService.generateMerchantPortal(leadId),
     onSuccess: () => { toast.success('Portal link generated'); qc.invalidateQueries({ queryKey: ['merchant-portal', leadId] }) },
@@ -827,8 +787,6 @@ export function CrmLeadNew() {
   const loanAmount    = lr['loan_amount'] as string | number | undefined
   const loanFmt       = loanAmount ? `$${Number(String(loanAmount).replace(/[^0-9.]/g, '')).toLocaleString()}` : null
   const approvedCount = submissions.filter(s => s.response_status === 'approved').length
-  const displaySts    = statuses.slice(0, 10)
-  const curStIdx      = displaySts.findIndex((s: LeadStatus) => s.lead_title_url === String(lead.lead_status))
 
   const TAB_BADGES: Partial<Record<TabId, number>> = {
     documents: docs.length,
@@ -871,14 +829,13 @@ export function CrmLeadNew() {
           <div className="flex-1 min-w-0 flex items-center gap-2.5 flex-wrap">
             <h1 className="text-[15px] font-bold text-white leading-none tracking-tight truncate max-w-[220px]">{fullName}</h1>
 
-            {/* Status chip */}
-            <button onClick={() => setShowStatus(true)}
-              className="inline-flex items-center gap-1 h-[20px] px-2 rounded-full text-[11px] font-bold flex-shrink-0 hover:brightness-110 transition-all"
+            {/* Status badge — read only */}
+            <span
+              className="inline-flex items-center gap-1 h-[20px] px-2 rounded-full text-[11px] font-bold flex-shrink-0"
               style={{ background: `${statusColor}25`, color: statusColor, border: `1px solid ${statusColor}35` }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusColor }} />
               {curStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              <ChevronDown size={9} className="opacity-60" />
-            </button>
+            </span>
 
             {/* Temperature */}
             {tempCfg && (
@@ -1011,44 +968,6 @@ export function CrmLeadNew() {
           </div>
         </div>
 
-        {/* Row 2: Pipeline progress bar — ultra-compact */}
-        {displaySts.length > 0 && (
-          <div className="flex items-center gap-0 px-4 pb-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {displaySts.map((s: LeadStatus, i: number) => {
-              const isAct  = i === curStIdx
-              const isDone = curStIdx >= 0 && i < curStIdx
-              const isLast = i === displaySts.length - 1
-              return (
-                <div key={s.id} className="flex items-center flex-shrink-0">
-                  <button
-                    disabled={isAct || updateStatus.isPending}
-                    onClick={() => updateStatus.mutate(s.lead_title_url)}
-                    className={['flex flex-col items-center gap-0.5 focus:outline-none px-0.5',
-                      isAct ? 'cursor-default' : 'cursor-pointer hover:opacity-75 transition-opacity'].join(' ')}
-                  >
-                    <div className={[
-                      'w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold',
-                      isAct  ? 'text-white shadow-md shadow-emerald-900/50' : '',
-                      isDone ? '' : !isAct ? 'text-white/25 border border-white/10 bg-white/5' : '',
-                    ].join(' ')}
-                      style={isAct ? { background: G[600] } : isDone ? { background: 'rgba(16,185,129,0.2)' } : {}}>
-                      {isAct ? <span>{i+1}</span> : isDone ? <Check size={8} style={{ color: G[500] }} /> : <span>{i+1}</span>}
-                    </div>
-                    <span className={['text-[8px] font-medium whitespace-nowrap max-w-[52px] text-center leading-none',
-                      isAct ? 'font-bold' : isDone ? 'text-white/30' : 'text-white/15'].join(' ')}
-                      style={isAct ? { color: G[500] } : {}}>
-                      {s.lead_title}
-                    </span>
-                  </button>
-                  {!isLast && (
-                    <div className="mx-0.5 h-px w-3.5 flex-shrink-0"
-                      style={{ background: isDone ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.06)' }} />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
       </header>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -1222,12 +1141,6 @@ export function CrmLeadNew() {
           </aside>
         )}
       </div>
-
-      {/* Status dropdown */}
-      {showStatus && (
-        <StatusDropdown statuses={statuses} current={String(lead.lead_status)}
-          onSelect={s => updateStatus.mutate(s)} onClose={() => setShowStatus(false)} />
-      )}
 
       <style>{`
         @keyframes fadeUp {
