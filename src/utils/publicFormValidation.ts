@@ -128,7 +128,8 @@ export function rulestoHtmlAttrs(
       case 'min':         attrs.minLength = Number(r.value); break
       case 'max':         attrs.maxLength = Number(r.value); break
       case 'digits':
-        attrs.maxLength = Number(r.value)
+        // Only set pattern; skip maxLength because formatted inputs (e.g. SSN with
+        // dashes: XXX-XX-XXXX = 11 chars) exceed the raw digit count.
         attrs.pattern   = `\\d{${r.value}}`
         break
       case 'digits_between':
@@ -166,7 +167,9 @@ function validateByType(
       if (!EMAIL_RE.test(val.trim())) return `${label} must be a valid email address`
       break
 
-    case 'tel': {
+    case 'tel':
+    case 'phone':
+    case 'phone_number': {
       const digits = val.replace(/\D/g, '')
       if (digits.length < 10 || digits.length > 15)
         return `${label} must be 10–15 digits`
