@@ -8,7 +8,9 @@ import {
   CheckCircle2, XCircle, Search,
   ArrowUpRight, ArrowDownRight, Timer, Receipt, ChevronDown, ChevronUp,
   Download, Eye, ToggleLeft, ToggleRight, Tag, Landmark,
+  Activity, CreditCard, TrendingDown, Wallet, Scale, BarChart2,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   PieChart, Pie, Cell,
@@ -94,17 +96,24 @@ function ColoredSection({ title, color, borderColor, children, defaultOpen = tru
 
 // ── Stat Box ────────────────────────────────────────────────────────────────────
 
-function StatBox({ label, value, borderColor, className }: {
+function StatBox({ label, value, borderColor, className, icon: Icon, iconBg, iconColor, accent }: {
   label: string; value: React.ReactNode; borderColor?: string; className?: string
+  icon?: LucideIcon; iconBg?: string; iconColor?: string; accent?: string
 }) {
   return (
-    <div className={cn(
-      'bg-gray-50 rounded-lg p-3 text-center border',
-      borderColor ?? 'border-gray-200',
-      className,
-    )}>
-      <p className="text-xs text-gray-500 font-medium mb-1">{label}</p>
-      <p className="text-lg font-bold text-gray-900 leading-tight">{value}</p>
+    <div className={cn('bg-white rounded-xl border shadow-sm overflow-hidden', borderColor ?? 'border-gray-200', className)}>
+      {accent && <div className={cn('h-0.5 w-full', accent)} />}
+      <div className="px-3 py-3 flex items-center gap-3">
+        {Icon && (
+          <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', iconBg ?? 'bg-gray-100')}>
+            <Icon size={16} className={iconColor ?? 'text-gray-500'} />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider truncate">{label}</p>
+          <p className="text-[15px] font-extrabold text-gray-900 leading-tight mt-0.5 truncate">{value}</p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -396,20 +405,21 @@ export function CrmBankStatementDetail() {
       {session.status === 'completed' && (
         <>
           {/* ═══ Combined Analysis Summary ════════════════════════════════════ */}
-          <div className="rounded-lg border-2 border-green-500 overflow-hidden">
-            <div className="bg-green-600 px-4 py-2.5">
+          <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600">
+              <BarChart2 size={14} className="text-white/80" />
               <h3 className="text-sm font-bold text-white">Combined Analysis Summary</h3>
             </div>
-            <div className="bg-white p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-                <StatBox label="Total Transactions" value={fmtNum(totalTx)} />
-                <StatBox label="Total Deposits" value={fmt(deposits)} />
-                <StatBox label="Adjustments" value={fmt(adjustments)} />
-                <StatBox label="True Revenue" value={fmt(revenue)} borderColor="border-green-300" />
-                <StatBox label="Total Debits" value={fmt(totalDebits)} />
-                <StatBox label="NSF/OD Fees" value={fmtNum(nsfCount)} borderColor={nsfCount > 0 ? 'border-amber-300' : undefined} />
-                <StatBox label="Avg Daily Balance" value={fmt(avgDailyBal)} borderColor="border-blue-300" />
-                <StatBox label="Avg Ledger Balance" value={fmt(avgLedgerBal)} borderColor="border-indigo-300" />
+            <div className="bg-slate-50 p-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatBox label="Total Transactions" value={fmtNum(totalTx)} icon={Activity} iconBg="bg-slate-100" iconColor="text-slate-500" accent="bg-slate-300" />
+                <StatBox label="Total Deposits" value={fmt(deposits)} icon={Banknote} iconBg="bg-emerald-50" iconColor="text-emerald-600" borderColor="border-emerald-200" accent="bg-emerald-500" />
+                <StatBox label="Adjustments" value={fmt(adjustments)} icon={Scale} iconBg="bg-orange-50" iconColor="text-orange-500" borderColor="border-orange-200" accent="bg-orange-400" />
+                <StatBox label="True Revenue" value={fmt(revenue)} icon={TrendingUp} iconBg="bg-green-50" iconColor="text-green-600" borderColor="border-green-300" accent="bg-green-500" />
+                <StatBox label="Total Debits" value={fmt(totalDebits)} icon={TrendingDown} iconBg="bg-red-50" iconColor="text-red-500" borderColor="border-red-200" accent="bg-red-400" />
+                <StatBox label="NSF / Overdraft Fees" value={fmtNum(nsfCount)} icon={AlertTriangle} iconBg={nsfCount > 0 ? 'bg-amber-50' : 'bg-gray-50'} iconColor={nsfCount > 0 ? 'text-amber-500' : 'text-gray-400'} borderColor={nsfCount > 0 ? 'border-amber-300' : 'border-gray-200'} accent={nsfCount > 0 ? 'bg-amber-400' : 'bg-gray-200'} />
+                <StatBox label="Avg Daily Balance" value={fmt(avgDailyBal)} icon={Wallet} iconBg="bg-blue-50" iconColor="text-blue-500" borderColor="border-blue-200" accent="bg-blue-400" />
+                <StatBox label="Avg Ledger Balance" value={fmt(avgLedgerBal)} icon={CreditCard} iconBg="bg-indigo-50" iconColor="text-indigo-500" borderColor="border-indigo-200" accent="bg-indigo-400" />
               </div>
             </div>
           </div>
@@ -564,12 +574,12 @@ function McaSection({ mca, lenders }: { mca: Record<string, any>; lenders: any[]
       <div className="bg-white p-4">
         {/* Summary stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <StatBox label="MCAs Detected" value={mca.total_mca_count ?? lenders.length} borderColor="border-red-300" />
-          <StatBox label="Est. Monthly Payments" value={fmt(mca.total_mca_payments)} borderColor="border-red-300" />
-          <StatBox label="Total MCA Amount" value={fmt(mca.total_mca_amount)} borderColor="border-red-300" />
+          <StatBox label="MCAs Detected" value={mca.total_mca_count ?? lenders.length} icon={ShieldAlert} iconBg="bg-red-50" iconColor="text-red-500" borderColor="border-red-300" accent="bg-red-400" />
+          <StatBox label="Est. Monthly Payments" value={fmt(mca.total_mca_payments)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" borderColor="border-red-300" accent="bg-red-400" />
+          <StatBox label="Total MCA Amount" value={fmt(mca.total_mca_amount)} icon={Banknote} iconBg="bg-red-50" iconColor="text-red-500" borderColor="border-red-300" accent="bg-red-400" />
           <StatBox label="Risk Level" value={
             (mca.total_mca_count ?? 0) >= 3 ? 'High' : (mca.total_mca_count ?? 0) >= 1 ? 'Medium' : 'Low'
-          } borderColor="border-red-300" />
+          } icon={AlertTriangle} iconBg="bg-red-50" iconColor="text-red-500" borderColor="border-red-300" accent="bg-red-400" />
         </div>
 
         {/* Lenders table */}
@@ -675,10 +685,10 @@ function McaCalculatorSection({ capacity, revenue }: { capacity: Record<string, 
           {/* Results side */}
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <StatBox label="Total Payback" value={fmt(calc.payback)} borderColor="border-blue-300" />
-              <StatBox label="Daily Payment" value={fmt(calc.dailyPayment, 2)} borderColor="border-blue-300" />
-              <StatBox label="Monthly Payment" value={fmt(calc.monthlyPayment)} borderColor="border-blue-300" />
-              <StatBox label="Remaining Capacity" value={fmt(calc.remainingCapacity)} borderColor="border-blue-300" />
+              <StatBox label="Total Payback" value={fmt(calc.payback)} icon={Banknote} iconBg="bg-blue-50" iconColor="text-blue-500" borderColor="border-blue-300" accent="bg-blue-400" />
+              <StatBox label="Daily Payment" value={fmt(calc.dailyPayment, 2)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-500" borderColor="border-blue-300" accent="bg-blue-400" />
+              <StatBox label="Monthly Payment" value={fmt(calc.monthlyPayment)} icon={CreditCard} iconBg="bg-blue-50" iconColor="text-blue-500" borderColor="border-blue-300" accent="bg-blue-400" />
+              <StatBox label="Remaining Capacity" value={fmt(calc.remainingCapacity)} icon={Wallet} iconBg="bg-blue-50" iconColor="text-blue-500" borderColor="border-blue-300" accent="bg-blue-400" />
             </div>
             {calc.canTake !== null && (
               <div className={cn('rounded-lg p-3 border-2 text-center', calc.canTake ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300')}>

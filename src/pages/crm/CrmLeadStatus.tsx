@@ -216,7 +216,7 @@ function StatusModal({
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Status updated' : 'Status created')
-      qc.invalidateQueries({ queryKey: ['lead-statuses'] })
+      qc.invalidateQueries({ queryKey: ['lead-statuses-all'] })
       onSaved()
     },
     onError: (err: unknown) => {
@@ -392,8 +392,8 @@ export function CrmLeadStatus() {
 
   // ── Query ──────────────────────────────────────────────────────────────────
   const { data: allStatuses, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['lead-statuses'],
-    queryFn: () => crmService.getLeadStatuses(),
+    queryKey: ['lead-statuses-all'],
+    queryFn: () => crmService.getAllLeadStatuses(),
     staleTime: 0,
   })
 
@@ -431,7 +431,7 @@ export function CrmLeadStatus() {
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   // ── Mutations ──────────────────────────────────────────────────────────────
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['lead-statuses'] })
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['lead-statuses-all'] })
 
   const toggleStatusMutation = useMutation({
     mutationFn: (s: LeadStatus) => crmService.toggleLeadStatus(s.id, Number(s.status) === 1 ? 0 : 1),

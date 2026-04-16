@@ -195,8 +195,9 @@ export function CrmLeads() {
     onError: () => toast.error('Failed to delete lead'),
   })
 
-  const statuses: Array<{ id: number; lead_status: string }> =
-    statusesData?.data?.data || statusesData?.data || []
+  const statuses: Array<{ id: number; lead_status: string; status?: string | number }> =
+    (statusesData?.data?.data || statusesData?.data || [])
+      .filter((s: { status?: string | number }) => String(s.status ?? '1') === '1')
 
   const statusFilterOptions = statuses.map((s: { id: number; lead_status: string }) => ({
     value: s.lead_status,

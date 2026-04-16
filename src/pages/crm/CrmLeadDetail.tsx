@@ -11,7 +11,7 @@ import {
   Check, DollarSign, ChevronRight, TrendingUp, FileCheck2, ShieldCheck,
   Activity, Search, Wrench, RefreshCw, AlertTriangle, CheckCircle,
   ArrowDownLeft, ArrowUpRight, Paperclip, Users, SlidersHorizontal, ArrowUpDown,
-  Copy, FileBarChart, BarChart3, ShieldAlert,
+  Copy, FileBarChart, BarChart3, ShieldAlert, Sparkles, Globe,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -4781,6 +4781,48 @@ function StatChip({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   )
 }
 
+// ── Lead Info tab helpers ──────────────────────────────────────────────────────
+const LI_AVATAR_COLORS = [
+  'from-emerald-500 to-teal-600',
+  'from-sky-500 to-cyan-600',
+  'from-violet-500 to-purple-600',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-600',
+  'from-fuchsia-500 to-purple-600',
+]
+const LI_FIELD_ICON_MAP: Record<string, LucideIcon> = {
+  first_name: User, last_name: User,
+  email: Mail, owner_email: Mail,
+  phone_number: Phone, mobile: Phone, business_phone: Phone,
+  city: MapPin, state: MapPin, business_city: MapPin, business_state: MapPin,
+  country: Globe, website: Globe,
+}
+function resolveLiFieldIcon(key: string, type?: string): LucideIcon {
+  if (LI_FIELD_ICON_MAP[key]) return LI_FIELD_ICON_MAP[key]
+  if (type === 'email') return Mail
+  if (type === 'phone' || type === 'phone_number') return Phone
+  if (type === 'url') return Globe
+  return Sparkles
+}
+const LI_OWNER2_SECS   = new Set(['second_owner'])
+const LI_BUSINESS_SECS = new Set(['business', 'funding', 'financial', 'documents', 'custom'])
+function liGroupFields(fields: CrmLabel[]) {
+  const personal: CrmLabel[] = [], business: CrmLabel[] = [], secondOwner: CrmLabel[] = []
+  for (const f of fields) {
+    const sec = f.section || 'other'
+    if (LI_OWNER2_SECS.has(sec))      secondOwner.push(f)
+    else if (LI_BUSINESS_SECS.has(sec)) business.push(f)
+    else                                personal.push(f)
+  }
+  return { personal, business, secondOwner }
+}
+const LI_CORE_FIELDS: { key: string; label: string; type?: string }[] = [
+  { key: 'first_name',   label: 'First Name'  },
+  { key: 'last_name',    label: 'Last Name'   },
+  { key: 'email',        label: 'Owner Email', type: 'email'        },
+  { key: 'phone_number', label: 'Mobile',      type: 'phone_number' },
+]
+
 // ── Main Lead Detail — Command Center ──────────────────────────────────────────
 export function CrmLeadDetail() {
   const { id }    = useParams<{ id: string }>()
@@ -4895,7 +4937,7 @@ export function CrmLeadDetail() {
   // Auto-detect if lead has Owner 2 data populated
   useEffect(() => {
     if (!lead || !leadFields) return
-    const owner2Fields = leadFields.filter(f => f.section === 'second_owner')
+    const owner2Fields = leadFields.filter(f => f.section === 'second_owner' && (f.status === true || (f.status as unknown) == 1))
     if (owner2Fields.length === 0) { setShowOwner2(false); return }
     const leadData = lead as Record<string, unknown>
     const hasData = owner2Fields.some(f => {
@@ -5146,251 +5188,137 @@ export function CrmLeadDetail() {
           <div className="flex-1 overflow-y-auto">
 
             {activeTab === 'details' && (() => {
-
-              // ── Internal field type ──────────────────────────────────────────
-              type FieldDef = {
-                field_key:     string
-                label_name:    string
-                field_type:    string
-                display_order: number
-              }
-
-              // ── Build section map fully from leadFields (crm_labels) ─────────
-              // Fields are sorted by display_order so section card order reflects
-              // the order configured on the Lead Fields page.
+              // configuredKeys = ALL keys (active + inactive) to suppress hardcoded fallbacks
               const configuredKeys = new Set((leadFields ?? []).map(f => f.field_key))
-              const sectionMap = new Map<string, FieldDef[]>()
+              const activeLeadFields = (leadFields ?? []).filter(
+                f => f.status === true || (f.status as unknown) == 1,
+              )
+              const { personal, business, secondOwner } = liGroupFields(activeLeadFields)
+              const visibleCore = LI_CORE_FIELDS.filter(f => !configuredKeys.has(f.key))
 
-              const addToSection = (sec: string, f: FieldDef) => {
-                const key = sec.toLowerCase().trim() || 'general'
-                if (!sectionMap.has(key)) sectionMap.set(key, [])
-                sectionMap.get(key)!.push(f)
+              const hasOwnerSection    = visibleCore.length > 0 || personal.length > 0
+              const hasBusinessSection = business.length > 0
+              const hasOwner2Active    = showOwner2 && secondOwner.length > 0
+
+              const leadData  = lead as Record<string, unknown>
+              const fullName  = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${leadId}`
+              const avatarGrad = LI_AVATAR_COLORS[leadId % LI_AVATAR_COLORS.length]
+              const leadInits  = initials(fullName)
+
+              function copyVal(text: string) {
+                navigator.clipboard.writeText(text).then(() => toast.success('Copied'))
               }
 
-              // Primary: all active fields from crm_labels, sorted by display_order
-              for (const f of [...(leadFields ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))) {
-                addToSection(f.section || 'general', {
-                  field_key:     f.field_key,
-                  label_name:    f.label_name,
-                  field_type:    f.field_type || 'text',
-                  display_order: f.display_order ?? 0,
-                })
-              }
-
-              // Fallback: system cols that crm_labels does not cover are injected
-              // at the top of their natural section so no lead data is ever hidden.
-              const SYS_FALLBACKS: Array<FieldDef & { section: string }> = [
-                { field_key: 'first_name',   label_name: 'First Name', field_type: 'text',         section: 'contact',  display_order: -40 },
-                { field_key: 'last_name',    label_name: 'Last Name',  field_type: 'text',         section: 'contact',  display_order: -30 },
-                { field_key: 'email',        label_name: 'Email',      field_type: 'email',        section: 'contact',  display_order: -20 },
-                { field_key: 'phone_number', label_name: 'Phone',      field_type: 'phone_number', section: 'contact',  display_order: -10 },
-                { field_key: 'company_name', label_name: 'Company',    field_type: 'text',         section: 'business', display_order: -50 },
-                { field_key: 'address',      label_name: 'Address',    field_type: 'text',         section: 'business', display_order: -40 },
-                { field_key: 'city',         label_name: 'City',       field_type: 'text',         section: 'business', display_order: -30 },
-                { field_key: 'state',        label_name: 'State',      field_type: 'text',         section: 'business', display_order: -20 },
-                { field_key: 'zip',          label_name: 'ZIP Code',   field_type: 'text',         section: 'business', display_order: -10 },
-              ]
-              for (const fb of SYS_FALLBACKS) {
-                if (!configuredKeys.has(fb.field_key)) {
-                  const { section, ...def } = fb
-                  const list = sectionMap.get(section) ?? []
-                  sectionMap.set(section, [def, ...list])
-                }
-              }
-
-              // ── Preferred section rendering order ────────────────────────────
-              const PREF_ORDER = ['owner', 'second_owner', 'contact', 'business', 'general', 'address', 'financial', 'legal', 'compliance', 'deal', 'marketing', 'custom']
-              const orderedSections = [
-                ...PREF_ORDER.filter(s => sectionMap.has(s)),
-                ...[...sectionMap.keys()].filter(s => !PREF_ORDER.includes(s)),
-              ]
-
-              // ── Display value formatter ──────────────────────────────────────
-              const fmtVal = (ft: string, val: unknown): string => {
-                if (val === null || val === undefined || val === '') return ''
-                const s = String(val)
-                if (ft === 'phone_number') return formatPhoneNumber(s)
-                if (ft === 'date') {
-                  try {
-                    return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  } catch { return s }
-                }
-                return s
-              }
-
-              // ── Section icon map ─────────────────────────────────────────────
-              const ICON_MAP: Record<string, LucideIcon> = {
-                contact: User, business: Briefcase, address: MapPin,
-                owner: UserCheck, second_owner: Users, general: ClipboardList,
-                financial: DollarSign, legal: FileText,
-                compliance: ShieldCheck, deal: TrendingUp,
-                marketing: Tag, custom: Hash,
-              }
-
-              // ── Section label map ────────────────────────────────────────────
-              const SECTION_LABELS: Record<string, string> = {
-                owner:        'Owner Information',
-                second_owner: 'Owner 2 Information',
-                contact:      'Contact Information',
-                business:   'Business Information',
-                general:    'General Information',
-                address:    'Address Information',
-                financial:  'Financial Information',
-                legal:      'Legal Information',
-                compliance: 'Compliance Information',
-                deal:       'Deal Information',
-                marketing:  'Marketing Information',
-                custom:     'Custom Information',
-              }
-
-              // ── Copy helper ───────────────────────────────────────────────────
-              const copyToClipboard = (text: string) => {
-                navigator.clipboard.writeText(text).then(() => toast.success('Copied to clipboard'))
-              }
-
-              // ── Render a single field value ────────────────────────────────────
-              const renderFieldValue = (f: FieldDef, raw: unknown, display: string) => {
-                const isEmpty = !display
-                if (isEmpty) return <span style={{ fontSize: 13, color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>—</span>
-
-                const isPhone = f.field_type === 'phone_number' || f.field_type === 'phone'
-                const isEmail = f.field_type === 'email'
-                const isHighlight = isPhone || isEmail || f.field_key === 'amount_requested' || f.field_key === 'funding_amount'
-
-                if (isPhone) {
-                  return (
-                    <span className="inline-flex items-center gap-2 group/val">
-                      <a href={`tel:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 700 : 600, color: '#0f172a', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
-                      <button type="button" onClick={() => copyToClipboard(String(raw))} className="opacity-0 group-hover/val:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100" title="Copy"><Copy size={12} className="text-slate-400" /></button>
-                    </span>
-                  )
-                }
-                if (isEmail) {
-                  return (
-                    <span className="inline-flex items-center gap-2 group/val">
-                      <a href={`mailto:${String(raw)}`} style={{ fontSize: 14, fontWeight: isHighlight ? 700 : 600, color: '#0f172a', textDecoration: 'none' }} className="hover:text-emerald-700 transition-colors">{display}</a>
-                      <button type="button" onClick={() => copyToClipboard(String(raw))} className="opacity-0 group-hover/val:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100" title="Copy"><Copy size={12} className="text-slate-400" /></button>
-                    </span>
-                  )
-                }
-                return <span style={{ fontSize: 14, fontWeight: isHighlight ? 700 : 600, color: '#0f172a' }}>{display}</span>
-              }
-
-              // ── Derive a representative name for each section ────────────────
-              const leadData = lead as Record<string, unknown>
-              const NAME_KEYS: Record<string, string[]> = {
-                owner:        ['first_name', 'last_name'],
-                contact:      ['first_name', 'last_name'],
-                business:     ['company_name'],
-                second_owner: ['owner2_first_name', 'owner2_last_name', 'second_owner_first_name', 'second_owner_last_name'],
-              }
-              const sectionName = (secKey: string): string => {
-                // Try known key patterns first
-                const keys = NAME_KEYS[secKey]
-                if (keys) {
-                  const parts = keys.map(k => leadData[k]).filter(v => v && String(v).trim()).map(String)
-                  if (parts.length > 0) return parts.join(' ')
-                }
-                // Fallback: scan section fields for first non-empty name-like field
-                const fields = sectionMap.get(secKey) ?? []
-                for (const f of fields) {
-                  const k = f.field_key.toLowerCase()
-                  if (k.includes('name') || k.includes('company')) {
-                    const v = leadData[f.field_key]
-                    if (v && String(v).trim()) return String(v)
-                  }
-                }
-                return ''
-              }
-
-              // ── Section renderer ─────────────────────────────────────────────
-              const renderSection = (secKey: string) => {
-                const fields = sectionMap.get(secKey) ?? []
-                if (fields.length === 0) return null
-                const title = SECTION_LABELS[secKey]
-                  ?? (secKey.charAt(0).toUpperCase() + secKey.slice(1) + ' Information')
-                const name = sectionName(secKey)
+              function fieldCard(key: string, label: string, type?: string) {
+                const raw      = leadData[key]
+                const dispVal  = (type === 'phone_number' || type === 'phone') && raw
+                  ? formatPhoneNumber(String(raw))
+                  : (raw != null && String(raw).trim() !== '') ? String(raw) : ''
+                const FIcon    = resolveLiFieldIcon(key, type)
+                const copyable = /^(email|phone_number)$/.test(key) || type === 'email' || type === 'phone' || type === 'phone_number'
                 return (
-                  <div key={secKey} style={{ minWidth: 0 }}>
-                    {/* Heading */}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #16a34a', paddingLeft: 10, lineHeight: 1.3, whiteSpace: 'nowrap' }}>
-                        {title}
-                      </h3>
-                      {name && (
-                        <>
-                          <span style={{ color: '#d1d5db' }}>—</span>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>{name}</span>
-                        </>
-                      )}
+                  <div key={key} className="group relative flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/20 cursor-default">
+                    <FIcon size={11} className="shrink-0 transition-colors text-slate-400 group-hover:text-indigo-500" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider leading-none">{label}</p>
+                      {dispVal
+                        ? <p className="text-[12px] font-semibold text-slate-800 mt-0.5 truncate leading-tight transition-colors group-hover:text-indigo-700" title={dispVal}>{dispVal}</p>
+                        : <p className="text-[12px] font-semibold mt-0.5 leading-tight text-slate-300">Not set</p>
+                      }
                     </div>
-                    <div style={{ height: 1, background: '#e5e7eb', marginBottom: 16 }} />
-
-                    {/* 2-col field grid inside each section */}
-                    <div className="li-fields">
-                      {fields.map(f => {
-                        const raw     = leadData[f.field_key]
-                        const display = fmtVal(f.field_type, raw)
-                        return (
-                          <div key={f.field_key} className="li-field">
-                            <span className="li-label">{f.label_name}</span>
-                            <span className="li-value">{renderFieldValue(f, raw, display)}</span>
-                          </div>
-                        )
-                      })}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {copyable && dispVal && (
+                        <button onClick={() => copyVal(String(raw!))} title="Copy"
+                          className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
+                          <Copy size={10} />
+                        </button>
+                      )}
+                      <button onClick={() => navigate(`/crm/leads/${leadId}/edit`)} title="Edit"
+                        className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors">
+                        <Pencil size={10} />
+                      </button>
                     </div>
                   </div>
                 )
               }
 
-              // Only include second_owner when it has populated data
-              const hasOwner2 = showOwner2 && (sectionMap.get('second_owner') ?? []).length > 0
-
-              const displaySections = showOwner2
-                ? orderedSections
-                : orderedSections.filter(s => s !== 'second_owner')
-
-              // Primary: owner, business, second_owner
-              const PRIMARY = ['owner', 'business', 'second_owner']
-              const primarySections = PRIMARY.filter(s => displaySections.includes(s) && (sectionMap.get(s) ?? []).length > 0)
-              const remainingSections = displaySections.filter(s => !PRIMARY.includes(s) && (sectionMap.get(s) ?? []).length > 0)
-
-              // Pair remaining into rows of 2
-              const restRows: string[][] = []
-              for (let i = 0; i < remainingSections.length; i += 2) {
-                restRows.push(remainingSections.slice(i, i + 2))
+              function sectionBar(Icon: LucideIcon, iconCls: string, title: string, count: number) {
+                return (
+                  <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 bg-slate-50/40">
+                    <Icon size={12} className={iconCls} />
+                    <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">{title}</h3>
+                    <span className="text-[10px] font-bold text-slate-400">{count}</span>
+                  </div>
+                )
               }
 
-              // 4-4-4 (3 cols) when Owner2 present, 6-6 (2 cols) when not
-              const primaryCols = hasOwner2 ? 3 : 2
-
               return (
-                <div className="px-5 py-5 overflow-y-auto" style={{ width: '100%' }}>
-                  <style>{`
-                    .li-row-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 32px;width:100%}
-                    .li-row-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px;width:100%}
-                    .li-section-sep{padding-bottom:24px;margin-bottom:24px;border-bottom:1px solid #f1f5f9}
-                    .li-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
-                    .li-field{display:flex;flex-direction:column;gap:4px}
-                    .li-label{font-size:12px;color:#7c9bc6;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;line-height:1.3}
-                    .li-value{font-size:14px;font-weight:600;color:#0f172a;word-break:break-word;line-height:1.4}
-                    @media(max-width:1024px){.li-row-3{grid-template-columns:1fr!important}.li-fields{grid-template-columns:1fr}}
-                    @media(max-width:768px){.li-row-2{grid-template-columns:1fr!important}}
-                  `}</style>
+                <div className="p-4">
+                  <style>{`@keyframes liDetailFadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}`}</style>
+                  <div style={{ animation: 'liDetailFadeUp .15s ease-out' }}>
+                    <div className="space-y-3">
 
-                  {/* Primary row: 4-4-4 or 6-6 */}
-                  {primarySections.length > 0 && (
-                    <div className={`li-row-${primaryCols}${restRows.length > 0 ? ' li-section-sep' : ''}`}>
-                      {primarySections.map(sec => <div key={sec} style={{ minWidth: 0 }}>{renderSection(sec)}</div>)}
-                    </div>
-                  )}
+                      {/* Lead identity card */}
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+                        <div className="relative shrink-0">
+                          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-sm font-bold text-white shadow-sm`}>
+                            {leadInits}
+                          </div>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">{fullName}</h2>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                            {lead.email && <span className="font-medium text-slate-600">{String(lead.email)}</span>}
+                            {lead.email && lead.phone_number && <span className="mx-1 text-slate-300">·</span>}
+                            {lead.phone_number && <span>{formatPhoneNumber(String(lead.phone_number))}</span>}
+                          </p>
+                        </div>
+                        <button onClick={() => navigate(`/crm/leads/${leadId}/edit`)}
+                          className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-colors border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300">
+                          <Pencil size={11} /> Edit
+                        </button>
+                      </div>
 
-                  {/* Remaining sections: 6-6 */}
-                  {restRows.map((row, ri) => (
-                    <div key={ri} className={`li-row-2${ri < restRows.length - 1 ? ' li-section-sep' : ''}`}>
-                      {row.map(sec => <div key={sec} style={{ minWidth: 0 }}>{renderSection(sec)}</div>)}
+                      {/* Owner Information */}
+                      {hasOwnerSection && (
+                        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
+                          {sectionBar(User, 'text-indigo-500', 'Owner Information', visibleCore.length + personal.length)}
+                          <div className="p-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {visibleCore.map(f => fieldCard(f.key, f.label, f.type))}
+                              {personal.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Business Information */}
+                      {hasBusinessSection && (
+                        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
+                          {sectionBar(Building2, 'text-blue-500', 'Business Information', business.length)}
+                          <div className="p-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {business.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Owner 2 Information */}
+                      {hasOwner2Active && (
+                        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
+                          {sectionBar(Users, 'text-violet-500', 'Owner 2 Information', secondOwner.length)}
+                          <div className="p-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {secondOwner.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                     </div>
-                  ))}
+                  </div>
                 </div>
               )
             })()}

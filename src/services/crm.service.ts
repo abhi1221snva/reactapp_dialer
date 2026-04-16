@@ -189,12 +189,31 @@ export const crmService = {
   getLeadStatuses: async (): Promise<import('../types/crm.types').LeadStatus[]> => {
     const res = await api.get('/leadStatus')
     const raw: Record<string, unknown>[] = res.data?.data ?? res.data ?? []
+    return raw
+      .map(s => ({
+        // Preserve ALL raw fields so extended fields (show_on_dashboard, vector_image,
+        // webhook_status, webhook_method, webhook_url, webhook_token) are available
+        // in the component without being silently dropped by the mapping.
+        ...s,
+        // Normalised fields override any same-named raw field
+        id:             Number(s.id),
+        lead_title:     String(s.title ?? s.lead_title ?? s.name ?? ''),
+        lead_title_url: String(s.lead_title_url ?? s.slug ?? ''),
+        color:          String(s.color_code ?? s.color ?? ''),
+        color_code:     String(s.color_code ?? s.color ?? ''),
+        display_order:  Number(s.display_order ?? 0),
+        status:         s.status as number | string | undefined,
+      }))
+      // Only active statuses for dropdown consumers
+      .filter(s => String(s.status) === '1') as unknown as import('../types/crm.types').LeadStatus[]
+  },
+
+  // Returns ALL statuses (active + inactive) — for admin management pages only.
+  getAllLeadStatuses: async (): Promise<import('../types/crm.types').LeadStatus[]> => {
+    const res = await api.get('/leadStatus')
+    const raw: Record<string, unknown>[] = res.data?.data ?? res.data ?? []
     return raw.map(s => ({
-      // Preserve ALL raw fields so extended fields (show_on_dashboard, vector_image,
-      // webhook_status, webhook_method, webhook_url, webhook_token) are available
-      // in the component without being silently dropped by the mapping.
       ...s,
-      // Normalised fields override any same-named raw field
       id:             Number(s.id),
       lead_title:     String(s.title ?? s.lead_title ?? s.name ?? ''),
       lead_title_url: String(s.lead_title_url ?? s.slug ?? ''),
@@ -222,6 +241,9 @@ export const crmService = {
     api.post('/lead-status/updateDisplayOrder', { display_order: ids }),
 
   // ── Lead Fields (REST API — for dynamic form rendering) ────────────────────
+  // Returns ALL fields (active + inactive). Every consumer must filter by
+  // status === true before rendering. The full set is needed so that inactive
+  // field_keys correctly suppress hardcoded fallback fields in forms/views.
   getLeadFields: () =>
     api.get('/crm/lead-fields'),
 

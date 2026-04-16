@@ -69,15 +69,6 @@ const LENDER_API_VALIDATION_CONFIG: Partial<TypeConfig> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatAbsoluteDate(dt: string): string {
-  const d = new Date(dt)
-  return (
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
-    ' · ' +
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  )
-}
-
 function formatRelativeTime(dt: string): string {
   const now = Date.now()
   const then = new Date(dt).getTime()
@@ -357,19 +348,19 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: 
   )
 
   return (
-    <div className="flex gap-2.5 group">
+    <div className="flex gap-2 group">
 
       {/* ── Timeline spine ── */}
       <div className="flex flex-col items-center flex-shrink-0">
         <div
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
+          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
           style={{ background: config.iconBg, border: `1.5px solid ${config.iconColor}40` }}
         >
-          <Icon size={12} style={{ color: config.iconColor }} />
+          <Icon size={11} style={{ color: config.iconColor }} />
         </div>
         {!isLast && (
           <div
-            className="w-px flex-1 mt-1 min-h-[16px]"
+            className="w-px flex-1 mt-1 min-h-[12px]"
             style={{ background: 'linear-gradient(to bottom, #E2E8F0, #F1F5F9)' }}
           />
         )}
@@ -378,7 +369,7 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: 
       {/* ── Card ── */}
       <div
         className={cn(
-          'flex-1 rounded-lg border mb-1.5 transition-shadow duration-150',
+          'flex-1 rounded-lg border mb-1 transition-shadow duration-150',
           'hover:shadow-sm cursor-default',
           isPinned
             ? 'bg-amber-50 border-amber-200'
@@ -390,31 +381,34 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: 
           boxShadow: isPinned ? '0 1px 6px rgba(245,158,11,0.10)' : undefined,
         }}
       >
-        <div className="px-3 pt-2 pb-2">
+        <div className="px-2.5 pt-1.5 pb-1.5">
 
-          {/* ── Header row: badge + pin ── */}
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Type badge */}
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide',
-                  config.badgeBg,
-                  config.badgeText,
-                )}
-              >
-                <Icon size={9} />
-                {config.label}
-              </span>
-
-              {/* Pinned badge */}
-              {isPinned && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
-                  <Pin size={9} className="fill-amber-500 text-amber-500" />
-                  Pinned
-                </span>
+          {/* ── Row 1: badge + subject + pin (all inline) ── */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* Type badge */}
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide flex-shrink-0',
+                config.badgeBg,
+                config.badgeText,
               )}
-            </div>
+            >
+              <Icon size={9} />
+              {config.label}
+            </span>
+
+            {/* Pinned badge */}
+            {isPinned && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
+                <Pin size={9} className="fill-amber-500 text-amber-500" />
+                Pinned
+              </span>
+            )}
+
+            {/* Subject */}
+            <p className="text-xs font-semibold text-slate-800 leading-snug truncate flex-1 min-w-0">
+              {activity.subject}
+            </p>
 
             {/* Pin toggle */}
             {onPin && (
@@ -422,27 +416,22 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: 
                 onClick={() => onPin(activity.id)}
                 title={isPinned ? 'Unpin' : 'Pin this item'}
                 className={cn(
-                  'flex-shrink-0 p-1 rounded-md transition-all duration-150',
+                  'flex-shrink-0 p-0.5 rounded transition-all duration-150',
                   isPinned
                     ? 'opacity-100 text-amber-500 hover:bg-amber-100'
                     : 'opacity-0 group-hover:opacity-100 text-slate-400 hover:text-amber-500 hover:bg-amber-50',
                 )}
               >
-                <Pin size={12} className={cn(isPinned && 'fill-current')} />
+                <Pin size={11} className={cn(isPinned && 'fill-current')} />
               </button>
             )}
           </div>
 
-          {/* ── Subject ── */}
-          <p className="text-sm font-semibold text-slate-800 leading-snug">
-            {activity.subject}
-          </p>
-
-          {/* ── Body (shown only if no structured rich content for this type, or always for notes) ── */}
+          {/* ── Row 2: body / rich content ── */}
           {activity.body && (!hasRichContent || isNote) && (
             <p
               className={cn(
-                'text-sm text-slate-600 mt-1 leading-relaxed whitespace-pre-wrap',
+                'text-[11px] text-slate-600 mt-1 leading-relaxed line-clamp-2',
                 isNote && 'italic',
               )}
             >
@@ -458,27 +447,24 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: 
           />
 
           {/* ── Meta row: time + user avatar ── */}
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-[11px] font-medium text-slate-400">
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className="text-[10px] font-medium text-slate-400">
               {formatRelativeTime(activity.created_at)}
-            </span>
-            <span className="text-[11px] text-slate-300 hidden sm:inline">
-              · {formatAbsoluteDate(activity.created_at)}
             </span>
             {userName && palette && (
               <>
-                <span className="text-slate-200 text-[11px]">·</span>
-                <div className="flex items-center gap-1.5">
+                <span className="text-slate-300 text-[10px]">·</span>
+                <div className="flex items-center gap-1">
                   <span
                     className={cn(
-                      'inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold flex-shrink-0',
+                      'inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[8px] font-bold flex-shrink-0',
                       palette.bg,
                       palette.text,
                     )}
                   >
                     {getInitials(userName)}
                   </span>
-                  <span className="text-[11px] text-slate-500">{userName}</span>
+                  <span className="text-[10px] text-slate-500">{userName}</span>
                 </div>
               </>
             )}

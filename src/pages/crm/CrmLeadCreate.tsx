@@ -14,8 +14,6 @@ import { leadService } from '../../services/lead.service'
 import { crmService } from '../../services/crm.service'
 import { DynamicFieldForm } from '../../components/crm/DynamicFieldForm'
 import { scrollToFirstError } from '../../utils/publicFormValidation'
-import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
-import { resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
 import { useAuthStore } from '../../stores/auth.store'
 import { LEVELS } from '../../utils/permissions'
@@ -30,8 +28,6 @@ const schema = z.object({
   last_name:      z.string().optional(),
   email:          z.string().optional(),
   phone_number:   z.string().optional(),
-  company_name:   z.string().optional(),
-  address:        z.string().optional(),
   city:           z.string().optional(),
   state:          z.string().optional(),
 })
@@ -62,8 +58,6 @@ const CORE_FIELD_DEFS: { key: string; label: string; type?: string; placeholder?
   { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name',            span: 3 },
   { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address', span: 3 },
   { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone', span: 3 },
-  { key: 'company_name', label: 'Company Name',   placeholder: 'Business / DBA name',  span: 6 },
-  { key: 'address',      label: 'Address',        placeholder: 'Street address',       span: 6 },
   { key: 'city',         label: 'City',           placeholder: 'City',                 span: 3 },
   { key: 'state',        label: 'State',          placeholder: 'State', maxLength: 2,  span: 3 },
 ]
@@ -159,15 +153,22 @@ export function CrmLeadCreate() {
     enabled: isEdit && !!leadId,
   })
 
-  // Memoize so array references stay stable across re-renders (watch() causes re-renders on every
+  // ALL field_keys from crm_labels (active + inactive) — used to suppress hardcoded
+  // core fields so that an admin-deactivated field is never re-injected by CORE_FIELD_DEFS.
+  const labelKeys = useMemo(() => new Set((leadFields ?? []).map(f => f.field_key)), [leadFields])
+
+  // Active fields only — passed to DynamicFieldForm for rendering.
+  // Memoized so array references stay stable across re-renders (watch() causes re-renders on every
   // keystroke; unstable references would trigger DynamicFieldForm's useEffect on every keystroke,
   // resetting all EAV field values back to their original DB values and making fields uneditable).
-  const { personal, business, secondOwner } = useMemo(() => bucketFields(leadFields), [leadFields])
+  const activeLeadFields = useMemo(
+    () => (leadFields ?? []).filter(f => f.status === true || (f.status as unknown) == 1),
+    [leadFields],
+  )
+  const { personal, business, secondOwner } = useMemo(() => bucketFields(activeLeadFields), [activeLeadFields])
 
-  // Keys already covered by crm_labels — don't render them again in the core section
-  // Memoized so the set is stable and doesn't cause downstream re-effects
-  const labelKeys = useMemo(() => new Set((leadFields ?? []).map(f => f.field_key)), [leadFields])
-  // Only show core fields that are NOT already in crm_labels (avoids duplicate RHF registration)
+  // Only show core fields that are NOT in crm_labels at all (active or inactive).
+  // If a core field exists in crm_labels as inactive, it stays hidden.
   const visibleCoreFields = useMemo(
     () => CORE_FIELD_DEFS.filter(f => !labelKeys.has(f.key)),
     [labelKeys],
@@ -199,7 +200,7 @@ export function CrmLeadCreate() {
     setValue('lead_type',      existing.lead_type   ? String(existing.lead_type)   : '')
     setValue('assigned_to',    existing.assigned_to ? String(existing.assigned_to) : '')
     // Core fields
-    const coreKeys = ['first_name','last_name','email','phone_number','company_name','address','city','state'] as const
+    const coreKeys = ['first_name','last_name','email','phone_number','city','state'] as const
     for (const k of coreKeys) {
       const v = ex[k]
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -451,42 +452,24 @@ export function CrmLeadCreate() {
                       <div className="p-5 space-y-4">
                         {visibleCoreFields.length > 0 && (
                           <div className="grid grid-cols-4 gap-x-4 gap-y-4">
-                            {visibleCoreFields.map(f => {
-                              const isWide = f.key === 'company_name' || f.key === 'address'
-                              return (
-                                <div key={f.key} className={isWide ? 'col-span-2' : ''} data-field-key={f.key}>
-                                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 5 }}>{f.label}</label>
-                                  {f.key === 'address' ? (
-                                    <AddressAutocomplete
-                                      value={watch('address') ?? ''}
-                                      onChange={v => setValue('address', v)}
-                                      onPlaceSelect={(parsed: ParsedPlace) => {
-                                        const group = resolveAddressGroup('address')
-                                        if (group) {
-                                          setValue('city', parsed.city)
-                                          setValue('state', parsed.state)
-                                        }
-                                      }}
-                                      placeholder={f.placeholder}
-                                    />
-                                  ) : (
-                                    <input
-                                      type={f.type ?? 'text'}
-                                      {...register(f.key as keyof FormData)}
-                                      className="crm-fi"
-                                      placeholder={f.placeholder}
-                                      maxLength={f.maxLength}
-                                      autoComplete={f.type === 'email' ? 'email' : undefined}
-                                    />
-                                  )}
-                                  {errors[f.key as keyof FormData]?.message && (
-                                    <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                                      <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
-                                    </span>
-                                  )}
-                                </div>
-                              )
-                            })}
+                            {visibleCoreFields.map(f => (
+                              <div key={f.key} data-field-key={f.key}>
+                                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 5 }}>{f.label}</label>
+                                <input
+                                  type={f.type ?? 'text'}
+                                  {...register(f.key as keyof FormData)}
+                                  className="crm-fi"
+                                  placeholder={f.placeholder}
+                                  maxLength={f.maxLength}
+                                  autoComplete={f.type === 'email' ? 'email' : undefined}
+                                />
+                                {errors[f.key as keyof FormData]?.message && (
+                                  <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                                    <AlertCircle size={11} />{String(errors[f.key as keyof FormData]?.message)}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                         {personal.length > 0 && (

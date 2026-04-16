@@ -113,8 +113,9 @@ export function LeadForm() {
     }
   }
 
-  const statuses: Array<{ id: number; lead_status: string }> =
-    statusesData?.data?.data || statusesData?.data || []
+  const statuses: Array<{ id: number; lead_status: string; status?: string | number }> =
+    (statusesData?.data?.data || statusesData?.data || [])
+      .filter((s: { status?: string | number }) => String(s.status ?? '1') === '1')
   const sources: Array<{ id: number; lead_source: string }> =
     sourcesData?.data?.data || sourcesData?.data || []
 

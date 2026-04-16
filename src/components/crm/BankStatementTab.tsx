@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Loader2, FileText, Trash2, Eye, Calendar,
@@ -51,7 +50,6 @@ interface Props { leadId: number }
 
 export function BankStatementTab({ leadId }: Props) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const [tier, setTier] = useState('lsc_pro')
 
   const { data, isLoading } = useQuery({
@@ -137,7 +135,7 @@ export function BankStatementTab({ leadId }: Props) {
           {sessions.map((s) => (
             <div key={s.session_id}
               className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-emerald-200 transition-colors cursor-pointer"
-              onClick={() => navigate(`/crm/bank-statements/${s.session_id}`)}>
+              onClick={() => window.open(`/crm/bank-statements/${s.session_id}`, '_blank')}>
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
@@ -160,7 +158,7 @@ export function BankStatementTab({ leadId }: Props) {
                     <span className="text-xs text-slate-500">{fmt(s.total_deposits)} deposits</span>
                   )}
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => navigate(`/crm/bank-statements/${s.session_id}`)}
+                    <button onClick={() => window.open(`/crm/bank-statements/${s.session_id}`, '_blank')}
                       className="text-slate-400 hover:text-emerald-600 p-1 rounded transition-colors" title="View Details">
                       <Eye size={14} />
                     </button>
