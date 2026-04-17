@@ -392,7 +392,7 @@ export function CrmLeadNew() {
   const [activeTab,       setActiveTab]       = useState<TabId>('activity')
   const [showMoreMenu,    setShowMoreMenu]    = useState(false)
   const [overviewEditing, setOverviewEditing] = useState(false)
-  const [showLendersModal, setShowLendersModal] = useState(false)
+  const [showComplianceModal, setShowComplianceModal] = useState(false)
   const tabContentRef = useRef<HTMLDivElement>(null)
 
   // ── Auto-collapse sidebar on this page only; restore on leave ───────────────
@@ -465,12 +465,14 @@ export function CrmLeadNew() {
     return () => document.removeEventListener('mousedown', h)
   }, [showMoreMenu])
 
-  // ── ESC closes lenders modal ───────────────────────────────────────────────
+  // ── ESC closes compliance modal ────────────────────────────────
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLendersModal(false) }
-    if (showLendersModal) document.addEventListener('keydown', h)
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowComplianceModal(false)
+    }
+    if (showComplianceModal) document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [showLendersModal])
+  }, [showComplianceModal])
 
   function switchTab(tab: TabId) {
     setActiveTab(tab)
@@ -600,11 +602,14 @@ export function CrmLeadNew() {
             {TABS.map(t => {
               const Icon    = t.icon
               const badge   = TAB_BADGES[t.id]
-              const isModal = t.id === 'lenders'
+              const isModal = t.id === 'compliance'
               const isAct   = activeTab === t.id && !isModal
               return (
                 <button key={t.id}
-                  onClick={() => isModal ? setShowLendersModal(true) : switchTab(t.id)}
+                  onClick={() => {
+                    if (t.id === 'compliance') setShowComplianceModal(true)
+                    else switchTab(t.id)
+                  }}
                   className={[
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all',
                     isAct ? 'shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
@@ -626,24 +631,24 @@ export function CrmLeadNew() {
           </div>
         </div>
 
-        {/* ── CONTENT ROW — col-8 Overview + col-4 Dynamic ── */}
+        {/* ── CONTENT ROW — col-8 Overview + col-4 Dynamic (col-5/col-7 on lenders) ── */}
         <div className="grid grid-cols-12 flex-1 overflow-hidden">
 
-          {/* LEFT col-8 — Overview fixed, never changes */}
-          <aside className="col-span-8 bg-white border-r border-slate-100 overflow-y-auto">
+          {/* LEFT — Overview fixed, never changes */}
+          <aside className={`${activeTab === 'lenders' ? 'col-span-5' : 'col-span-8'} bg-white border-r border-slate-100 overflow-y-auto transition-all duration-300`}>
             <div className="p-4">
               <OverviewTab lead={lead} leadId={leadId} leadFields={leadFields} onUpdated={() => qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })} editingProp={overviewEditing} setEditingProp={setOverviewEditing} />
             </div>
           </aside>
 
-          {/* RIGHT col-4 — dynamic tab content */}
-          <div ref={tabContentRef} className="col-span-4 overflow-y-auto p-3" style={{ background: '#f8fafc' }}>
+          {/* RIGHT — dynamic tab content */}
+          <div ref={tabContentRef} className={`${activeTab === 'lenders' ? 'col-span-7' : 'col-span-4'} overflow-y-auto p-3 transition-all duration-300`} style={{ background: '#f8fafc' }}>
             <div key={activeTab} style={{ animation: 'fadeUp .15s ease-out' }}>
               {activeTab === 'activity'        && <ActivityTimeline leadId={leadId} />}
               {activeTab === 'documents'       && <DocumentsPanel leadId={leadId} />}
+              {activeTab === 'lenders'         && <LendersPanel leadId={leadId} onTabChange={(tab) => switchTab(tab as TabId)} />}
               {activeTab === 'offers'          && <OffersStipsTab leadId={leadId} />}
               {activeTab === 'deal'            && <DealTab leadId={leadId} />}
-              {activeTab === 'compliance'      && <ComplianceTab leadId={leadId} />}
               {activeTab === 'approvals'       && <ApprovalsSection leadId={leadId} />}
               {activeTab === 'bank-statements' && <BankStatementTab leadId={leadId} />}
               {activeTab === 'drip'            && <DripLeadPanel leadId={leadId} />}
@@ -653,42 +658,35 @@ export function CrmLeadNew() {
         </div>
       </div>
 
-      {/* ── LENDERS MODAL ──────────────────────────────────────────────────── */}
-      {showLendersModal && (
+      {/* ── COMPLIANCE MODAL — true fullscreen ───────────────────────────── */}
+      {showComplianceModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowLendersModal(false) }}
+          className="fixed inset-0 z-50 flex flex-col bg-white"
+          style={{ animation: 'fadeUp .15s ease-out' }}
         >
-          <div
-            className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col"
-            style={{ width: '95vw', maxWidth: '95vw', maxHeight: '90vh', animation: 'fadeUp .18s ease-out' }}
-          >
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: G[100] }}>
-                  <Building2 size={15} style={{ color: G[600] }} />
-                </div>
-                <div>
-                  <h2 className="text-[14px] font-bold text-slate-800">Lenders</h2>
-                  <p className="text-[11px] text-slate-400">Manage lender submissions for this lead</p>
-                </div>
+          {/* Sticky header — full width, no radius */}
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 flex items-center justify-between px-6 py-3.5 flex-shrink-0 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: G[100] }}>
+                <ShieldCheck size={15} style={{ color: G[600] }} />
               </div>
-              <button
-                onClick={() => setShowLendersModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                <X size={16} />
-              </button>
+              <div>
+                <h2 className="text-[14px] font-bold text-slate-800">Compliance</h2>
+                <p className="text-[11px] text-slate-400">Compliance checks and verification for this lead</p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowComplianceModal(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
+            >
+              <X size={13} /> Close
+            </button>
+          </div>
 
-            {/* Modal body — scrollable */}
-            <div className="flex-1 overflow-y-auto p-5">
-              <LendersPanel
-                leadId={leadId}
-                onTabChange={(tab) => { setShowLendersModal(false); switchTab(tab as TabId) }}
-              />
+          {/* Scrollable body — full width, no max-width */}
+          <div className="flex-1 overflow-y-auto" style={{ background: '#f8fafc' }}>
+            <div className="w-full px-6 py-5">
+              <ComplianceTab leadId={leadId} />
             </div>
           </div>
         </div>

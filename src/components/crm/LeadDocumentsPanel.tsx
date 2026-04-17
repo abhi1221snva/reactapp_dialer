@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Loader2, X, FileText, Download, AlertCircle, Eye,
   RefreshCw, BarChart3, ShieldAlert, FolderOpen, Trash2, Upload, Search,
+  Banknote, TrendingDown, Scale, TrendingUp, Wallet, CreditCard, Activity, AlertTriangle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
@@ -326,12 +328,12 @@ function BankStatementAnalysisModal({ session, leadId, onClose }: { session: Ban
 }
 
 // ── Document Analysis Panel ────────────────────────────────────────────────────
-function DocumentAnalysisPanel({ session, leadId, onOpenDetails }: {
+function DocumentAnalysisPanel({ session, leadId }: {
   session: BankStatementSession
   leadId: number
-  onOpenDetails: () => void
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date())
@@ -367,86 +369,86 @@ function DocumentAnalysisPanel({ session, leadId, onOpenDetails }: {
   const fs = sum?.fraud_score ?? session.fraud_score
   const nsfCount = sum?.nsf?.nsf_fee_count ?? sum?.nsf_count ?? session.nsf_count ?? 0
 
-  const metrics: Array<{ label: string; value: string | number; labelColor: string; valueColor: string; bg: string; border: string }> = [
-    { label: 'Revenue',            value: fmtCurrency(sum?.true_revenue ?? session.total_revenue),                         labelColor: 'text-emerald-600', valueColor: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-    { label: 'Deposits',           value: fmtCurrency(sum?.total_credits ?? session.total_deposits),                       labelColor: 'text-green-600',   valueColor: 'text-green-800',   bg: 'bg-green-50',   border: 'border-green-200'   },
-    { label: 'Debits',             value: fmtCurrency(sum?.total_debits),                                                  labelColor: 'text-red-500',     valueColor: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200'     },
-    { label: 'Adjustments',        value: fmtCurrency(sum?.adjustments),                                                   labelColor: 'text-orange-500',  valueColor: 'text-orange-800',  bg: 'bg-orange-50',  border: 'border-orange-200'  },
-    { label: 'Average Balance',    value: fmtCurrency(sum?.average_daily_balance),                                         labelColor: 'text-blue-500',    valueColor: 'text-blue-800',    bg: 'bg-blue-50',    border: 'border-blue-200'    },
-    { label: 'Ledger Balance',     value: fmtCurrency(sum?.average_ledger_balance ?? sum?.ending_balance),                 labelColor: 'text-indigo-500',  valueColor: 'text-indigo-800',  bg: 'bg-indigo-50',  border: 'border-indigo-200'  },
-    { label: 'Total Transactions', value: sum?.total_transactions ?? 0,                                                    labelColor: 'text-slate-500',   valueColor: 'text-slate-800',   bg: 'bg-slate-50',   border: 'border-slate-200'   },
-    { label: 'Non-Sufficient Funds', value: nsfCount,                                                                      labelColor: nsfCount > 0 ? 'text-amber-600' : 'text-slate-500', valueColor: nsfCount > 0 ? 'text-amber-800' : 'text-slate-700', bg: nsfCount > 0 ? 'bg-amber-50' : 'bg-slate-50', border: nsfCount > 0 ? 'border-amber-200' : 'border-slate-200' },
+  type Metric = { label: string; value: string | number; icon: typeof Banknote; iconBg: string; iconColor: string; accent: string; border: string }
+  const metrics: Metric[] = [
+    { label: 'Revenue',              value: fmtCurrency(sum?.true_revenue ?? session.total_revenue),           icon: TrendingUp,     iconBg: 'bg-emerald-50',  iconColor: 'text-emerald-600', accent: 'bg-emerald-500', border: 'border-emerald-200' },
+    { label: 'Deposits',             value: fmtCurrency(sum?.total_credits ?? session.total_deposits),         icon: Banknote,       iconBg: 'bg-green-50',    iconColor: 'text-green-600',   accent: 'bg-green-500',   border: 'border-green-200'   },
+    { label: 'Debits',               value: fmtCurrency(sum?.total_debits),                                    icon: TrendingDown,   iconBg: 'bg-red-50',      iconColor: 'text-red-500',     accent: 'bg-red-400',     border: 'border-red-200'     },
+    { label: 'Adjustments',          value: fmtCurrency(sum?.adjustments),                                     icon: Scale,          iconBg: 'bg-orange-50',   iconColor: 'text-orange-500',  accent: 'bg-orange-400',  border: 'border-orange-200'  },
+    { label: 'Avg Balance',          value: fmtCurrency(sum?.average_daily_balance),                           icon: Wallet,         iconBg: 'bg-blue-50',     iconColor: 'text-blue-500',    accent: 'bg-blue-400',    border: 'border-blue-200'    },
+    { label: 'Ledger Balance',       value: fmtCurrency(sum?.average_ledger_balance ?? sum?.ending_balance),   icon: CreditCard,     iconBg: 'bg-indigo-50',   iconColor: 'text-indigo-500',  accent: 'bg-indigo-400',  border: 'border-indigo-200'  },
+    { label: 'Transactions',         value: sum?.total_transactions ?? 0,                                      icon: Activity,       iconBg: 'bg-slate-100',   iconColor: 'text-slate-500',   accent: 'bg-slate-300',   border: 'border-slate-200'   },
+    { label: 'NSF',                  value: nsfCount,                                                          icon: AlertTriangle,  iconBg: nsfCount > 0 ? 'bg-amber-50' : 'bg-gray-50', iconColor: nsfCount > 0 ? 'text-amber-500' : 'text-gray-400', accent: nsfCount > 0 ? 'bg-amber-400' : 'bg-gray-200', border: nsfCount > 0 ? 'border-amber-300' : 'border-gray-200' },
   ]
 
   return (
-    <div className="border-t border-slate-100 bg-gradient-to-b from-slate-50/60 to-white px-4 py-3">
-      <div className="flex items-start justify-between gap-2 mb-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="bg-slate-800 text-white font-bold px-2 py-1 rounded text-[10px] uppercase tracking-wider">Analysis</span>
+    <div className="border-t border-slate-100 bg-gradient-to-b from-slate-50/50 to-white px-3 py-3">
+
+      {/* Header row */}
+      <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+          <span className="bg-slate-800 text-white font-bold px-2 py-0.5 rounded text-[10px] uppercase tracking-wider">Analysis</span>
           {fs != null && (
-            <span className={`font-bold px-2 py-1 rounded text-[10px] ${fs >= 70 ? 'bg-red-100 text-red-800' : fs >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-              Fraud Score {fs}
+            <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${fs >= 70 ? 'bg-red-100 text-red-800' : fs >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+              Fraud {fs}
             </span>
           )}
           {hasMca && (
-            <span className="font-bold text-red-800 bg-red-100 px-2 py-1 rounded flex items-center gap-1 text-[10px]">
-              <ShieldAlert size={10} /> MCA Detected
+            <span className="font-bold text-red-800 bg-red-100 px-2 py-0.5 rounded flex items-center gap-1 text-[10px]">
+              <ShieldAlert size={9} /> MCA
             </span>
           )}
-          <span className="text-[10px] text-slate-400 font-medium">
-            Updated {lastRefreshedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <span className="text-[10px] text-slate-400">
+            {lastRefreshedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         </div>
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => handleRefresh(true)}
             disabled={isRefreshing}
-            title="Refresh analysis data"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 transition-colors text-[11px] font-semibold disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors text-[11px] font-semibold disabled:opacity-60 shadow-sm"
           >
-            {isRefreshing
-              ? <><Loader2 size={11} className="animate-spin" /> Refreshing…</>
-              : <><RefreshCw size={11} /> Refresh</>}
+            {isRefreshing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+            {isRefreshing ? 'Refreshing…' : 'Refresh'}
           </button>
           <button
             type="button"
-            onClick={onOpenDetails}
-            className="text-indigo-600 font-bold hover:text-indigo-700 text-[11px]"
+            onClick={() => navigate(`/crm/bank-statements/${session.session_id}`)}
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-100 transition-colors text-[11px] font-bold"
           >
-            Details &rarr;
+            Details →
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs">
-          <AlertCircle size={13} className="flex-shrink-0" />
+        <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs">
+          <AlertCircle size={12} className="flex-shrink-0" />
           <span className="flex-1">{error}</span>
-          <button
-            onClick={() => setError(null)}
-            className="text-red-500 hover:text-red-700 font-semibold"
-            title="Dismiss"
-          >
-            <X size={12} />
-          </button>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700"><X size={11} /></button>
         </div>
       )}
 
-      <div className={`grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 transition-opacity ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}>
-        {metrics.map((m, i) => (
-          <div
-            key={i}
-            className={`rounded-lg border ${m.border} ${m.bg} px-3 py-2.5 flex flex-col items-start justify-center min-w-0`}
-          >
-            <span className={`text-[10px] font-semibold uppercase tracking-wide leading-tight ${m.labelColor}`}>
-              {m.label}
-            </span>
-            <span className={`mt-1 text-sm sm:text-[15px] font-extrabold tabular-nums leading-tight truncate w-full ${m.valueColor}`}>
-              {m.value}
-            </span>
-          </div>
-        ))}
+      {/* Stats grid — 2×4 max */}
+      <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 transition-opacity ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}>
+        {metrics.map((m, i) => {
+          const Icon = m.icon
+          return (
+            <div key={i} className={`bg-white rounded-lg border ${m.border} overflow-hidden shadow-sm`}>
+              <div className={`h-0.5 w-full ${m.accent}`} />
+              <div className="px-2.5 py-2 flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${m.iconBg}`}>
+                  <Icon size={13} className={m.iconColor} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider leading-none truncate">{m.label}</p>
+                  <p className="text-[13px] font-extrabold text-gray-900 leading-tight mt-0.5 truncate">{m.value}</p>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -457,12 +459,13 @@ type SortKey = 'date_desc' | 'date_asc' | 'name_asc' | 'name_desc'
 
 export function DocumentsPanel({ leadId }: { leadId: number }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [viewDoc, setViewDoc] = useState<CrmDocument | null>(null)
-  const [analysisModal, setAnalysisModal] = useState<BankStatementSession | null>(null)
   const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('date_desc')
+  const [analysisModalSession, setAnalysisModalSession] = useState<BankStatementSession | null>(null)
 
   const { data: docSessions } = useQuery({
     queryKey: ['bs-by-documents', leadId],
@@ -597,7 +600,27 @@ export function DocumentsPanel({ leadId }: { leadId: number }) {
   return (
     <>
       {viewDoc && <DocViewerModal doc={viewDoc} leadId={leadId} onClose={() => setViewDoc(null)} />}
-      {analysisModal && <BankStatementAnalysisModal session={analysisModal} leadId={leadId} onClose={() => setAnalysisModal(null)} />}
+      {analysisModalSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setAnalysisModalSession(null) }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[92vw] max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center"><BarChart3 size={16} className="text-emerald-600" /></div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{analysisModalSession.file_name ?? 'Bank Statement Analysis'}</p>
+                  <p className="text-[10px] text-slate-400">Session: {analysisModalSession.session_id}</p>
+                </div>
+              </div>
+              <button onClick={() => setAnalysisModalSession(null)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0 ml-3">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <DocumentAnalysisPanel session={analysisModalSession} leadId={leadId} />
+            </div>
+          </div>
+        </div>
+      )}
 
     <div className="flex flex-col h-full">
 
@@ -749,10 +772,16 @@ export function DocumentsPanel({ leadId }: { leadId: number }) {
                         {bsSession && (
                           <>
                             {bsSession.status === 'completed' && (
-                              <button onClick={() => setAnalysisModal(bsSession)}
-                                className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors" title="View Analysis">
-                                <BarChart3 size={13} />
-                              </button>
+                              <>
+                                <button onClick={() => setAnalysisModalSession(bsSession)}
+                                  className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors text-[11px] font-semibold" title="View Analysis">
+                                  <BarChart3 size={12} /> Analysis
+                                </button>
+                                <button onClick={() => navigate(`/crm/bank-statements/${bsSession.session_id}`)}
+                                  className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors" title="Full Details">
+                                  <Eye size={13} />
+                                </button>
+                              </>
                             )}
                             {(bsSession.status === 'pending' || bsSession.status === 'processing') && (
                               <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 text-sky-700 text-[10px] font-bold">
@@ -801,13 +830,6 @@ export function DocumentsPanel({ leadId }: { leadId: number }) {
                       </div>
                     </div>
 
-                    {bsSession && bsSession.status === 'completed' && (
-                      <DocumentAnalysisPanel
-                        session={bsSession}
-                        leadId={leadId}
-                        onOpenDetails={() => setAnalysisModal(bsSession)}
-                      />
-                    )}
                   </div>
                 )
               })}

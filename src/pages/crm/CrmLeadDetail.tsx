@@ -5253,13 +5253,13 @@ export function CrmLeadDetail() {
               }
 
               return (
-                <div className="p-4">
+                <div className="px-4 pt-3 pb-4">
                   <style>{`@keyframes liDetailFadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}`}</style>
                   <div style={{ animation: 'liDetailFadeUp .15s ease-out' }}>
                     <div className="space-y-3">
 
                       {/* Lead identity card */}
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+                      <div className="flex items-center gap-3 px-3 py-3.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
                         <div className="relative shrink-0">
                           <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-sm font-bold text-white shadow-sm`}>
                             {leadInits}
@@ -5268,9 +5268,9 @@ export function CrmLeadDetail() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">{fullName}</h2>
-                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          <p className="text-[11px] text-slate-500 truncate mt-1">
                             {lead.email && <span className="font-medium text-slate-600">{String(lead.email)}</span>}
-                            {lead.email && lead.phone_number && <span className="mx-1 text-slate-300">·</span>}
+                            {lead.email && lead.phone_number && <span className="mx-1.5 text-slate-300">·</span>}
                             {lead.phone_number && <span>{formatPhoneNumber(String(lead.phone_number))}</span>}
                           </p>
                         </div>
