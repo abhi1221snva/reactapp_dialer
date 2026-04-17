@@ -247,17 +247,17 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
 
     if (editing) {
       return (
-        <div key={key} className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-indigo-200 bg-indigo-50/30 ring-1 ring-indigo-100/60 transition-all">
-          <FIcon size={11} className="shrink-0 text-indigo-400" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-semibold text-indigo-300 uppercase tracking-wider leading-none mb-0.5">{label}</p>
-            <input
-              type={inputType}
-              {...register(key)}
-              className="w-full text-[12px] font-semibold text-slate-800 outline-none bg-transparent leading-tight placeholder:text-slate-300"
-              placeholder={label}
-            />
-          </div>
+        <div key={key} className="flex flex-col gap-1 transition-all">
+          <label className="flex items-center gap-1.5 text-[9px] font-bold text-indigo-500 uppercase tracking-wider leading-none pl-0.5">
+            <FIcon size={9} className="text-indigo-400" />
+            {label}
+          </label>
+          <input
+            type={inputType}
+            {...register(key)}
+            className="w-full h-9 px-2.5 text-[12px] font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300"
+            placeholder={label}
+          />
         </div>
       )
     }
@@ -280,10 +280,6 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
               <Copy size={10} />
             </button>
           )}
-          <button onClick={() => setEditing(true)} title="Edit"
-            className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors">
-            <Pencil size={10} />
-          </button>
         </div>
       </div>
     )
@@ -345,8 +341,8 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
       {hasOwnerSection && (
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
           {sectionBar(User, 'text-indigo-500', 'Owner Information', visibleCore.length + personal.length)}
-          <div className="p-2">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className={editing ? 'p-3' : 'p-2'}>
+            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
               {visibleCore.map(f => fieldCard(f.key, f.label, f.type))}
               {personal.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
             </div>
@@ -358,8 +354,8 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
       {hasBusinessSection && (
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
           {sectionBar(Building2, 'text-blue-500', 'Business Information', business.length)}
-          <div className="p-2">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className={editing ? 'p-3' : 'p-2'}>
+            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
               {business.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
             </div>
           </div>
@@ -370,8 +366,8 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
       {hasOwner2 && (
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
           {sectionBar(Users, 'text-violet-500', 'Owner 2 Information', secondOwner.length)}
-          <div className="p-2">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className={editing ? 'p-3' : 'p-2'}>
+            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
               {secondOwner.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
             </div>
           </div>
@@ -389,7 +385,7 @@ export function CrmLeadNew() {
   const qc        = useQueryClient()
   const leadId    = Number(id)
 
-  const [activeTab,       setActiveTab]       = useState<TabId>('activity')
+  const [activeTab,       setActiveTab]       = useState<TabId>('documents')
   const [showMoreMenu,    setShowMoreMenu]    = useState(false)
   const [overviewEditing, setOverviewEditing] = useState(false)
   const [showComplianceModal, setShowComplianceModal] = useState(false)
@@ -597,8 +593,8 @@ export function CrmLeadNew() {
       <div className="flex flex-col flex-1 overflow-hidden" style={{ background: '#f1f5f9' }}>
 
         {/* ── TAB BAR — full width col-12 ── */}
-        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <div className="flex items-center gap-1 py-1.5 min-w-max">
+        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex items-center min-w-max">
             {TABS.map(t => {
               const Icon    = t.icon
               const badge   = TAB_BADGES[t.id]
@@ -611,19 +607,23 @@ export function CrmLeadNew() {
                     else switchTab(t.id)
                   }}
                   className={[
-                    'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all',
-                    isAct ? 'shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
-                  ].join(' ')}
-                  style={isAct ? { background: G[600], color: '#fff' } : {}}>
-                  <Icon size={12} />
+                    'relative flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold whitespace-nowrap transition-all',
+                    isAct
+                      ? 'text-emerald-700'
+                      : 'text-slate-400 hover:text-slate-600',
+                  ].join(' ')}>
+                  <Icon size={13} className={isAct ? 'text-emerald-600' : ''} />
                   {t.label}
                   {badge !== undefined && badge > 0 && (
                     <span className={[
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                      isAct ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+                      'text-[9px] font-bold min-w-[16px] text-center px-1 py-px rounded-full leading-tight',
+                      isAct ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400',
                     ].join(' ')}>
                       {badge}
                     </span>
+                  )}
+                  {isAct && (
+                    <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-emerald-600" />
                   )}
                 </button>
               )
@@ -635,14 +635,14 @@ export function CrmLeadNew() {
         <div className="grid grid-cols-12 flex-1 overflow-hidden">
 
           {/* LEFT — Overview fixed, never changes */}
-          <aside className={`${activeTab === 'lenders' ? 'col-span-5' : 'col-span-8'} bg-white border-r border-slate-100 overflow-y-auto transition-all duration-300`}>
+          <aside className={`${activeTab === 'lenders' ? 'col-span-4' : 'col-span-8'} bg-white border-r border-slate-100 overflow-y-auto transition-all duration-300`}>
             <div className="p-4">
               <OverviewTab lead={lead} leadId={leadId} leadFields={leadFields} onUpdated={() => qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })} editingProp={overviewEditing} setEditingProp={setOverviewEditing} />
             </div>
           </aside>
 
           {/* RIGHT — dynamic tab content */}
-          <div ref={tabContentRef} className={`${activeTab === 'lenders' ? 'col-span-7' : 'col-span-4'} overflow-y-auto p-3 transition-all duration-300`} style={{ background: '#f8fafc' }}>
+          <div ref={tabContentRef} className={`${activeTab === 'lenders' ? 'col-span-8' : 'col-span-4'} overflow-y-auto p-3 transition-all duration-300`} style={{ background: '#f8fafc' }}>
             <div key={activeTab} style={{ animation: 'fadeUp .15s ease-out' }}>
               {activeTab === 'activity'        && <ActivityTimeline leadId={leadId} />}
               {activeTab === 'documents'       && <DocumentsPanel leadId={leadId} />}

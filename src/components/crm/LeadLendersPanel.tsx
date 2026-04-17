@@ -1740,6 +1740,9 @@ export function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabCha
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
       qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+
+      // Close email preview so submission history becomes visible
+      setPreviewExpanded(false)
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Submission failed'
@@ -1808,10 +1811,10 @@ export function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabCha
   return (
     <div className="flex flex-col lg:flex-row gap-5 items-start" style={{ transition: 'all 0.3s ease' }}>
 
-      {/* ═══ Col 1 — Submit Application (4/12) ═════════════════════════════ */}
+      {/* ═══ Col 1 — Submit Application ═════════════════════════════ */}
       <div
         className="w-full lg:w-auto min-w-0 order-1"
-        style={{ flex: '4 4 0%', transition: 'flex 0.3s ease' }}
+        style={{ flex: showPreview ? '4 4 0%' : '5 5 0%', minWidth: 320, transition: 'flex 0.3s ease' }}
       >
             <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden sticky top-4">
 
@@ -2362,10 +2365,11 @@ export function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabCha
         </div>
       )}
 
-      {/* ═══ Col 3 — Submission History & Logs (8/12 default, 4/12 with preview) */}
+      {/* ═══ Submission History & Logs (hidden when email preview is visible) */}
+      {!showPreview && (
       <div
-        className={`w-full lg:w-auto space-y-5 min-w-0 ${showPreview ? 'order-3' : 'order-2'}`}
-        style={{ flex: showPreview ? '4 4 0%' : '8 8 0%', transition: 'flex 0.3s ease' }}
+        className="w-full lg:w-auto space-y-5 min-w-0 order-2"
+        style={{ flex: '7 7 0%', transition: 'flex 0.3s ease' }}
       >
 
         {/* ── Submission History ── */}
@@ -2516,6 +2520,7 @@ export function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabCha
         <LenderEmailHistory leadId={leadId} />
 
       </div>
+      )}
 
       {/* ── API Log Drawer ── */}
       <ApiLogDrawer

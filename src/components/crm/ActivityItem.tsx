@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import {
   MessageSquare, Phone, Mail, ArrowRightLeft, FileText,
   CheckSquare, Send, AlertCircle, Pin, User, Globe, Zap,
-  ArrowRight, Code2, CheckCircle2, XCircle, Wrench,
+  ArrowRight, Code2, CheckCircle2, XCircle, Wrench, ChevronDown,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -13,91 +14,62 @@ import { LenderErrorList, describeApiError } from './LenderApiFixModal'
 interface TypeConfig {
   icon: LucideIcon
   label: string
-  badgeBg: string
-  badgeText: string
-  borderColor: string
-  iconBg: string
-  iconColor: string
+  color: string      // main brand color
+  bg: string          // light bg
+  bgHover: string     // card hover bg
+  dot: string         // dot color class
 }
 
 const TYPE_CONFIG: Record<ActivityType, TypeConfig> = {
-  note_added:         { icon: MessageSquare, label: 'Note',             badgeBg: 'bg-emerald-50',  badgeText: 'text-emerald-700',  borderColor: '#059669', iconBg: '#d1fae5', iconColor: '#059669' },
-  call_made:          { icon: Phone,         label: 'Call',             badgeBg: 'bg-blue-50',     badgeText: 'text-blue-700',     borderColor: '#3B82F6', iconBg: '#dbeafe', iconColor: '#3B82F6' },
-  email_sent:         { icon: Mail,          label: 'Email',            badgeBg: 'bg-sky-50',      badgeText: 'text-sky-700',      borderColor: '#0EA5E9', iconBg: '#e0f2fe', iconColor: '#0EA5E9' },
-  sms_sent:           { icon: MessageSquare, label: 'SMS',              badgeBg: 'bg-violet-50',   badgeText: 'text-violet-700',   borderColor: '#8B5CF6', iconBg: '#ede9fe', iconColor: '#8B5CF6' },
-  status_change:      { icon: ArrowRightLeft,label: 'Status Change',    badgeBg: 'bg-amber-50',    badgeText: 'text-amber-700',    borderColor: '#F59E0B', iconBg: '#fef3c7', iconColor: '#F59E0B' },
-  field_update:       { icon: FileText,      label: 'Field Update',     badgeBg: 'bg-slate-50',    badgeText: 'text-slate-600',    borderColor: '#94A3B8', iconBg: '#f1f5f9', iconColor: '#64748B' },
-  document_uploaded:  { icon: FileText,      label: 'Document',         badgeBg: 'bg-sky-50',      badgeText: 'text-sky-700',      borderColor: '#0EA5E9', iconBg: '#e0f2fe', iconColor: '#0EA5E9' },
-  task_created:       { icon: CheckSquare,   label: 'Task Created',     badgeBg: 'bg-violet-50',   badgeText: 'text-violet-700',   borderColor: '#8B5CF6', iconBg: '#ede9fe', iconColor: '#8B5CF6' },
-  task_completed:     { icon: CheckSquare,   label: 'Task Done',        badgeBg: 'bg-emerald-50',  badgeText: 'text-emerald-700',  borderColor: '#10B981', iconBg: '#d1fae5', iconColor: '#10B981' },
-  lender_submitted:   { icon: Send,          label: 'Lender Submit',    badgeBg: 'bg-orange-50',   badgeText: 'text-orange-700',   borderColor: '#F97316', iconBg: '#ffedd5', iconColor: '#F97316' },
-  lender_api_result:  { icon: CheckCircle2,  label: 'API Result',       badgeBg: 'bg-emerald-50',  badgeText: 'text-emerald-700',  borderColor: '#10B981', iconBg: '#d1fae5', iconColor: '#10B981' },
-  lender_response:    { icon: AlertCircle,   label: 'Lender Response',  badgeBg: 'bg-red-50',      badgeText: 'text-red-700',      borderColor: '#EF4444', iconBg: '#fee2e2', iconColor: '#EF4444' },
-  approval_requested: { icon: AlertCircle,   label: 'Approval Req.',    badgeBg: 'bg-amber-50',    badgeText: 'text-amber-700',    borderColor: '#F59E0B', iconBg: '#fef3c7', iconColor: '#F59E0B' },
-  approval_granted:   { icon: CheckSquare,   label: 'Approved',         badgeBg: 'bg-emerald-50',  badgeText: 'text-emerald-700',  borderColor: '#10B981', iconBg: '#d1fae5', iconColor: '#10B981' },
-  approval_declined:  { icon: AlertCircle,   label: 'Declined',         badgeBg: 'bg-red-50',      badgeText: 'text-red-700',      borderColor: '#EF4444', iconBg: '#fee2e2', iconColor: '#EF4444' },
-  affiliate_created:  { icon: Globe,         label: 'Affiliate Link',   badgeBg: 'bg-indigo-50',   badgeText: 'text-indigo-700',   borderColor: '#6366F1', iconBg: '#e0e7ff', iconColor: '#6366F1' },
-  merchant_accessed:  { icon: User,          label: 'Merchant Access',  badgeBg: 'bg-sky-50',      badgeText: 'text-sky-700',      borderColor: '#0EA5E9', iconBg: '#e0f2fe', iconColor: '#0EA5E9' },
-  lead_created:       { icon: User,          label: 'Lead Created',     badgeBg: 'bg-emerald-50',  badgeText: 'text-emerald-700',  borderColor: '#10B981', iconBg: '#d1fae5', iconColor: '#10B981' },
-  lead_imported:      { icon: FileText,      label: 'Imported',         badgeBg: 'bg-slate-50',    badgeText: 'text-slate-600',    borderColor: '#94A3B8', iconBg: '#f1f5f9', iconColor: '#64748B' },
-  lead_assigned:      { icon: User,          label: 'Assigned',         badgeBg: 'bg-indigo-50',   badgeText: 'text-indigo-700',   borderColor: '#6366F1', iconBg: '#e0e7ff', iconColor: '#6366F1' },
-  webhook_triggered:  { icon: Zap,           label: 'Webhook',          badgeBg: 'bg-amber-50',    badgeText: 'text-amber-700',    borderColor: '#F59E0B', iconBg: '#fef3c7', iconColor: '#F59E0B' },
-  system:             { icon: Zap,           label: 'System',           badgeBg: 'bg-slate-50',    badgeText: 'text-slate-500',    borderColor: '#9CA3AF', iconBg: '#f1f5f9', iconColor: '#9CA3AF' },
+  note_added:         { icon: MessageSquare, label: 'Note',            color: '#059669', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
+  call_made:          { icon: Phone,         label: 'Call',            color: '#3B82F6', bg: '#eff6ff', bgHover: 'hover:bg-blue-50/40',    dot: 'bg-blue-500'    },
+  email_sent:         { icon: Mail,          label: 'Email',           color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
+  sms_sent:           { icon: MessageSquare, label: 'SMS',             color: '#8B5CF6', bg: '#f5f3ff', bgHover: 'hover:bg-violet-50/40',  dot: 'bg-violet-500'  },
+  status_change:      { icon: ArrowRightLeft,label: 'Status',          color: '#F59E0B', bg: '#fffbeb', bgHover: 'hover:bg-amber-50/40',   dot: 'bg-amber-500'   },
+  field_update:       { icon: FileText,      label: 'Update',          color: '#64748B', bg: '#f8fafc', bgHover: 'hover:bg-slate-50/40',   dot: 'bg-slate-400'   },
+  document_uploaded:  { icon: FileText,      label: 'Document',        color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
+  task_created:       { icon: CheckSquare,   label: 'Task',            color: '#8B5CF6', bg: '#f5f3ff', bgHover: 'hover:bg-violet-50/40',  dot: 'bg-violet-500'  },
+  task_completed:     { icon: CheckSquare,   label: 'Done',            color: '#10B981', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
+  lender_submitted:   { icon: Send,          label: 'Submitted',       color: '#F97316', bg: '#fff7ed', bgHover: 'hover:bg-orange-50/40',  dot: 'bg-orange-500'  },
+  lender_api_result:  { icon: CheckCircle2,  label: 'API Result',      color: '#10B981', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
+  lender_response:    { icon: AlertCircle,   label: 'Response',        color: '#EF4444', bg: '#fef2f2', bgHover: 'hover:bg-red-50/40',     dot: 'bg-red-500'     },
+  approval_requested: { icon: AlertCircle,   label: 'Approval Req.',   color: '#F59E0B', bg: '#fffbeb', bgHover: 'hover:bg-amber-50/40',   dot: 'bg-amber-500'   },
+  approval_granted:   { icon: CheckSquare,   label: 'Approved',        color: '#10B981', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
+  approval_declined:  { icon: AlertCircle,   label: 'Declined',        color: '#EF4444', bg: '#fef2f2', bgHover: 'hover:bg-red-50/40',     dot: 'bg-red-500'     },
+  affiliate_created:  { icon: Globe,         label: 'Affiliate',       color: '#6366F1', bg: '#eef2ff', bgHover: 'hover:bg-indigo-50/40',  dot: 'bg-indigo-500'  },
+  merchant_accessed:  { icon: User,          label: 'Merchant',        color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
+  lead_created:       { icon: User,          label: 'Created',         color: '#10B981', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
+  lead_imported:      { icon: FileText,      label: 'Imported',        color: '#64748B', bg: '#f8fafc', bgHover: 'hover:bg-slate-50/40',   dot: 'bg-slate-400'   },
+  lead_assigned:      { icon: User,          label: 'Assigned',        color: '#6366F1', bg: '#eef2ff', bgHover: 'hover:bg-indigo-50/40',  dot: 'bg-indigo-500'  },
+  webhook_triggered:  { icon: Zap,           label: 'Webhook',         color: '#F59E0B', bg: '#fffbeb', bgHover: 'hover:bg-amber-50/40',   dot: 'bg-amber-500'   },
+  system:             { icon: Zap,           label: 'System',          color: '#9CA3AF', bg: '#f9fafb', bgHover: 'hover:bg-gray-50/40',    dot: 'bg-gray-400'    },
 }
 
-// Failed lender API result uses a red scheme
-const LENDER_API_FAIL_CONFIG: Partial<TypeConfig> = {
-  icon:        XCircle,
-  label:       'API Failed',
-  badgeBg:     'bg-red-50',
-  badgeText:   'text-red-700',
-  borderColor: '#EF4444',
-  iconBg:      '#fee2e2',
-  iconColor:   '#EF4444',
+const LENDER_API_FAIL: Partial<TypeConfig> = {
+  icon: XCircle, label: 'API Failed', color: '#EF4444', bg: '#fef2f2', bgHover: 'hover:bg-red-50/40', dot: 'bg-red-500',
 }
-
-// Validation error uses an amber scheme
-const LENDER_API_VALIDATION_CONFIG: Partial<TypeConfig> = {
-  icon:        AlertCircle,
-  label:       'Validation Error',
-  badgeBg:     'bg-amber-50',
-  badgeText:   'text-amber-700',
-  borderColor: '#F59E0B',
-  iconBg:      '#fef3c7',
-  iconColor:   '#F59E0B',
+const LENDER_API_VALIDATION: Partial<TypeConfig> = {
+  icon: AlertCircle, label: 'Validation', color: '#F59E0B', bg: '#fffbeb', bgHover: 'hover:bg-amber-50/40', dot: 'bg-amber-500',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatRelativeTime(dt: string): string {
-  const now = Date.now()
-  const then = new Date(dt).getTime()
-  const diffMs = now - then
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHr  = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHr / 24)
-
-  if (diffSec < 60)  return 'just now'
-  if (diffMin < 60)  return diffMin === 1 ? '1 min ago' : `${diffMin} mins ago`
-  if (diffHr  < 24)  return diffHr  === 1 ? '1 hour ago' : `${diffHr} hours ago`
-  if (diffDay === 1) return 'yesterday'
-  if (diffDay < 7)   return `${diffDay} days ago`
-  if (diffDay < 30)  return `${Math.floor(diffDay / 7)} weeks ago`
-  if (diffDay < 365) return `${Math.floor(diffDay / 30)} months ago`
-  return `${Math.floor(diffDay / 365)} years ago`
+  const diffMs = Date.now() - new Date(dt).getTime()
+  const m = Math.floor(diffMs / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d`
+  if (d < 30) return `${Math.floor(d / 7)}w`
+  return new Date(dt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase() ?? '')
-    .join('')
+  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
-
-// ─── Avatar colours (deterministic per name) ─────────────────────────────────
 
 const AVATAR_PALETTES = [
   { bg: 'bg-indigo-100', text: 'text-indigo-700' },
@@ -116,7 +88,7 @@ function avatarPalette(name: string) {
   return AVATAR_PALETTES[hash % AVATAR_PALETTES.length]
 }
 
-// ─── Type-specific rich content ───────────────────────────────────────────────
+// ─── Rich content ─────────────────────────────────────────────────────────────
 
 interface RichContentProps {
   activity: LeadActivity
@@ -127,7 +99,6 @@ interface RichContentProps {
 function RichContent({ activity, onViewDetails, onFix }: RichContentProps) {
   const meta = activity.meta as Record<string, unknown> | null | undefined
 
-  // ── Lender API Result ──────────────────────────────────────────────────────
   if (activity.activity_type === 'lender_api_result' && meta) {
     const isSuccess      = meta.success as boolean | undefined
     const responseCode   = meta.response_code as number | null | undefined
@@ -140,161 +111,116 @@ function RichContent({ activity, onViewDetails, onFix }: RichContentProps) {
     const fixSuggestions = (meta.fix_suggestions ?? []) as FixSuggestion[]
     const apiStatus      = meta.api_status as string | undefined
 
-    // Parse success details from response_body
     let parsedResponse: Record<string, unknown> | null = null
     try { if (meta.response_body) parsedResponse = JSON.parse(meta.response_body as string) } catch { /* ignore */ }
     const businessId = (parsedResponse as { businessID?: string } | null)?.businessID
     const appNumber  = (parsedResponse as { applicationNumber?: string } | null)?.applicationNumber
 
-    // Determine if we have fix suggestions or need fallback error description
-    const hasFixes  = !isSuccess && fixSuggestions.length > 0
-    const errInfo   = !isSuccess && !hasFixes
+    const hasFixes = !isSuccess && fixSuggestions.length > 0
+    const errInfo  = !isSuccess && !hasFixes
       ? describeApiError({
-          status:         apiStatus ?? ((!responseCode && isSuccess === false) ? 'timeout' : 'error'),
-          response_code:  responseCode ?? null,
-          response_body:  meta.response_body as string | null,
+          status:        apiStatus ?? ((!responseCode && isSuccess === false) ? 'timeout' : 'error'),
+          response_code: responseCode ?? null,
+          response_body: meta.response_body as string | null,
         })
       : null
 
     const hasChips = responseCode != null || durationMs != null || (attempts != null && attempts > 1)
 
     return (
-      <div className="mt-2 space-y-2">
-
-        {/* Fixable badge */}
+      <div className="mt-1.5 space-y-1.5">
         {isFixable && !isSuccess && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Wrench size={9} /> Fixable
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            <Wrench size={8} /> Fixable
           </span>
         )}
-
-        {/* Doc upload filename */}
         {docFilename && (
           <div className="flex items-center gap-1.5">
-            <FileText size={10} className="text-sky-500 flex-shrink-0" />
-            <span className="text-[11px] text-sky-700 font-medium">{docFilename}</span>
+            <FileText size={9} className="text-sky-500 flex-shrink-0" />
+            <span className="text-[10px] text-sky-700 font-medium truncate">{docFilename}</span>
           </div>
         )}
-
-        {/* Info chips */}
         {hasChips && (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1">
             {responseCode != null && (
-              <span className={cn(
-                'inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded',
-                isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-              )}>
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
                 HTTP {responseCode}
               </span>
             )}
             {durationMs != null && (
-              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
-                {durationMs}ms
-              </span>
+              <span className="text-[9px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">{durationMs}ms</span>
             )}
             {attempts != null && attempts > 1 && (
-              <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
-                {attempts} attempts
-              </span>
+              <span className="text-[9px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">{attempts} attempts</span>
             )}
           </div>
         )}
-
-        {/* Success details: App # and Business ID */}
         {isSuccess && (appNumber || businessId) && (
-          <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 space-y-1">
-            {appNumber  && <p className="text-[11px] text-emerald-800"><span className="font-medium">Application #:</span> <span className="font-mono">{appNumber}</span></p>}
-            {businessId && <p className="text-[11px] text-emerald-800"><span className="font-medium">Business ID:</span> <span className="font-mono">{businessId}</span></p>}
+          <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+            {appNumber  && <p className="text-[10px] text-emerald-800"><span className="font-medium">App #:</span> <span className="font-mono">{appNumber}</span></p>}
+            {businessId && <p className="text-[10px] text-emerald-800"><span className="font-medium">Biz ID:</span> <span className="font-mono">{businessId}</span></p>}
           </div>
         )}
-
-        {/* Structured error list with Fix Now buttons */}
-        {hasFixes && onFix && (
-          <LenderErrorList
-            suggestions={fixSuggestions}
-            onFix={onFix}
-          />
-        )}
-
-        {/* Fallback validation errors (old entries without fix_suggestions) */}
+        {hasFixes && onFix && <LenderErrorList suggestions={fixSuggestions} onFix={onFix} />}
         {!hasFixes && validErrors && validErrors.length > 0 && (
-          <div className="bg-amber-50 border border-amber-100 rounded-lg p-2.5 space-y-1">
-            <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">
-              Validation Errors
-            </p>
+          <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 space-y-0.5">
             {validErrors.map((e, i) => (
-              <p key={i} className="text-[11px] text-amber-800 flex items-start gap-1.5">
-                <AlertCircle size={10} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                {e}
+              <p key={i} className="text-[10px] text-amber-800 flex items-start gap-1">
+                <AlertCircle size={9} className="text-amber-500 flex-shrink-0 mt-0.5" />{e}
               </p>
             ))}
           </div>
         )}
-
-        {/* Error description for non-fixable errors */}
         {errInfo && (
-          <div className="bg-red-50 border border-red-100 rounded-lg p-2.5 space-y-1">
-            <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wide mb-1">{errInfo.title}</p>
+          <div className="bg-red-50 border border-red-100 rounded-lg p-2 space-y-0.5">
+            <p className="text-[9px] font-bold text-red-700 uppercase tracking-wide">{errInfo.title}</p>
             {errInfo.details.map((d, i) => (
-              <p key={i} className="text-[11px] text-red-800 whitespace-pre-wrap">{d}</p>
+              <p key={i} className="text-[10px] text-red-800 whitespace-pre-wrap">{d}</p>
             ))}
           </div>
         )}
-
-        {/* View full response */}
         {hasResponse && onViewDetails && (
-          <button
-            onClick={onViewDetails}
-            className="flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold transition-colors"
-          >
-            <Code2 size={10} /> View Full API Response →
+          <button onClick={onViewDetails} className="flex items-center gap-1 text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold transition-colors">
+            <Code2 size={9} /> View API Response
           </button>
         )}
       </div>
     )
   }
 
-  // ── Document Uploaded ──────────────────────────────────────────────────────
   if (activity.activity_type === 'document_uploaded' && meta?.files) {
     const files = meta.files as string[]
-    if (files.length === 0) return null
+    if (!files.length) return null
     return (
-      <div className="mt-1.5 flex flex-wrap gap-1">
+      <div className="mt-1 flex flex-wrap gap-1">
         {files.map((f, i) => (
-          <span
-            key={i}
-            className="inline-flex items-center gap-1 text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0.5 rounded font-medium"
-          >
-            <FileText size={9} /> {f}
+          <span key={i} className="inline-flex items-center gap-0.5 text-[9px] bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0.5 rounded font-medium">
+            <FileText size={8} /> {f}
           </span>
         ))}
       </div>
     )
   }
 
-  // ── Status Change ──────────────────────────────────────────────────────────
   if (activity.activity_type === 'status_change' && meta) {
     const from = meta.from_status as string | undefined
     const to   = meta.to_status   as string | undefined
     if (from && to) {
       return (
-        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">{from}</span>
-          <ArrowRight size={11} className="text-amber-400 flex-shrink-0" />
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold">{to}</span>
+        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{from}</span>
+          <ArrowRight size={10} className="text-amber-400 flex-shrink-0" />
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">{to}</span>
         </div>
       )
     }
   }
 
-  // ── Lender Submitted ──────────────────────────────────────────────────────
   if (activity.activity_type === 'lender_submitted' && meta?.lender_name) {
     return (
-      <div className="mt-1 flex items-center gap-1.5">
-        <Send size={10} className="text-orange-400" />
-        <span className="text-[11px] text-orange-700 font-semibold">
-          {meta.lender_name as string}
-        </span>
+      <div className="mt-1 flex items-center gap-1">
+        <Send size={9} className="text-orange-400" />
+        <span className="text-[10px] text-orange-700 font-semibold">{meta.lender_name as string}</span>
       </div>
     )
   }
@@ -302,7 +228,7 @@ function RichContent({ activity, onViewDetails, onFix }: RichContentProps) {
   return null
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
   activity: LeadActivity
@@ -312,17 +238,17 @@ interface Props {
   isLast?: boolean
 }
 
-export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: Props) {
+export function ActivityItem({ activity, onPin, onViewDetails, onFix }: Props) {
   const meta = activity.meta as Record<string, unknown> | null | undefined
+  const [expanded, setExpanded] = useState(false)
 
-  // Resolve config, with overrides for lender API result based on success/failure
   let config = TYPE_CONFIG[activity.activity_type] ?? TYPE_CONFIG.system
   if (activity.activity_type === 'lender_api_result' && meta) {
     const validErrors = meta.validation_errors as string[] | undefined
-    if (!empty(validErrors)) {
-      config = { ...config, ...LENDER_API_VALIDATION_CONFIG } as TypeConfig
+    if (validErrors && validErrors.length > 0) {
+      config = { ...config, ...LENDER_API_VALIDATION } as TypeConfig
     } else if (meta.success === false) {
-      config = { ...config, ...LENDER_API_FAIL_CONFIG } as TypeConfig
+      config = { ...config, ...LENDER_API_FAIL } as TypeConfig
     }
   }
 
@@ -332,152 +258,124 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix, isLast }: 
   const userName = activity.user?.name ?? activity.user_name ?? ''
   const palette  = userName ? avatarPalette(userName) : null
 
-  const hasRichContent = (
+  const hasBody = !!activity.body
+  const hasRichContent = !!(
     (activity.activity_type === 'lender_api_result' && meta &&
-      !!(
-        (meta as any)?.response_code != null ||
-        (meta as any)?.doc_filename ||
-        ((meta as any)?.validation_errors as string[] | undefined)?.length ||
-        ((meta as any)?.fix_suggestions as unknown[] | undefined)?.length ||
-        (meta as any)?.is_fixable
-      )
+      ((meta as Record<string, unknown>)?.response_code != null ||
+        (meta as Record<string, unknown>)?.doc_filename ||
+        ((meta as Record<string, unknown>)?.validation_errors as string[] | undefined)?.length ||
+        ((meta as Record<string, unknown>)?.fix_suggestions as unknown[] | undefined)?.length ||
+        (meta as Record<string, unknown>)?.is_fixable)
     ) ||
-    (activity.activity_type === 'document_uploaded' && (meta as any)?.files?.length > 0) ||
-    (activity.activity_type === 'status_change' && (meta as any)?.from_status) ||
-    (activity.activity_type === 'lender_submitted' && (meta as any)?.lender_name)
+    (activity.activity_type === 'document_uploaded' && (meta as Record<string, unknown>)?.files && ((meta as Record<string, unknown>).files as string[]).length > 0) ||
+    (activity.activity_type === 'status_change' && (meta as Record<string, unknown>)?.from_status) ||
+    (activity.activity_type === 'lender_submitted' && (meta as Record<string, unknown>)?.lender_name)
   )
+
+  const isExpandable = hasBody && !isNote && hasRichContent
 
   return (
-    <div className="flex gap-2 group">
+    <div
+      className={cn(
+        'group rounded-lg border transition-all duration-150 mb-1.5',
+        isPinned
+          ? 'bg-amber-50/60 border-amber-200/80 shadow-sm'
+          : `bg-white border-slate-100 ${config.bgHover} hover:border-slate-200`,
+      )}
+    >
+      <div className="px-2.5 py-2">
 
-      {/* ── Timeline spine ── */}
-      <div className="flex flex-col items-center flex-shrink-0">
-        <div
-          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
-          style={{ background: config.iconBg, border: `1.5px solid ${config.iconColor}40` }}
-        >
-          <Icon size={11} style={{ color: config.iconColor }} />
-        </div>
-        {!isLast && (
+        {/* Row 1: Icon dot + type + subject + time + pin */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {/* Color dot + icon */}
           <div
-            className="w-px flex-1 mt-1 min-h-[12px]"
-            style={{ background: 'linear-gradient(to bottom, #E2E8F0, #F1F5F9)' }}
-          />
-        )}
-      </div>
-
-      {/* ── Card ── */}
-      <div
-        className={cn(
-          'flex-1 rounded-lg border mb-1 transition-shadow duration-150',
-          'hover:shadow-sm cursor-default',
-          isPinned
-            ? 'bg-amber-50 border-amber-200'
-            : 'bg-white border-slate-200 hover:border-slate-300',
-          isNote && !isPinned && 'bg-slate-50/60',
-        )}
-        style={{
-          borderLeft: `3px solid ${config.borderColor}`,
-          boxShadow: isPinned ? '0 1px 6px rgba(245,158,11,0.10)' : undefined,
-        }}
-      >
-        <div className="px-2.5 pt-1.5 pb-1.5">
-
-          {/* ── Row 1: badge + subject + pin (all inline) ── */}
-          <div className="flex items-center gap-1.5 min-w-0">
-            {/* Type badge */}
-            <span
-              className={cn(
-                'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide flex-shrink-0',
-                config.badgeBg,
-                config.badgeText,
-              )}
-            >
-              <Icon size={9} />
-              {config.label}
-            </span>
-
-            {/* Pinned badge */}
-            {isPinned && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
-                <Pin size={9} className="fill-amber-500 text-amber-500" />
-                Pinned
-              </span>
-            )}
-
-            {/* Subject */}
-            <p className="text-xs font-semibold text-slate-800 leading-snug truncate flex-1 min-w-0">
-              {activity.subject}
-            </p>
-
-            {/* Pin toggle */}
-            {onPin && (
-              <button
-                onClick={() => onPin(activity.id)}
-                title={isPinned ? 'Unpin' : 'Pin this item'}
-                className={cn(
-                  'flex-shrink-0 p-0.5 rounded transition-all duration-150',
-                  isPinned
-                    ? 'opacity-100 text-amber-500 hover:bg-amber-100'
-                    : 'opacity-0 group-hover:opacity-100 text-slate-400 hover:text-amber-500 hover:bg-amber-50',
-                )}
-              >
-                <Pin size={11} className={cn(isPinned && 'fill-current')} />
-              </button>
-            )}
+            className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+            style={{ background: config.bg }}
+          >
+            <Icon size={10} style={{ color: config.color }} />
           </div>
 
-          {/* ── Row 2: body / rich content ── */}
-          {activity.body && (!hasRichContent || isNote) && (
-            <p
-              className={cn(
-                'text-[11px] text-slate-600 mt-1 leading-relaxed line-clamp-2',
-                isNote && 'italic',
-              )}
-            >
-              {activity.body}
-            </p>
+          {/* Type label */}
+          <span className="text-[9px] font-bold uppercase tracking-wider flex-shrink-0" style={{ color: config.color }}>
+            {config.label}
+          </span>
+
+          {/* Pinned indicator */}
+          {isPinned && (
+            <Pin size={9} className="text-amber-500 fill-amber-400 flex-shrink-0" />
           )}
 
-          {/* ── Type-specific rich content ── */}
-          <RichContent
-            activity={activity}
-            onViewDetails={onViewDetails ? () => onViewDetails(activity) : undefined}
-            onFix={onFix ? (err) => onFix(activity, err) : undefined}
-          />
+          {/* Subject */}
+          <span className="text-[11px] font-semibold text-slate-700 truncate flex-1 min-w-0 leading-tight">
+            {activity.subject}
+          </span>
 
-          {/* ── Meta row: time + user avatar ── */}
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[10px] font-medium text-slate-400">
-              {formatRelativeTime(activity.created_at)}
-            </span>
-            {userName && palette && (
-              <>
-                <span className="text-slate-300 text-[10px]">·</span>
-                <div className="flex items-center gap-1">
-                  <span
-                    className={cn(
-                      'inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[8px] font-bold flex-shrink-0',
-                      palette.bg,
-                      palette.text,
-                    )}
-                  >
-                    {getInitials(userName)}
-                  </span>
-                  <span className="text-[10px] text-slate-500">{userName}</span>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Time */}
+          <span className="text-[9px] font-medium text-slate-400 tabular-nums flex-shrink-0 ml-auto">
+            {formatRelativeTime(activity.created_at)}
+          </span>
 
+          {/* Pin toggle */}
+          {onPin && (
+            <button
+              onClick={() => onPin(activity.id)}
+              title={isPinned ? 'Unpin' : 'Pin'}
+              className={cn(
+                'flex-shrink-0 p-0.5 rounded transition-all',
+                isPinned
+                  ? 'opacity-100 text-amber-500 hover:bg-amber-100'
+                  : 'opacity-0 group-hover:opacity-100 text-slate-300 hover:text-amber-500 hover:bg-amber-50',
+              )}
+            >
+              <Pin size={10} className={cn(isPinned && 'fill-current')} />
+            </button>
+          )}
         </div>
-      </div>
 
+        {/* Row 2: Body text (notes always show, others may be expandable) */}
+        {hasBody && (!hasRichContent || isNote) ? (
+          <p className={cn(
+            'text-[11px] text-slate-500 mt-1 leading-relaxed',
+            !expanded && !isNote && 'line-clamp-1',
+          )} style={{ paddingLeft: 26 }}>
+            {String(activity.body)}
+          </p>
+        ) : null}
+
+        {/* Row 3: Rich content */}
+        {hasRichContent ? (
+          <div style={{ paddingLeft: 26 }}>
+            <RichContent
+              activity={activity}
+              onViewDetails={onViewDetails ? () => onViewDetails(activity) : undefined}
+              onFix={onFix ? (err) => onFix(activity, err) : undefined}
+            />
+          </div>
+        ) : null}
+
+        {/* Expand toggle for items with both body and rich content */}
+        {isExpandable && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-0.5 text-[9px] text-slate-400 hover:text-slate-600 mt-1 transition-colors"
+            style={{ paddingLeft: 26 }}
+          >
+            <ChevronDown size={9} className={cn('transition-transform', expanded && 'rotate-180')} />
+            {expanded ? 'Less' : 'More'}
+          </button>
+        )}
+
+        {/* Row 4: User */}
+        {userName && palette && (
+          <div className="flex items-center gap-1 mt-1" style={{ paddingLeft: 26 }}>
+            <span className={cn('inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[7px] font-bold', palette.bg, palette.text)}>
+              {getInitials(userName)}
+            </span>
+            <span className="text-[9px] text-slate-400 font-medium">{userName}</span>
+          </div>
+        )}
+
+      </div>
     </div>
   )
-}
-
-// ── tiny helper used inside the component ──────────────────────────────────────
-function empty(arr: unknown[] | undefined): boolean {
-  return !arr || arr.length === 0
 }

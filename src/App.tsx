@@ -243,8 +243,8 @@ export default function App() {
           <Route path="/crm/leads" element={<CrmLeadsList />} />
           <Route path="/crm/leads/create" element={<CrmLeadCreate />} />
           <Route path="/crm/leads/:id/edit" element={<CrmLeadCreate />} />
-          <Route path="/crm/leads/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadDetail /></ErrorBoundary>} />
-          <Route path="/crm/leads-new/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadNew /></ErrorBoundary>} />
+          <Route path="/crm/leads/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadNew /></ErrorBoundary>} />
+          <Route path="/crm/leads-new/:id" element={<ErrorBoundary fallbackTitle="Lead Detail Error"><CrmLeadDetail /></ErrorBoundary>} />
           <Route path="/crm/affiliate-links"   element={<CrmAffiliateLinks />} />
           <Route path="/crm/company-settings"  element={<CrmCompanySettings />} />
           <Route path="/crm/approvals" element={<CrmApprovals />} />

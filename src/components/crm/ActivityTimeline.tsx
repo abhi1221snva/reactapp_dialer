@@ -91,9 +91,9 @@ function DateDivider({ date }: { date: string }) {
   })()
 
   return (
-    <div className="flex items-center gap-3 my-2 px-1">
+    <div className="flex items-center gap-2 my-1.5">
       <div className="flex-1 h-px bg-slate-100" />
-      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-1 whitespace-nowrap">
+      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
         {label}
       </span>
       <div className="flex-1 h-px bg-slate-100" />
@@ -105,15 +105,16 @@ function DateDivider({ date }: { date: string }) {
 
 function ActivitySkeleton() {
   return (
-    <div className="space-y-0 animate-pulse pl-9">
-      {[1, 2, 3].map(i => (
-        <div key={i} className="py-3 px-1">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="h-4 w-16 rounded-full bg-slate-200" />
-            <div className="h-3 w-12 rounded-full bg-slate-100" />
+    <div className="space-y-1.5 animate-pulse">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="rounded-lg border border-slate-100 px-2.5 py-2">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="h-5 w-5 rounded-md bg-slate-100" />
+            <div className="h-3 w-12 rounded bg-slate-100" />
+            <div className={cn('h-3 rounded bg-slate-200 flex-1', i % 2 === 0 ? 'max-w-[60%]' : 'max-w-[45%]')} />
+            <div className="h-2.5 w-6 rounded bg-slate-100" />
           </div>
-          <div className={cn('h-4 rounded bg-slate-200 mb-1', i === 2 ? 'w-4/5' : 'w-3/5')} />
-          <div className="h-3 w-2/5 rounded bg-slate-100" />
+          {i <= 2 && <div className="h-3 w-3/4 rounded bg-slate-50 ml-6.5" style={{ marginLeft: 26 }} />}
         </div>
       ))}
     </div>
@@ -586,7 +587,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
 
   return (
     <>
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2.5">
 
       {/* ── Compose area ── */}
       <ComposeArea
@@ -596,10 +597,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
       />
 
       {/* ── Filter pills ── */}
-      <div
-        className="flex items-center gap-2 overflow-x-auto pb-1"
-        style={{ scrollbarWidth: 'none' }}
-      >
+      <div className="flex items-center gap-1 overflow-x-auto py-0.5" style={{ scrollbarWidth: 'none' }}>
         {FILTER_OPTIONS.map(opt => {
           const isActive = activeFilter === opt.value
           const showBadge = opt.value === 'all' && totalCount > 0 && !!infiniteData
@@ -609,21 +607,18 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
               key={opt.value}
               onClick={() => setActiveFilter(opt.value)}
               className={cn(
-                'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors',
+                'px-2.5 py-1 rounded-md text-[10px] font-semibold whitespace-nowrap transition-all border',
                 isActive
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                  ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700',
               )}
             >
               {opt.label}
               {showBadge && (
-                <span
-                  className={cn(
-                    'ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1',
-                    'rounded-full text-[10px] font-bold',
-                    isActive ? 'bg-white/25 text-white' : 'bg-slate-300 text-slate-600',
-                  )}
-                >
+                <span className={cn(
+                  'ml-1 text-[9px] font-bold',
+                  isActive ? 'text-white/60' : 'text-slate-400',
+                )}>
                   {totalCount > 999 ? '999+' : totalCount}
                 </span>
               )}
@@ -642,18 +637,15 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
           <>
             {/* Pinned section — only on All tab */}
             {isAllTab && pinnedItems.length > 0 && (
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2.5 px-1">
-                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
-                    <Pin size={11} className="text-amber-500 fill-amber-400" />
-                    <span className="text-[11px] font-semibold text-amber-700">
-                      {pinnedItems.length} Pinned
-                    </span>
-                  </div>
+              <div className="mb-3">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Pin size={10} className="text-amber-500 fill-amber-400" />
+                  <span className="text-[9px] font-bold text-amber-600 uppercase tracking-widest">
+                    Pinned ({pinnedItems.length})
+                  </span>
                   <div className="flex-1 h-px bg-amber-100" />
                 </div>
 
-                {/* Pinned items */}
                 <div>
                   {pinnedItems.map((activity, idx) => (
                     <ActivityItem
@@ -668,11 +660,7 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
                 </div>
 
                 {unpinnedItems.length > 0 && (
-                  <div className="flex items-center gap-2 my-3 px-1">
-                    <div className="flex-1 h-px bg-slate-100" />
-                    <span className="text-[11px] text-slate-400 font-medium">Activity</span>
-                    <div className="flex-1 h-px bg-slate-100" />
-                  </div>
+                  <div className="h-px bg-slate-100 my-2" />
                 )}
               </div>
             )}
@@ -684,30 +672,24 @@ export function ActivityTimeline({ leadId, onAddActivity }: Props) {
 
             {/* Load more */}
             {hasNextPage && (
-              <div className="flex flex-col items-center gap-1.5 pt-2 pb-1">
-                <p className="text-[11px] text-slate-400">
-                  Showing {loadedCount} of {totalCount} items
-                </p>
+              <div className="flex items-center justify-between pt-2 pb-1">
+                <span className="text-[10px] text-slate-400">
+                  {loadedCount} of {totalCount}
+                </span>
                 <button
                   onClick={() => fetchNextPage()}
                   disabled={isFetchingNextPage}
                   className={cn(
-                    'inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200',
-                    'text-xs font-medium text-slate-600 bg-white hover:bg-slate-50',
-                    'hover:border-slate-300 hover:shadow-sm transition-all duration-150',
-                    'disabled:opacity-60 disabled:cursor-not-allowed',
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200',
+                    'text-[10px] font-semibold text-slate-600 bg-white hover:bg-slate-50',
+                    'hover:border-slate-300 transition-all',
+                    'disabled:opacity-60',
                   )}
                 >
                   {isFetchingNextPage ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin text-slate-400" />
-                      Loading…
-                    </>
+                    <><Loader2 size={10} className="animate-spin text-slate-400" /> Loading…</>
                   ) : (
-                    <>
-                      <ChevronDown size={13} className="text-slate-400" />
-                      Load more
-                    </>
+                    <><ChevronDown size={10} className="text-slate-400" /> Load more</>
                   )}
                 </button>
               </div>
