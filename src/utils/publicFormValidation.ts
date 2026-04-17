@@ -37,9 +37,12 @@ export function validateWithDbRules(
       case 'required':
         if (!trimmed) return `${label} is required`
         break
-      case 'numeric':
-        if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return `${label} must be a numeric value`
+      case 'numeric': {
+        // Strip dashes/spaces for SSN-formatted values (XXX-XX-XXXX) before checking
+        const cleaned = trimmed.replace(/[-\s]/g, '')
+        if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return `${label} must be a numeric value`
         break
+      }
       case 'integer':
         if (!/^-?\d+$/.test(trimmed)) return `${label} must be a whole number`
         break

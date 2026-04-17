@@ -62,6 +62,14 @@ function percentageRule(label: string): ValidateFn {
   }
 }
 
+function ssnRule(label: string): ValidateFn {
+  return (val) => {
+    if (!val || val.trim() === '') return true
+    const digits = val.replace(/\D/g, '')
+    return digits.length === 9 || `${label} must be 9 digits (XXX-XX-XXXX)`
+  }
+}
+
 function dateRule(label: string): ValidateFn {
   return (val) => {
     if (!val || val.trim() === '') return true
@@ -92,6 +100,14 @@ export function buildFieldRules(label: CrmLabel): RegisterOptions<any, any> {
 
   if (isRequired && !isCheckbox) {
     rules.required = `${label.label_name} is required`
+  }
+
+  // Treat fields as SSN if type is 'ssn' OR key contains 'ssn' (legacy text-typed fields)
+  const isSSN = label.field_type === 'ssn' || /\bssn\b/i.test(label.field_key)
+
+  if (isSSN) {
+    rules.validate = ssnRule(label.label_name)
+    return rules
   }
 
   switch (label.field_type) {

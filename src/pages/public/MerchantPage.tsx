@@ -292,7 +292,9 @@ function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
   )
 }
 
-// ─── Document step ────────────────────────────────────────────────────────────
+// ─── Document step (affiliate-style queue + uploaded list) ───────────────────
+interface UploadFile { id: string; file: File; docType: string; subType: string }
+
 const MAX_FILE_MB  = 10
 const MAX_TOTAL_MB = 25
 const MAX_FILE_B   = MAX_FILE_MB * 1024 * 1024
@@ -309,20 +311,24 @@ function parseSubValues(raw: string | null | undefined): string[] {
   return raw.split(',').map(s => s.trim()).filter(Boolean)
 }
 
+const fmtSize = (n: number) => n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`
+const fileExt = (n: string) => n.split('.').pop()?.toLowerCase() ?? 'file'
+
 function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDocument[]; onUploaded: () => void }) {
+  // ── Local file queue (like affiliate) ──
+  const [queue, setQueue]             = useState<UploadFile[]>([])
   const [over, setOver]               = useState(false)
-  const [docType, setDocType]         = useState('')
-  const [subType, setSubType]         = useState('')
-  const [uploading, setUploading]     = useState(false)
   const [err, setErr]                 = useState('')
+  const [uploading, setUploading]     = useState(false)
+  const [confirmId, setConfirmId]     = useState<string | null>(null)
+  // ── Server-side uploaded files ──
   const [deleting, setDeleting]       = useState<number | null>(null)
-  // Viewer state
+  const [confirmDoc, setConfirmDoc]   = useState<{ id: number; filename: string } | null>(null)
+  // ── Viewer ──
   const [viewDoc, setViewDoc]         = useState<{ id: number; filename: string } | null>(null)
   const [blobUrl, setBlobUrl]         = useState<string | null>(null)
   const [viewLoading, setViewLoading] = useState(false)
   const [viewErr, setViewErr]         = useState('')
-  // Confirm-delete state
-  const [confirmDoc, setConfirmDoc]   = useState<{ id: number; filename: string } | null>(null)
   const inp                           = useRef<HTMLInputElement>(null)
 
   const { data: typeData } = useQuery({
@@ -331,47 +337,51 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
     staleTime: 5 * 60 * 1000,
   })
   const types = typeData ?? []
-  const selectedDocType = types.find(t => t.title === docType) ?? null
-  const subValues = parseSubValues(selectedDocType?.values)
-  const computedDocType = docType ? (subType ? `${docType} - ${subType}` : docType) : ''
+  const defaultType = types[0]?.title ?? ''
 
-  const validateFiles = (files: File[]): string | null => {
+  const confirmFile = confirmId ? queue.find(f => f.id === confirmId) : null
+
+  // ── Add files to local queue ──
+  const addToQueue = (files: File[]) => {
+    if (!types.length) {
+      setErr('No document types are configured. Please contact support.'); return
+    }
     for (const f of files) {
       if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') {
-        return `"${f.name}" is not a PDF. Only PDF files are accepted.`
+        setErr(`"${f.name}" is not a PDF. Only PDF files are accepted.`); return
       }
       if (f.size > MAX_FILE_B) {
-        return `"${f.name}" exceeds the ${MAX_FILE_MB} MB per-file limit.`
+        setErr(`"${f.name}" exceeds the ${MAX_FILE_MB} MB per-file limit.`); return
       }
     }
-    const totalSize = files.reduce((s, f) => s + f.size, 0)
+    const totalSize = queue.reduce((s, x) => s + x.file.size, 0) + files.reduce((s, f) => s + f.size, 0)
     if (totalSize > MAX_TOTAL_B) {
-      return `Total batch size exceeds ${MAX_TOTAL_MB} MB. Please upload fewer files.`
+      setErr(`Total size exceeds ${MAX_TOTAL_MB} MB. Please remove some files.`); return
     }
-    return null
+    setErr('')
+    setQueue(prev => [
+      ...prev,
+      ...files.map(f => ({ id: Math.random().toString(36).slice(2), file: f, docType: defaultType, subType: '' })),
+    ])
   }
 
-  const uploadFiles = async (files: File[]) => {
-    if (!docType) { setErr('Select a document type first.'); return }
-    const ve = validateFiles(files)
-    if (ve) { setErr(ve); return }
+  // ── Upload all queued files ──
+  const uploadAll = async () => {
+    if (queue.length === 0) return
     setUploading(true); setErr('')
     try {
-      for (const f of files) {
-        await publicAppService.uploadDocument(token, f, computedDocType)
+      for (const q of queue) {
+        const label = q.subType ? `${q.docType} - ${q.subType}` : q.docType
+        await publicAppService.uploadDocument(token, q.file, label)
       }
+      setQueue([])
       onUploaded()
     } catch (e: unknown) {
       setErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Upload failed.')
     } finally { setUploading(false) }
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setOver(false)
-    const files = Array.from(e.dataTransfer.files)
-    if (files.length) uploadFiles(files)
-  }
-
+  // ── Server-side delete ──
   const handleConfirmDelete = async () => {
     if (!confirmDoc) return
     const docId = confirmDoc.id
@@ -385,15 +395,14 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
     } finally { setDeleting(null) }
   }
 
+  // ── Viewer ──
   const openViewer = async (doc: MerchantDocument) => {
-    // Revoke previous blob URL to avoid memory leaks
     if (blobUrl) URL.revokeObjectURL(blobUrl)
     setBlobUrl(null); setViewErr(''); setViewLoading(true)
     setViewDoc({ id: doc.id, filename: doc.filename })
     try {
       const res = await publicAppService.fetchDocumentBlob(token, doc.id)
-      const url = URL.createObjectURL(res.data)
-      setBlobUrl(url)
+      setBlobUrl(URL.createObjectURL(res.data))
     } catch {
       setViewErr('Could not load document. Please try again.')
     } finally { setViewLoading(false) }
@@ -405,9 +414,41 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
   }
 
   return (
-    <div style={{ display: 'flex', gap: 20, height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', overflowY: 'auto' }}>
 
-      {/* ── Delete confirmation modal ── */}
+      {/* ── Remove-from-queue confirmation modal ── */}
+      {confirmFile && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setConfirmId(null)}>
+          <div style={{ background: C.card, borderRadius: 16, padding: '28px 28px 24px', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: C.errorBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <X size={20} color={C.error} />
+              </div>
+              <div>
+                <p style={{ margin: 0, fontWeight: 800, fontSize: 16, color: C.text }}>Remove File?</p>
+                <p style={{ margin: 0, fontSize: 12, color: C.muted, marginTop: 2 }}>This file will be removed from the upload queue.</p>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: C.textMid, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', wordBreak: 'break-all' }}>
+              {confirmFile.file.name}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setConfirmId(null)}
+                style={{ padding: '8px 20px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.textMid, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="button" onClick={() => { setErr(''); setQueue(queue.filter(x => x.id !== confirmId)); setConfirmId(null) }}
+                style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: C.error, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <X size={13} /> Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete uploaded doc confirmation modal ── */}
       {confirmDoc && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={() => setConfirmDoc(null)}>
@@ -475,59 +516,95 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
         </div>
       )}
 
-      {/* Left: upload */}
-      <div style={{ flex: '0 0 360px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6 }}>Document Type</label>
-          <select value={docType} onChange={e => { setDocType(e.target.value); setSubType(''); setErr('') }}
-            style={{ width: '100%', padding: '8px 11px', border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: C.card, cursor: 'pointer', outline: 'none', appearance: 'none', color: docType ? C.text : C.muted,
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: 14 }}>
-            <option value="">— Select type —</option>
-            {types.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
-          </select>
-        </div>
-        {subValues.length > 0 && (
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6 }}>Sub-Type</label>
-            <select value={subType} onChange={e => setSubType(e.target.value)}
-              style={{ width: '100%', padding: '8px 11px', border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: C.card, cursor: 'pointer', outline: 'none', appearance: 'none', color: subType ? C.text : C.muted,
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: 14 }}>
-              <option value="">Select {selectedDocType?.title} month</option>
-              {subValues.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
+      {/* ══════════ Left: Drop zone | Right: All files (queued + uploaded) ══════════ */}
+      <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
+        {/* Left: drop zone — full height */}
+        <div style={{ flex: '0 0 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+            onDrop={e => { e.preventDefault(); setOver(false); addToQueue(Array.from(e.dataTransfer.files)) }}
+            onClick={() => inp.current?.click()}
+            style={{ flex: 1, border: `2px dashed ${over ? C.indigo : C.border}`, borderRadius: 12, background: over ? C.indigoPale : C.card2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', transition: 'all .2s', padding: 20 }}>
+            <Upload size={26} style={{ color: over ? C.indigo : C.muted }} />
+            <p style={{ fontWeight: 600, color: over ? C.indigo : C.text, margin: 0, fontSize: 14 }}>{over ? 'Drop here' : 'Drag & drop or click'}</p>
+            <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>PDF only · max {MAX_FILE_MB} MB per file</p>
+            <input ref={inp} type="file" multiple accept=".pdf"
+              style={{ display: 'none' }}
+              onChange={e => { if (e.target.files) { addToQueue(Array.from(e.target.files)); e.target.value = '' } }} />
           </div>
-        )}
-
-        <div onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={handleDrop}
-          onClick={() => !uploading && inp.current?.click()}
-          style={{ flex: 1, border: `2px dashed ${over ? C.indigo : C.border}`, borderRadius: 12, background: over ? C.indigoPale : C.card2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: uploading ? 'wait' : 'pointer', transition: 'all .2s', padding: 20 }}>
-          {uploading
-            ? <><div style={{ width: 32, height: 32, border: `3px solid ${C.indigoLt}`, borderTopColor: C.indigo, borderRadius: '50%', animation: 'spin .8s linear infinite' }} /><p style={{ color: C.indigo, fontSize: 13, margin: 0, fontWeight: 600 }}>Uploading…</p></>
-            : <><Upload size={26} style={{ color: over ? C.indigo : C.muted }} />
-              <p style={{ fontWeight: 600, color: over ? C.indigo : C.text, margin: 0, fontSize: 14 }}>{over ? 'Drop here' : 'Drag & drop or click'}</p>
-              <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>PDF only · max {MAX_FILE_MB} MB per file</p></>
-          }
-          <input ref={inp} type="file" accept=".pdf" multiple style={{ display: 'none' }}
-            onChange={e => { if (e.target.files?.length) { uploadFiles(Array.from(e.target.files)); e.target.value = '' } }} />
-        </div>
-
-        {err && <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '8px 12px', color: '#7f1d1d', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{err}</div>}
-      </div>
-
-      {/* Right: uploaded list */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>Uploaded Files</span>
-          {docs.length > 0 && <span style={{ background: C.indigoLt, color: C.indigo, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20 }}>{docs.length}</span>}
-        </div>
-        {docs.length === 0
-          ? <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.subtle, fontSize: 13 }}>
-              <FileText size={32} style={{ opacity: .3 }} />
-              <span>No documents uploaded yet</span>
+          {err && (
+            <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '8px 12px', color: '#7f1d1d', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertCircle size={13} />{err}
             </div>
-          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+          )}
+        </div>
+
+        {/* Right: combined file listing (queued + uploaded) */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0, minHeight: 0, overflowY: 'auto' }}>
+
+          {/* ── Queued files ── */}
+          {queue.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: docs.length > 0 ? 16 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>Queued Files</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ background: C.indigoLt, color: C.indigo, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20 }}>{queue.length}</span>
+                  <button type="button" onClick={uploadAll} disabled={uploading}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 14px', border: 'none', borderRadius: 7, background: uploading ? '#a5b4fc' : C.indigo, color: 'white', fontSize: 12, fontWeight: 700, cursor: uploading ? 'not-allowed' : 'pointer', boxShadow: uploading ? 'none' : '0 2px 8px rgba(79,70,229,.3)' }}>
+                    {uploading
+                      ? <><div style={{ width: 11, height: 11, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Uploading…</>
+                      : <><Upload size={12} />Upload All</>
+                    }
+                  </button>
+                </div>
+              </div>
+              {queue.map(f => {
+                const e2 = fileExt(f.file.name)
+                const ec = EXT_COLORS[e2] ?? C.indigo
+                const selType = types.find(t => t.title === f.docType) ?? null
+                const subs = parseSubValues(selType?.values)
+                return (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: `${ec}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FileText size={16} color={ec} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file.name}</p>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: 10, background: `${ec}18`, color: ec, fontWeight: 700, padding: '1px 6px', borderRadius: 5, textTransform: 'uppercase' }}>{e2}</span>
+                        <span style={{ fontSize: 11, color: C.muted }}>{fmtSize(f.file.size)}</span>
+                      </div>
+                    </div>
+                    <select value={f.docType}
+                      onChange={e => setQueue(queue.map(x => x.id === f.id ? { ...x, docType: e.target.value, subType: '' } : x))}
+                      style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 140 }}>
+                      {types.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
+                    </select>
+                    {subs.length > 0 && (
+                      <select value={f.subType}
+                        onChange={e => setQueue(queue.map(x => x.id === f.id ? { ...x, subType: e.target.value } : x))}
+                        style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 120 }}>
+                        <option value="">Select…</option>
+                        {subs.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    )}
+                    <button type="button" onClick={() => setConfirmId(f.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtle, padding: 4, display: 'flex', flexShrink: 0 }}>
+                      <X size={15} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* ── Uploaded documents ── */}
+          {docs.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {queue.length > 0 && <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: 8 }} />}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>Uploaded Documents</span>
+                <span style={{ background: C.successBg, color: C.success, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20 }}>{docs.length}</span>
+              </div>
               {docs.map(d => {
                 const e2 = ext(d.filename)
                 const ec = EXT_COLORS[e2] ?? C.indigo
@@ -558,7 +635,16 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
                 )
               })}
             </div>
-        }
+          )}
+
+          {/* ── Empty state (no queued, no uploaded) ── */}
+          {queue.length === 0 && docs.length === 0 && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.subtle, fontSize: 13 }}>
+              <FileText size={32} style={{ opacity: .3 }} />
+              <span>No files queued yet</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

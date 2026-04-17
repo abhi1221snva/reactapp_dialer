@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, AlertCircle } from 'lucide-react'
 import type { UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form'
@@ -75,8 +75,61 @@ function isVisible(
   })
 }
 
+// ── SSN formatting helper ────────────────────────────────────────────────────
+function formatSSN(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 9)
+  if (digits.length > 5) return `${digits.slice(0,3)}-${digits.slice(3,5)}-${digits.slice(5)}`
+  if (digits.length > 3) return `${digits.slice(0,3)}-${digits.slice(3)}`
+  return digits
+}
+
+function isSSNField(fieldKey: string, fieldType: string): boolean {
+  return fieldType === 'ssn' || /\bssn\b/i.test(fieldKey)
+}
+
 // ── Thin alias kept so renderInput() call-sites below are unchanged ──────────
 const parseOptions = parseFieldOptions
+
+// ── SSN Input component (auto-formats digits to XXX-XX-XXXX) ────────────────
+function SsnInput({ fieldKey, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const [display, setDisplay] = useState(() => formatSSN(defaultValue))
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    // Override validate to strip dashes before checking
+    validate: (val: string) => {
+      if (!val || val.trim() === '') return true
+      const digits = val.replace(/\D/g, '')
+      return digits.length === 9 || 'SSN must be 9 digits (XXX-XX-XXXX)'
+    },
+  })
+
+  return (
+    <input
+      type="text"
+      {...rest}
+      value={display}
+      className="crm-fi"
+      placeholder={placeholder}
+      maxLength={11}
+      inputMode="numeric"
+      onChange={e => {
+        const fmt = formatSSN(e.target.value)
+        setDisplay(fmt)
+        // Pass formatted value to react-hook-form
+        e.target.value = fmt
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
 
 // ── Input renderer ────────────────────────────────────────────────────────────
 function renderInput(
@@ -183,6 +236,19 @@ function renderInput(
     )
   }
 
+  // ── SSN ────────────────────────────────────────────────────────────────────
+  if (isSSNField(field_key, field_type)) {
+    return (
+      <SsnInput
+        fieldKey={field_key}
+        register={register}
+        rules={rules}
+        defaultValue={defaultValue as string ?? ''}
+        placeholder={ph || 'XXX-XX-XXXX'}
+      />
+    )
+  }
+
   // ── Phone ──────────────────────────────────────────────────────────────────
   if (field_type === 'phone_number' || field_type === 'phone') {
     return (
@@ -226,7 +292,7 @@ function renderInput(
 }
 
 // ── Read-only display ─────────────────────────────────────────────────────────
-function DisplayValue({ value, dataType }: { value: unknown; dataType: string }) {
+function DisplayValue({ value, dataType, fieldKey }: { value: unknown; dataType: string; fieldKey?: string }) {
   if (dataType === 'checkbox') {
     const checked = value === '1' || value === 1 || value === true
     return (
@@ -238,7 +304,9 @@ function DisplayValue({ value, dataType }: { value: unknown; dataType: string })
       </div>
     )
   }
-  const str = value !== null && value !== undefined && value !== '' ? String(value) : null
+  const raw = value !== null && value !== undefined && value !== '' ? String(value) : null
+  // Format SSN values as XXX-XX-XXXX for display
+  const str = raw && isSSNField(fieldKey ?? '', dataType) ? formatSSN(raw) : raw
   return str
     ? <p className="text-sm font-medium text-slate-800 leading-snug">{str}</p>
     : <p className="text-sm text-slate-300">—</p>
@@ -328,6 +396,7 @@ export function DynamicFieldForm({
                     <DisplayValue
                       value={defaultValues[label.field_key]}
                       dataType={label.field_type}
+                      fieldKey={label.field_key}
                     />
                   </div>
                 ))}
