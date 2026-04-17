@@ -470,6 +470,7 @@ export function CrmLeadNew() {
     onSuccess: () => {
       toast.success('Temperature updated')
       qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
     },
     onError: () => toast.error('Failed to update temperature'),
   })
