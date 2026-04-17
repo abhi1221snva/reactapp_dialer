@@ -429,6 +429,7 @@ export function OffersStipsTab({ leadId }: Props) {
     const map = new Map<string, LenderGroup>()
 
     for (const o of offers) {
+      if (o.status === 'declined') continue
       const key = o.lender_name ?? `lender-${o.lender_id ?? 'unknown'}`
       if (!map.has(key)) {
         map.set(key, { lenderKey: key, lenderName: o.lender_name ?? 'Unknown Lender', lenderId: o.lender_id, offers: [], stips: [] })

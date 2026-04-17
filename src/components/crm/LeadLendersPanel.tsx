@@ -537,7 +537,9 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting, onA
             </p>
           )}
         </div>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 ${statusColors[status] ?? statusColors.pending}`}>
+        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${statusColors[status] ?? statusColors.pending}`}>
+          {status === 'approved' && <CheckCircle size={10} />}
+          {status === 'declined' && <AlertCircle size={10} />}
           {statusLabel[status] ?? status}
         </span>
         {isFailed && errorMessages.length > 0 && (
@@ -556,16 +558,6 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting, onA
             title="View API log"
           >
             <Eye size={12} />
-          </button>
-        )}
-        {onResubmit && (
-          <button
-            onClick={e => { e.stopPropagation(); onResubmit(sub.lender_id) }}
-            disabled={isResubmitting}
-            className="p-1 rounded flex-shrink-0 text-slate-400 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-50 transition-colors"
-            title="Resubmit to this lender"
-          >
-            {isResubmitting ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
           </button>
         )}
         <button

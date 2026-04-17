@@ -19,7 +19,7 @@ import {
   User, Users, Clock, DollarSign, FileText, FolderOpen, Building2,
   TrendingUp, ShieldCheck, CheckCircle, Send, FileBarChart,
   Pencil, Trash2, Download, Copy, ExternalLink, Upload, Search,
-  Hash, MessageSquare, Activity, MoreVertical,
+  Hash, MessageSquare, Activity, MoreVertical, UserCheck,
   Tag, Calendar, Check, Eye, SlidersHorizontal, Sparkles,
   Zap, MapPin, Globe,
   ArrowUpRight, PhoneCall, Star, LayoutDashboard,
@@ -67,7 +67,6 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'offers',          label: 'Offers',      icon: DollarSign      },
   { id: 'deal',            label: 'Deal',        icon: TrendingUp      },
   { id: 'compliance',      label: 'Compliance',  icon: ShieldCheck     },
-  { id: 'approvals',       label: 'Approvals',   icon: CheckCircle     },
   { id: 'drip',            label: 'Drip',        icon: Send            },
 ]
 
@@ -424,6 +423,22 @@ export function CrmLeadNew() {
     staleTime: 5 * 60_000,
   })
 
+  const { data: users = [] } = useQuery({
+    queryKey: ['crm-users'],
+    queryFn: () => crmService.getUsers(),
+    staleTime: 5 * 60_000,
+  })
+
+  const assignMut = useMutation({
+    mutationFn: (userId: number | null) => leadService.update(leadId, { assigned_to: userId }),
+    onSuccess: () => {
+      toast.success('Lead assigned')
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+    },
+    onError: () => toast.error('Failed to assign'),
+  })
+
   const { data: docs = [] } = useQuery({
     queryKey: ['lead-documents', leadId],
     queryFn: async () => (await crmService.getLeadDocuments(leadId)).data?.data ?? [] as CrmDocument[],
@@ -551,6 +566,22 @@ export function CrmLeadNew() {
           </p>
         </div>
 
+        {/* Assigned To */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <UserCheck size={12} className="text-violet-500" />
+          <select
+            value={lr['assigned_to'] != null ? String(lr['assigned_to']) : ''}
+            onChange={e => assignMut.mutate(e.target.value ? Number(e.target.value) : null)}
+            disabled={assignMut.isPending}
+            className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2 py-1 outline-none focus:border-violet-400 cursor-pointer disabled:opacity-50"
+          >
+            <option value="">Unassigned</option>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
           {!overviewEditing ? (
@@ -649,7 +680,6 @@ export function CrmLeadNew() {
               {activeTab === 'lenders'         && <LendersPanel leadId={leadId} onTabChange={(tab) => switchTab(tab as TabId)} />}
               {activeTab === 'offers'          && <OffersStipsTab leadId={leadId} />}
               {activeTab === 'deal'            && <DealTab leadId={leadId} />}
-              {activeTab === 'approvals'       && <ApprovalsSection leadId={leadId} />}
               {activeTab === 'bank-statements' && <BankStatementTab leadId={leadId} />}
               {activeTab === 'drip'            && <DripLeadPanel leadId={leadId} />}
             </div>

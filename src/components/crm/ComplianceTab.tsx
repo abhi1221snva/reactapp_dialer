@@ -429,7 +429,7 @@ const PANEL_MAP: Record<string, (props: { leadId: number }) => JSX.Element> = {
 }
 
 function CoreComplianceChecks({ leadId }: { leadId: number }) {
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>('bank_statements')
   const { data: checks = [] } = useQuery<ComplianceCheck[]>({
     queryKey: ['compliance', leadId],
     queryFn: async () => { const r = await crmService.getComplianceChecks(leadId); return r.data?.data ?? r.data ?? [] },

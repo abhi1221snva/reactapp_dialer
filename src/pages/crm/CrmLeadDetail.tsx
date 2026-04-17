@@ -4837,6 +4837,7 @@ export function CrmLeadDetail() {
   const [activeTab,          setActiveTab]          = useState<TabId>('details')
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
   const [showMoreMenu,       setShowMoreMenu]       = useState(false)
+  const [showTempDropdown,   setShowTempDropdown]   = useState(false)
   const [showPdfModal,       setShowPdfModal]       = useState(false)
   const [showEmailModal,     setShowEmailModal]     = useState(false)
   const [showSmsModal,       setShowSmsModal]       = useState(false)
@@ -4857,10 +4858,11 @@ export function CrmLeadDetail() {
       const t = e.target as HTMLElement
       if (showStatusDropdown && !t.closest('[data-dropdown="status"]')) setShowStatusDropdown(false)
       if (showMoreMenu && !t.closest('[data-dropdown="more"]')) setShowMoreMenu(false)
+      if (showTempDropdown && !t.closest('[data-dropdown="temperature"]')) setShowTempDropdown(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showStatusDropdown, showMoreMenu])
+  }, [showStatusDropdown, showMoreMenu, showTempDropdown])
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['crm-lead', leadId],
@@ -4958,6 +4960,16 @@ export function CrmLeadDetail() {
     onError: () => toast.error('Failed to update status'),
   })
 
+  const updateTemperature = useMutation({
+    mutationFn: (temp: string) => leadService.update(leadId, { temperature: temp }),
+    onSuccess: () => {
+      toast.success('Temperature updated')
+      setShowTempDropdown(false)
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+    },
+    onError: () => toast.error('Failed to update temperature'),
+  })
+
   if (isLoading) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <Loader2 size={28} className="animate-spin text-emerald-500" />
@@ -5035,12 +5047,6 @@ export function CrmLeadDetail() {
                   <span className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}40` }} />
                   {currentStatus?.lead_title ?? String(lead.lead_status).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                 </span>
-                {tempStyle && (
-                  <span className={`hidden sm:inline-flex items-center gap-1 h-[22px] px-2.5 rounded-full text-[10px] font-bold flex-shrink-0 ${tempStyle.bg} ${tempStyle.text}`}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: tempStyle.dot }} />
-                    {tempStyle.label}
-                  </span>
-                )}
               </div>
 
               {/* Line 2: Contact chips */}
@@ -5089,6 +5095,50 @@ export function CrmLeadDetail() {
 
             {/* Right: Action buttons */}
             <div className="flex items-center gap-2 flex-shrink-0 pt-1">
+              {/* Temperature dropdown */}
+              <div className="relative" data-dropdown="temperature">
+                <button
+                  onClick={() => setShowTempDropdown(!showTempDropdown)}
+                  className={`h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium transition-all hover:shadow-sm ${
+                    tempStyle
+                      ? ''
+                      : ''
+                  }`}
+                  style={tempStyle
+                    ? { background: `${tempStyle.dot}15`, border: `1px solid ${tempStyle.dot}40`, color: tempStyle.dot }
+                    : { background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b' }
+                  }
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}
+                >
+                  {tempStyle && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tempStyle.dot }} />}
+                  <span className="hidden sm:inline">{tempStyle ? tempStyle.label : 'Temperature'}</span>
+                  <ChevronDown size={11} className={`transition-transform ${showTempDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showTempDropdown && (
+                  <div className="absolute right-0 top-full mt-1.5 w-[160px] rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-30 py-1">
+                    {(['hot', 'warm', 'cold'] as const).map(temp => {
+                      const s = TEMP_STYLES[temp]
+                      const isCurrent = leadTemp === temp
+                      return (
+                        <button
+                          key={temp}
+                          onClick={() => { updateTemperature.mutate(temp); setShowTempDropdown(false) }}
+                          disabled={isCurrent || updateTemperature.isPending}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                        >
+                          <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/50" style={{ background: s.dot, boxShadow: `0 0 0 1px ${s.dot}50` }} />
+                          <span className="flex-1 text-xs font-semibold text-slate-700">{s.label}</span>
+                          {isCurrent && (
+                            <Check size={12} className="text-emerald-600 flex-shrink-0" />
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="w-px h-5 bg-slate-200 mx-0.5" />
               <button
                 onClick={() => setShowEmailModal(true)}
                 className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium text-sky-700 transition-all hover:shadow-sm"

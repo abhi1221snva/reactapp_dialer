@@ -436,6 +436,16 @@ export function CrmBankStatementDetail() {
           {/* ═══ Category Distribution ════════════════════════════════════════ */}
           {summary && <CategorySection summary={summary} transactions={transactions} />}
 
+          {/* ═══ Multiple Accounts Detected ═════════════════════════════════ */}
+          {summary?.multiple_accounts_detected && summary?.accounts?.length > 0 && (
+            <MultipleAccountsSection accounts={summary.accounts} />
+          )}
+
+          {/* ═══ Repeated Fixed Debits Detected ════════════════════════════ */}
+          {summary?.repeated_fixed_debits_detected && summary?.repeated_fixed_debits?.length > 0 && (
+            <RepeatedFixedDebitsSection debits={summary.repeated_fixed_debits} />
+          )}
+
           {/* ═══ Transactions ═════════════════════════════════════════════════ */}
           {leadId > 0 && (
             <TransactionsSection
@@ -1072,5 +1082,100 @@ function TransactionsSection({ txTab, setTxTab, txSearch, setTxSearch, txLenderF
         )}
       </div>
     </div>
+  )
+}
+
+// ── Multiple Accounts Detected Section ──────────────────────────────────────────
+
+function MultipleAccountsSection({ accounts }: { accounts: Record<string, any>[] }) {
+  return (
+    <ColoredSection title={`Multiple Accounts Detected (${accounts.length})`} color="bg-amber-600" borderColor="border-amber-300">
+      <div className="bg-white p-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Account</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Transactions</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Credits</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Debits</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Total Credits</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Total Debits</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">True Revenue</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((acc, i) => {
+                const net = num(acc.net)
+                return (
+                  <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2.5 px-3 font-semibold text-gray-800">
+                      {acc.account_number ? `****${acc.account_number}` : `Account ${i + 1}`}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtNum(acc.transaction_count)}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtNum(acc.credit_count)}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtNum(acc.debit_count)}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-emerald-600">{fmt(acc.total_credits)}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-red-500">{fmt(acc.total_debits)}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-green-600">{fmt(acc.true_revenue)}</td>
+                    <td className={cn('py-2.5 px-3 text-right font-bold', net >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                      {fmt(net)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ColoredSection>
+  )
+}
+
+// ── Repeated Fixed Debits Detected Section ──────────────────────────────────────
+
+function RepeatedFixedDebitsSection({ debits }: { debits: Record<string, any>[] }) {
+  return (
+    <ColoredSection title={`Repeated Fixed Debits Detected (${debits.length})`} color="bg-rose-600" borderColor="border-rose-300">
+      <div className="bg-white p-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Vendor / Description</th>
+                <th className="text-right py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Amount</th>
+                <th className="text-center py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Month</th>
+                <th className="text-center py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Count</th>
+                <th className="text-left py-2 px-3 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Dates</th>
+              </tr>
+            </thead>
+            <tbody>
+              {debits.map((d, i) => (
+                <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-2.5 px-3 font-semibold text-gray-800 max-w-[300px] truncate" title={d.vendor_description}>
+                    {d.vendor_description}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-bold text-red-500">{fmt(d.amount)}</td>
+                  <td className="py-2.5 px-3 text-center text-gray-600">{d.month}</td>
+                  <td className="py-2.5 px-3 text-center">
+                    <span className="inline-flex items-center justify-center bg-rose-50 text-rose-700 font-bold rounded-full px-2 py-0.5 text-[10px] border border-rose-200">
+                      {d.count}x
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 text-gray-600">
+                    <div className="flex flex-wrap gap-1">
+                      {(d.dates ?? []).map((dt: string, j: number) => (
+                        <span key={j} className="bg-gray-100 text-gray-600 text-[10px] font-medium px-1.5 py-0.5 rounded">{dt}</span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ColoredSection>
   )
 }
