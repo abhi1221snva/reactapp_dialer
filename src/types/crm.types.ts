@@ -434,6 +434,46 @@ export interface ActivityTimelineResponse {
   has_more: boolean
 }
 
+// ─── Field Change Diff Types ─────────────────────────────────────────────────
+
+export interface FieldChange {
+  old: string | null
+  new: string | null
+  label?: string
+}
+
+export interface FieldUpdateMeta {
+  changed_fields?: Record<string, FieldChange>
+  source?: string
+  batch_id?: string
+  field?: string
+  old_value?: string | null
+  new_value?: string | null
+}
+
+export interface LeadChangeLog {
+  id: number
+  lead_id: number
+  batch_id: string
+  source: string
+  user_id: number | null
+  user_type: string
+  changes: Record<string, FieldChange>
+  ip_address: string | null
+  summary: string | null
+  created_at: string
+  user_name?: string | null
+}
+
+export interface LeadChangeLogResponse {
+  lead_id: number
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+  items: LeadChangeLog[]
+}
+
 // ─── Status History ───────────────────────────────────────────────────────────
 
 export interface LeadStatusHistory {

@@ -48,6 +48,10 @@ export const crmService = {
   pinActivity: (leadId: number, activityId: number) =>
     api.post(`/crm/lead/${leadId}/activity/${activityId}/pin`, {}),
 
+  // ── Change Logs (audit trail) ────────────────────────────────────────────────
+  getChangeLogs: (leadId: number, offset = 0, limit = 50, source?: string) =>
+    api.get(`/crm/lead/${leadId}/change-logs`, { params: { offset, limit, ...(source ? { source } : {}) } }),
+
   // ── Status History ──────────────────────────────────────────────────────────
   getStatusHistory: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/status-history`),

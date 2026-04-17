@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import {
-  MessageSquare, Phone, Mail, ArrowRightLeft, FileText,
+  MessageSquare, Phone, Mail, ArrowRightLeft, FileText, Pencil,
   CheckSquare, Send, AlertCircle, Pin, User, Globe, Zap,
   ArrowRight, Code2, CheckCircle2, XCircle, Wrench, ChevronDown,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import type { LeadActivity, ActivityType, FixSuggestion } from '../../types/crm.types'
+import type { LeadActivity, ActivityType, FixSuggestion, FieldUpdateMeta } from '../../types/crm.types'
 import { LenderErrorList, describeApiError } from './LenderApiFixModal'
+import { FieldChangesDiff } from './FieldChangesDiff'
 
 // ─── Type config ──────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ const TYPE_CONFIG: Record<ActivityType, TypeConfig> = {
   email_sent:         { icon: Mail,          label: 'Email',           color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
   sms_sent:           { icon: MessageSquare, label: 'SMS',             color: '#8B5CF6', bg: '#f5f3ff', bgHover: 'hover:bg-violet-50/40',  dot: 'bg-violet-500'  },
   status_change:      { icon: ArrowRightLeft,label: 'Status',          color: '#F59E0B', bg: '#fffbeb', bgHover: 'hover:bg-amber-50/40',   dot: 'bg-amber-500'   },
-  field_update:       { icon: FileText,      label: 'Update',          color: '#64748B', bg: '#f8fafc', bgHover: 'hover:bg-slate-50/40',   dot: 'bg-slate-400'   },
+  field_update:       { icon: Pencil,        label: 'Updated',         color: '#6366F1', bg: '#eef2ff', bgHover: 'hover:bg-indigo-50/40',  dot: 'bg-indigo-500'  },
   document_uploaded:  { icon: FileText,      label: 'Document',        color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
   task_created:       { icon: CheckSquare,   label: 'Task',            color: '#8B5CF6', bg: '#f5f3ff', bgHover: 'hover:bg-violet-50/40',  dot: 'bg-violet-500'  },
   task_completed:     { icon: CheckSquare,   label: 'Done',            color: '#10B981', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
@@ -216,6 +217,26 @@ function RichContent({ activity, onViewDetails, onFix }: RichContentProps) {
     }
   }
 
+  if (activity.activity_type === 'field_update' && meta) {
+    const typedMeta = meta as FieldUpdateMeta
+    let changes: Record<string, { old: string | null; new: string | null; label?: string }> = {}
+
+    if (typedMeta.changed_fields && Object.keys(typedMeta.changed_fields).length > 0) {
+      changes = typedMeta.changed_fields
+    } else if (typedMeta.field) {
+      changes = {
+        [typedMeta.field]: {
+          old: typedMeta.old_value ?? null,
+          new: typedMeta.new_value ?? null,
+        },
+      }
+    }
+
+    if (Object.keys(changes).length > 0) {
+      return <FieldChangesDiff changes={changes} source={typedMeta.source} />
+    }
+  }
+
   if (activity.activity_type === 'lender_submitted' && meta?.lender_name) {
     return (
       <div className="mt-1 flex items-center gap-1">
@@ -269,6 +290,7 @@ export function ActivityItem({ activity, onPin, onViewDetails, onFix }: Props) {
     ) ||
     (activity.activity_type === 'document_uploaded' && (meta as Record<string, unknown>)?.files && ((meta as Record<string, unknown>).files as string[]).length > 0) ||
     (activity.activity_type === 'status_change' && (meta as Record<string, unknown>)?.from_status) ||
+    (activity.activity_type === 'field_update' && meta && ((meta as FieldUpdateMeta)?.changed_fields || (meta as FieldUpdateMeta)?.field)) ||
     (activity.activity_type === 'lender_submitted' && (meta as Record<string, unknown>)?.lender_name)
   )
 

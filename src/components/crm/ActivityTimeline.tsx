@@ -21,6 +21,7 @@ const FILTER_OPTIONS = [
   { value: 'call_made',     label: 'Calls' },
   { value: 'email_sent',    label: 'Emails' },
   { value: 'status_change', label: 'Status' },
+  { value: 'field_update',  label: 'Updates' },
   { value: 'document_uploaded', label: 'Docs' },
   { value: 'lender_submitted',  label: 'Lender' },
   { value: 'lender_api_result', label: 'API Results' },
@@ -42,6 +43,7 @@ type TabKey =
   | 'call_made'
   | 'email_sent'
   | 'status_change'
+  | 'field_update'
   | 'document_uploaded'
 
 // ─── Dot colours per activity type ────────────────────────────────────────────
