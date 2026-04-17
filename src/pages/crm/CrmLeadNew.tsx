@@ -21,7 +21,7 @@ import {
   Pencil, Trash2, Download, Copy, ExternalLink, Upload, Search,
   Hash, MessageSquare, Activity, MoreVertical, UserCheck,
   Tag, Calendar, Check, Eye, SlidersHorizontal, Sparkles,
-  Zap, MapPin, Globe,
+  Zap, MapPin, Globe, Thermometer,
   ArrowUpRight, PhoneCall, Star, LayoutDashboard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -180,9 +180,10 @@ function resolveFieldIcon(key: string, type?: string): LucideIcon {
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEditingProp }: {
+function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEditingProp, activeTab }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
   editingProp?: boolean; setEditingProp?: (v: boolean) => void
+  activeTab?: string
 }) {
   const qc = useQueryClient()
   const [editingLocal, setEditingLocal] = useState(false)
@@ -223,7 +224,18 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
 
   const hasOwnerSection    = visibleCore.length > 0 || personal.length > 0
   const hasBusinessSection = business.length > 0
-  const hasOwner2          = secondOwner.length > 0
+  const hasOwner2Fields    = secondOwner.length > 0
+
+  // Owner 2 toggle — auto-detect from existing data, user can toggle
+  const [showOwner2, setShowOwner2] = useState(false)
+  useEffect(() => {
+    if (!hasOwner2Fields) { setShowOwner2(false); return }
+    const hasData = secondOwner.some(f => {
+      const val = lr[f.field_key]
+      return val !== null && val !== undefined && String(val).trim() !== ''
+    })
+    setShowOwner2(hasData)
+  }, [lead, leadFields])
 
   // Avatar for identity card
   const fullName   = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${leadId}`
@@ -341,7 +353,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
           {sectionBar(User, 'text-indigo-500', 'Owner Information', visibleCore.length + personal.length)}
           <div className={editing ? 'p-3' : 'p-2'}>
-            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : activeTab === 'lenders' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
               {visibleCore.map(f => fieldCard(f.key, f.label, f.type))}
               {personal.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
             </div>
@@ -354,7 +366,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
           {sectionBar(Building2, 'text-blue-500', 'Business Information', business.length)}
           <div className={editing ? 'p-3' : 'p-2'}>
-            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : activeTab === 'lenders' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
               {business.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
             </div>
           </div>
@@ -362,14 +374,28 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
       )}
 
       {/* ── Owner 2 Information ── */}
-      {hasOwner2 && (
+      {hasOwner2Fields && (
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
-          {sectionBar(Users, 'text-violet-500', 'Owner 2 Information', secondOwner.length)}
-          <div className={editing ? 'p-3' : 'p-2'}>
-            <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
-              {secondOwner.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
-            </div>
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 bg-slate-50/40">
+            <label className="flex items-center gap-2 cursor-pointer flex-1">
+              <input
+                type="checkbox"
+                checked={showOwner2}
+                onChange={e => setShowOwner2(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-violet-500 focus:ring-violet-400 cursor-pointer"
+              />
+              <Users size={12} className="text-violet-500" />
+              <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Owner 2 Information</h3>
+              <span className="text-[10px] font-bold text-slate-400">{secondOwner.length}</span>
+            </label>
           </div>
+          {showOwner2 && (
+            <div className={editing ? 'p-3' : 'p-2'}>
+              <div className={`grid gap-2 ${editing ? 'grid-cols-2 sm:grid-cols-3' : activeTab === 'lenders' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                {secondOwner.map(f => fieldCard(f.field_key, f.label_name, f.field_type))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -437,6 +463,15 @@ export function CrmLeadNew() {
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
     },
     onError: () => toast.error('Failed to assign'),
+  })
+
+  const tempMut = useMutation({
+    mutationFn: (val: string) => leadService.update(leadId, { temperature: val || null }),
+    onSuccess: () => {
+      toast.success('Temperature updated')
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+    },
+    onError: () => toast.error('Failed to update temperature'),
   })
 
   const { data: docs = [] } = useQuery({
@@ -566,6 +601,27 @@ export function CrmLeadNew() {
           </p>
         </div>
 
+        {/* Temperature */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Thermometer size={12} className={temp === 'hot' ? 'text-red-500' : temp === 'warm' ? 'text-amber-500' : temp === 'cold' ? 'text-blue-500' : 'text-slate-400'} />
+          <select
+            value={temp ?? ''}
+            onChange={e => tempMut.mutate(e.target.value)}
+            disabled={tempMut.isPending}
+            className={`text-[11px] font-semibold rounded-lg px-2 py-1 outline-none cursor-pointer disabled:opacity-50 border ${
+              temp === 'hot'  ? 'text-red-700 bg-red-50 border-red-200 focus:border-red-400' :
+              temp === 'warm' ? 'text-amber-700 bg-amber-50 border-amber-200 focus:border-amber-400' :
+              temp === 'cold' ? 'text-blue-700 bg-blue-50 border-blue-200 focus:border-blue-400' :
+                                'text-slate-600 bg-slate-50 border-slate-200 focus:border-slate-400'
+            }`}
+          >
+            <option value="">No Temp</option>
+            <option value="hot">🔥 Hot</option>
+            <option value="warm">🌤 Warm</option>
+            <option value="cold">❄️ Cold</option>
+          </select>
+        </div>
+
         {/* Assigned To */}
         <div className="flex items-center gap-1.5 shrink-0">
           <UserCheck size={12} className="text-violet-500" />
@@ -668,7 +724,7 @@ export function CrmLeadNew() {
           {/* LEFT — Overview fixed, never changes */}
           <aside className={`${activeTab === 'lenders' ? 'col-span-4' : 'col-span-8'} bg-white border-r border-slate-100 overflow-y-auto transition-all duration-300`}>
             <div className="p-4">
-              <OverviewTab lead={lead} leadId={leadId} leadFields={leadFields} onUpdated={() => qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })} editingProp={overviewEditing} setEditingProp={setOverviewEditing} />
+              <OverviewTab lead={lead} leadId={leadId} leadFields={leadFields} onUpdated={() => qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })} editingProp={overviewEditing} setEditingProp={setOverviewEditing} activeTab={activeTab} />
             </div>
           </aside>
 
