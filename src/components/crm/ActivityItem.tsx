@@ -24,7 +24,8 @@ interface TypeConfig {
 const TYPE_CONFIG: Record<ActivityType, TypeConfig> = {
   note_added:         { icon: MessageSquare, label: 'Note',            color: '#059669', bg: '#ecfdf5', bgHover: 'hover:bg-emerald-50/40', dot: 'bg-emerald-500' },
   call_made:          { icon: Phone,         label: 'Call',            color: '#3B82F6', bg: '#eff6ff', bgHover: 'hover:bg-blue-50/40',    dot: 'bg-blue-500'    },
-  email_sent:         { icon: Mail,          label: 'Email',           color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
+  email_sent:         { icon: Mail,          label: 'Email Sent',      color: '#0EA5E9', bg: '#f0f9ff', bgHover: 'hover:bg-sky-50/40',     dot: 'bg-sky-500'     },
+  email_failed:       { icon: Mail,          label: 'Email Failed',    color: '#EF4444', bg: '#fef2f2', bgHover: 'hover:bg-red-50/40',     dot: 'bg-red-500'     },
   sms_sent:           { icon: MessageSquare, label: 'SMS',             color: '#8B5CF6', bg: '#f5f3ff', bgHover: 'hover:bg-violet-50/40',  dot: 'bg-violet-500'  },
   status_change:      { icon: ArrowRightLeft,label: 'Status',          color: '#F59E0B', bg: '#fffbeb', bgHover: 'hover:bg-amber-50/40',   dot: 'bg-amber-500'   },
   field_update:       { icon: Pencil,        label: 'Updated',         color: '#6366F1', bg: '#eef2ff', bgHover: 'hover:bg-indigo-50/40',  dot: 'bg-indigo-500'  },

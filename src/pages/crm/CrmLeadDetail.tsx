@@ -1543,7 +1543,8 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting, onA
     pending:         'text-slate-600 bg-slate-100 border-slate-300',
   }
   const statusLabel: Record<string, string> = {
-    approved: 'Approved', declined: 'Declined', needs_documents: 'Missing Docs', pending: 'Pending',
+    approved: 'Approved', declined: 'Declined', needs_documents: 'Missing Docs',
+    pending: sub.submission_status === 'submitted' ? 'Awaiting Response' : 'Pending',
   }
 
   // Submission status badges (separate from response status)
@@ -2360,6 +2361,24 @@ function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (
     staleTime: 60_000,
   })
 
+  // CRM field labels for human-readable names in validation
+  const { data: crmFieldLabels } = useQuery({
+    queryKey: ['crm-lead-fields'],
+    queryFn: async () => {
+      const res = await crmService.getLeadFields()
+      const fields = (res.data?.data ?? res.data ?? []) as CrmLabel[]
+      const map: Record<string, string> = {}
+      for (const f of fields) {
+        if (f.field_key && f.label_name) map[f.field_key] = f.label_name
+      }
+      return map
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const resolveLabel = (key: string): string =>
+    crmFieldLabels?.[key] || sharedAutoLabel(key)
+
   // Fix modal state
   const [fixModal, setFixModal] = useState<{ log: ApiLog; error: FixSuggestion } | null>(null)
 
@@ -2725,7 +2744,7 @@ function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (
 
         for (const key of fieldsToCheck) {
           if (typeof key !== 'string' || !key || COMPUTED_FIELDS.has(key)) continue
-          labels[key] = sharedAutoLabel(key)
+          labels[key] = resolveLabel(key)
           const val = lead?.[key]
           if (val === undefined || val === null || String(val).trim() === '') {
             missing.push(key)
@@ -3144,20 +3163,7 @@ function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (
                       </div>
                     )}
 
-                    {(() => {
-                      const alreadySentSelected = Array.from(selectedIds).filter(id => !!submittedLenderMap[id])
-                      if (!alreadySentSelected.length) return null
-                      const names = alreadySentSelected.map(id => submittedLenderMap[id].lender_name ?? `Lender #${id}`).join(', ')
-                      return (
-                        <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                          <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                          <p className="text-[11px] text-amber-700 leading-relaxed">
-                            <strong className="font-semibold">{names}</strong>{' '}
-                            {alreadySentSelected.length === 1 ? 'was' : 'were'} already submitted. This will resend the application.
-                          </p>
-                        </div>
-                      )
-                    })()}
+                    {/* Previously-submitted warning removed — submission history panel + Resend button label provide sufficient context */}
                   </div>
 
                   <div className="border-t border-slate-100" />
@@ -3179,16 +3185,20 @@ function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (
                         setPreviewExpanded(val !== '')
                       }}
                     >
-                      <option value="">— Default template —</option>
+                      <option value="">— Select email template —</option>
                       {(emailTemplates ?? []).map(t => (
                         <option key={t.id} value={t.id}>{t.template_name}</option>
                       ))}
                     </select>
-                    {previewTemplate && (
+                    {previewTemplate ? (
                       <p className="text-[11px] text-emerald-600 flex items-center gap-1 mt-1.5">
                         <Eye size={10} /> Preview visible in center column
                       </p>
-                    )}
+                    ) : selectedIds.size > 0 ? (
+                      <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1.5">
+                        <AlertCircle size={10} /> Please select an email template before sending
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="border-t border-slate-100" />
@@ -3357,7 +3367,7 @@ function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabChange?: (
                       toast.error('An error occurred. Please try again.')
                     }
                   }}
-                  disabled={selectedIds.size === 0 || submitMutation.isPending || isValidating}
+                  disabled={selectedIds.size === 0 || templateId === '' || submitMutation.isPending || isValidating}
                   className="btn-success flex items-center gap-2 px-5 disabled:opacity-50 flex-1 justify-center"
                 >
                   {submitMutation.isPending ? (

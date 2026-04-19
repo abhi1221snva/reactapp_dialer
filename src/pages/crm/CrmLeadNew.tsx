@@ -22,7 +22,7 @@ import {
   Hash, MessageSquare, Activity, MoreVertical, UserCheck,
   Tag, Calendar, Check, Eye, SlidersHorizontal, Sparkles,
   Zap, MapPin, Globe, Thermometer,
-  ArrowUpRight, PhoneCall, Star, LayoutDashboard,
+  ArrowUpRight, PhoneCall, Star, LayoutDashboard, ChevronDown, Plus,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -39,9 +39,11 @@ import { ApprovalsSection }     from '../../components/crm/ApprovalsSection'
 import { DynamicFieldForm }     from '../../components/crm/DynamicFieldForm'
 import { DocumentsPanel }       from '../../components/crm/LeadDocumentsPanel'
 import { LendersPanel }         from '../../components/crm/LeadLendersPanel'
+import { RichEmailEditor }       from '../../components/crm/RichEmailEditor'
+import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import { confirmDelete }         from '../../utils/confirmDelete'
 import { formatPhoneNumber }    from '../../utils/format'
-import type { CrmLead, LeadStatus, CrmDocument, CrmLabel } from '../../types/crm.types'
+import type { CrmLead, LeadStatus, CrmDocument, CrmLabel, EmailTemplate, SmsTemplate } from '../../types/crm.types'
 import { useUIStore }           from '../../stores/ui.store'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -414,6 +416,8 @@ export function CrmLeadNew() {
   const [showMoreMenu,    setShowMoreMenu]    = useState(false)
   const [overviewEditing, setOverviewEditing] = useState(false)
   const [showComplianceModal, setShowComplianceModal] = useState(false)
+  const [showEmailModal,  setShowEmailModal]  = useState(false)
+  const [showSmsModal,    setShowSmsModal]    = useState(false)
   const tabContentRef = useRef<HTMLDivElement>(null)
 
   // ── Auto-collapse sidebar on this page only; restore on leave ───────────────
@@ -502,6 +506,14 @@ export function CrmLeadNew() {
     onSuccess: () => { toast.success('Portal link generated'); qc.invalidateQueries({ queryKey: ['merchant-portal', leadId] }) },
     onError: () => toast.error('Failed'),
   })
+
+  const handleMerchantPortal = () => {
+    if (merchantPortal?.url) {
+      navigator.clipboard.writeText(String(merchantPortal.url)).then(() => toast.success('Merchant link copied!'))
+    } else {
+      genPortal.mutate()
+    }
+  }
 
   // ── Click-outside more menu ────────────────────────────────────────────────
   useEffect(() => {
@@ -641,6 +653,33 @@ export function CrmLeadNew() {
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setShowEmailModal(true)}
+            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold text-sky-700 transition-all hover:shadow-sm"
+            style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}
+            title="Send Email"
+          >
+            <Mail size={12} /> <span className="hidden xl:inline">Email</span>
+          </button>
+          <button
+            onClick={() => setShowSmsModal(true)}
+            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold text-violet-700 transition-all hover:shadow-sm"
+            style={{ background: '#f5f3ff', border: '1px solid #c4b5fd' }}
+            title="Send SMS"
+          >
+            <MessageSquare size={12} /> <span className="hidden xl:inline">SMS</span>
+          </button>
+          <button
+            onClick={handleMerchantPortal}
+            disabled={genPortal.isPending}
+            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold text-amber-700 transition-all hover:shadow-sm disabled:opacity-50"
+            style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
+            title={merchantPortal?.url ? 'Copy merchant portal link' : 'Generate merchant portal link'}
+          >
+            {genPortal.isPending ? <Loader2 size={12} className="animate-spin" /> : merchantPortal?.url ? <Copy size={12} /> : <ExternalLink size={12} />}
+            <span className="hidden xl:inline">{merchantPortal?.url ? 'Copy Link' : 'Merchant'}</span>
+          </button>
+          <div className="w-px h-5 bg-slate-200" />
           {!overviewEditing ? (
             <button onClick={() => setOverviewEditing(true)}
               className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-colors border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300">
@@ -652,26 +691,12 @@ export function CrmLeadNew() {
             </span>
           )}
 
-          {/* More (delete / classic view / panel toggle) */}
-          <div className="relative" data-more-menu>
-            <button onClick={() => setShowMoreMenu(v => !v)}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all">
-              <MoreVertical size={15} />
-            </button>
-            {showMoreMenu && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1">
-                <button onClick={() => { navigate(`/crm/leads/${leadId}`); setShowMoreMenu(false) }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
-                  <ArrowUpRight size={13} className="text-slate-400" /> Classic View
-                </button>
-                <div className="h-px bg-slate-100 my-1" />
-                <button onClick={() => { handleDelete(); setShowMoreMenu(false) }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50">
-                  <Trash2 size={13} /> Delete Lead
-                </button>
-              </div>
-            )}
-          </div>
+          <button onClick={handleDelete}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all border border-transparent hover:border-red-200"
+            title="Delete Lead"
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
 
@@ -779,12 +804,393 @@ export function CrmLeadNew() {
         </div>
       )}
 
+      {/* ── Email Modal ── */}
+      {showEmailModal && (
+        <SendEmailModal leadId={leadId} defaultTo={String(lead?.email ?? '')} onClose={() => setShowEmailModal(false)} />
+      )}
+
+      {/* ── SMS Modal ── */}
+      {showSmsModal && (
+        <SendSmsModal leadId={leadId} defaultTo={String(lead?.phone_number ?? '')} onClose={() => setShowSmsModal(false)} />
+      )}
+
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(5px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+    </div>
+  )
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Replace [[field_key]] placeholders with actual lead values. */
+function fillPlaceholders(html: string, lead: Record<string, unknown>): string {
+  const resolve = (_match: string, key: string) => {
+    const val = lead[key]
+    return val !== null && val !== undefined && val !== '' ? String(val) : _match
+  }
+  return html
+    .replace(/\[\[(\w+)\]\]/g, resolve)
+    .replace(/\{\{(\w+)\}\}/g, resolve)
+}
+
+/** Strip style/script/head tags so HTML is safe for TipTap editor */
+function cleanHtmlForEditor(html: string): string {
+  if (!html) return ''
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('style, script, head').forEach(el => el.remove())
+  return doc.body.innerHTML
+}
+
+// ── Send Email Modal ─────────────────────────────────────────────────────────
+
+function SendEmailModal({ leadId, defaultTo, onClose }: { leadId: number; defaultTo: string; onClose: () => void }) {
+  const [to,            setTo]            = useState(defaultTo)
+  const [subject,       setSubject]       = useState('')
+  const [body,          setBody]          = useState('')
+  const [selectedTplId, setSelectedTplId] = useState<number | ''>('')
+  const [resolving,     setResolving]     = useState(false)
+  const [tab,           setTab]           = useState<'compose' | 'preview'>('compose')
+  const editorRef = useRef<RichEmailEditorRef>(null)
+  const [tplSearch,     setTplSearch]     = useState('')
+  const [tplOpen,       setTplOpen]       = useState(false)
+  const tplDropRef = useRef<HTMLDivElement>(null)
+
+  const { data: templates, isLoading: tplLoading } = useQuery({
+    queryKey: ['email-templates', 'all'],
+    queryFn: async () => {
+      const res = await crmService.getEmailTemplates()
+      return (res.data?.data ?? res.data ?? []) as EmailTemplate[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tplDropRef.current && !tplDropRef.current.contains(e.target as Node)) setTplOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleTemplateChange = async (tplId: number | '') => {
+    setSelectedTplId(tplId)
+    setTplOpen(false)
+    setTplSearch('')
+    if (tplId === '') { setSubject(''); editorRef.current?.setContent(''); return }
+    setResolving(true)
+    try {
+      const res = await crmService.resolveEmailTemplate(leadId, tplId as number)
+      const resolved = res.data?.data ?? res.data
+      setSubject(resolved?.subject ?? '')
+      editorRef.current?.setContent(cleanHtmlForEditor(resolved?.body ?? ''))
+    } catch { toast.error('Failed to load template') }
+    finally { setResolving(false) }
+  }
+
+  const send = useMutation({
+    mutationFn: () => {
+      const html = editorRef.current?.getContent() ?? body
+      return crmService.sendMerchantEmail(leadId, { to, subject, body: html, is_html: true })
+    },
+    onSuccess: () => { toast.success('Email sent'); onClose() },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send email'
+      toast.error(msg)
+    },
+  })
+
+  const bodyIsEmpty = !body || body.replace(/<[^>]*>/g, '').trim() === ''
+  const previewHtml = body
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden" style={{ maxWidth: 760, maxHeight: '90vh' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0">
+              <Mail size={16} className="text-sky-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-800 text-sm leading-tight">Send Email</p>
+              {to && <p className="text-[11px] text-slate-400 mt-0.5">{to}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+              {(['compose', 'preview'] as const).map(t => (
+                <button key={t} onClick={() => setTab(t)}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all capitalize ${tab === t ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >{t}</button>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><X size={15} /></button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {tab === 'compose' ? (
+            <div className="flex flex-col gap-4 p-6">
+              {/* Template picker */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500">Email Template</label>
+                  <a href="/crm/email-templates" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 font-medium transition-colors">
+                    <Plus size={11} /> New Template
+                  </a>
+                </div>
+                <div className="relative" ref={tplDropRef}>
+                  <button type="button" onClick={() => !tplLoading && !resolving && setTplOpen(v => !v)} disabled={tplLoading || resolving}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-left focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 disabled:opacity-60 transition-colors hover:border-slate-300">
+                    <span className={selectedTplId === '' ? 'text-slate-400' : 'text-slate-700 font-medium'}>
+                      {selectedTplId !== '' ? (templates ?? []).find(t => t.id === selectedTplId)?.template_name ?? 'Selected template' : 'Select Email Template'}
+                    </span>
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      {(resolving || tplLoading) && <Loader2 size={12} className="animate-spin text-sky-500" />}
+                      {selectedTplId !== '' && !resolving && (
+                        <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); handleTemplateChange('') }} onKeyDown={e => e.key === 'Enter' && handleTemplateChange('')}
+                          className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"><X size={10} /></span>
+                      )}
+                      <ChevronDown size={14} className={`text-slate-400 transition-transform duration-150 ${tplOpen ? 'rotate-180' : ''}`} />
+                    </span>
+                  </button>
+
+                  {tplOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+                        <Search size={13} className="text-slate-400 flex-shrink-0" />
+                        <input autoFocus type="text" value={tplSearch} onChange={e => setTplSearch(e.target.value)} placeholder="Search templates…"
+                          className="flex-1 text-xs outline-none text-slate-700 placeholder-slate-400 bg-transparent" />
+                        {tplSearch && <button onClick={() => setTplSearch('')} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={11} /></button>}
+                      </div>
+                      <div className="max-h-52 overflow-y-auto py-1">
+                        {(() => {
+                          const filtered = (templates ?? []).filter(t => !tplSearch || t.template_name.toLowerCase().includes(tplSearch.toLowerCase()) || (t.subject ?? '').toLowerCase().includes(tplSearch.toLowerCase()))
+                          if (!filtered.length) return <p className="px-3 py-4 text-xs text-slate-400 text-center">{tplLoading ? 'Loading…' : tplSearch ? `No match for "${tplSearch}"` : 'No templates available'}</p>
+                          return filtered.map(t => (
+                            <button key={t.id} type="button" onClick={() => handleTemplateChange(t.id)}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-sky-50 transition-colors ${selectedTplId === t.id ? 'bg-sky-50' : ''}`}>
+                              <div className="min-w-0">
+                                <p className={`text-sm font-medium truncate ${selectedTplId === t.id ? 'text-sky-700' : 'text-slate-700'}`}>{t.template_name}</p>
+                                {t.subject && <p className="text-[11px] text-slate-400 truncate mt-0.5">{t.subject}</p>}
+                              </div>
+                              {selectedTplId === t.id && <Check size={13} className="text-sky-600 flex-shrink-0 ml-2" />}
+                            </button>
+                          ))
+                        })()}
+                      </div>
+                      <div className="border-t border-slate-100 px-3 py-2">
+                        <a href="/crm/email-templates" target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-[11px] text-sky-600 hover:text-sky-700 font-medium transition-colors">
+                          <ExternalLink size={11} /> Manage all email templates
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* To + Subject */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">To</label>
+                  <input type="email" value={to} onChange={e => setTo(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Subject</label>
+                  <input type="text" value={subject} onChange={e => { setSubject(e.target.value); setSelectedTplId('') }} placeholder="Enter subject..."
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400" />
+                </div>
+              </div>
+
+              {/* Body */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Message</label>
+                <RichEmailEditor ref={editorRef} onChange={setBody} />
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 bg-slate-50 min-h-full">
+              <div className="max-w-xl mx-auto">
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="h-1 bg-gradient-to-r from-sky-400 via-blue-400 to-indigo-400" />
+                  <div className="px-6 py-4 border-b border-slate-100 space-y-2">
+                    {[{ label: 'To', value: to || '—' }, { label: 'Subject', value: subject || '—' }].map(row => (
+                      <div key={row.label} className="flex items-start gap-3">
+                        <span className="text-slate-400 text-[11px] w-14 text-right flex-shrink-0 mt-0.5 font-medium">{row.label}</span>
+                        <span className={`text-sm ${row.label === 'Subject' ? 'font-semibold text-slate-900' : 'text-slate-600 font-mono text-[12px]'}`}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-8 py-6 text-sm text-slate-700 leading-relaxed min-h-32">
+                    {body ? <div dangerouslySetInnerHTML={{ __html: previewHtml }} /> : <p className="text-slate-400 italic text-xs">No message content yet.</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+          <p className="text-[11px] text-slate-400">{bodyIsEmpty ? 'No content yet' : `${body.replace(/<[^>]*>/g, '').length.toLocaleString()} chars`}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
+            <button onClick={() => send.mutate()} disabled={send.isPending || !to || !subject || bodyIsEmpty}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send Email
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
+// ── Send SMS Modal ───────────────────────────────────────────────────────────
+
+function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultTo: string; onClose: () => void }) {
+  const [to,          setTo]          = useState(defaultTo)
+  const [body,        setBody]        = useState('')
+  const [fromNumber,  setFromNumber]  = useState('')
+  const [selectedTpl, setSelectedTpl] = useState<number | ''>('')
+
+  const MAX_SEGMENT = 160
+  const segments = Math.ceil((body.length || 1) / MAX_SEGMENT)
+  const charsLeft = segments * MAX_SEGMENT - body.length
+
+  const { data: senderNumbers, isLoading: numbersLoading } = useQuery({
+    queryKey: ['sms-sender-numbers'],
+    queryFn: async () => {
+      const res = await crmService.getSmsSenderNumbers()
+      const arr = res.data?.data?.numbers ?? res.data?.numbers ?? res.data?.data ?? []
+      return (Array.isArray(arr) ? arr : []) as { phone_number: string; friendly_name?: string }[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const { data: templates } = useQuery({
+    queryKey: ['sms-templates'],
+    queryFn: async () => {
+      const res  = await crmService.getSmsTemplates()
+      const rows = (res.data?.data ?? res.data ?? []) as Record<string, unknown>[]
+      return rows.map(r => ({
+        ...r,
+        sms_template_name: r.template_name ?? r.sms_template_name ?? '',
+        sms_template:      r.template_html  ?? r.sms_template      ?? '',
+        status: Number(r.status) as 0 | 1,
+      })) as SmsTemplate[]
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const { data: leadData } = useQuery({
+    queryKey: ['crm-lead', leadId],
+    queryFn: async () => (r => (r.data?.data ?? r.data) as CrmLead)(await leadService.getById(leadId)),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  useEffect(() => {
+    if (!fromNumber && senderNumbers && senderNumbers.length > 0) setFromNumber(senderNumbers[0].phone_number)
+  }, [senderNumbers, fromNumber])
+
+  const handleTemplateChange = (tplId: number | '') => {
+    setSelectedTpl(tplId)
+    if (tplId === '') { setBody(''); return }
+    const tpl = (templates ?? []).find(t => t.id === tplId)
+    if (tpl) {
+      const resolved = leadData ? fillPlaceholders(tpl.sms_template, leadData as Record<string, unknown>) : tpl.sms_template
+      setBody(resolved)
+    }
+  }
+
+  const send = useMutation({
+    mutationFn: () => crmService.sendLeadSms(leadId, { to, body, from_number: fromNumber || undefined }),
+    onSuccess: () => { toast.success('SMS sent successfully'); onClose() },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send SMS'
+      toast.error(msg)
+    },
+  })
+
+  const canSend = to.trim().length > 0 && body.trim().length > 0 && !send.isPending
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden" style={{ maxWidth: 520 }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center">
+              <MessageSquare size={15} className="text-violet-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Send Text Message</h2>
+              <p className="text-xs text-slate-400 mt-0.5">SMS via connected number</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><X size={15} /></button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-3 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+          {(templates ?? []).length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Template <span className="text-slate-400">(optional)</span></label>
+              <select value={selectedTpl} onChange={e => handleTemplateChange(e.target.value === '' ? '' : Number(e.target.value))} className="input w-full text-xs">
+                <option value="">— Select a template —</option>
+                {(templates ?? []).map(t => <option key={t.id} value={t.id}>{t.sms_template_name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">To <span className="text-red-500">*</span></label>
+              <input type="tel" value={to} onChange={e => setTo(e.target.value)} placeholder="e.g. +12025551234" className="input w-full text-xs" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
+              {numbersLoading ? (
+                <div className="input w-full text-xs flex items-center gap-1.5 text-slate-400"><Loader2 size={12} className="animate-spin" /> Loading…</div>
+              ) : (
+                <select value={fromNumber} onChange={e => setFromNumber(e.target.value)} className="input w-full text-xs">
+                  <option value="">— Auto-select —</option>
+                  {(senderNumbers ?? []).map(n => <option key={n.phone_number} value={n.phone_number}>{n.friendly_name ? `${n.friendly_name} (${n.phone_number})` : n.phone_number}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-slate-600">Message <span className="text-red-500">*</span></label>
+              <span className={`text-[11px] font-mono ${charsLeft < 20 ? 'text-orange-500' : 'text-slate-400'}`}>{charsLeft} chars · {segments} {segments === 1 ? 'segment' : 'segments'}</span>
+            </div>
+            <textarea value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="Type your message…" className="input w-full text-sm resize-none" maxLength={1600} />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-slate-50/60 flex-shrink-0">
+          <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
+          <button type="button" disabled={!canSend} onClick={() => send.mutate()}
+            className="flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50">
+            {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send Text
+          </button>
+        </div>
+
+      </div>
     </div>
   )
 }

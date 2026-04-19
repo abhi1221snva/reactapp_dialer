@@ -398,6 +398,7 @@ export type ActivityType =
   | 'lender_api_result'
   | 'lender_response'
   | 'email_sent'
+  | 'email_failed'
   | 'sms_sent'
   | 'call_made'
   | 'approval_requested'

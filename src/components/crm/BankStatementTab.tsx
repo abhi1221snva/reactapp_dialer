@@ -134,8 +134,7 @@ export function BankStatementTab({ leadId }: Props) {
         <div className="space-y-2">
           {sessions.map((s) => (
             <div key={s.session_id}
-              className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-emerald-200 transition-colors cursor-pointer"
-              onClick={() => window.open(`/crm/bank-statements/${s.session_id}`, '_blank')}>
+              className="bg-white border border-slate-200 rounded-xl overflow-hidden transition-colors">
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
@@ -157,11 +156,13 @@ export function BankStatementTab({ leadId }: Props) {
                   {s.status === 'completed' && s.total_deposits != null && (
                     <span className="text-xs text-slate-500">{fmt(s.total_deposits)} deposits</span>
                   )}
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => window.open(`/crm/bank-statements/${s.session_id}`, '_blank')}
-                      className="text-slate-400 hover:text-emerald-600 p-1 rounded transition-colors" title="View Details">
-                      <Eye size={14} />
-                    </button>
+                  <div className="flex items-center gap-1">
+                    {s.status === 'completed' && (
+                      <button onClick={() => window.open(`/crm/bank-statements/${s.session_id}`, '_blank')}
+                        className="text-emerald-500 hover:text-emerald-700 p-1 rounded transition-colors" title="View Analysis Details">
+                        <Eye size={14} />
+                      </button>
+                    )}
                     <button onClick={async () => {
                       if (await confirmDelete('Delete this analysis session?')) deleteMut.mutate(s.session_id)
                     }}
