@@ -26,15 +26,16 @@ const CAMPAIGN_COLORS = [
 
 function mapCampaign(c: Campaign, idx: number): StudioCampaign {
   const dialMethodMap: Record<string, StudioCampaign['dialMethod']> = {
-    predictive: 'Predictive',
-    preview:    'Preview',
-    progressive:'Power',
-    manual:     'Manual',
+    predictive_dial:   'Predictive',
+    preview_and_dial:  'Preview',
+    power_dial:        'Power',
+    super_power_dial:  'Super Dial',
+    outbound_ai:       'Outbound AI',
   }
   return {
     id:          c.id,
     name:        c.campaign_name,
-    dialMethod:  dialMethodMap[c.dial_method] ?? 'Predictive',
+    dialMethod:  dialMethodMap[c.dial_mode] ?? 'Predictive',
     ratio:       c.dial_ratio ?? 1,
     totalLeads:  c.total_leads ?? 0,
     calledLeads: c.called_leads ?? 0,
@@ -56,6 +57,7 @@ export function DialerStudio() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [campaign, setCampaign] = useState<StudioCampaign | null>(null)
   const [urlCampaignNotFound, setUrlCampaignNotFound] = useState(false)
+  const [failedCampaignId, setFailedCampaignId] = useState<number | null>(null)
 
   const { sipConfig } = useAuth()
   const phoneRegistered   = useFloatingStore(s => s.phoneRegistered)
@@ -80,7 +82,7 @@ export function DialerStudio() {
       ...c,
       campaign_name: (c.campaign_name ?? c.title ?? '') as string,
       status:        (c.campaign_status ?? (Number(c.status) === 1 ? 'active' : 'inactive')) as 'active' | 'inactive',
-      dial_method:   (c.dial_method ?? 'predictive') as Campaign['dial_method'],
+      dial_mode:     (c.dial_mode ?? 'predictive_dial') as Campaign['dial_mode'],
       dial_ratio:    Number(c.dial_ratio ?? c.call_ratio ?? 1),
       total_leads:   c.total_leads  !== undefined ? Number(c.total_leads)  : undefined,
       called_leads:  c.called_leads !== undefined ? Number(c.called_leads) : undefined,
@@ -97,7 +99,7 @@ export function DialerStudio() {
     // Wait until campaigns have finished loading before checking
     if (isLoading) return
     const id = Number(raw)
-    if (Number.isNaN(id) || campaign?.id === id) return
+    if (Number.isNaN(id) || campaign?.id === id || failedCampaignId === id) return
     const match = allCampaigns.find((c) => c.id === id)
     if (match) {
       setUrlCampaignNotFound(false)
@@ -123,6 +125,7 @@ export function DialerStudio() {
       return dialerService.extensionLogin(c.id).then((res) => ({ res, campaign: c }))
     },
     onSuccess: ({ campaign: c }) => {
+      setFailedCampaignId(null)
       const rawCamp = rawCampaigns.find((r) => r.id === c.id)
       if (rawCamp) setActiveCampaign(rawCamp)
       setExtensionLoggedIn(true)
@@ -138,7 +141,8 @@ export function DialerStudio() {
       next.set('mode', 'dialer')
       setSearchParams(next, { replace: false })
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, variables: StudioCampaign) => {
+      setFailedCampaignId(variables.id)
       const backendMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
       const localMsg   = (err as Error)?.message
       toast.error(backendMsg ?? localMsg ?? 'Failed to join campaign', { duration: 6000 })
@@ -147,7 +151,7 @@ export function DialerStudio() {
 
   // ── Navigation handlers ────────────────────────────────────────────────────
   const handleSelectCampaign = useCallback(
-    (c: StudioCampaign) => { loginMutation.mutate(c) },
+    (c: StudioCampaign) => { setFailedCampaignId(null); loginMutation.mutate(c) },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [loginMutation],
   )

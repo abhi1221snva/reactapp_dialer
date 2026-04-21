@@ -17,6 +17,7 @@
  */
 import { useEffect, useRef } from 'react'
 import Pusher from 'pusher-js'
+import toast from 'react-hot-toast'
 import { useDialerStore } from '../stores/dialer.store'
 import { useAuthStore } from '../stores/auth.store'
 import { campaignDialerService } from '../services/campaignDialer.service'
@@ -29,15 +30,17 @@ interface Options {
   onBridged?: (leadId: number, campaignId: number) => void
   /** Optional: called when call.ended event is received */
   onEnded?: (leadId: number) => void
+  /** Optional: called when customer did not answer */
+  onCustomerNoAnswer?: (leadId: number) => void
 }
 
-export function useAgentLiveCall({ extension, onBridged, onEnded }: Options = {}) {
+export function useAgentLiveCall({ extension, onBridged, onEnded, onCustomerNoAnswer }: Options = {}) {
   const pusherRef  = useRef<Pusher | null>(null)
   const { setActiveLead, setCallState, startCallTimer } = useDialerStore()
   const user = useAuthStore((s) => s.user)
 
-  // Resolve extension from prop or auth store user
-  const ext = extension ?? (user as Record<string, unknown> | null)?.extension
+  // Resolve extension from prop or auth store user (prefer alt_extension for WebRTC)
+  const ext = extension ?? (user as Record<string, unknown> | null)?.alt_extension ?? (user as Record<string, unknown> | null)?.extension
 
   useEffect(() => {
     if (!ext || !import.meta.env.VITE_PUSHER_APP_KEY) return
@@ -92,6 +95,14 @@ export function useAgentLiveCall({ extension, onBridged, onEnded }: Options = {}
       if (callState === 'in-call') {
         setCallState('wrapping')
       }
+    })
+
+    // ── call.customer_noanswer: customer originate failed ────────────────────
+    channel.bind('call.customer_noanswer', (data: { lead_id: number; campaign_id: number }) => {
+      toast.error('Customer did not answer')
+      onCustomerNoAnswer?.(data.lead_id)
+      // Transition to wrapping — conference will be torn down by backend
+      setCallState('wrapping')
     })
 
     pusherRef.current = pusher

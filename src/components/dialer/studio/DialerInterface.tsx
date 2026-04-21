@@ -334,7 +334,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     onError:    () => toast.error('Voicemail drop failed'),
   })
 
-  // ─── Dial handler ─────────────────────────────────────────────────────────
+  // ─── Dial handler (Agent-First: AMI rings webphone, then auto-dials lead) ─
   const handleDial = useCallback(async () => {
     // Only dial when store is 'ready' (logged in, not active)
     if (storeState !== 'ready' && storeState !== 'idle') return
@@ -348,26 +348,19 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     setIsDialingLocal(true)
     try {
       pushLeadToHistory()
-      const leadRes = await dialerService.getLead()
-      const raw = leadRes.data as Record<string, unknown>
-      if (!raw?.success || !raw.lead_id) {
-        toast('No leads available in this campaign', { icon: 'ℹ️' })
+
+      // Single API call: picks next lead + AMI originates to agent's webphone
+      const res = await dialerService.campaignDialNext(campaign.id)
+      const raw = res.data as Record<string, unknown>
+
+      if (!raw?.success) {
+        toast(String(raw?.message || 'No leads available in this campaign'), { icon: 'ℹ️' })
         return
       }
+
+      // Build lead object from response
       const storeLead = parseApiLead(raw)
       setActiveLead(storeLead)
-
-      if (!storeLead.phone_number) {
-        toast.error('Lead has no phone number')
-        return
-      }
-
-      const callRes = await dialerService.callNumber({
-        campaign_id: campaign.id,
-        lead_id:     storeLead.lead_id ?? storeLead.id,
-        number:      storeLead.phone_number,
-        id:          storeLead.list_id ?? storeLead.id,  // backend uses this as list_id for lead_report
-      })
 
       setCampaignDialActive(true)
       setCallState('ringing')
@@ -386,28 +379,11 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
 
       setPhoneOpen(true)
 
-      // WebRTC mode: browser initiates the SIP call directly
-      if (callRes.data?.dial_mode === 'webrtc') {
-        const sipDial = useFloatingStore.getState().sipDialHandler
-        if (!sipDial) {
-          toast.error('WebPhone not initialized — please reload the page', { duration: 6000 })
-          setCallState('ready')
-          setCampaignDialActive(false)
-          dialerService.hangUp({ id: campaign.id }).catch(() => {})
-          updateLastCallLog({ status: 'failed' })
-          return
-        }
-        try {
-          await sipDial(callRes.data?.number || storeLead.phone_number)
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'SIP call failed — reconnect WebPhone and try again'
-          toast.error(msg, { duration: 6000 })
-          setCallState('ready')
-          setCampaignDialActive(false)
-          dialerService.hangUp({ id: campaign.id }).catch(() => {})
-          updateLastCallLog({ status: 'failed' })
-        }
-      }
+      // Agent-first mode: AMI is ringing the webphone — no sipDial needed.
+      // The incoming SIP call will appear on the webphone automatically.
+      // When agent answers -> ConfBridge -> AMI listener dials the lead.
+      toast.success('Incoming call — answer your webphone to connect to lead', { duration: 5000 })
+
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??

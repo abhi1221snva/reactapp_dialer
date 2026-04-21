@@ -8,6 +8,8 @@ export interface DraggableWidgetProps {
   onClose: () => void
   /** Called when minimize state changes */
   onMinimize?: (minimized: boolean) => void
+  /** Controlled minimized state — when provided, overrides internal state */
+  minimized?: boolean
   /** Left side of header — icon + title */
   headerLeft: ReactNode
   /** Extra controls on the right of the header (before Minimize/Close) */
@@ -34,6 +36,7 @@ export function DraggableWidget({
   isOpen,
   onClose,
   onMinimize,
+  minimized: minimizedProp,
   headerLeft,
   headerRight,
   onMaximize,
@@ -51,6 +54,11 @@ export function DraggableWidget({
 
   // Reset minimize state when widget closes
   useEffect(() => { if (!isOpen) setIsMinimized(false) }, [isOpen])
+
+  // Sync external minimized prop to internal state
+  useEffect(() => {
+    if (minimizedProp !== undefined) setIsMinimized(minimizedProp)
+  }, [minimizedProp])
 
   // Track viewport for mobile/desktop switching
   useEffect(() => {

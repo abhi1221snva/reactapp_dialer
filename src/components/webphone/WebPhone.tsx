@@ -90,6 +90,7 @@ export function WebPhone() {
   const updateUser = useAuthStore(s => s.updateUser)
 
   const isOpen              = useFloatingStore(s => s.phoneOpen)
+  const phoneMinimized      = useFloatingStore(s => s.phoneMinimized)
   const setPhoneOpen        = useFloatingStore(s => s.setPhoneOpen)
   const setPhoneMinimized   = useFloatingStore(s => s.setPhoneMinimized)
   const registerPhoneClick  = useFloatingStore(s => s.registerPhoneClick)
@@ -191,6 +192,7 @@ export function WebPhone() {
         } else if (isCallSess) {
           ringtone.current?.pause(); ringback.current?.pause()
           setIncomingFrom(null); setStatusMsg('In Call'); setPhoneState('in_call')
+          setNumber('')  // Clear so DTMF display starts fresh
         }
         break
 
@@ -262,6 +264,8 @@ export function WebPhone() {
         setIncomingFrom(from); setStatusMsg(`Incoming: ${from}`)
         setPhoneState('incoming')
         ringtone.current?.play().catch(() => {})
+        // Restore phone panel: open it and un-minimize so the user sees the incoming call
+        useFloatingStore.getState().setPhoneMinimized(false)
         setIsOpen(true)
 
         // Sync to dialer store so IncomingCallModal also shows
@@ -380,6 +384,9 @@ export function WebPhone() {
         sip_caps: [{ name: '+g.oma.sip-im' }, { name: 'language', value: '"en,fr"' }],
       })
       sipCallSess.current.call(digits)
+      // Update number state so the calling screen displays the full number (not just "+1")
+      const stripped = digits.replace(/^\+?1/, '')
+      setNumber(stripped)
       setPhoneState('calling'); setStatusMsg(`Calling ${digits}…`)
     } catch (err) { setStatusMsg('Call failed to initiate'); throw err }
   }, [onSipEventSession])
@@ -430,8 +437,26 @@ export function WebPhone() {
 
   const sipDtmf = useCallback((char: string) => {
     if (sipCallSess.current) {
-      try { sipCallSess.current.dtmf(char) } catch { /* ignore */ }
+      // Prefer WebRTC RTCDTMFSender (RFC 4733 in-band) — Asterisk expects this for WebRTC
+      let sent = false
+      try {
+        const pc: RTCPeerConnection | undefined =
+          (sipCallSess.current as any).o_session?.o_mgr?.o_pc ??
+          (sipCallSess.current as any).o_session?.o_session?.o_mgr?.o_pc
+        if (pc) {
+          const sender = pc.getSenders().find((s: RTCRtpSender) => s.track?.kind === 'audio' && s.dtmf)
+          if (sender?.dtmf) {
+            sender.dtmf.insertDTMF(char, 100, 70)
+            sent = true
+          }
+        }
+      } catch { /* fall back to SIP INFO */ }
+      // Fallback: SIPml5 SIP INFO DTMF
+      if (!sent) {
+        try { sipCallSess.current.dtmf(char) } catch { /* ignore */ }
+      }
       dtmfTone.current?.play().catch(() => {})
+      setNumber(n => n + char)
     } else {
       setNumber(n => n + char)
     }
@@ -603,14 +628,23 @@ export function WebPhone() {
 
       <DraggableWidget
         isOpen={isOpen}
-        onClose={() => setPhoneOpen(false)}
+        onClose={() => {
+          // When SIP is active, minimize instead of closing — keeps registration alive
+          // and the header strip visible so the user knows the phone is still connected.
+          if (phoneState !== 'idle' && phoneState !== 'error') {
+            setPhoneMinimized(true)
+          } else {
+            setPhoneOpen(false)
+          }
+        }}
         onMinimize={setPhoneMinimized}
+        minimized={phoneMinimized}
         headerGradient="linear-gradient(160deg, #0a0f1e 0%, #111827 50%, #1c1854 100%)"
         defaultRight={phoneRight}
         defaultBottom={20}
         width={320}
         zIndex={62}
-        bodyHeight={470}
+        bodyHeight={isInCall ? 580 : isCalling ? 340 : 470}
         headerLeft={
           <>
             <div style={{

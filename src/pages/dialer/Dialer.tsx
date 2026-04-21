@@ -18,6 +18,15 @@ import { cn } from '../../utils/cn'
 import { isCampaignInCallingHours } from '../../utils/timezone'
 import type { Campaign, Lead } from '../../types'
 
+// ─── Dial-mode display labels ─────────────────────────────────────────────────
+const DIAL_MODE_LABEL: Record<string, string> = {
+  predictive_dial:   'Predictive',
+  preview_and_dial:  'Preview',
+  power_dial:        'Power',
+  super_power_dial:  'Super Dial',
+  outbound_ai:       'Outbound AI',
+}
+
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; classes: string }> = {
   idle:     { label: 'Not Ready',   classes: 'bg-slate-100 text-slate-500' },
@@ -101,7 +110,7 @@ export function Dialer() {
   // When the backend campaign worker bridges a call, it pushes a Pusher event
   // on channel "dialer-agent.{ext}" with the lead_id. This hook fetches the
   // lead and populates activeLead so LeadInfoPanel shows data immediately.
-  useAgentLiveCall({ extension: user?.extension })
+  useAgentLiveCall({ extension: user?.alt_extension || user?.extension })
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: campaignsData, isLoading } = useQuery({
@@ -112,7 +121,7 @@ export function Dialer() {
     ...c,
     campaign_name: (c.campaign_name ?? c.title ?? '') as string,
     status:        (c.campaign_status ?? (Number(c.status) === 1 ? 'active' : 'inactive')) as 'active' | 'inactive',
-    dial_method:   (c.dial_method ?? 'predictive') as Campaign['dial_method'],
+    dial_mode:     (c.dial_mode ?? 'predictive_dial') as Campaign['dial_mode'],
     dial_ratio:    Number(c.dial_ratio ?? c.call_ratio ?? 1),
     total_leads:   c.total_leads !== undefined ? Number(c.total_leads) : undefined,
     called_leads:  c.called_leads !== undefined ? Number(c.called_leads) : undefined,
@@ -569,7 +578,7 @@ export function Dialer() {
 
                   <h3 className="font-bold text-slate-900 text-base leading-snug">{c.campaign_name}</h3>
                   <p className="text-xs text-slate-500 mt-1 capitalize">
-                    {c.dial_method} &nbsp;·&nbsp; Ratio {c.dial_ratio}:1
+                    {DIAL_MODE_LABEL[c.dial_mode] ?? c.dial_mode} &nbsp;·&nbsp; Ratio {c.dial_ratio}:1
                   </p>
 
                   {/* Calling hours info */}
@@ -652,7 +661,7 @@ export function Dialer() {
                 {activeCampaign?.campaign_name}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5 capitalize">
-                {activeCampaign?.dial_method} &nbsp;·&nbsp; Ratio {activeCampaign?.dial_ratio}:1
+                {DIAL_MODE_LABEL[activeCampaign?.dial_mode ?? ''] ?? activeCampaign?.dial_mode} &nbsp;·&nbsp; Ratio {activeCampaign?.dial_ratio}:1
                 {user && (
                   <> &nbsp;·&nbsp; Ext. <span className="font-mono">{user.alt_extension || user.extension}</span></>
                 )}

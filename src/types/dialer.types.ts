@@ -5,7 +5,7 @@ export type TransferState = 'idle' | 'initiating' | 'ringing' | 'merged'
 export interface Campaign {
   id: number
   campaign_name: string
-  dial_method: 'predictive' | 'preview' | 'progressive' | 'manual'
+  dial_mode: 'predictive_dial' | 'preview_and_dial' | 'power_dial' | 'super_power_dial' | 'outbound_ai'
   dial_ratio: number
   status: 'active' | 'inactive'
   total_leads?: number

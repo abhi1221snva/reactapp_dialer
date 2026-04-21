@@ -37,6 +37,14 @@ export const dialerService = {
     api.post('/call-number', { ...data, dialer_mode: 2 }),
 
   /**
+   * POST /campaign-dial-next { campaign_id }
+   * Agent-first: AMI rings agent's webphone, then auto-dials lead on answer.
+   * Returns lead data + dial_mode: 'ami_agent_first'
+   */
+  campaignDialNext: (campaign_id: number) =>
+    api.post('/campaign-dial-next', { campaign_id, dialer_mode: 2 }),
+
+  /**
    * POST /hang-up
    * Backend validation: id* — pass campaign_id as id (identifies agent's active call).
    */

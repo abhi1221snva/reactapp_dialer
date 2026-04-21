@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -189,8 +189,8 @@ function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
 }) {
   const ref    = useRef<HTMLCanvasElement>(null)
   const last   = useRef<{ x: number; y: number } | null>(null)
+  const drawingRef = useRef(false)
   const [mode, setMode]       = useState<'view' | 'draw'>(existingUrl ? 'view' : 'draw')
-  const [drawing, setDrawing] = useState(false)
   const [hasLines, setHasLines] = useState(false)
   const [saving, setSaving]   = useState(false)
   const [err, setErr]         = useState('')
@@ -213,21 +213,21 @@ function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
     return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy }
   }
 
-  const startDraw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault(); const c = ref.current; if (!c) return
-    setDrawing(true); last.current = pos(e, c)
-  }, [])
+    drawingRef.current = true; last.current = pos(e, c)
+  }
 
-  const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); if (!drawing) return
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); if (!drawingRef.current) return
     const c = ref.current; if (!c) return
     const ctx = c.getContext('2d')!
     const p = pos(e, c)
     if (last.current) { ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y); ctx.lineTo(p.x, p.y); ctx.stroke(); setHasLines(true) }
     last.current = p
-  }, [drawing])
+  }
 
-  const endDraw = useCallback(() => { setDrawing(false); last.current = null }, [])
+  const endDraw = () => { drawingRef.current = false; last.current = null }
 
   const clear = () => {
     const c = ref.current; if (!c) return

@@ -4,7 +4,7 @@
 export interface StudioCampaign {
   id: number
   name: string
-  dialMethod: 'Predictive' | 'Preview' | 'Power' | 'Manual'
+  dialMethod: 'Predictive' | 'Preview' | 'Power' | 'Super Dial' | 'Manual' | 'Outbound AI'
   ratio: number
   totalLeads: number
   calledLeads: number
