@@ -10,6 +10,8 @@ import { useUIStore } from '../stores/ui.store'
 import { useAuthStore } from '../stores/auth.store'
 import { RouteGuard } from '../components/RouteGuard'
 import { Building2, LogOut } from 'lucide-react'
+import { useIdleTimeout } from '../hooks/useIdleTimeout'
+import { IdleWarningModal } from '../components/IdleWarningModal'
 
 function ImpersonationBanner() {
   const { impersonating, impersonatingCompany, stopImpersonation } = useAuthStore()
@@ -44,6 +46,12 @@ function ImpersonationBanner() {
 
 export function AppLayout() {
   const { mobileSidebarOpen, closeMobileSidebar } = useUIStore()
+  const { clearAuth } = useAuthStore()
+  const { showWarning, remaining, dismissWarning } = useIdleTimeout({
+    timeout: 30 * 60 * 1000,      // 30 minutes
+    warningBefore: 5 * 60 * 1000,  // warn at 25 min
+    onTimeout: () => clearAuth(),
+  })
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -74,6 +82,13 @@ export function AppLayout() {
       <WebPhone />
       <FloatingSms />
       <FloatingFab />
+      {showWarning && (
+        <IdleWarningModal
+          remaining={remaining}
+          onStayActive={dismissWarning}
+          onLogout={() => clearAuth()}
+        />
+      )}
     </div>
   )
 }

@@ -225,6 +225,7 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+  const [loginError, setLoginError] = useState('')
 
   // Legacy SMS/email OTP step
   const [otpStep, setOtpStep] = useState(false)
@@ -250,12 +251,15 @@ export function Login() {
         return
       }
       const user = await buildUser(payload as Record<string, unknown>)
-      setAuth(payload.token as string, user)
+      setAuth(payload.token as string, user, payload.refresh_token as string | undefined)
       const engine = useEngineStore.getState().engine
       navigate(engine === 'crm' ? '/crm/dashboard' : '/dashboard')
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { code?: string; message?: string } } }
+      const axiosErr = err as { response?: { status?: number; data?: { code?: string; message?: string } } }
       const code = axiosErr?.response?.data?.code
+      const status = axiosErr?.response?.status
+      const msg = axiosErr?.response?.data?.message
+
       if (code === 'ACCOUNT_NOT_FOUND') {
         const result = await Swal.fire({
           title: 'Account Not Found',
@@ -271,6 +275,16 @@ export function Login() {
         if (result.isConfirmed) {
           navigate('/register')
         }
+      } else if (code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE' || status === 403) {
+        Swal.fire({
+          title: 'Account Not Active',
+          text: msg || 'Your account is not active. Please contact support.',
+          icon: 'error',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#6366f1',
+        })
+      } else {
+        toast.error(msg || 'Google login failed. Please try again.')
       }
     } finally {
       setGoogleLoading(false)
@@ -341,8 +355,11 @@ export function Login() {
   const completeLogin = async (payload: Record<string, unknown>) => {
     // Save token immediately so any API calls during buildUser use the fresh token
     localStorage.setItem('auth_token', payload.token as string)
+    if (payload.refresh_token) {
+      localStorage.setItem('refresh_token', payload.refresh_token as string)
+    }
     const user = await buildUser(payload)
-    setAuth(payload.token as string, user)
+    setAuth(payload.token as string, user, payload.refresh_token as string | undefined)
     // Respect persisted engine preference — navigate to CRM or dialer dashboard
     const engine = useEngineStore.getState().engine
     navigate(engine === 'crm' ? '/crm/dashboard' : '/dashboard')
@@ -350,19 +367,44 @@ export function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoginError('')
+
+    // Client-side validation
+    if (!email.trim() || !password) {
+      setLoginError('Email and password are required')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setLoginError('Please enter a valid email address')
+      return
+    }
+
     setLoading(true)
     try {
-      const res = await authService.login({ email, password, device: 'desktop_app' })
+      const res = await authService.login({ email: email.trim(), password, device: 'desktop_app' })
       const payload = (res.data?.data ?? res.data) as unknown as Record<string, unknown>
 
       if (!payload) {
-        toast.error('Unexpected response from server')
+        setLoginError('Unexpected response from server')
         return
       }
 
       if (payload.requires_2fa === 'google_totp') {
         setPendingUserId(Number(payload.user_id))
         setTotpStep(true)
+        return
+      }
+
+      // Organization requires 2FA but user hasn't set it up yet
+      if (payload.requires_2fa_setup) {
+        localStorage.setItem('auth_token', payload.token as string)
+        const user = await buildUser(payload)
+        setAuth(payload.token as string, user)
+        toast('Your organization requires two-factor authentication. Please set it up now.', {
+          duration: 6000,
+          icon: '\u26A0\uFE0F',
+        })
+        navigate('/profile')
         return
       }
 
@@ -376,22 +418,57 @@ export function Login() {
       }
 
       await completeLogin(payload)
-    } catch {
-      // errors handled by interceptor
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string; code?: string } } }
+      const status = axiosErr?.response?.status
+      const msg = axiosErr?.response?.data?.message
+      const code = axiosErr?.response?.data?.code
+
+      if (status === 403) {
+        // Deactivated / inactive account
+        if (code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
+          setLoginError(msg || 'Your account is not active. Please contact support.')
+        } else {
+          setLoginError(msg || 'Access denied. Please contact support.')
+        }
+      } else if (status === 401) {
+        setLoginError(msg || 'Invalid email or password')
+      } else if (status === 429) {
+        setLoginError(msg || 'Too many attempts. Please wait a few minutes and try again.')
+      } else if (status === 422) {
+        setLoginError(msg || 'Please check your input and try again')
+      } else if (status && status >= 500) {
+        setLoginError('Something went wrong. Please try again later.')
+      } else {
+        setLoginError('Unable to connect. Please check your internet connection.')
+      }
     } finally {
       setLoading(false)
     }
   }
 
+  const [otpError, setOtpError] = useState('')
+
   const handleOtp = async (e: React.FormEvent) => {
     e.preventDefault()
+    setOtpError('')
     setLoading(true)
     try {
       const res = await authService.verifyOtp({ otp, otpId })
       const payload = (res.data?.data ?? res.data) as Record<string, unknown>
       await completeLogin(payload)
-    } catch {
-      // errors handled by interceptor
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+      const status = axiosErr?.response?.status
+      const msg = axiosErr?.response?.data?.message
+      if (status === 401 || status === 400) {
+        setOtpError(msg || 'Invalid verification code. Please try again.')
+      } else if (status === 429) {
+        setOtpError(msg || 'Too many attempts. Please wait and try again.')
+      } else {
+        setOtpError('Verification failed. Please try again.')
+      }
+      setOtp('')
     } finally {
       setLoading(false)
     }
@@ -433,6 +510,23 @@ export function Login() {
             Enter the 6-digit code sent to your email
           </p>
         </div>
+
+        {otpError && (
+          <div
+            className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm"
+            style={{
+              background: 'rgba(239,68,68,0.10)',
+              border: '1px solid rgba(239,68,68,0.25)',
+              color: '#fca5a5',
+            }}
+          >
+            <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" style={{ color: '#f87171' }}>
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <span>{otpError}</span>
+          </div>
+        )}
+
         <input
           type="text"
           inputMode="numeric"
@@ -441,14 +535,19 @@ export function Login() {
           style={{ borderWidth: '2px' }}
           maxLength={6}
           value={otp}
-          onChange={e => setOtp(e.target.value)}
+          onChange={e => { setOtp(e.target.value); setOtpError('') }}
           placeholder="000000"
           required
         />
-        <button type="submit" disabled={loading} className="auth-btn-primary">
+        <button type="submit" disabled={loading || otp.length < 6} className="auth-btn-primary">
           {loading ? <><Spinner /> Verifying...</> : <><Shield className="w-4 h-4" /> Verify Code</>}
         </button>
-        <button type="button" onClick={() => toast('Resend not implemented yet')}
+        <button type="button" onClick={() => {
+          setOtpStep(false)
+          setOtp('')
+          setOtpId('')
+          toast('Please sign in again to receive a new code')
+        }}
           className="auth-btn-ghost-dark w-full mt-2 text-sm">Resend code</button>
       </form>
     )
@@ -462,6 +561,23 @@ export function Login() {
         <h2 className="text-2xl font-bold text-white leading-tight">Welcome back</h2>
         <p className="text-sm text-slate-400 mt-1">Sign in to your account to continue</p>
       </div>
+
+      {/* Login error alert */}
+      {loginError && (
+        <div
+          className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm"
+          style={{
+            background: 'rgba(239,68,68,0.10)',
+            border: '1px solid rgba(239,68,68,0.25)',
+            color: '#fca5a5',
+          }}
+        >
+          <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" style={{ color: '#f87171' }}>
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+          <span>{loginError}</span>
+        </div>
+      )}
 
       {/* Social login — icon only, centered row */}
       <div className="flex justify-center gap-3">
@@ -507,7 +623,7 @@ export function Login() {
             className="auth-input pl-10"
             placeholder="you@company.com"
             value={email}
-            onChange={e => setEmail(e.target.value)}
+            onChange={e => { setEmail(e.target.value); setLoginError('') }}
             required
           />
         </div>
@@ -523,7 +639,7 @@ export function Login() {
             className="auth-input pl-10 pr-10"
             placeholder="••••••••"
             value={password}
-            onChange={e => setPassword(e.target.value)}
+            onChange={e => { setPassword(e.target.value); setLoginError('') }}
             required
           />
           <button

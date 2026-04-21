@@ -13,6 +13,44 @@ function Spinner() {
   )
 }
 
+// ─── Password policy helpers ────────────────────────────────────────────────
+const PASSWORD_RULES = [
+  { label: '10+ characters', test: (pw: string) => pw.length >= 10 },
+  { label: 'Uppercase',      test: (pw: string) => /[A-Z]/.test(pw) },
+  { label: 'Lowercase',      test: (pw: string) => /[a-z]/.test(pw) },
+  { label: 'Number',         test: (pw: string) => /[0-9]/.test(pw) },
+  { label: 'Special char',   test: (pw: string) => /[^A-Za-z0-9]/.test(pw) },
+]
+
+function validatePassword(pw: string): string[] {
+  return PASSWORD_RULES.filter(r => !r.test(pw)).map(r => r.label)
+}
+
+function PasswordStrength({ password }: { password: string }) {
+  if (!password) return null
+  const score = PASSWORD_RULES.filter(r => r.test(password)).length
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="h-1 flex-1 rounded-full transition-colors"
+            style={{ background: i <= score
+              ? score <= 2 ? '#ef4444' : score <= 3 ? '#f59e0b' : '#10b981'
+              : 'rgba(255,255,255,0.08)' }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {PASSWORD_RULES.map(r => (
+          <span key={r.label} className={`text-xs ${r.test(password) ? 'text-emerald-400' : 'text-slate-500'}`}>
+            {r.test(password) ? '\u2713' : '\u2717'} {r.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ResetPassword() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -93,8 +131,9 @@ export function ResetPassword() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password.length < 8) {
-      toast.error('Password must be at least 8 characters')
+    const pwErrors = validatePassword(password)
+    if (pwErrors.length > 0) {
+      toast.error(`Password needs: ${pwErrors.join(', ')}`)
       return
     }
     if (password !== confirm) {
@@ -140,11 +179,11 @@ export function ResetPassword() {
           <input
             type={showPass ? 'text' : 'password'}
             className="auth-input pl-10 pr-10"
-            placeholder="Min 8 characters"
+            placeholder="Min 10 characters"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
-            minLength={8}
+            minLength={10}
             maxLength={64}
           />
           <button type="button" onClick={() => setShowPass(s => !s)}
@@ -152,6 +191,7 @@ export function ResetPassword() {
             {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
+        <PasswordStrength password={password} />
       </div>
 
       <div className="space-y-1">

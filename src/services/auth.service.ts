@@ -32,6 +32,19 @@ export const authService = {
   changePassword: (data: { old_password: string; password: string; password_confirmation: string; id?: number | string }) =>
     api.post('/update-user-password', { id: data.id, password: data.old_password, new_password: data.password }),
 
+  refreshToken: (refreshToken: string) =>
+    api.post('/auth/refresh', { refresh_token: refreshToken }),
+
+  // Session management
+  getSessions: () =>
+    api.get('/auth/sessions'),
+
+  revokeSession: (id: number | string) =>
+    api.delete(`/auth/sessions/${id}`),
+
+  revokeAllSessions: () =>
+    api.delete('/auth/sessions'),
+
   logout: () =>
     api.post('/logout'),
 }

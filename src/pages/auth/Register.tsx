@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  User, Mail, Lock, Phone, Building2, Eye, EyeOff,
+  User as UserIcon, Mail, Lock, Phone, Building2, Eye, EyeOff,
   CheckCircle2, ArrowLeft, RefreshCw, Shield, ArrowRight,
 } from 'lucide-react'
 
@@ -25,7 +25,48 @@ function MicrosoftIcon() {
   )
 }
 import toast from 'react-hot-toast'
+
+// ─── Password policy helpers ���────────────────────────────────────────────────
+const PASSWORD_RULES = [
+  { label: '10+ characters', test: (pw: string) => pw.length >= 10 },
+  { label: 'Uppercase',      test: (pw: string) => /[A-Z]/.test(pw) },
+  { label: 'Lowercase',      test: (pw: string) => /[a-z]/.test(pw) },
+  { label: 'Number',         test: (pw: string) => /[0-9]/.test(pw) },
+  { label: 'Special char',   test: (pw: string) => /[^A-Za-z0-9]/.test(pw) },
+]
+
+function validatePassword(pw: string): string[] {
+  return PASSWORD_RULES.filter(r => !r.test(pw)).map(r => r.label)
+}
+
+function PasswordStrength({ password }: { password: string }) {
+  if (!password) return null
+  const score = PASSWORD_RULES.filter(r => r.test(password)).length
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="h-1 flex-1 rounded-full transition-colors"
+            style={{ background: i <= score
+              ? score <= 2 ? '#ef4444' : score <= 3 ? '#f59e0b' : '#10b981'
+              : 'rgba(255,255,255,0.08)' }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {PASSWORD_RULES.map(r => (
+          <span key={r.label} className={`text-xs ${r.test(password) ? 'text-emerald-400' : 'text-slate-500'}`}>
+            {r.test(password) ? '\u2713' : '\u2717'} {r.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+import Swal from 'sweetalert2'
 import { registerService } from '../../services/register.service'
+import { useAuthStore } from '../../stores/auth.store'
+import type { User } from '../../types'
 
 // ─── Google Identity Services type declaration ────────────────────────────────
 declare global {
@@ -140,6 +181,45 @@ function useCountdown(initial = 60) {
   return { seconds, canResend: !active || seconds <= 0, start }
 }
 
+// ─── Email-blocked SweetAlert helper ──────────────────────────────────────────
+async function showEmailBlockedAlert(
+  code: string,
+  navigateFn: ReturnType<typeof useNavigate>,
+): Promise<void> {
+  if (code === 'ACCOUNT_DEACTIVATED') {
+    await Swal.fire({
+      title: 'Account Deactivated',
+      text: 'This account has been deactivated. Please contact support.',
+      icon: 'error',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#6366f1',
+    })
+  } else if (code === 'ACCOUNT_INACTIVE') {
+    await Swal.fire({
+      title: 'Account Not Active',
+      text: 'This account is not active. Please contact support.',
+      icon: 'error',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#6366f1',
+    })
+  } else {
+    const result = await Swal.fire({
+      title: 'Already Registered',
+      text: 'An account with this email already exists. Please sign in instead.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Go to Login',
+      cancelButtonText: 'Close',
+      confirmButtonColor: '#6366f1',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+    })
+    if (result.isConfirmed) {
+      navigateFn('/login')
+    }
+  }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export function Register() {
   const navigate = useNavigate()
@@ -182,17 +262,37 @@ export function Register() {
       if (!window.google?.accounts?.id || !googleBtnRef.current) return
       window.google.accounts.id.initialize({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID as string,
-        callback: (response: { credential: string }) => {
+        callback: async (response: { credential: string }) => {
           setPendingCredential(response.credential)
+          let decodedEmail = ''
+          let decodedName = ''
           try {
             const parts = response.credential.split('.')
             const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-            setForm(f => ({
-              ...f,
-              name:  payload.name ?? payload.given_name ?? '',
-              email: payload.email ?? '',
-            }))
+            decodedName = payload.name ?? payload.given_name ?? ''
+            decodedEmail = payload.email ?? ''
           } catch { /* ignore decode errors */ }
+
+          // FAIL-SAFE: If email couldn't be decoded, stop immediately
+          if (!decodedEmail) {
+            toast.error('Could not read email from Google account. Please try again.')
+            return
+          }
+
+          // Check email existence BEFORE proceeding. On ANY failure, STOP.
+          try {
+            await registerService.checkEmail(decodedEmail)
+          } catch (err: unknown) {
+            const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
+            if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
+              await showEmailBlockedAlert(code, navigate)
+            } else {
+              toast.error('Unable to verify your email. Please try again.')
+            }
+            return // Always stop on any error — never proceed to form
+          }
+
+          setForm(f => ({ ...f, name: decodedName, email: decodedEmail }))
           setGoogleFlow(true)
           setStep('google-business')
         },
@@ -220,7 +320,8 @@ export function Register() {
     e.preventDefault()
     if (!form.name.trim()) { toast.error('Full name is required'); return }
     if (!form.business_name.trim()) { toast.error('Business name is required'); return }
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    const pwErrors = validatePassword(form.password)
+    if (pwErrors.length > 0) { toast.error(`Password needs: ${pwErrors.join(', ')}`); return }
     if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return }
 
     setLoading(true)
@@ -256,10 +357,17 @@ export function Register() {
         name:  data?.name  ?? f.name,
         email: data?.email ?? f.email,
       }))
-      toast.success('Google account verified!')
+      toast.success('Account details saved!')
       setStep('phone-verify')
-    } catch {
-      // handled by interceptor
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { code?: string; message?: string } } }
+      const code = axiosErr?.response?.data?.code
+      const msg = axiosErr?.response?.data?.message
+      if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
+        await showEmailBlockedAlert(code, navigate)
+      } else {
+        toast.error(msg || 'Google registration failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -274,8 +382,11 @@ export function Register() {
       setEmailOtpSent(true)
       emailTimer.start()
       toast.success('Verification code sent to your email!')
-    } catch {
-      // handled by interceptor
+    } catch (err: unknown) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
+        await showEmailBlockedAlert(code, navigate)
+      }
     } finally {
       setLoading(false)
     }
@@ -321,8 +432,12 @@ export function Register() {
       setPhoneOtpSent(true)
       phoneTimer.start()
       toast.success('Verification SMS sent!')
-    } catch {
-      // handled by interceptor
+    } catch (err: unknown) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'PHONE_ALREADY_REGISTERED') {
+        toast.error('An account with this phone number already exists.')
+        navigate('/login')
+      }
     } finally {
       setLoading(false)
     }
@@ -330,6 +445,8 @@ export function Register() {
 
   // ── Verify phone OTP ──────────────────────────────────────────────────────
   const [progressId, setProgressId] = useState<string | null>(null)
+
+  const { setAuth } = useAuthStore()
 
   const handleVerifyPhone = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -344,8 +461,22 @@ export function Register() {
         // Slow path — show provisioning progress screen
         setProgressId(String(data.progress_id))
         setStep('provisioning')
+      } else if (data?.token) {
+        // Fast path with auto-login token — log in immediately
+        const userData = data.user as Record<string, unknown> | undefined
+        const user: User = {
+          ...(userData ?? {}),
+          name: form.name || String(userData?.first_name ?? '') + ' ' + String(userData?.last_name ?? ''),
+          level: Number(userData?.level ?? 6),
+          companyName: form.business_name,
+        } as User
+        localStorage.setItem('auth_token', data.token as string)
+        setAuth(data.token as string, user)
+        toast.success('Welcome! Your account is ready.')
+        navigate('/dashboard')
+        return
       } else {
-        // Fast path — account ready instantly
+        // Fast path without token — show success screen
         setStep('success')
       }
     } catch {
@@ -517,7 +648,7 @@ export function Register() {
           <div>
             <label className="auth-label">Full Name <span className="text-red-500">*</span></label>
             <div className="relative">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+              <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
               <input type="text" className="auth-input pl-10" placeholder="John Smith"
                 value={form.name} onChange={set('name')} required maxLength={100} />
             </div>
@@ -537,13 +668,14 @@ export function Register() {
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
               <input type={showPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
-                placeholder="Min 8 characters"
-                value={form.password} onChange={set('password')} required minLength={8} maxLength={64} />
+                placeholder="Min 10 characters"
+                value={form.password} onChange={set('password')} required minLength={10} maxLength={64} />
               <button type="button" onClick={() => setShowPass(s => !s)}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                 {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            <PasswordStrength password={form.password} />
           </div>
 
           <div>
@@ -612,7 +744,7 @@ export function Register() {
             style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.18)' }}>
             <CheckCircle2 size={18} className="text-emerald-400 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-emerald-300">Google account verified</p>
+              <p className="text-xs font-semibold text-emerald-300">Google identity confirmed</p>
               <p className="text-xs text-emerald-400/70 truncate">{form.email}</p>
             </div>
           </div>
@@ -620,7 +752,7 @@ export function Register() {
           <div>
             <label className="auth-label">Full Name</label>
             <div className="relative">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+              <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
               <input type="text" className="auth-input pl-10 opacity-60 cursor-not-allowed"
                 value={form.name} readOnly />
             </div>

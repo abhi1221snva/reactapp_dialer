@@ -13,6 +13,7 @@ function resetAllCaches() {
 
 interface AuthState {
   token: string | null
+  refreshToken: string | null
   user: User | null
   isAuthenticated: boolean
   // Impersonation — system admin switched into a client workspace
@@ -21,7 +22,8 @@ interface AuthState {
   originalUser: User | null
   impersonatingCompany: string | null
 
-  setAuth: (token: string, user: User) => void
+  setAuth: (token: string, user: User, refreshToken?: string) => void
+  setTokens: (token: string, refreshToken: string) => void
   clearAuth: () => void
   updateUser: (user: Partial<User>) => void
   startImpersonation: (newToken: string, newUser: User, company: string) => void
@@ -32,6 +34,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       token: null,
+      refreshToken: null,
       user: null,
       isAuthenticated: false,
       impersonating: false,
@@ -39,11 +42,18 @@ export const useAuthStore = create<AuthState>()(
       originalUser: null,
       impersonatingCompany: null,
 
-      setAuth: (token, user) => {
+      setAuth: (token, user, refreshToken) => {
         localStorage.setItem('auth_token', token)
+        if (refreshToken) localStorage.setItem('refresh_token', refreshToken)
         // Clear stale caches from any previous session before populating new data
         resetAllCaches()
-        set({ token, user, isAuthenticated: true })
+        set({ token, user, isAuthenticated: true, refreshToken: refreshToken ?? null })
+      },
+
+      setTokens: (token, refreshToken) => {
+        localStorage.setItem('auth_token', token)
+        localStorage.setItem('refresh_token', refreshToken)
+        set({ token, refreshToken })
       },
 
       clearAuth: () => {
@@ -56,10 +66,11 @@ export const useAuthStore = create<AuthState>()(
           }).catch(() => {})
         }
         localStorage.removeItem('auth_token')
+        localStorage.removeItem('refresh_token')
         localStorage.removeItem('auth_user')
         resetAllCaches()
         set({
-          token: null, user: null, isAuthenticated: false,
+          token: null, refreshToken: null, user: null, isAuthenticated: false,
           impersonating: false, originalToken: null, originalUser: null, impersonatingCompany: null,
         })
       },
@@ -105,6 +116,7 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       partialize: (state) => ({
         token: state.token,
+        refreshToken: state.refreshToken,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         impersonating: state.impersonating,

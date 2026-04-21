@@ -450,20 +450,20 @@ function PasswordSection() {
 
 function SessionsSection() {
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['sessions'], queryFn: () => api.get('/sessions'), retry: 1,
+    queryKey: ['sessions'], queryFn: () => authService.getSessions(), retry: 1,
   })
   const revokeMutation = useMutation({
-    mutationFn: (id: string | number) => api.post('/revoke-session', { session_id: id }),
+    mutationFn: (id: string | number) => authService.revokeSession(id),
     onSuccess: () => { toast.success('Session revoked'); refetch() },
     onError: () => toast.error('Could not revoke session'),
   })
   const revokeAllMutation = useMutation({
-    mutationFn: () => api.post('/revoke-all-sessions'),
+    mutationFn: () => authService.revokeAllSessions(),
     onSuccess: () => { toast.success('All other sessions revoked'); refetch() },
     onError: () => toast.error('Could not revoke sessions'),
   })
 
-  const sessions: Session[] = data?.data?.data || data?.data || []
+  const sessions: Session[] = data?.data?.data?.sessions || data?.data?.data || data?.data || []
   const fallback: Session[] = [{
     id: 'current', device: 'Desktop',
     browser: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 40) : 'Chrome',
