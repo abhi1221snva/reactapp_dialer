@@ -60,16 +60,15 @@ interface WcpProps {
   onDecline: () => void
   onEnd: () => void
   onMute: () => void
-  remoteAudioRef: React.RefObject<HTMLAudioElement | null>
 }
 
-function WidgetCallPanel({ phase, session, isMuted, callSeconds, onAccept, onDecline, onEnd, onMute, remoteAudioRef }: WcpProps) {
+function WidgetCallPanel({ phase, session, isMuted, callSeconds, onAccept, onDecline, onEnd, onMute }: WcpProps) {
   const COLORS = ['bg-indigo-500','bg-violet-500','bg-sky-500','bg-emerald-500','bg-rose-500','bg-amber-500','bg-teal-500','bg-orange-500']
   const bg = COLORS[Math.abs(session.remoteUserId) % COLORS.length]
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%)' }}>
-      {phase === 'active' && <audio ref={remoteAudioRef as React.Ref<HTMLAudioElement>} autoPlay playsInline className="hidden" />}
+      {/* Audio element is now always-mounted in ChatPusherProvider */}
       <div className={cn('w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-xl', bg, phase === 'incoming' && 'animate-pulse')}>
         {initials(session.remoteName)}
       </div>
@@ -152,13 +151,33 @@ interface VcoProps {
   onEnd: () => void
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>
   localVideoRef: React.RefObject<HTMLVideoElement | null>
+  remoteStreamRef: React.RefObject<MediaStream | null>
+  localStreamRef: React.RefObject<MediaStream | null>
 }
 
-export function VideoCallOverlay({ session, isMuted, isCameraOff, callSeconds, onMute, onCamera, onEnd, remoteVideoRef, localVideoRef }: VcoProps) {
+export function VideoCallOverlay({ session, isMuted, isCameraOff, callSeconds, onMute, onCamera, onEnd, remoteVideoRef, localVideoRef, remoteStreamRef, localStreamRef }: VcoProps) {
   return (
     <div className="fixed inset-0 flex flex-col bg-black" style={{ zIndex: 100 }}>
-      <video ref={remoteVideoRef as React.Ref<HTMLVideoElement>} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
-      <video ref={localVideoRef as React.Ref<HTMLVideoElement>} autoPlay playsInline muted className="absolute top-4 right-4 w-32 h-24 rounded-xl object-cover border-2 border-white/20 shadow-lg z-10" />
+      <video
+        ref={(el) => {
+          (remoteVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
+          if (el && remoteStreamRef.current && !el.srcObject) {
+            el.srcObject = remoteStreamRef.current
+            el.play().catch(() => {})
+          }
+        }}
+        autoPlay playsInline className="absolute inset-0 w-full h-full object-cover"
+      />
+      <video
+        ref={(el) => {
+          (localVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
+          if (el && localStreamRef.current && !el.srcObject) {
+            el.srcObject = localStreamRef.current
+            el.play().catch(() => {})
+          }
+        }}
+        autoPlay playsInline muted className="absolute top-4 right-4 w-32 h-24 rounded-xl object-cover border-2 border-white/20 shadow-lg z-10"
+      />
       <div className="relative z-10 text-center pt-8">
         <p className="text-white font-semibold">{session.remoteName}</p>
         <p className="text-white/60 text-sm mt-0.5 tabular-nums">{fmtDuration(callSeconds)}</p>
@@ -416,7 +435,6 @@ export function MiniChatWindow({ conv, stackIndex, zIndex, onClose, onFocus }: M
     pusherRef, setConversations, setTotalUnread,
     callPhase, callSession, isMuted, callSeconds,
     startCall, acceptIncomingCall, declineCall, endCurrentCall, toggleMute,
-    remoteAudioRef,
   } = useChatPusher()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -669,14 +687,51 @@ export function MiniChatWindow({ conv, stackIndex, zIndex, onClose, onFocus }: M
           </button>
 
           <button
-            onClick={(e) => { e.stopPropagation(); onClose() }}
+            onClick={(e) => {
+              e.stopPropagation()
+              // During an active call, minimize instead of closing to keep audio alive
+              if (isCallWindow && callPhase !== 'idle') {
+                setIsMinimized(true)
+              } else {
+                onClose()
+              }
+            }}
             className="w-7 h-7 rounded-lg bg-white/15 hover:bg-rose-500/80 flex items-center justify-center transition-colors"
-            title="Close"
+            title={isCallWindow && callPhase !== 'idle' ? 'Minimize (call active)' : 'Close'}
           >
-            <X size={12} className="text-white" />
+            {isCallWindow && callPhase !== 'idle' ? <Minus size={12} className="text-white" /> : <X size={12} className="text-white" />}
           </button>
         </div>
       </div>
+
+      {/* Compact call bar — visible when minimized with an active call */}
+      {isMinimized && isCallWindow && callPhase !== 'idle' && (
+        <div
+          className="flex items-center justify-between px-3 py-2 bg-emerald-500 cursor-pointer"
+          onClick={() => setIsMinimized(false)}
+        >
+          <div className="flex items-center gap-2 text-white text-xs font-medium">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            {callPhase === 'incoming' ? 'Incoming call…' : callPhase === 'calling' ? 'Calling…' : fmtDuration(callSeconds)}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleMute() }}
+              className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center"
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? <MicOff size={10} className="text-white" /> : <Mic size={10} className="text-white" />}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); endCurrentCall() }}
+              className="w-6 h-6 rounded-full bg-rose-600 flex items-center justify-center"
+              title="End call"
+            >
+              <PhoneOff size={10} className="text-white" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Body (collapsible) */}
       <div style={{
@@ -697,7 +752,6 @@ export function MiniChatWindow({ conv, stackIndex, zIndex, onClose, onFocus }: M
             onDecline={declineCall}
             onEnd={endCurrentCall}
             onMute={toggleMute}
-            remoteAudioRef={remoteAudioRef}
           />
         ) : (
           <ThreadView

@@ -14,7 +14,7 @@ import { CallControls }      from './CallControls'
 import { IncomingCallPopup } from './IncomingCallPopup'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-declare global { interface Window { SIPml: any } }
+declare global { interface Window { SIPml: any; __rtcPatched?: boolean } }
 
 type PhoneState = 'idle' | 'registering' | 'ready' | 'incoming' | 'calling' | 'in_call' | 'error'
 
@@ -193,6 +193,66 @@ export function WebPhone() {
           ringtone.current?.pause(); ringback.current?.pause()
           setIncomingFrom(null); setStatusMsg('In Call'); setPhoneState('in_call')
           setNumber('')  // Clear so DTMF display starts fresh
+          // Diagnostic: log ICE + DTLS state to help debug media issues
+          try {
+            const pc: RTCPeerConnection | undefined =
+              (sipCallSess.current as any)?.o_session?.o_mgr?.o_pc ??
+              (sipCallSess.current as any)?.o_session?.o_session?.o_mgr?.o_pc
+            if (pc) {
+              console.log('[WebPhone] PeerConnection state:', {
+                iceConnectionState: pc.iceConnectionState,
+                iceGatheringState: pc.iceGatheringState,
+                connectionState: pc.connectionState,
+                signalingState: pc.signalingState,
+                localDesc: pc.localDescription?.type,
+                remoteDesc: pc.remoteDescription?.type,
+              })
+              // Log senders/receivers track state
+              const senders = pc.getSenders().map(s => ({
+                kind: s.track?.kind, readyState: s.track?.readyState, enabled: s.track?.enabled, muted: s.track?.muted,
+              }))
+              const receivers = pc.getReceivers().map(r => ({
+                kind: r.track?.kind, readyState: r.track?.readyState, enabled: r.track?.enabled, muted: r.track?.muted,
+              }))
+              console.log('[WebPhone] Senders:', senders, 'Receivers:', receivers)
+
+              // Check audio element state
+              const audioEl = audioRemote.current
+              if (audioEl) {
+                console.log('[WebPhone] Audio element:', {
+                  srcObject: !!audioEl.srcObject,
+                  paused: audioEl.paused,
+                  muted: audioEl.muted,
+                  volume: audioEl.volume,
+                  readyState: audioEl.readyState,
+                  tracks: audioEl.srcObject instanceof MediaStream
+                    ? audioEl.srcObject.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState, enabled: t.enabled }))
+                    : 'no stream',
+                })
+                // Force play in case autoplay was blocked
+                if (audioEl.paused && audioEl.srcObject) {
+                  audioEl.play().catch(err => console.warn('[WebPhone] Audio play blocked:', err))
+                }
+              }
+
+              pc.getStats().then(stats => {
+                stats.forEach(report => {
+                  if (report.type === 'candidate-pair' && report.nominated) {
+                    console.log('[WebPhone] Active ICE pair:', report)
+                  }
+                  if (report.type === 'transport') {
+                    console.log('[WebPhone] DTLS transport:', { dtlsState: report.dtlsState, tlsVersion: report.tlsVersion })
+                  }
+                  if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                    console.log('[WebPhone] Inbound audio RTP:', { packetsReceived: report.packetsReceived, bytesReceived: report.bytesReceived, jitter: report.jitter })
+                  }
+                  if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                    console.log('[WebPhone] Outbound audio RTP:', { packetsSent: report.packetsSent, bytesSent: report.bytesSent })
+                  }
+                })
+              }).catch(() => {})
+            }
+          } catch { /* diagnostic only */ }
         }
         break
 
@@ -221,6 +281,20 @@ export function WebPhone() {
         break
       }
       case 'm_early_media': ringback.current?.pause(); break
+
+      case 'm_stream_audio_remote_added': {
+        // Remote audio track attached — force the <audio> element to play.
+        // Chrome's autoplay policy may silently block it; this explicit play()
+        // call after user-gesture (they clicked dial) should succeed.
+        const audioEl = audioRemote.current
+        if (audioEl) {
+          audioEl.volume = 1.0
+          audioEl.muted = false
+          audioEl.play().catch(err => console.warn('[WebPhone] Remote audio play() blocked:', err))
+        }
+        break
+      }
+
       case 'm_local_hold_ok':   setIsOnHold(true);  setStatusMsg('On Hold'); break
       case 'm_local_hold_nok':  setIsOnHold(false); break
       case 'm_local_resume_ok': setIsOnHold(false); setStatusMsg('In Call'); break
@@ -260,7 +334,23 @@ export function WebPhone() {
           ? rawFrom.replace(/^sip:/i, '').replace(/@.*$/, '')
           : 'Unknown Caller'
 
-        // Always show incoming call UI with Answer/Decline buttons
+        // Campaign dial mode: auto-answer the incoming INVITE from Asterisk.
+        // The agent already initiated this call from the dialer — no prompt needed.
+        if (campaignDialActiveRef.current) {
+          try {
+            sipCallSess.current.accept({
+              audio_remote: audioRemote.current,
+              events_listener: { events: '*', listener: onSipEventSession },
+            })
+            setIncomingFrom(null)
+            setPhoneState('in_call'); setStatusMsg('In Call')
+          } catch {
+            setStatusMsg('Failed to auto-answer campaign call')
+          }
+          break
+        }
+
+        // Normal incoming call: show Answer/Decline UI
         setIncomingFrom(from); setStatusMsg(`Incoming: ${from}`)
         setPhoneState('incoming')
         ringtone.current?.play().catch(() => {})
@@ -269,14 +359,12 @@ export function WebPhone() {
         setIsOpen(true)
 
         // Sync to dialer store so IncomingCallModal also shows
-        if (!campaignDialActiveRef.current) {
-          useDialerStore.getState().setIncomingCall({
-            number: from,
-            location_id: 0,
-            parent_id: 0,
-            user_ids: [],
-          })
-        }
+        useDialerStore.getState().setIncomingCall({
+          number: from,
+          location_id: 0,
+          parent_id: 0,
+          user_ids: [],
+        })
         break
       }
 
@@ -295,7 +383,13 @@ export function WebPhone() {
 
       case 'i_registration_event': {
         const code: number = e.getSipResponseCode?.() ?? 0
-        if (code === 200) { setPhoneState('ready'); setStatusMsg('Ready') }
+        if (code === 200) {
+          setPhoneState('ready'); setStatusMsg('Ready')
+          // Pre-warm microphone stream so the first dial has zero delay.
+          // SIPml5 caches this stream (enable_media_stream_cache: true)
+          // and reuses it for subsequent calls.
+          navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {})
+        }
         else if (code === 401 || code === 403 || code === 407)
           { setPhoneState('error'); setStatusMsg('Auth failed — check credentials') }
         break
@@ -318,11 +412,34 @@ export function WebPhone() {
     const ext = sipConfig.extension; const domain = sipConfig.domain
     setPhoneState('registering'); setStatusMsg('Connecting…')
     try {
+      // Patch RTCPeerConnection to allow all ICE candidates (direct + relay).
+      // SIPml5 doesn't pass iceTransportPolicy — this ensures the browser
+      // tries direct connections first, falling back to TURN relay when needed.
+      const NativePC = window.RTCPeerConnection
+      if (!window.__rtcPatched) {
+        window.RTCPeerConnection = function (cfg?: RTCConfiguration, ...rest: unknown[]) {
+          const patched = { ...cfg, iceTransportPolicy: 'all' as RTCIceTransportPolicy }
+          console.log('[WebPhone] RTCPeerConnection patched → all (direct + relay)', patched)
+          return new NativePC(patched, ...(rest as []))
+        } as unknown as typeof RTCPeerConnection
+        window.RTCPeerConnection.prototype = NativePC.prototype
+        Object.setPrototypeOf(window.RTCPeerConnection, NativePC)
+        ;(window as any).__rtcPatched = true
+      }
+
+      const turnHost = import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'
+      const turnPort = import.meta.env.VITE_TURN_SERVER_PORT || '3478'
+      const turnUser = import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798'
+      const turnCred = import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu'
+
       window.SIPml.setDebugLevel('error')
       sipStack.current = new window.SIPml.Stack({
         realm: domain, impi: ext, impu: `sip:${ext}@${domain}`,
         password: sipConfig.password, display_name: user?.name ?? ext,
-        websocket_proxy_url: sipConfig.wsUri, ice_servers: null,
+        websocket_proxy_url: sipConfig.wsUri,
+        ice_servers: [
+          { url: `turn:${turnHost}:3478`, username: turnUser, credential: turnCred },
+        ],
         enable_rtcweb_breaker: false,
         events_listener: { events: '*', listener: onSipEventStack },
         sip_headers: [{ name: 'User-Agent', value: 'DialerCRM/1.0' }],
@@ -613,7 +730,7 @@ export function WebPhone() {
 
   return (
     <>
-      <audio ref={audioRemote} autoPlay />
+      <audio ref={audioRemote} autoPlay playsInline />
       <audio ref={ringtone}  loop src="/asset/audio/ringtone.wav" />
       <audio ref={ringback}  loop src="/asset/audio/ringbacktone.wav" />
       <audio ref={dtmfTone}       src="/asset/audio/dtmf.wav" />

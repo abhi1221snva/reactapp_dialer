@@ -52,6 +52,9 @@ interface ChatPusherContextValue {
   remoteAudioRef: React.RefObject<HTMLAudioElement | null>
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>
   localVideoRef: React.RefObject<HTMLVideoElement | null>
+  // Stream refs (for late-mounting video elements)
+  remoteStreamRef: React.RefObject<MediaStream | null>
+  localStreamRef: React.RefObject<MediaStream | null>
 }
 
 const ChatPusherContext = createContext<ChatPusherContextValue | null>(null)
@@ -92,6 +95,7 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
   const callSessionRef = useRef<CallSession | null>(null)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
+  const remoteStreamRef = useRef<MediaStream | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -143,6 +147,8 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
   const cleanupCall = useCallback(() => {
     if (peerRef.current) { peerRef.current.close(); peerRef.current = null }
     if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null }
+    remoteStreamRef.current = null
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null
     if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
     pendingIceRef.current = []; pendingOfferRef.current = null
     callPhaseRef.current = 'idle'; setCallPhase('idle')
@@ -156,9 +162,32 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
     callTimerRef.current = setInterval(() => setCallSeconds(s => s + 1), 1000)
   }, [])
 
+  const attachRemoteStream = useCallback((stream: MediaStream) => {
+    remoteStreamRef.current = stream
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream
+    const audio = remoteAudioRef.current
+    if (audio) {
+      audio.srcObject = stream
+      audio.muted = false
+      audio.volume = 1.0
+      const p = audio.play()
+      if (p) p.catch(err => {
+        console.warn('[TeamChat] audio.play() blocked:', err.name)
+        const resume = () => { audio.play().catch(() => {}); document.removeEventListener('click', resume) }
+        document.addEventListener('click', resume, { once: true })
+      })
+      console.log('[TeamChat] Audio attached — tracks:', stream.getAudioTracks().map(t => t.readyState))
+    } else {
+      console.warn('[TeamChat] remoteAudioRef null — stream buffered')
+    }
+  }, [])
+
   const buildPeer = useCallback(async (session: CallSession, iceServers: RTCIceServer[]) => {
+    console.log('[TeamChat] buildPeer — type:', session.callType, 'iceServers:', iceServers.length)
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: session.callType === 'video' })
     localStreamRef.current = stream
+    console.log('[TeamChat] Local tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}`))
     if (session.callType === 'video' && localVideoRef.current) localVideoRef.current.srcObject = stream
 
     const peer = new RTCPeerConnection({ iceServers })
@@ -166,10 +195,23 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
     stream.getTracks().forEach(t => peer.addTrack(t, stream))
 
     peer.ontrack = (e) => {
-      const s = e.streams[0]
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = s
-      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = s
+      console.log('[TeamChat] ontrack — kind:', e.track.kind, 'state:', e.track.readyState, 'streams:', e.streams.length)
+      const s = e.streams[0] ?? new MediaStream([e.track])
+      attachRemoteStream(s)
     }
+
+    peer.oniceconnectionstatechange = () => {
+      console.log('[TeamChat] ICE state:', peer.iceConnectionState)
+      if (peer.iceConnectionState === 'failed') {
+        console.error('[TeamChat] ICE FAILED — check TURN servers / network')
+        toast.error('Connection failed — network issue')
+      }
+    }
+
+    peer.onconnectionstatechange = () => {
+      console.log('[TeamChat] Connection state:', peer.connectionState)
+    }
+
     peer.onicecandidate = (e) => {
       const sess = callSessionRef.current
       if (e.candidate && sess) {
@@ -177,11 +219,11 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
           call_id: sess.callId, signal_type: 'ice-candidate',
           signal_data: e.candidate.toJSON() as RTCIceCandidateInit,
           target_user_id: sess.remoteUserId,
-        }).catch(() => {})
+        }).catch(err => console.warn('[TeamChat] ICE signal error:', err))
       }
     }
     return peer
-  }, [])
+  }, [attachRemoteStream])
 
   const startCall = useCallback(async (conv: Conversation, callType: 'audio' | 'video') => {
     if (callPhaseRef.current !== 'idle') return
@@ -203,7 +245,10 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
     try {
       await chatService.acceptCall(session.convUuid, session.callId, session.remoteUserId)
       const iceRes = await chatService.getIceServers()
-      const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+      const iceServers = iceRes.data?.data?.iceServers ?? [
+            { urls: `stun:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478` },
+            { urls: `turn:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478?transport=tcp`, username: import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798', credential: import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu' },
+          ]
       const peer = await buildPeer(session, iceServers)
       callPhaseRef.current = 'active'; setCallPhase('active')
       startCallTimer()
@@ -319,42 +364,57 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
     })
 
     userChannel.bind('call.accepted', (data: CallAcceptedData) => {
+      console.log('[TeamChat] call.accepted by:', data.accepted_by.id, 'phase:', callPhaseRef.current)
       if (callPhaseRef.current !== 'calling') return
       const session = callSessionRef.current; if (!session) return
       ;(async () => {
         try {
           const iceRes = await chatService.getIceServers()
-          const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+          const iceServers = iceRes.data?.data?.iceServers ?? [
+            { urls: `stun:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478` },
+            { urls: `turn:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478?transport=tcp`, username: import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798', credential: import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu' },
+          ]
+          console.log('[TeamChat] ICE servers from API:', JSON.stringify(iceServers.map((s: RTCIceServer) => s.urls)))
           const peer = await buildPeer(session, iceServers)
           callPhaseRef.current = 'active'; setCallPhase('active')
           startCallTimer()
           const offer = await peer.createOffer()
           await peer.setLocalDescription(offer)
+          console.log('[TeamChat] Offer created, sending to:', data.accepted_by.id)
           await chatService.callSignal(session.convUuid, { call_id: session.callId, signal_type: 'offer', signal_data: offer as RTCSessionDescriptionInit, target_user_id: data.accepted_by.id })
-        } catch { toast.error('Call setup failed'); cleanupCall() }
+          console.log('[TeamChat] Offer sent successfully')
+        } catch (err) { console.error('[TeamChat] call.accepted handler error:', err); toast.error('Call setup failed'); cleanupCall() }
       })()
     })
 
     userChannel.bind('call.signal', (data: CallSignalData) => {
       const session = callSessionRef.current
       if (!session || data.call_id !== session.callId) return
+      console.log('[TeamChat] signal received:', data.signal_type, 'peer exists:', !!peerRef.current)
       ;(async () => {
-        const peer = peerRef.current
-        if (data.signal_type === 'offer') {
-          if (!peer) { pendingOfferRef.current = data.signal_data as RTCSessionDescriptionInit; return }
-          await peer.setRemoteDescription(data.signal_data as RTCSessionDescriptionInit)
-          for (const c of pendingIceRef.current) { await peer.addIceCandidate(c).catch(() => {}) }
-          pendingIceRef.current = []
-          const answer = await peer.createAnswer()
-          await peer.setLocalDescription(answer)
-          await chatService.callSignal(session.convUuid, { call_id: session.callId, signal_type: 'answer', signal_data: answer as RTCSessionDescriptionInit, target_user_id: data.from_user.id })
-        } else if (data.signal_type === 'answer') {
-          if (peer) await peer.setRemoteDescription(data.signal_data as RTCSessionDescriptionInit).catch(() => {})
-        } else if (data.signal_type === 'ice-candidate') {
-          const candidate = data.signal_data as RTCIceCandidateInit
-          if (peer?.remoteDescription) { await peer.addIceCandidate(candidate).catch(() => {}) }
-          else { pendingIceRef.current.push(candidate) }
-        }
+        try {
+          const peer = peerRef.current
+          if (data.signal_type === 'offer') {
+            if (!peer) { console.log('[TeamChat] Offer queued (peer not ready)'); pendingOfferRef.current = data.signal_data as RTCSessionDescriptionInit; return }
+            await peer.setRemoteDescription(data.signal_data as RTCSessionDescriptionInit)
+            console.log('[TeamChat] Remote description set (offer), pending ICE:', pendingIceRef.current.length)
+            for (const c of pendingIceRef.current) { await peer.addIceCandidate(c).catch(err => console.warn('[TeamChat] addIceCandidate err:', err)) }
+            pendingIceRef.current = []
+            const answer = await peer.createAnswer()
+            await peer.setLocalDescription(answer)
+            console.log('[TeamChat] Sending answer to:', data.from_user.id)
+            await chatService.callSignal(session.convUuid, { call_id: session.callId, signal_type: 'answer', signal_data: answer as RTCSessionDescriptionInit, target_user_id: data.from_user.id })
+          } else if (data.signal_type === 'answer') {
+            if (peer) {
+              await peer.setRemoteDescription(data.signal_data as RTCSessionDescriptionInit)
+              console.log('[TeamChat] Remote description set (answer)')
+            }
+          } else if (data.signal_type === 'ice-candidate') {
+            const candidate = data.signal_data as RTCIceCandidateInit
+            if (peer?.remoteDescription) { await peer.addIceCandidate(candidate).catch(err => console.warn('[TeamChat] addIceCandidate err:', err)) }
+            else { pendingIceRef.current.push(candidate) }
+          }
+        } catch (err) { console.error('[TeamChat] Signal handler error:', err) }
       })()
     })
 
@@ -392,7 +452,25 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
     startCall, acceptIncomingCall, declineCall, endCurrentCall,
     toggleMute, toggleCamera,
     remoteAudioRef, remoteVideoRef, localVideoRef,
+    remoteStreamRef, localStreamRef,
   }
 
-  return <ChatPusherContext.Provider value={value}>{children}</ChatPusherContext.Provider>
+  return (
+    <ChatPusherContext.Provider value={value}>
+      {children}
+      {/* Always-mounted audio element so remoteAudioRef is never null when ontrack fires */}
+      <audio
+        ref={(el) => {
+          (remoteAudioRef as React.MutableRefObject<HTMLAudioElement | null>).current = el
+          if (el && remoteStreamRef.current && !el.srcObject) {
+            el.srcObject = remoteStreamRef.current
+            el.play().catch(() => {})
+          }
+        }}
+        autoPlay
+        playsInline
+        style={{ display: 'none' }}
+      />
+    </ChatPusherContext.Provider>
+  )
 }

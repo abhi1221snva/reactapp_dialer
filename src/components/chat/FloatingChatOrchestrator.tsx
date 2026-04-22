@@ -38,7 +38,6 @@ function MobileChatWidget() {
     loadConversations,
     callPhase, callSession, isMuted, callSeconds,
     startCall, acceptIncomingCall, declineCall, endCurrentCall, toggleMute,
-    remoteAudioRef,
   } = useChatPusher()
 
   const [view, setView] = useState<'list' | 'thread'>('list')
@@ -421,6 +420,7 @@ function DesktopChatLayout() {
     callPhase, callSession, isMuted, isCameraOff, callSeconds,
     toggleMute, toggleCamera, endCurrentCall,
     remoteVideoRef, localVideoRef,
+    remoteStreamRef, localStreamRef,
   } = useChatPusher()
 
   return (
@@ -456,6 +456,8 @@ function DesktopChatLayout() {
           onEnd={endCurrentCall}
           remoteVideoRef={remoteVideoRef}
           localVideoRef={localVideoRef}
+          remoteStreamRef={remoteStreamRef}
+          localStreamRef={localStreamRef}
         />
       )}
     </>
