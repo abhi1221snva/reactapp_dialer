@@ -23,6 +23,9 @@ interface DialerState {
   // Lead history stack for previous-lead navigation
   leadHistory: Lead[]
 
+  // Provider error reason shown during 'failed' state
+  failReason: string | null
+
   setCallState: (state: CallState) => void
   setActiveCampaign: (campaign: Campaign | null) => void
   setActiveLead: (lead: Lead | null) => void
@@ -32,6 +35,8 @@ interface DialerState {
   setOnHold: (val: boolean) => void
   setIncomingCall: (call: IncomingCall | null) => void
   setActiveCallId: (id: string | null) => void
+
+  setFailReason: (reason: string | null) => void
 
   setTransferState: (state: TransferState) => void
   setTransferSessionId: (id: string | null) => void
@@ -67,6 +72,7 @@ export const useDialerStore = create<DialerState>((set, get) => ({
 
   callLogs: [],
   leadHistory: [],
+  failReason: null,
 
   setCallState: (callState) => set({ callState }),
   setActiveCampaign: (activeCampaign) => set({ activeCampaign }),
@@ -77,6 +83,8 @@ export const useDialerStore = create<DialerState>((set, get) => ({
   setOnHold: (isOnHold) => set({ isOnHold }),
   setIncomingCall: (incomingCall) => set({ incomingCall }),
   setActiveCallId: (activeCallId) => set({ activeCallId }),
+
+  setFailReason: (failReason) => set({ failReason }),
 
   setTransferState: (transferState) => set({ transferState }),
   setTransferSessionId: (transferSessionId) => set({ transferSessionId }),
@@ -120,5 +128,6 @@ export const useDialerStore = create<DialerState>((set, get) => ({
       activeCallId: null,
       transferState: 'idle',
       transferSessionId: null,
+      failReason: null,
     }),
 }))

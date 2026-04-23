@@ -22,13 +22,14 @@ function genPassword(): string {
   const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   const lower = 'abcdefghijklmnopqrstuvwxyz'
   const nums = '0123456789'
-  const syms = '@#!'
+  const syms = '@#!$%^&*_+-='
   const all = upper + lower + nums + syms
-  const pick = (s: string) => s[Math.floor(Math.random() * s.length)]
+  const rng = (max: number) => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % max }
+  const pick = (s: string) => s[rng(s.length)]
   const chars = [pick(upper), pick(lower), pick(nums), pick(syms)]
-  for (let i = chars.length; i < 10; i++) chars.push(pick(all))
+  for (let i = chars.length; i < 12; i++) chars.push(pick(all))
   for (let i = chars.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = rng(i + 1)
     ;[chars[i], chars[j]] = [chars[j], chars[i]]
   }
   return chars.join('')
@@ -37,7 +38,7 @@ function genPin(): string {
   return String(Math.floor(Math.random() * 9000) + 1000)
 }
 function capFirst(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
 }
 function formatUSPhone(raw: string): string {
   const d = raw.replace(/\D/g, '').slice(0, 10)
@@ -55,6 +56,12 @@ function mapExtType(val: string): string {
 // Constants
 // ---------------------------------------------------------------------------
 // TIMEZONES imported from ../../constants/timezones
+const USER_LEVELS = [
+  { value: 1, label: 'Agent' },
+  { value: 3, label: 'Associate' },
+  { value: 5, label: 'Manager' },
+  { value: 7, label: 'Admin' },
+]
 const DIALER_MODES = [
   { value: 'webphone', label: 'WebPhone' },
   { value: 'extension', label: 'Extension' },
@@ -241,7 +248,7 @@ const makeDefault = () => ({
   ip_filtering:0,enable_2fa:0,app_status:0,
 })
 type FormState = ReturnType<typeof makeDefault>
-type FormErrors = Partial<Record<keyof FormState | 'asterisk_server_id', string>>
+type FormErrors = Partial<Record<keyof FormState | 'asterisk_server_id' | 'password', string>>
 
 // ---------------------------------------------------------------------------
 // Component
@@ -284,7 +291,7 @@ export function UserForm() {
 
   const checkEmailAvailability = useCallback((email: string) => {
     if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current)
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailStatus('idle'); return }
+    if (!email.trim() || !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) { setEmailStatus('idle'); return }
     if (isEdit && existing?.data?.data && (existing.data.data as Record<string,unknown>).email === email) { setEmailStatus('idle'); return }
     if (lastCheckedEmail.current === email) return
     setEmailStatus('checking')
@@ -383,12 +390,15 @@ export function UserForm() {
     const e: FormErrors = {}
     if (!form.first_name.trim()) e.first_name = 'First name is required'
     if (!form.email.trim()) e.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email'
+    else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.email)) e.email = 'Enter a valid email'
+    if (!isEdit && !form.password) e.password = 'Password is required'
+    else if (!isEdit && form.password.length < 10) e.password = 'Minimum 10 characters'
+    else if (!isEdit && (!/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/[0-9]/.test(form.password) || !/[^A-Za-z0-9]/.test(form.password))) e.password = 'Must include upper, lower, digit, and special char'
     if (!form.mobile.trim()) e.mobile = 'Phone number is required'
-    else if (form.mobile.replace(/\D/g,'').length!==10) e.mobile = 'Must be exactly 10 digits'
+    else if (form.mobile.replace(/\D/g,'').length < 7 || form.mobile.replace(/\D/g,'').length > 15) e.mobile = 'Must be 7-15 digits'
     if (form.no_answer_redirect===1) {
       if (!form.no_answer_phone.trim()) e.no_answer_phone = 'Redirect number is required'
-      else if (form.no_answer_phone.replace(/\D/g,'').length!==10) e.no_answer_phone = 'Must be exactly 10 digits'
+      else if (form.no_answer_phone.replace(/\D/g,'').length < 7 || form.no_answer_phone.replace(/\D/g,'').length > 15) e.no_answer_phone = 'Must be 7-15 digits'
     }
     if (!isEdit) {
       const ext = Number(form.extension)
@@ -451,7 +461,10 @@ export function UserForm() {
         toast.error(d?.message||(d?.errors?Object.values(d.errors)[0]?.[0]??'':'')||'Failed to save')
       }
       const errs = (err as {response?:{data?:{errors?:Record<string,string[]>}}})?.response?.data?.errors
-      if (errs?.extension) set('extension', genExtension())
+      if (errs?.extension) {
+        set('extension', genExtension())
+        toast('Extension was already taken. A new one has been generated.', { icon: '\u26A0\uFE0F' })
+      }
     },
   })
 
@@ -608,7 +621,7 @@ export function UserForm() {
                               {filteredCC.map(c=>{
                                 const sel = form.country_code===c.code
                                 return (
-                                <button key={c.short} type="button"
+                                <button key={c.short + c.code} type="button"
                                   onClick={()=>{set('country_code',c.code);setCcOpen(false);setCcSearch('')}}
                                   style={{ width:'100%',padding:'6px 10px',border:'none',background:sel?'#eef2ff':'transparent',cursor:'pointer',fontSize:12,color:'#0f172a',textAlign:'left',display:'flex',alignItems:'center',gap:6 }}
                                   onMouseEnter={e=>(e.currentTarget.style.background=sel?'#eef2ff':'#f8fafc')}
@@ -684,6 +697,7 @@ export function UserForm() {
                         </button>
                       </div>
                     </div>
+                    {err('password')}
                   </div>
                   )}
                   <div style={FLEX1}>
@@ -725,6 +739,20 @@ export function UserForm() {
                   </div>
                 </div>
 
+                {/* Row 2b: User Role (visible to managers+) */}
+                {authLevel >= LEVELS.MANAGER && (
+                  <div style={FLEX_ROW_MT}>
+                    <div style={FLEX1}>
+                      <label style={LABEL}>User Role / Level</label>
+                      <select className="cpn-fi" value={form.user_level}
+                        onChange={e=>set('user_level',Number(e.target.value))}>
+                        {USER_LEVELS.map(l=><option key={l.value} value={l.value}>{l.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={FLEX1} />
+                  </div>
+                )}
+
                 {/* Row 3: Agent Group | CLI Setting | Custom CLI (dynamic) */}
                 <div style={FLEX_ROW_MT}>
                   <div style={FLEX1}>
@@ -739,7 +767,7 @@ export function UserForm() {
                   </div>
                   <div style={FLEX1}>
                     <label style={LABEL}>CLI Setting</label>
-                    <select className="cpn-fi" value={form.cli_setting} onChange={e=>set('cli_setting',Number(e.target.value))}>
+                    <select className="cpn-fi" value={form.cli_setting} onChange={e=>{const v=Number(e.target.value);set('cli_setting',v);if(v!==1)set('cli','')}}>
                       {CLI_SETTINGS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>

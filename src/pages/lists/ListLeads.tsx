@@ -150,9 +150,10 @@ export function ListLeads() {
   }
   const payload = (data as LeadsResponse)?.data?.data
   const listName = payload?.list_name ?? `List #${id}`
-  const headers: string[] = payload?.list_header ?? []
+  const rawHeaders = payload?.list_header
+  const headers: string[] = Array.isArray(rawHeaders) ? rawHeaders : []
   const rows: Record<string, unknown>[] = payload?.list_data ?? []
-  const total: number = payload?.total_records ?? 0
+  const total: number = Number(payload?.total_records) || 0
 
   // Inject toolbar into the standard .lt header
   useEffect(() => {
@@ -310,13 +311,16 @@ export function ListLeads() {
                     <td className="text-center text-xs text-slate-400">
                       {(page - 1) * PAGE_SIZE + i + 1}
                     </td>
-                    {headers.map(h => (
-                      <td key={h} className="max-w-[200px] truncate">
-                        {row[h] !== undefined && row[h] !== null && row[h] !== ''
-                          ? String(row[h])
-                          : <span className="text-slate-300">—</span>}
-                      </td>
-                    ))}
+                    {headers.map(h => {
+                      const val = row[h] !== undefined && row[h] !== null && row[h] !== ''
+                        ? String(row[h])
+                        : null
+                      return (
+                        <td key={h} className="max-w-[200px] truncate" title={val ?? undefined}>
+                          {val ?? <span className="text-slate-300">—</span>}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))
               )}

@@ -76,4 +76,4 @@ export interface StudioNote {
 
 export type SidebarTab = 'lead' | 'sms' | 'email' | 'script' | 'notes' | 'events'
 
-export type CallState = 'idle' | 'dialing' | 'ringing' | 'in-call' | 'wrap-up'
+export type CallState = 'idle' | 'dialing' | 'ringing' | 'in-call' | 'wrap-up' | 'failed'

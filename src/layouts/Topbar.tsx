@@ -6,6 +6,8 @@ import { useNotificationStore } from '../stores/notification.store'
 import { initials } from '../utils/format'
 import { cn } from '../utils/cn'
 
+const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='40' fill='%23e2e8f0'/%3E%3Ccircle cx='40' cy='30' r='12' fill='%2394a3b8'/%3E%3Cellipse cx='40' cy='62' rx='20' ry='14' fill='%2394a3b8'/%3E%3C/svg%3E"
+
 type AgentStatus = 'available' | 'busy' | 'break' | 'offline'
 
 const statusConfig: Record<AgentStatus, { color: string; label: string }> = {
@@ -112,20 +114,12 @@ export function Topbar() {
             className="flex items-center gap-2 pl-1 pr-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors duration-150"
             title={user?.name}
           >
-            {user?.profile_pic ? (
-              <img
-                src={user.profile_pic}
-                alt={user.name}
-                className="w-9 h-9 rounded-full object-cover shadow-sm flex-shrink-0"
-              />
-            ) : (
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shadow-sm flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
-              >
-                {user ? initials(user.name) : '?'}
-              </div>
-            )}
+            <img
+              src={user?.profile_pic || DEFAULT_AVATAR}
+              alt={user?.name || 'User'}
+              className="w-9 h-9 rounded-full object-cover shadow-sm flex-shrink-0"
+              onError={e => { (e.target as HTMLImageElement).src = DEFAULT_AVATAR }}
+            />
             <ChevronDown size={13} className={cn('text-slate-400 transition-transform duration-150', showProfileMenu && 'rotate-180')} />
           </button>
 

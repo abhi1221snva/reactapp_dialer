@@ -182,10 +182,10 @@ function resolveFieldIcon(key: string, type?: string): LucideIcon {
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEditingProp, activeTab }: {
+function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEditingProp, activeTab, onSendEmail, onSendSms }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
   editingProp?: boolean; setEditingProp?: (v: boolean) => void
-  activeTab?: string
+  activeTab?: string; onSendEmail?: () => void; onSendSms?: () => void
 }) {
   const qc = useQueryClient()
   const [editingLocal, setEditingLocal] = useState(false)
@@ -230,6 +230,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
 
   // Owner 2 toggle — auto-detect from existing data, user can toggle
   const [showOwner2, setShowOwner2] = useState(false)
+  const [showOwner2Confirm, setShowOwner2Confirm] = useState(false)
   useEffect(() => {
     if (!hasOwner2Fields) { setShowOwner2(false); return }
     const hasData = secondOwner.some(f => {
@@ -238,6 +239,39 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
     })
     setShowOwner2(hasData)
   }, [lead, leadFields])
+
+  // Remove Owner 2 mutation — clears all second_owner EAV fields
+  const removeOwner2Mut = useMutation({
+    mutationFn: () => {
+      const clearData: Record<string, unknown> = {}
+      secondOwner.forEach(f => { clearData[f.field_key] = '' })
+      return leadService.update(leadId, clearData)
+    },
+    onSuccess: () => {
+      toast.success('Second owner removed')
+      setShowOwner2(false)
+      setShowOwner2Confirm(false)
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      onUpdated()
+    },
+    onError: () => { toast.error('Failed to remove second owner'); setShowOwner2Confirm(false) },
+  })
+
+  /** When unchecking Owner 2 — if data exists, confirm before removing */
+  function handleOwner2Toggle(checked: boolean) {
+    if (checked) { setShowOwner2(true); return }
+    // Check if any Owner 2 fields have data
+    const hasData = secondOwner.some(f => {
+      const val = lr[f.field_key]
+      return val !== null && val !== undefined && String(val).trim() !== ''
+    })
+    if (hasData) {
+      setShowOwner2Confirm(true)
+    } else {
+      setShowOwner2(false)
+    }
+  }
 
   // Avatar for identity card
   const fullName   = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || `Lead #${leadId}`
@@ -287,6 +321,18 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
         </div>
         {/* Hover actions */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {(key === 'phone_number' || type === 'phone' || type === 'phone_number') && displayVal && onSendSms && (
+            <button onClick={onSendSms} title="Send SMS"
+              className="p-1 rounded text-violet-400 hover:bg-violet-50 hover:text-violet-600 transition-colors">
+              <MessageSquare size={10} />
+            </button>
+          )}
+          {(key === 'email' || type === 'email') && displayVal && onSendEmail && (
+            <button onClick={onSendEmail} title="Send Email"
+              className="p-1 rounded text-sky-400 hover:bg-sky-50 hover:text-sky-600 transition-colors">
+              <Mail size={10} />
+            </button>
+          )}
           {copyable && displayVal && (
             <button onClick={() => copyToClipboard(String(raw!), label)} title="Copy"
               className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
@@ -376,20 +422,28 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
       )}
 
       {/* ── Owner 2 Information ── */}
-      {hasOwner2Fields && (
+      {hasOwner2Fields && (showOwner2 || editing) && (
         <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden shadow-sm">
           <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 bg-slate-50/40">
-            <label className="flex items-center gap-2 cursor-pointer flex-1">
-              <input
-                type="checkbox"
-                checked={showOwner2}
-                onChange={e => setShowOwner2(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-slate-300 text-violet-500 focus:ring-violet-400 cursor-pointer"
-              />
-              <Users size={12} className="text-violet-500" />
-              <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Owner 2 Information</h3>
-              <span className="text-[10px] font-bold text-slate-400">{secondOwner.length}</span>
-            </label>
+            {editing ? (
+              <label className="flex items-center gap-2 cursor-pointer flex-1">
+                <input
+                  type="checkbox"
+                  checked={showOwner2}
+                  onChange={e => handleOwner2Toggle(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-violet-500 focus:ring-violet-400 cursor-pointer"
+                />
+                <Users size={12} className="text-violet-500" />
+                <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Owner 2 Information</h3>
+                <span className="text-[10px] font-bold text-slate-400">{secondOwner.length}</span>
+              </label>
+            ) : (
+              <div className="flex items-center gap-2 flex-1">
+                <Users size={12} className="text-violet-500" />
+                <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Owner 2 Information</h3>
+                <span className="text-[10px] font-bold text-slate-400">{secondOwner.length}</span>
+              </div>
+            )}
           </div>
           {showOwner2 && (
             <div className={editing ? 'p-3' : 'p-2'}>
@@ -398,6 +452,39 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Remove Owner 2 Confirmation Modal ── */}
+      {showOwner2Confirm && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setShowOwner2Confirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-5 pt-5 pb-2">
+              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-50">
+                <AlertCircle size={20} className="text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Remove Second Owner</h3>
+                <p className="text-xs text-slate-500 mt-0.5">This action cannot be undone</p>
+              </div>
+            </div>
+            <div className="px-5 py-3">
+              <p className="text-[13px] text-slate-600 leading-relaxed">
+                Do you want to remove the Second Owner? All owner 2 information will be permanently deleted from this lead.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 bg-slate-50 border-t border-slate-100">
+              <button onClick={() => setShowOwner2Confirm(false)}
+                className="inline-flex items-center gap-1 h-8 px-4 rounded-lg text-[12px] font-semibold border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => removeOwner2Mut.mutate()} disabled={removeOwner2Mut.isPending}
+                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-lg text-[12px] font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 transition-colors">
+                {removeOwner2Mut.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                Yes, Remove
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -589,11 +676,12 @@ export function CrmLeadNew() {
       style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
 
       {/* ── Full-width identity bar ── */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 bg-white border-b border-slate-200/80 shadow-sm">
+      <div className="flex-shrink-0 flex items-center gap-3 bg-white border-b border-slate-200/80 shadow-sm"
+        style={{ padding: '12px 20px' }}>
         {/* Back */}
         <button onClick={() => navigate('/crm/leads')} title="Back"
-          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all flex-shrink-0">
-          <ArrowLeft size={15} />
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all flex-shrink-0">
+          <ArrowLeft size={16} />
         </button>
 
         {/* Avatar */}
@@ -607,21 +695,21 @@ export function CrmLeadNew() {
         {/* Name + email / phone */}
         <div className="flex-1 min-w-0">
           <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">{fullName}</h2>
-          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+          <p className="text-[12px] text-slate-500 truncate mt-0.5">
             {lead.email && <span className="font-medium text-slate-600">{String(lead.email)}</span>}
-            {lead.email && lead.phone_number && <span className="mx-1 text-slate-300">·</span>}
+            {lead.email && lead.phone_number && <span className="mx-1.5 text-slate-300">·</span>}
             {lead.phone_number && <span>{formatPhoneNumber(String(lead.phone_number))}</span>}
           </p>
         </div>
 
         {/* Temperature */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <Thermometer size={12} className={temp === 'hot' ? 'text-red-500' : temp === 'warm' ? 'text-amber-500' : temp === 'cold' ? 'text-blue-500' : 'text-slate-400'} />
+          <Thermometer size={13} className={temp === 'hot' ? 'text-red-500' : temp === 'warm' ? 'text-amber-500' : temp === 'cold' ? 'text-blue-500' : 'text-slate-400'} />
           <select
             value={temp ?? ''}
             onChange={e => tempMut.mutate(e.target.value)}
             disabled={tempMut.isPending}
-            className={`text-[11px] font-semibold rounded-lg px-2 py-1 outline-none cursor-pointer disabled:opacity-50 border ${
+            className={`text-[11px] font-semibold rounded-lg px-2.5 py-1.5 outline-none cursor-pointer disabled:opacity-50 border ${
               temp === 'hot'  ? 'text-red-700 bg-red-50 border-red-200 focus:border-red-400' :
               temp === 'warm' ? 'text-amber-700 bg-amber-50 border-amber-200 focus:border-amber-400' :
               temp === 'cold' ? 'text-blue-700 bg-blue-50 border-blue-200 focus:border-blue-400' :
@@ -637,12 +725,12 @@ export function CrmLeadNew() {
 
         {/* Assigned To */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <UserCheck size={12} className="text-violet-500" />
+          <UserCheck size={13} className="text-violet-500" />
           <select
             value={lr['assigned_to'] != null ? String(lr['assigned_to']) : ''}
             onChange={e => assignMut.mutate(e.target.value ? Number(e.target.value) : null)}
             disabled={assignMut.isPending}
-            className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2 py-1 outline-none focus:border-violet-400 cursor-pointer disabled:opacity-50"
+            className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400 cursor-pointer disabled:opacity-50"
           >
             <option value="">Unassigned</option>
             {users.map(u => (
@@ -652,27 +740,24 @@ export function CrmLeadNew() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => setShowEmailModal(true)}
-            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold text-sky-700 transition-all hover:shadow-sm"
-            style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}
-            title="Send Email"
-          >
-            <Mail size={12} /> <span className="hidden xl:inline">Email</span>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Email */}
+          <button onClick={() => setShowEmailModal(true)} title="Send Email"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[11px] font-semibold text-sky-700 transition-all hover:shadow-sm"
+            style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+            <Mail size={13} /> Email
           </button>
-          <button
-            onClick={() => setShowSmsModal(true)}
-            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold text-violet-700 transition-all hover:shadow-sm"
-            style={{ background: '#f5f3ff', border: '1px solid #c4b5fd' }}
-            title="Send SMS"
-          >
-            <MessageSquare size={12} /> <span className="hidden xl:inline">SMS</span>
+          {/* SMS */}
+          <button onClick={() => setShowSmsModal(true)} title="Send SMS"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[11px] font-semibold text-violet-700 transition-all hover:shadow-sm"
+            style={{ background: '#f5f3ff', border: '1px solid #c4b5fd' }}>
+            <MessageSquare size={13} /> SMS
           </button>
+          <div className="w-px h-5 bg-slate-200" />
           <button
             onClick={handleMerchantPortal}
             disabled={genPortal.isPending}
-            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-semibold text-amber-700 transition-all hover:shadow-sm disabled:opacity-50"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[11px] font-semibold text-amber-700 transition-all hover:shadow-sm disabled:opacity-50"
             style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
             title={merchantPortal?.url ? 'Copy merchant portal link' : 'Generate merchant portal link'}
           >
@@ -682,11 +767,11 @@ export function CrmLeadNew() {
           <div className="w-px h-5 bg-slate-200" />
           {!overviewEditing ? (
             <button onClick={() => setOverviewEditing(true)}
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-colors border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300">
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-semibold transition-colors border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300">
               <Pencil size={11} /> Edit
             </button>
           ) : (
-            <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg">
+            <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg">
               Editing Overview…
             </span>
           )}
@@ -750,7 +835,7 @@ export function CrmLeadNew() {
           {/* LEFT — Overview fixed, never changes */}
           <aside className={`${activeTab === 'lenders' ? 'col-span-4' : 'col-span-8'} bg-white border-r border-slate-100 overflow-y-auto transition-all duration-300`}>
             <div className="p-4">
-              <OverviewTab lead={lead} leadId={leadId} leadFields={leadFields} onUpdated={() => qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })} editingProp={overviewEditing} setEditingProp={setOverviewEditing} activeTab={activeTab} />
+              <OverviewTab lead={lead} leadId={leadId} leadFields={leadFields} onUpdated={() => qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })} editingProp={overviewEditing} setEditingProp={setOverviewEditing} activeTab={activeTab} onSendEmail={() => setShowEmailModal(true)} onSendSms={() => setShowSmsModal(true)} />
             </div>
           </aside>
 

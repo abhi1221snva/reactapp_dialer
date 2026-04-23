@@ -9,13 +9,14 @@ function genPassword(): string {
   const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   const lower = 'abcdefghijklmnopqrstuvwxyz'
   const nums = '0123456789'
-  const syms = '@#!'
+  const syms = '@#!$%^&*_+-='
   const all = upper + lower + nums + syms
-  const pick = (s: string) => s[Math.floor(Math.random() * s.length)]
+  const rng = (max: number) => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % max }
+  const pick = (s: string) => s[rng(s.length)]
   const chars = [pick(upper), pick(lower), pick(nums), pick(syms)]
-  for (let i = chars.length; i < 10; i++) chars.push(pick(all))
+  for (let i = chars.length; i < 12; i++) chars.push(pick(all))
   for (let i = chars.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = rng(i + 1)
     ;[chars[i], chars[j]] = [chars[j], chars[i]]
   }
   return chars.join('')
@@ -34,6 +35,7 @@ export function ChangePasswordModal({ userId, userName, isSelf, onClose, onSucce
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNew, setShowNew] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [showCurrent, setShowCurrent] = useState(false)
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -42,7 +44,11 @@ export function ChangePasswordModal({ userId, userName, isSelf, onClose, onSucce
     const e: Record<string, string> = {}
     if (isSelf && !currentPassword) e.currentPassword = 'Current password is required'
     if (!newPassword) e.newPassword = 'New password is required'
-    else if (newPassword.length < 8) e.newPassword = 'Minimum 8 characters'
+    else if (newPassword.length < 10) e.newPassword = 'Minimum 10 characters'
+    else if (!/[A-Z]/.test(newPassword)) e.newPassword = 'Must include an uppercase letter'
+    else if (!/[a-z]/.test(newPassword)) e.newPassword = 'Must include a lowercase letter'
+    else if (!/[0-9]/.test(newPassword)) e.newPassword = 'Must include a number'
+    else if (!/[^A-Za-z0-9]/.test(newPassword)) e.newPassword = 'Must include a special character'
     if (!confirmPassword) e.confirmPassword = 'Please confirm the password'
     else if (newPassword !== confirmPassword) e.confirmPassword = 'Passwords do not match'
     setErrors(e)
@@ -144,7 +150,7 @@ export function ChangePasswordModal({ userId, userName, isSelf, onClose, onSucce
                 value={newPassword}
                 onChange={(e) => { setNewPassword(e.target.value); setErrors(p => ({ ...p, newPassword: '' })) }}
                 className="w-full h-10 pl-3 pr-24 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none"
-                placeholder="Min 8 characters"
+                placeholder="Min 10 chars, upper+lower+digit+special"
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                 <button type="button" onClick={() => setShowNew(v => !v)}
@@ -167,13 +173,19 @@ export function ChangePasswordModal({ userId, userName, isSelf, onClose, onSucce
           {/* Confirm password */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1.5">Confirm Password</label>
-            <input
-              type={showNew ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(e) => { setConfirmPassword(e.target.value); setErrors(p => ({ ...p, confirmPassword: '' })) }}
-              className="w-full h-10 pl-3 pr-3 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none"
-              placeholder="Re-enter new password"
-            />
+            <div className="relative">
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setErrors(p => ({ ...p, confirmPassword: '' })) }}
+                className="w-full h-10 pl-3 pr-10 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none"
+                placeholder="Re-enter new password"
+              />
+              <button type="button" onClick={() => setShowConfirm(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
             {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
           </div>
 

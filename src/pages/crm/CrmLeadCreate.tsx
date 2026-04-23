@@ -139,7 +139,8 @@ export function CrmLeadCreate() {
     queryKey: ['lead-sources'],
     queryFn: async () => {
       const res = await leadService.getLeadSources()
-      return (res.data?.data ?? res.data ?? []) as Array<{ id: number; source_title: string }>
+      const all = (res.data?.data ?? res.data ?? []) as Array<{ id: number; source_title: string; status?: number | string }>
+      return all.filter(s => Number(s.status) === 1)
     },
     staleTime: 5 * 60 * 1000,
   })

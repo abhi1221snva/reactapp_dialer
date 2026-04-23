@@ -274,8 +274,8 @@ function RingGroupFormModal({
     mutationFn: (data: Record<string, unknown>) =>
       editing ? ringgroupService.update(data) : ringgroupService.create(data),
     onSuccess: async (response) => {
-      const body = (response as { data?: { success?: string | boolean; message?: string } })?.data
-      const succeeded = body?.success === true || body?.success === 'true'
+      const body = (response as { data?: { success?: string | boolean | number; message?: string } })?.data
+      const succeeded = body?.success === true || body?.success === 'true' || body?.success === 1 || body?.success === '1'
       if (!succeeded) {
         toast.error(body?.message ?? 'Failed to save Ring Group')
         return
@@ -335,16 +335,28 @@ function RingGroupFormModal({
             <select className="input" value={form.ring_type}
               onChange={e => setForm(p => ({ ...p, ring_type: Number(e.target.value) }))}>
               <option value={1}>Ring All</option>
+              <option value={2}>Sequence</option>
               <option value={3}>Round Robin</option>
             </select>
           </div>
         </div>
 
-        <div>
-          <label className="label">Description</label>
-          <input className="input" value={form.description}
-            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-            placeholder="Optional description" />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Description</label>
+            <input className="input" value={form.description}
+              onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              placeholder="Optional description" maxLength={500} />
+          </div>
+          <div>
+            <label className="label">Receive On</label>
+            <select className="input" value={form.receive_on}
+              onChange={e => setForm(p => ({ ...p, receive_on: e.target.value }))}>
+              {RECEIVE_ON_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div>
@@ -437,15 +449,16 @@ export function RingGroups() {
     {
       key: 'extension_name', header: 'Extension',
       render: (row) => {
-        // extension_name is "Name-Ext,Name2-Ext2" — split on comma only, not dash
+        // extension_name is "First Last-Ext,First2 Last2-Ext2"
+        // Use regex to separate trailing numeric extension from agent name (handles hyphens in names)
         const raw = String(row.extension_name ?? '')
         const entries = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []
         return (
           <div className="flex flex-wrap gap-1">
             {entries.slice(0, 3).map((entry, i) => {
-              const dashIdx = entry.lastIndexOf('-')
-              const name = dashIdx > 0 ? entry.slice(0, dashIdx).trim() : entry
-              const ext = dashIdx > 0 ? entry.slice(dashIdx + 1).trim() : ''
+              // Match trailing -<digits> as extension, everything before is the name
+              const match = entry.match(/^(.+)-(\d+)$/)
+              const name = match ? match[1].trim() : entry
               return (
                 <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700">
                   <span className="font-medium">{name}</span>
@@ -525,7 +538,7 @@ export function RingGroups() {
 
       <RingGroupFormModal
         isOpen={modal}
-        onClose={() => { setModal(false); setEditing(null) }}
+        onClose={() => { setModal(false); setTimeout(() => setEditing(null), 150) }}
         editing={editing}
       />
     </div>

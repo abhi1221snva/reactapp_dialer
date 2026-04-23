@@ -482,7 +482,10 @@ export function FloatingChat() {
       ;(async () => {
         try {
           const iceRes = await chatService.getIceServers()
-          const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+          const iceServers = iceRes.data?.data?.iceServers ?? [
+            { urls: `stun:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478` },
+            { urls: `turn:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478?transport=tcp`, username: import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798', credential: import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu' },
+          ]
           const peer = await buildPeer(session, iceServers)
           callPhaseRef.current = 'active'; setCallPhase('active')
           startCallTimer()
@@ -720,7 +723,10 @@ export function FloatingChat() {
     try {
       await chatService.acceptCall(session.convUuid, session.callId, session.remoteUserId)
       const iceRes = await chatService.getIceServers()
-      const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+      const iceServers = iceRes.data?.data?.iceServers ?? [
+            { urls: `stun:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478` },
+            { urls: `turn:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478?transport=tcp`, username: import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798', credential: import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu' },
+          ]
       const peer = await buildPeer(session, iceServers)
       callPhaseRef.current = 'active'; setCallPhase('active')
       startCallTimer()

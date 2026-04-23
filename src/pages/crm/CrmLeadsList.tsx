@@ -65,7 +65,7 @@ interface MyAffiliateLink {
 }
 
 function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
-  const navigate = useNavigate()
+  const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -83,6 +83,17 @@ function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
       return res.data?.data
     },
     staleTime: 5 * 60 * 1000,
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: () => api.post<{ success: boolean; data: { affiliate_code: string; affiliate_url: string } }>('/crm/affiliate/generate-code', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-affiliate-link'] })
+      toast.success('Affiliate code generated!')
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err?.response?.data?.message ?? 'Failed to generate code')
+    },
   })
 
   // Build URL: prefer backend-provided url, fallback to company website_url + code
@@ -147,10 +158,14 @@ function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
                 Generate your personal referral code to start tracking leads.
               </p>
               <button
-                onClick={() => { onClose(); navigate('/crm/affiliate-links') }}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm"
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm disabled:opacity-60"
               >
-                <Link2 size={14} /> Generate Affiliate Code
+                {generateMutation.isPending
+                  ? <><Loader2 size={14} className="animate-spin" /> Generating…</>
+                  : <><Link2 size={14} /> Generate Affiliate Code</>
+                }
               </button>
             </div>
           ) : (

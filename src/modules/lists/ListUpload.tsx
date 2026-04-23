@@ -4,6 +4,7 @@ import { Upload, X, FileSpreadsheet, AlertCircle, ArrowRight } from 'lucide-reac
 import toast from 'react-hot-toast'
 import { listService } from '../../services/list.service'
 import { campaignService } from '../../services/campaign.service'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { UploadFormData, ParseResult } from './types'
 
 interface Props {
@@ -54,11 +55,17 @@ export function ListUpload({ onParsed, presetCampaignId }: Props) {
   const set = <K extends keyof UploadFormData>(key: K, value: UploadFormData[K]) =>
     setForm(f => ({ ...f, [key]: value }))
 
+  const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+
   const handleFileDrop = (file: File) => {
     const allowed = ['.xls', '.xlsx', '.csv']
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
     if (!allowed.includes(ext)) {
       toast.error('Only .xls, .xlsx, and .csv files are allowed')
+      return
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File size must be less than 20MB')
       return
     }
     set('file', file)
@@ -104,18 +111,14 @@ export function ListUpload({ onParsed, presetCampaignId }: Props) {
               <label className="block text-[11px] font-semibold uppercase text-slate-500 tracking-wide mb-1">
                 Assign to Campaign <span className="text-red-500">*</span>
               </label>
-              <select
-                className="input"
+              <SearchableSelect
+                options={campaigns.map(c => ({ value: String(c.id), label: c.title || c.campaign_name || `Campaign #${c.id}` }))}
                 value={form.campaign_id}
-                onChange={e => set('campaign_id', e.target.value)}
-              >
-                <option value="">-- Select Campaign --</option>
-                {campaigns.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.title || c.campaign_name}
-                  </option>
-                ))}
-              </select>
+                onChange={v => set('campaign_id', v)}
+                placeholder="Search campaigns…"
+                emptyLabel="-- Select Campaign --"
+                className="input"
+              />
             </div>
           </div>
 
@@ -176,7 +179,7 @@ export function ListUpload({ onParsed, presetCampaignId }: Props) {
             >
               <Upload size={24} className="mx-auto mb-2 text-slate-400" />
               <p className="text-sm font-medium text-slate-700">Drop your file here or click to browse</p>
-              <p className="text-[11px] text-slate-400 mt-1">Supported formats: .xls, .xlsx, .csv — first row must be column headers</p>
+              <p className="text-[11px] text-slate-400 mt-1">Supported formats: .xls, .xlsx, .csv (max 20MB) — first row must be column headers</p>
             </div>
           )}
           <input

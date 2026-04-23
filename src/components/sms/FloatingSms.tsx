@@ -103,6 +103,19 @@ function ConvRow({ conv, isActive, onClick }: {
 
 function Bubble({ msg }: { msg: SmsMessage }) {
   const out = msg.direction === 'outbound'
+  const sys = msg.direction === 'system'
+
+  if (sys) return (
+    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 5 }}>
+      <div style={{ maxWidth: '85%', background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: 10, padding: '5px 12px', textAlign: 'center' }}>
+        <p style={{ fontSize: 11, lineHeight: 1.4, margin: 0, color: 'rgba(148,163,184,0.85)', fontStyle: 'italic', wordBreak: 'break-word' }}>{msg.body}</p>
+        <span style={{ fontSize: 9, color: 'rgba(148,163,184,0.5)' }}>
+          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', justifyContent: out ? 'flex-end' : 'flex-start', marginBottom: 5, paddingLeft: out ? 32 : 0, paddingRight: out ? 0 : 32 }}>
       <div style={{

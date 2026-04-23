@@ -17,6 +17,15 @@ const DIAL_MODES = [
   { value: 'predictive_dial', label: 'Predictive Dial' },
 ]
 
+const CALLER_ID_STRATEGIES = [
+  { value: 'custom', label: 'Custom Number' },
+  { value: 'area_code', label: 'Area Code Match' },
+  { value: 'area_code_random', label: 'Area Code Random' },
+  { value: 'area_code_3', label: 'Mirror 6 Digits' },
+  { value: 'area_code_4', label: 'Mirror 7 Digits' },
+  { value: 'area_code_5', label: 'Mirror 8 Digits' },
+]
+
 const TIMEZONES = [
   'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
   'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'UTC',
@@ -26,7 +35,8 @@ const DEFAULT_FORM = {
   campaign_name: '',
   description: '',
   dial_mode: 'power_dial',
-  caller_id: '',
+  caller_id: 'custom',
+  custom_caller_id: '',
   dial_ratio: 1,
   time_based_calling: 0,
   call_time_start: '08:00',
@@ -75,10 +85,11 @@ export function CampaignForm() {
           ? c.disposition_id
           : []
       setForm({
-        campaign_name: c.campaign_name || '',
+        campaign_name: c.campaign_name || c.title || '',
         description: c.description || '',
         dial_mode: c.dial_mode || 'power_dial',
-        caller_id: c.caller_id || '',
+        caller_id: c.caller_id || 'custom',
+        custom_caller_id: c.custom_caller_id ? String(c.custom_caller_id) : '',
         dial_ratio: c.dial_ratio || 1,
         time_based_calling: c.time_based_calling || 0,
         call_time_start: c.call_time_start || '08:00',
@@ -94,11 +105,22 @@ export function CampaignForm() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const data = { ...form, campaign_name: form.campaign_name.charAt(0).toUpperCase() + form.campaign_name.slice(1) }
-      if (isEdit) {
-        return campaignService.update({ ...data, campaign_id: Number(id) })
+      const name = form.campaign_name.charAt(0).toUpperCase() + form.campaign_name.slice(1)
+      const payload: Record<string, unknown> = {
+        ...form,
+        campaign_name: name,
+        title: name, // backend expects 'title' as the column name
       }
-      return campaignService.create(data)
+      // Send custom_caller_id as a number when strategy is 'custom'
+      if (form.caller_id === 'custom' && form.custom_caller_id) {
+        payload.custom_caller_id = form.custom_caller_id.replace(/\D/g, '')
+      } else {
+        payload.custom_caller_id = 0
+      }
+      if (isEdit) {
+        return campaignService.update({ ...payload, campaign_id: Number(id) })
+      }
+      return campaignService.create(payload)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Campaign updated' : 'Campaign created')
@@ -230,10 +252,18 @@ export function CampaignForm() {
                     </select>
                   </div>
                   <div>
-                    <label className={FIELD_LABEL}>Caller ID</label>
-                    <input className="input" placeholder="+1XXXXXXXXXX"
-                      value={form.caller_id} onChange={e => set('caller_id', e.target.value)} />
+                    <label className={FIELD_LABEL}>Caller ID Strategy</label>
+                    <select className="input" value={form.caller_id} onChange={e => set('caller_id', e.target.value)}>
+                      {CALLER_ID_STRATEGIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
                   </div>
+                  {form.caller_id === 'custom' && (
+                    <div>
+                      <label className={FIELD_LABEL}>Custom Caller ID *</label>
+                      <input className="input" placeholder="+16465533256"
+                        value={form.custom_caller_id} onChange={e => set('custom_caller_id', e.target.value)} />
+                    </div>
+                  )}
                   <div>
                     <label className={FIELD_LABEL}>Agent Group</label>
                     <SearchableSelect

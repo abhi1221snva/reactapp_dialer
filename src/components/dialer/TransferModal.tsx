@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { X, ArrowRightLeft, Phone, Users, Hash, Loader2, CheckCircle2, AlertCircle, LogOut } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, ArrowRightLeft, Phone, Users, Hash, Loader2, CheckCircle2, AlertCircle, LogOut, ChevronDown } from 'lucide-react'
 import { useDialerStore } from '../../stores/dialer.store'
 import { useAuthStore } from '../../stores/auth.store'
 import { dialerService } from '../../services/dialer.service'
+import { ringgroupService } from '../../services/ringgroup.service'
 import { cn } from '../../utils/cn'
 
 type TransferType = 'extension' | 'ring_group' | 'did'
@@ -42,6 +43,24 @@ export function TransferModal({ isOpen, onClose }: Props) {
   const [target, setTarget] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [ringGroups, setRingGroups] = useState<Array<{ id: number; title?: string; name?: string }>>([])
+  const [rgLoading, setRgLoading] = useState(false)
+  const rgFetchedRef = useRef(false)
+
+  // Fetch ring groups when ring_group type is selected
+  useEffect(() => {
+    if (!isOpen) { rgFetchedRef.current = false; return }
+    if (transferType !== 'ring_group' || rgFetchedRef.current) return
+    rgFetchedRef.current = true
+    setRgLoading(true)
+    ringgroupService.list({ page: 1, limit: 200, search: '' } as never)
+      .then((res: unknown) => {
+        const data = (res as { data?: { data?: Array<{ id: number; title?: string; name?: string }> } })?.data?.data ?? []
+        setRingGroups(data)
+      })
+      .catch(() => setRingGroups([]))
+      .finally(() => setRgLoading(false))
+  }, [isOpen, transferType])
 
   if (!isOpen) return null
 
@@ -203,21 +222,39 @@ export function TransferModal({ isOpen, onClose }: Props) {
             <div className="form-group">
               <label className="label">
                 {transferType === 'extension' && 'Extension Number'}
-                {transferType === 'ring_group' && 'Ring Group ID / Name'}
+                {transferType === 'ring_group' && 'Ring Group'}
                 {transferType === 'did' && 'External Phone Number'}
               </label>
-              <input
-                type="text"
-                className="input"
-                placeholder={
-                  transferType === 'extension' ? 'e.g. 1002' :
-                  transferType === 'ring_group' ? 'e.g. sales' :
-                  'e.g. +12125551234'
-                }
-                value={target}
-                onChange={(e) => { setTarget(e.target.value); setError(null) }}
-                onKeyDown={(e) => e.key === 'Enter' && handleInitiate()}
-              />
+              {transferType === 'ring_group' ? (
+                <div className="relative">
+                  <select
+                    className="input appearance-none pr-8"
+                    value={target}
+                    onChange={(e) => { setTarget(e.target.value); setError(null) }}
+                    disabled={rgLoading}
+                  >
+                    <option value="">{rgLoading ? 'Loading ring groups…' : 'Select a ring group'}</option>
+                    {ringGroups.map(rg => (
+                      <option key={rg.id} value={rg.title ?? rg.name ?? String(rg.id)}>
+                        {rg.title ?? rg.name ?? `Ring Group #${rg.id}`}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  className="input"
+                  placeholder={
+                    transferType === 'extension' ? 'e.g. 1002' :
+                    'e.g. +12125551234'
+                  }
+                  value={target}
+                  onChange={(e) => { setTarget(e.target.value); setError(null) }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleInitiate()}
+                />
+              )}
             </div>
           )}
 

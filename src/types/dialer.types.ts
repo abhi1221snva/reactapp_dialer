@@ -1,4 +1,4 @@
-export type CallState = 'idle' | 'ready' | 'ringing' | 'in-call' | 'wrapping' | 'paused'
+export type CallState = 'idle' | 'ready' | 'ringing' | 'in-call' | 'wrapping' | 'paused' | 'failed'
 
 export type TransferState = 'idle' | 'initiating' | 'ringing' | 'merged'
 

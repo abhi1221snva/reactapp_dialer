@@ -343,9 +343,6 @@ export function DidForm() {
 
     const d = existing as Record<string, unknown>
 
-    console.log('[DID Edit] raw API record keys:', Object.keys(d))
-    console.log('[DID Edit] raw API record:', JSON.stringify(d, null, 2))
-
     const toStr = (v: unknown): string => {
       if (v === null || v === undefined || v === '') return 'extension'
       if (typeof v === 'number') return DEST_TYPE_FROM_NUM[v] ?? 'extension'
@@ -531,13 +528,16 @@ export function DidForm() {
     onSuccess: (res) => {
       const succeeded = res?.data?.success
       if (succeeded === false || succeeded === 'false' || succeeded === 0) {
+        // Try errors array first, then message field
         const errArr   = res?.data?.errors
         const firstErr = Array.isArray(errArr) && errArr.length > 0 ? String(errArr[0]) : null
-        const isTech   = firstErr
-          ? /SQLSTATE|Exception|Traceback|stack trace|at line \d|mysqli|PDO|undefined|null|Fatal/i.test(firstErr)
+        const msgField = res?.data?.message ? String(res.data.message) : null
+        const rawMsg   = firstErr || msgField
+        const isTech   = rawMsg
+          ? /SQLSTATE|Exception|Traceback|stack trace|at line \d|mysqli|PDO|undefined|null|Fatal/i.test(rawMsg)
           : true
         const fallback = isEdit ? 'Unable to update DID.' : 'Unable to add DID.'
-        toast.error((!isTech && firstErr && firstErr.length <= 120) ? firstErr : fallback)
+        toast.error((!isTech && rawMsg && rawMsg.length <= 150) ? rawMsg : fallback)
         return
       }
       toast.success(isEdit ? 'DID updated' : 'DID added')

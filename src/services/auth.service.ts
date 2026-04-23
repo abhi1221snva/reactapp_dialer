@@ -11,6 +11,9 @@ export const authService = {
   googleLogin: (credential: string) =>
     api.post('/auth/google/callback', { credential }),
 
+  linkGoogle: (credential: string, password: string) =>
+    api.post('/auth/google/link', { credential, password }),
+
   forgotPassword: (email: string) =>
     api.post('/forgot-password', { email }),
 

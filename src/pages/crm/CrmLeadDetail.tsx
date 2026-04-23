@@ -4696,34 +4696,16 @@ function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultT
         {/* Body */}
         <div className="p-5 space-y-3 overflow-y-auto" style={{ maxHeight: '65vh' }}>
 
-          {/* Template picker */}
-          {(templates ?? []).length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Template <span className="text-slate-400">(optional)</span></label>
-              <select
-                value={selectedTpl}
-                onChange={e => handleTemplateChange(e.target.value === '' ? '' : Number(e.target.value))}
-                className="input w-full text-xs"
-              >
-                <option value="">— Select a template —</option>
-                {(templates ?? []).map(t => (
-                  <option key={t.id} value={t.id}>{t.sms_template_name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {/* To / From row */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">To <span className="text-red-500">*</span></label>
-              <input
-                type="tel"
-                value={to}
-                onChange={e => setTo(e.target.value)}
-                placeholder="e.g. +12025551234"
-                className="input w-full text-xs"
-              />
+              <div
+                className="input w-full text-xs flex items-center"
+                style={{ background: '#f1f5f9', color: '#475569', cursor: 'not-allowed' }}
+              >
+                {formatPhoneNumber(to) || to || '—'}
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
@@ -4740,6 +4722,21 @@ function SendSmsModal({ leadId, defaultTo, onClose }: { leadId: number; defaultT
                 </select>
               )}
             </div>
+          </div>
+
+          {/* SMS Template picker */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">SMS Template <span className="text-slate-400">(optional)</span></label>
+            <select
+              value={selectedTpl}
+              onChange={e => handleTemplateChange(e.target.value === '' ? '' : Number(e.target.value))}
+              className="input w-full text-xs"
+            >
+              <option value="">— Select a template —</option>
+              {(templates ?? []).map(t => (
+                <option key={t.id} value={t.id}>{t.sms_template_name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Message body */}

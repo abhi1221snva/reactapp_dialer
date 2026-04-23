@@ -80,13 +80,8 @@ export const registerService = {
    * Body: { registration_id, country_code, phone }
    * Returns: { status, message }
    */
-  sendPhoneOtp2: async (registration_id: string, country_code: string, phone: string) => {
-    const payload = { registration_id, country_code, phone }
-    console.log('SEND OTP PAYLOAD:', payload)
-    const response = await api.post<{ status: boolean; message: string }>('/register/phone/send-otp', payload)
-    console.log('SEND OTP RESPONSE:', response.data)
-    return response
-  },
+  sendPhoneOtp2: (registration_id: string, country_code: string, phone: string) =>
+    api.post<{ status: boolean; message: string }>('/register/phone/send-otp', { registration_id, country_code, phone }),
 
   /**
    * V2 Step 3b — Verify phone OTP (completes registration)
@@ -94,17 +89,22 @@ export const registerService = {
    * Body: { registration_id, country_code, phone, otp }
    * Returns: { status, message, data: { user_id, client_id } }
    */
-  verifyPhoneOtp: async (registration_id: string, country_code: string, phone: string, otp: string) => {
+  verifyPhoneOtp: (registration_id: string, country_code: string, phone: string, otp: string) => {
     // Backend stores OTP keyed to E.164 (country_code + phone, e.g. "+919415265571").
-    // verifyPhoneOtp only accepts { registration_id, phone (E.164), otp } — no country_code field.
     const e164Phone = country_code + phone
-    const payload = { registration_id, phone: e164Phone, otp }
-    console.log('VERIFY OTP FINAL PAYLOAD:', payload)
     return api.post<{ status: boolean; message: string; data: { user_id: number; client_id: number } }>(
       '/register/phone/verify-otp',
-      payload
+      { registration_id, phone: e164Phone, otp }
     )
   },
+
+  /**
+   * Quick email existence check — returns 422 with EMAIL_ALREADY_REGISTERED if taken.
+   * POST /register/check-email
+   * Body: { email }
+   */
+  checkEmail: (email: string) =>
+    api.post<{ status: boolean; message: string }>('/register/check-email', { email }),
 
   /**
    * Google OAuth registration — verifies Google ID token, creates prospect,

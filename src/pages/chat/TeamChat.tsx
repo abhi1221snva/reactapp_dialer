@@ -1320,7 +1320,10 @@ export function TeamChat() {
       ;(async () => {
         try {
           const iceRes = await chatService.getIceServers()
-          const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+          const iceServers = iceRes.data?.data?.iceServers ?? [
+            { urls: `stun:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478` },
+            { urls: `turn:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478?transport=tcp`, username: import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798', credential: import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu' },
+          ]
           const peer = await buildPeer(session, iceServers)
           callPhaseRef.current = 'active'; setCallPhase('active')
           startCallTimer()
@@ -1695,7 +1698,10 @@ export function TeamChat() {
     try {
       await chatService.acceptCall(session.convUuid, session.callId, session.remoteUserId)
       const iceRes = await chatService.getIceServers()
-      const iceServers = iceRes.data?.data?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }]
+      const iceServers = iceRes.data?.data?.iceServers ?? [
+            { urls: `stun:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478` },
+            { urls: `turn:${import.meta.env.VITE_TURN_SERVER_HOST || 'sip3.linkswitchcommunications.com'}:3478?transport=tcp`, username: import.meta.env.VITE_TURN_SERVER_USERNAME || '89789798', credential: import.meta.env.VITE_TURN_SERVER_CREDENTIAL || 'dwuedjniu' },
+          ]
       const peer = await buildPeer(session, iceServers)
       callPhaseRef.current = 'active'; setCallPhase('active')
       startCallTimer()
@@ -1779,7 +1785,7 @@ export function TeamChat() {
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full -m-6 overflow-hidden" style={{ minHeight: 0 }}>
+    <div className="flex h-full -mx-5 -my-3 overflow-hidden" style={{ minHeight: 0 }}>
 
       {/* ── Sidebar ── */}
       <div className="w-72 flex-shrink-0 flex flex-col bg-white border-r border-slate-200 overflow-hidden">

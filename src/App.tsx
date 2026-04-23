@@ -159,6 +159,7 @@ import { LEVELS } from './utils/permissions'
 import { MerchantPortalLayout } from './layouts/MerchantPortalLayout'
 import { MerchantLogin } from './pages/merchant/MerchantLogin'
 import { MerchantApplications } from './pages/merchant/MerchantApplications'
+import { LandingPage } from './pages/public/LandingPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -181,7 +182,9 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function RootRedirect() {
+  const { isAuthenticated } = useAuthStore()
   const engine = useEngineStore(s => s.engine)
+  if (!isAuthenticated) return <AuthLayout><Login /></AuthLayout>
   return <Navigate to={engine === 'crm' ? '/crm/dashboard' : '/dashboard'} replace />
 }
 
@@ -206,6 +209,7 @@ export default function App() {
     <Routes>
       {/* Fully public routes — no auth, no layout wrapper */}
       <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
+      <Route path="/website" element={<LandingPage />} />
 
       {/* ── Merchant Portal (account-based) ─────────────────────────────── */}
       {/* Static paths must come BEFORE the dynamic :leadToken catch-all */}
@@ -299,8 +303,8 @@ export default function App() {
           {/* Users */}
           <Route path="/users" element={<Users />} />
           <Route path="/users/create" element={<RoleGuard minLevel={LEVELS.MANAGER}><UserForm /></RoleGuard>} />
-          <Route path="/users/:id/edit" element={<UserForm />} />
-          <Route path="/users/:id/details" element={<UserDetail />} />
+          <Route path="/users/:id/edit" element={<RoleGuard minLevel={LEVELS.MANAGER}><UserForm /></RoleGuard>} />
+          <Route path="/users/:id/details" element={<RoleGuard minLevel={LEVELS.ADMIN}><UserDetail /></RoleGuard>} />
 
           {/* DIDs */}
           <Route path="/dids" element={<Dids />} />

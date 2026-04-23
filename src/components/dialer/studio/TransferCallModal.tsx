@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react'
 import { X, Users, Phone, Search, ArrowRightLeft, Circle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import { dialerService } from '../../../services/dialer.service'
+import { useAuthStore } from '../../../stores/auth.store'
 import type { StudioAgent } from './types'
 
 interface Props {
   isOpen: boolean
   onClose: () => void
   agents: StudioAgent[]
+  campaignId?: number
+  leadPhone?: string
 }
 
 type TransferTab = 'agents' | 'mobile'
@@ -25,7 +29,7 @@ const STATUS_LABEL: Record<StudioAgent['status'], string> = {
   offline:   'Offline',
 }
 
-export function TransferCallModal({ isOpen, onClose, agents }: Props) {
+export function TransferCallModal({ isOpen, onClose, agents, campaignId, leadPhone }: Props) {
   const [tab, setTab] = useState<TransferTab>('agents')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
@@ -55,17 +59,46 @@ export function TransferCallModal({ isOpen, onClose, agents }: Props) {
     )
   })
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     if (tab === 'agents' && !selected) return
     if (tab === 'mobile' && !mobileNumber.trim()) return
     setTransferring(true)
-    setTimeout(() => {
-      setTransferring(false)
+
+    const authUser = useAuthStore.getState().user as Record<string, unknown> | null
+    const altExt = String(authUser?.alt_extension ?? authUser?.extension ?? '')
+
+    try {
+      if (tab === 'agents') {
+        const targetAgent = agents.find(a => a.id === selected)
+        await dialerService.initiateTransfer({
+          campaign_id: campaignId ?? 0,
+          customer_phone_number: leadPhone ?? '',
+          alt_extension: altExt,
+          forward_extension: targetAgent?.extension ?? '',
+          warm_call_transfer_type: 'extension',
+          domain: 'dialer',
+          lead_id: 0,
+        })
+      } else {
+        await dialerService.initiateTransfer({
+          campaign_id: campaignId ?? 0,
+          customer_phone_number: leadPhone ?? '',
+          alt_extension: altExt,
+          did_number: mobileNumber.trim(),
+          warm_call_transfer_type: 'did',
+          domain: 'dialer',
+          lead_id: 0,
+        })
+      }
       toast.success('Call transferred successfully')
       setSelected(null)
       setMobileNumber('')
       onClose()
-    }, 900)
+    } catch {
+      toast.error('Transfer failed — please try again')
+    } finally {
+      setTransferring(false)
+    }
   }
 
   const canTransfer = tab === 'agents' ? selected !== null : mobileNumber.trim().length >= 5

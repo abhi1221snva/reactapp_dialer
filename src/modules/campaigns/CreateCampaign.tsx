@@ -347,6 +347,17 @@ export function CreateCampaign() {
     setValue('redirect_to', '')
     setValue('redirect_to_dropdown', null)
     setValue('no_agent_dropdown_action', null)
+    // Reset dial-mode-specific fields when switching modes
+    if (dialMode !== 'predictive_dial' && dialMode !== 'outbound_ai') {
+      setValue('amd', '0')
+      setValue('amd_drop_action', null)
+      setValue('audio_message_amd', null)
+      setValue('voice_message_amd', null)
+    }
+    if (dialMode !== 'predictive_dial') {
+      setValue('automated_duration', '0')
+      setValue('no_agent_available_action', null)
+    }
   }, [dialMode, setValue])
   useEffect(() => { setValue('redirect_to_dropdown', null) }, [redirectTo, setValue])
   useEffect(() => { setValue('no_agent_dropdown_action', null) }, [noAgentAction, setValue])
@@ -421,8 +432,13 @@ export function CreateCampaign() {
           if (weekSchedule[day].enabled) weekPlan[day] = { start: weekSchedule[day].start, end: weekSchedule[day].end }
         })
         const timerTitle = customTimerTitle.trim() || `${data.title} Schedule`
-        const timerRes = await campaignService.createCallTimer({ title: timerTitle, week_plan: weekPlan })
-        callScheduleId = (timerRes as { data?: { data?: { id?: number } } })?.data?.data?.id
+        try {
+          const timerRes = await campaignService.createCallTimer({ title: timerTitle, week_plan: weekPlan })
+          callScheduleId = (timerRes as { data?: { data?: { id?: number } } })?.data?.data?.id
+          if (!callScheduleId) throw new Error('Timer created but no ID returned')
+        } catch (err) {
+          throw new Error(`Failed to create call timer: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
       } else if (typeof selectedTimerKey === 'number') {
         callScheduleId = selectedTimerKey
       }
@@ -957,6 +973,19 @@ export function CreateCampaign() {
                       <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
                         <button type="button" className={cn(field.value === '0' && 'active')} style={{ flex: 1, ...(field.value === '0' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('0')}>No</button>
                         <button type="button" className={cn(field.value === '1' && 'active')} style={{ flex: 1, ...(field.value === '1' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('1')}>Yes</button>
+                      </div>
+                    )}
+                  />
+                </div>
+              )}
+              {(dialMode === 'predictive_dial' || dialMode === 'outbound_ai') && (
+                <div className="cpn-reveal">
+                  <label style={LBL}>AMD Detection</label>
+                  <Controller name="amd" control={control}
+                    render={({ field }) => (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(field.value === '0' && 'active')} style={{ flex: 1, ...(field.value === '0' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('0')}>Off</button>
+                        <button type="button" className={cn(field.value === '1' && 'active')} style={{ flex: 1, ...(field.value === '1' ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange('1')}>On</button>
                       </div>
                     )}
                   />

@@ -318,7 +318,11 @@ export function Dids() {
     onSuccess: (res) => {
       setDeletingId(null)
       const ok = res?.data?.success
-      if (ok === false || ok === 'false' || ok === 0) { toast.error('Unable to delete DID.'); return }
+      if (ok === false || ok === 'false' || ok === 0) {
+        const msg = res?.data?.message
+        toast.error(msg && typeof msg === 'string' && msg.length <= 150 ? msg : 'Unable to delete DID.')
+        return
+      }
       toast.success('DID deleted')
       qc.invalidateQueries({ queryKey: ['dids'] })
     },

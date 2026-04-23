@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Globe, Save, X, Settings2, Copy, RefreshCw, Webhook } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe, Save, X, Settings2, Copy, RefreshCw, Webhook, Mail, MessageSquare, Bell, Check, ChevronDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
 import { RowActions } from '../../components/ui/RowActions'
 import { leadSourceService } from '../../services/leadSource.service'
+import { agentService } from '../../services/agent.service'
 import { showConfirm } from '../../utils/confirmDelete'
 import { formatDateTime } from '../../utils/format'
 import { capFirst } from '../../utils/cn'
@@ -21,9 +22,19 @@ interface LeadSourceItem {
   status: number
   unique_id: string
   webhook_secret?: string
+  notify_email?: boolean
+  notify_sms?: boolean
+  notify_user_ids?: number[]
   created_at?: string
   updated_at?: string
   [key: string]: unknown
+}
+
+interface UserOption {
+  id: number
+  first_name: string
+  last_name: string
+  email: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -167,13 +178,52 @@ function WebhookModal({
   source,
   onClose,
   onRotated,
+  onUpdated,
 }: {
   source: LeadSourceItem
   onClose: () => void
   onRotated: (newSecret: string) => void
+  onUpdated: () => void
 }) {
   const secret = (source.webhook_secret as string) ?? ''
   const webhookUrl = secret ? buildWebhookUrl(secret) : ''
+
+  // Notification state
+  const [notifyEmail, setNotifyEmail] = useState(!!source.notify_email)
+  const [notifySms, setNotifySms]     = useState(!!source.notify_sms)
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>(source.notify_user_ids ?? [])
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
+
+  // Load all users (including admins) for notification dropdown
+  const { data: usersData } = useQuery({
+    queryKey: ['all-users-for-notify'],
+    queryFn: async () => {
+      const res = await agentService.allUsers()
+      return (res.data?.data ?? []) as UserOption[]
+    },
+    staleTime: 60_000,
+  })
+  const allUsers = usersData ?? []
+  const filteredUsers = allUsers.filter(u =>
+    `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
+  )
+
+  const toggleUser = (id: number) => {
+    setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const saveNotifyMutation = useMutation({
+    mutationFn: () => leadSourceService.update(source.id, {
+      source_title: source.source_title,
+      url: source.url || '',
+      notify_email: notifyEmail,
+      notify_sms: notifySms,
+      notify_user_ids: selectedUserIds,
+    }),
+    onSuccess: () => { toast.success('Notification settings saved'); onUpdated() },
+    onError: () => toast.error('Failed to save notification settings'),
+  })
 
   // Load configured fields for this source
   const { data: fieldsData, isLoading: fieldsLoading } = useQuery({
@@ -315,6 +365,100 @@ function WebhookModal({
           </div>
         </div>
 
+        {/* Notification Alerts */}
+        <div className="border-t border-slate-100 pt-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Bell size={14} className="text-indigo-500" />
+            <p className="text-xs font-semibold text-slate-700">Lead Alerts</p>
+            <span className="text-[10px] text-slate-400">Notify users when a lead is received via this webhook</span>
+          </div>
+
+          {/* Checkboxes */}
+          <div className="flex items-center gap-5">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={notifyEmail} onChange={e => setNotifyEmail(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              <Mail size={13} className="text-slate-500" />
+              <span className="text-xs text-slate-700">Email Alert</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={notifySms} onChange={e => setNotifySms(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              <MessageSquare size={13} className="text-slate-500" />
+              <span className="text-xs text-slate-700">SMS Alert</span>
+            </label>
+          </div>
+
+          {/* User multi-select dropdown */}
+          {(notifyEmail || notifySms) && (
+            <div className="relative">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Notify Users</label>
+              <button type="button" onClick={() => setUserDropdownOpen(o => !o)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+              >
+                <span className={selectedUserIds.length > 0 ? 'text-slate-800 text-xs' : 'text-slate-400 text-xs'}>
+                  {selectedUserIds.length > 0
+                    ? `${selectedUserIds.length} user${selectedUserIds.length > 1 ? 's' : ''} selected`
+                    : 'Select users to notify...'}
+                </span>
+                <ChevronDown size={14} className="text-slate-400" />
+              </button>
+
+              {/* Selected user chips */}
+              {selectedUserIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {selectedUserIds.map(uid => {
+                    const u = allUsers.find(x => x.id === uid)
+                    return u ? (
+                      <span key={uid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-medium">
+                        {u.first_name} {u.last_name}
+                        <button type="button" onClick={() => toggleUser(uid)} className="hover:text-indigo-900">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ) : null
+                  })}
+                </div>
+              )}
+
+              {userDropdownOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-hidden">
+                  <div className="p-2 border-b border-slate-100">
+                    <input autoFocus value={userSearch} onChange={e => setUserSearch(e.target.value)}
+                      placeholder="Search users..."
+                      className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                  </div>
+                  <div className="overflow-y-auto max-h-44">
+                    {filteredUsers.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-slate-400">No users found</p>
+                    ) : filteredUsers.map(u => {
+                      const checked = selectedUserIds.includes(u.id)
+                      return (
+                        <button key={u.id} type="button" onClick={() => toggleUser(u.id)}
+                          className={`w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 transition-colors flex items-center gap-2 ${checked ? 'bg-indigo-50' : ''}`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                            {checked && <Check size={10} className="text-white" />}
+                          </div>
+                          <span className="text-slate-700">{u.first_name} {u.last_name}</span>
+                          <span className="text-slate-400 ml-auto">{u.email}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Save button */}
+          <div className="flex justify-end">
+            <button onClick={() => saveNotifyMutation.mutate()} disabled={saveNotifyMutation.isPending}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+            >
+              {saveNotifyMutation.isPending ? 'Saving…' : 'Save Alert Settings'}
+            </button>
+          </div>
+        </div>
+
         {/* Footer: rotate secret */}
         <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-4">
           <div>
@@ -435,8 +579,8 @@ export function LeadSources() {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <Badge variant={row.status === 1 ? 'green' : 'gray'}>
-          {row.status === 1 ? 'Active' : 'Inactive'}
+        <Badge variant={Number(row.status) === 1 ? 'green' : 'gray'}>
+          {Number(row.status) === 1 ? 'Active' : 'Inactive'}
         </Badge>
       ),
     },
@@ -500,6 +644,7 @@ export function LeadSources() {
           source={webhookSource}
           onClose={() => setWebhookSource(null)}
           onRotated={handleRotated}
+          onUpdated={() => qc.invalidateQueries({ queryKey: ['lead-sources'] })}
         />
       )}
 

@@ -405,31 +405,31 @@ export function EditCampaign() {
   const countries: Array<{ phonecode: string; name: string }> =
     (Array.isArray((countriesData as { data?: { data?: unknown[] } })?.data?.data) ? (countriesData as { data: { data: Array<{ phonecode: string; name: string }> } }).data.data : [])
 
-  const { data: extensionsData } = useQuery({ queryKey: ['extensions-all', clientId], queryFn: () => campaignService.getExtensions() })
+  const { data: extensionsData } = useQuery({ queryKey: ['extensions-all', clientId], queryFn: () => campaignService.getExtensions(), enabled: dialMode === 'predictive_dial' || dialMode === 'outbound_ai' })
   const extensions: Array<{ id: number; first_name?: string; last_name?: string; extension?: string }> =
     (Array.isArray((extensionsData as { data?: { data?: unknown[] } })?.data?.data) ? (extensionsData as { data: { data: Array<{ id: number; first_name?: string; last_name?: string; extension?: string }> } }).data.data : [])
 
-  const { data: ivrData } = useQuery({ queryKey: ['ivr-list', clientId], queryFn: () => campaignService.getIvrList() })
+  const { data: ivrData } = useQuery({ queryKey: ['ivr-list', clientId], queryFn: () => campaignService.getIvrList(), enabled: dialMode === 'predictive_dial' || dialMode === 'outbound_ai' })
   const ivrList: Array<{ ivr_id: string; ivr_desc: string }> =
     (Array.isArray((ivrData as { data?: { data?: unknown[] } })?.data?.data) ? (ivrData as { data: { data: Array<{ ivr_id: string; ivr_desc: string }> } }).data.data : [])
 
-  const { data: ringGroupData } = useQuery({ queryKey: ['ring-groups', clientId], queryFn: () => campaignService.getRingGroups() })
+  const { data: ringGroupData } = useQuery({ queryKey: ['ring-groups', clientId], queryFn: () => campaignService.getRingGroups(), enabled: dialMode === 'outbound_ai' })
   const ringGroups: Array<{ id: number; title: string }> =
     (Array.isArray((ringGroupData as { data?: { data?: unknown[] } })?.data?.data) ? (ringGroupData as { data: { data: Array<{ id: number; title: string }> } }).data.data : [])
 
-  const { data: voiceTemplatesData } = useQuery({ queryKey: ['voice-templates'], queryFn: () => campaignService.getVoiceTemplates() })
+  const { data: voiceTemplatesData } = useQuery({ queryKey: ['voice-templates'], queryFn: () => campaignService.getVoiceTemplates(), enabled: dialMode === 'predictive_dial' || dialMode === 'outbound_ai' })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vtRaw = (voiceTemplatesData as any)?.data?.data
   const voiceTemplates: Array<{ templete_id: string; templete_name: string }> =
     Array.isArray(vtRaw) ? vtRaw : Array.isArray(vtRaw?.data) ? vtRaw.data : []
 
-  const { data: audioMessagesData } = useQuery({ queryKey: ['audio-messages'], queryFn: () => campaignService.getAudioMessages() })
+  const { data: audioMessagesData } = useQuery({ queryKey: ['audio-messages'], queryFn: () => campaignService.getAudioMessages(), enabled: dialMode === 'predictive_dial' || dialMode === 'outbound_ai' })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const amRaw = (audioMessagesData as any)?.data?.data
   const audioMessages: Array<{ ivr_id: string; ivr_desc: string }> =
     Array.isArray(amRaw) ? amRaw : Array.isArray(amRaw?.data) ? amRaw.data : []
 
-  const { data: promptsData } = useQuery({ queryKey: ['prompts-all'], queryFn: () => campaignService.getPrompts() })
+  const { data: promptsData } = useQuery({ queryKey: ['prompts-all'], queryFn: () => campaignService.getPrompts(), enabled: dialMode === 'outbound_ai' })
   const prompts: Array<{ id: number; title: string }> =
     (Array.isArray((promptsData as { data?: { data?: unknown[] } })?.data?.data) ? (promptsData as { data: { data: Array<{ id: number; title: string }> } }).data.data : [])
 
@@ -492,8 +492,9 @@ export function EditCampaign() {
       setExistingTimerId(Number(schedId))
       setSelectedTimerKey(Number(schedId))
       campaignService.getCallTimer(Number(schedId)).then((res: unknown) => {
-        const timerData = (res as { data?: { data?: { title?: string; week_plan?: Record<string, { start: string; end: string }> } } })?.data?.data
+        const timerData = (res as { data?: { data?: { title?: string; timezone?: string; week_plan?: Record<string, { start: string; end: string }> } } })?.data?.data
         if (timerData?.title) setCustomTimerTitle(timerData.title)
+        if (timerData?.timezone) setValue('timezone', timerData.timezone)
         const wp = timerData?.week_plan
         if (wp && typeof wp === 'object') {
           const merged = { ...DEFAULT_WEEK_SCHEDULE }

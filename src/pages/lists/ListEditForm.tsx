@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { listService } from '../../services/list.service'
 import { campaignService } from '../../services/campaign.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 
 export function ListEditForm() {
   const { id } = useParams<{ id: string }>()
@@ -44,7 +45,16 @@ export function ListEditForm() {
   }, [list])
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      // Confirm campaign move
+      if (newCampaignId && newCampaignId !== campaignId && campaignId > 0) {
+        const targetName = campaigns.find(c => c.id === newCampaignId)?.title
+          || campaigns.find(c => c.id === newCampaignId)?.campaign_name
+          || `Campaign #${newCampaignId}`
+        if (!window.confirm(`Move this list to "${targetName}"? This cannot be undone.`)) {
+          throw new Error('')
+        }
+      }
       const payload: Record<string, unknown> = {
         list_id: listId,
         campaign_id: campaignId || 0,
@@ -59,7 +69,9 @@ export function ListEditForm() {
       toast.success('List updated')
       navigate(`/lists/${id}`)
     },
-    onError: () => toast.error('Failed to update list'),
+    onError: (err: Error) => {
+      if (err.message) toast.error(err.message)
+    },
   })
 
   if (isLoading) return <PageLoader />
@@ -103,18 +115,14 @@ export function ListEditForm() {
         {campaigns.length > 0 && (
           <div className="form-group">
             <label className="label">Campaign</label>
-            <select
+            <SearchableSelect
+              options={campaigns.map(c => ({ value: String(c.id), label: c.title || c.campaign_name || `Campaign #${c.id}` }))}
+              value={String(newCampaignId)}
+              onChange={v => setNewCampaignId(Number(v))}
+              placeholder="Search campaigns…"
+              emptyLabel="— Select Campaign —"
               className="input"
-              value={newCampaignId}
-              onChange={e => setNewCampaignId(Number(e.target.value))}
-            >
-              <option value={0}>— Select Campaign —</option>
-              {campaigns.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.title || c.campaign_name}
-                </option>
-              ))}
-            </select>
+            />
             {newCampaignId !== campaignId && campaignId > 0 && (
               <p className="text-xs text-amber-600 mt-1">
                 This will move the list to the selected campaign.

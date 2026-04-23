@@ -614,7 +614,7 @@ function VoipSettings() {
         </div>
         <div className="form-group col-span-2">
           <label className="label">STUN Server</label>
-          <input className="input font-mono" placeholder="stun:stun.l.google.com:19302" value={f('stun_server')} onChange={e => set('stun_server', e.target.value)} />
+          <input className="input font-mono" placeholder="stun:sip3.linkswitchcommunications.com:3478" value={f('stun_server')} onChange={e => set('stun_server', e.target.value)} />
         </div>
       </div>
       <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">

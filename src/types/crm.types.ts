@@ -910,8 +910,8 @@ export interface AutomationLog {
 // ─── SMS Inbox ────────────────────────────────────────────────────────────────
 
 export type SmsConversationStatus = 'open' | 'closed' | 'archived'
-export type SmsDirection = 'inbound' | 'outbound'
-export type SmsMessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'received'
+export type SmsDirection = 'inbound' | 'outbound' | 'system'
+export type SmsMessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'received' | 'system'
 
 export interface SmsAgent {
   id: number

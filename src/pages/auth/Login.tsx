@@ -241,11 +241,28 @@ export function Login() {
   const googleBtnRef = useRef<HTMLDivElement>(null)
   const googleInitialized = useRef(false)
 
+  // Google link state — shown when user needs to verify password before linking
+  const [googleLinkStep, setGoogleLinkStep] = useState(false)
+  const [googleLinkCredential, setGoogleLinkCredential] = useState('')
+  const [googleLinkEmail, setGoogleLinkEmail] = useState('')
+  const [googleLinkPassword, setGoogleLinkPassword] = useState('')
+  const [googleLinkLoading, setGoogleLinkLoading] = useState(false)
+
   const googleCallback = useCallback(async (response: { credential: string }) => {
     setGoogleLoading(true)
     try {
       const res = await authService.googleLogin(response.credential)
       const payload = res.data?.data ?? res.data
+      const code = res.data?.code
+
+      // Handle GOOGLE_LINK_REQUIRED — need password verification before linking
+      if (code === 'GOOGLE_LINK_REQUIRED') {
+        setGoogleLinkCredential(payload?.credential || response.credential)
+        setGoogleLinkEmail(payload?.email || '')
+        setGoogleLinkStep(true)
+        return
+      }
+
       if (!payload?.token) {
         toast.error('Google login failed. Please try again.')
         return
@@ -472,6 +489,88 @@ export function Login() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleGoogleLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!googleLinkPassword.trim()) {
+      toast.error('Please enter your password')
+      return
+    }
+    setGoogleLinkLoading(true)
+    try {
+      const res = await authService.linkGoogle(googleLinkCredential, googleLinkPassword)
+      const payload = (res.data?.data ?? res.data) as Record<string, unknown>
+      if (!payload?.token) {
+        toast.error('Failed to link Google account.')
+        return
+      }
+      toast.success('Google account linked successfully!')
+      await completeLogin(payload)
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+      const msg = axiosErr?.response?.data?.message
+      const status = axiosErr?.response?.status
+      if (status === 401) {
+        toast.error(msg || 'Incorrect password. Please try again.')
+      } else {
+        toast.error(msg || 'Failed to link Google account.')
+      }
+      setGoogleLinkPassword('')
+    } finally {
+      setGoogleLinkLoading(false)
+    }
+  }
+
+  // ── Google Link password step ──────────────────────────────────────────────
+  if (googleLinkStep) {
+    return (
+      <form onSubmit={handleGoogleLink} className="space-y-5">
+        <button type="button" onClick={() => { setGoogleLinkStep(false); setGoogleLinkPassword('') }}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 transition-colors mb-4">
+          <ArrowLeft className="w-4 h-4" />
+          Back to login
+        </button>
+
+        <div className="flex flex-col items-center mb-7">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
+            style={{
+              background: 'rgba(99,102,241,0.12)',
+              border: '1px solid rgba(99,102,241,0.25)',
+              boxShadow: '0 8px 24px rgba(99,102,241,0.20)',
+            }}
+          >
+            <Lock className="w-7 h-7 text-indigo-400" />
+          </div>
+          <h2 className="text-[1.65rem] font-bold text-white text-center leading-tight">Link Google Account</h2>
+          <p className="text-sm text-slate-400 text-center mt-2">
+            An account with <strong className="text-white">{googleLinkEmail}</strong> already exists.
+            Enter your password to link Google login.
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="auth-label">Account Password</label>
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+            <input
+              type="password"
+              className="auth-input pl-10"
+              placeholder="Enter your account password"
+              value={googleLinkPassword}
+              onChange={e => setGoogleLinkPassword(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <button type="submit" disabled={googleLinkLoading || !googleLinkPassword.trim()} className="auth-btn-primary">
+          {googleLinkLoading ? <><Spinner /> Linking...</> : <><Shield className="w-4 h-4" /> Link & Sign In</>}
+        </button>
+      </form>
+    )
   }
 
   // ── 2FA TOTP step ─────────────────────────────────────────────────────────

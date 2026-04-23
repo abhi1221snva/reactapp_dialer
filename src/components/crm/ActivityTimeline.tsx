@@ -20,6 +20,7 @@ const FILTER_OPTIONS = [
   { value: 'note_added',    label: 'Notes' },
   { value: 'call_made',     label: 'Calls' },
   { value: 'email_sent',    label: 'Emails' },
+  { value: 'sms_sent',      label: 'SMS' },
   { value: 'status_change', label: 'Status' },
   { value: 'field_update',  label: 'Updates' },
   { value: 'document_uploaded', label: 'Docs' },
@@ -42,6 +43,7 @@ type TabKey =
   | 'lender_response'
   | 'call_made'
   | 'email_sent'
+  | 'sms_sent'
   | 'status_change'
   | 'field_update'
   | 'document_uploaded'
@@ -135,6 +137,7 @@ function EmptyState({ filter }: { filter: FilterValue }) {
     lender_response:  { icon: <AlertCircle size={32} className="text-red-200" />,              title: 'No lender responses',      sub: 'Lender responses will appear here.' },
     call_made:        { icon: <LayoutList size={32} className="text-blue-200" />,              title: 'No calls logged',          sub: 'Call activity will appear here.' },
     email_sent:       { icon: <LayoutList size={32} className="text-sky-200" />,               title: 'No emails logged',         sub: 'Email activity will appear here.' },
+    sms_sent:         { icon: <MessageSquare size={32} className="text-violet-200" />,         title: 'No SMS logged',            sub: 'SMS activity will appear here.' },
     status_change:    { icon: <LayoutList size={32} className="text-violet-200" />,            title: 'No status changes',        sub: 'Status changes will appear here.' },
     document_uploaded:{ icon: <FileText size={32} className="text-amber-200" />,              title: 'No documents',             sub: 'Document uploads will appear here.' },
   }

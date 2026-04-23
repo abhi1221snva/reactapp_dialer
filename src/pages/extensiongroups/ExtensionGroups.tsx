@@ -9,7 +9,7 @@ import { RowActions } from '../../components/ui/RowActions'
 import { extensiongroupService } from '../../services/extensiongroup.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { useServerTable } from '../../hooks/useServerTable'
-import { confirmDelete } from '../../utils/confirmDelete'
+import { confirmDelete, showConfirm } from '../../utils/confirmDelete'
 import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 
@@ -65,7 +65,7 @@ function ExtensionCell({ groupId }: { groupId: number }) {
   const { data: mapData } = useQuery({
     queryKey: ['ext-group-map', groupId],
     queryFn: () => extensiongroupService.getExtensionsForGroup(groupId),
-    staleTime: 60_000,
+    staleTime: 5_000,
     retry: 1,
   })
 
@@ -331,8 +331,8 @@ function ExtGroupFormModal({
       return
     }
 
-    // Guard against empty extensions array for edit.
-    if (editing && form.extensions.length === 0) {
+    // Guard against empty extensions array for both create and edit.
+    if (form.extensions.length === 0) {
       toast.error('Please select at least one extension')
       return
     }
@@ -454,7 +454,17 @@ export function ExtensionGroups() {
       key: 'status', header: 'Status',
       render: (row) => (
         <button
-          onClick={() => toggleMutation.mutate({ id: row.id, status: !!isActive(row) })}
+          onClick={async () => {
+            const action = isActive(row) ? 'deactivate' : 'activate'
+            if (await showConfirm({
+              title: `${action.charAt(0).toUpperCase() + action.slice(1)} Group?`,
+              message: `Are you sure you want to ${action} "${row.title}"?`,
+              confirmText: `Yes, ${action}`,
+              danger: isActive(row),
+              icon: 'question',
+            }))
+              toggleMutation.mutate({ id: row.id, status: !!isActive(row) })
+          }}
           disabled={toggleMutation.isPending}
           title={isActive(row) ? 'Click to deactivate' : 'Click to activate'}
           className="cursor-pointer hover:opacity-75 transition-opacity"
@@ -516,7 +526,7 @@ export function ExtensionGroups() {
 
       <ExtGroupFormModal
         isOpen={modal}
-        onClose={() => { setModal(false); setEditing(null) }}
+        onClose={() => { setModal(false); setTimeout(() => setEditing(null), 150) }}
         editing={editing}
       />
     </div>

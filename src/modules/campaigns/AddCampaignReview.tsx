@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, CheckCircle2, Radio, Phone, Clock, Tag, Zap, List,
-  Globe, Users, PartyPopper, Trash2, Pencil,
+  Globe, Users, PartyPopper, Trash2, Pencil, RefreshCw, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
@@ -33,12 +33,23 @@ interface ListRow {
   [key: string]: unknown
 }
 
+interface RecycleEntry {
+  dispositionId: number
+  callCount: number
+}
+
 export function AddCampaignReview() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { setToolbar, headerKey } = useDialerHeader()
   const campaignId = Number(id)
+
+  // ── Recycle modal state ──
+  const [recycleOpen, setRecycleOpen] = useState(false)
+  const [recycleListId, setRecycleListId] = useState<number | null>(null)
+  const [recycleListName, setRecycleListName] = useState('')
+  const [recycleEntries, setRecycleEntries] = useState<RecycleEntry[]>([])
 
   const { data: campaignData, isLoading } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -103,6 +114,65 @@ export function AddCampaignReview() {
       danger: true,
     })
     if (confirmed) detachMutation.mutate(lid)
+  }
+
+  // ── Recycle mutation ──
+  const recycleMutation = useMutation({
+    mutationFn: (payload: { campaign_id: number; list_id: number; disposition: number[]; select_id: number[] }) =>
+      campaignService.recycleLists(payload),
+    onSuccess: (res) => {
+      const deleted = (res as { data?: { deleted?: number } })?.data?.deleted ?? 0
+      toast.success(`Recycled ${deleted} lead${deleted !== 1 ? 's' : ''} successfully`)
+      setRecycleOpen(false)
+      qc.invalidateQueries({ queryKey: ['campaign', campaignId] })
+      qc.invalidateQueries({ queryKey: ['campaign-lists-review', campaignId] })
+    },
+    onError: () => toast.error('Failed to recycle leads'),
+  })
+
+  const openRecycleModal = (row: ListRow) => {
+    setRecycleListId(getListId(row))
+    setRecycleListName(getListName(row))
+    // Initialize with one empty entry
+    setRecycleEntries([{ dispositionId: 0, callCount: 1 }])
+    setRecycleOpen(true)
+  }
+
+  const handleRecycleSubmit = async () => {
+    const validEntries = recycleEntries.filter(e => e.dispositionId > 0 && e.callCount > 0)
+    if (validEntries.length === 0) {
+      toast.error('Select at least one disposition with a call count')
+      return
+    }
+    if (!recycleListId) return
+
+    const confirmed = await showConfirm({
+      title: 'Recycle Leads?',
+      message: `This will remove leads from "${recycleListName}" that match the selected dispositions and call count, allowing them to be dialed again.`,
+      confirmText: 'Yes, Recycle',
+      icon: 'question',
+      danger: false,
+    })
+    if (!confirmed) return
+
+    recycleMutation.mutate({
+      campaign_id: campaignId,
+      list_id: recycleListId,
+      disposition: validEntries.map(e => e.dispositionId),
+      select_id: validEntries.map(e => e.callCount),
+    })
+  }
+
+  const addRecycleEntry = () => {
+    setRecycleEntries(prev => [...prev, { dispositionId: 0, callCount: 1 }])
+  }
+
+  const removeRecycleEntry = (idx: number) => {
+    setRecycleEntries(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const updateRecycleEntry = (idx: number, field: keyof RecycleEntry, value: number) => {
+    setRecycleEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e))
   }
 
   // ── Toolbar ──
@@ -182,7 +252,7 @@ export function AddCampaignReview() {
           ) : (
             <>
               {/* Table header */}
-              <div className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_5rem] gap-2 items-center px-4 py-2 border-b border-slate-100">
+              <div className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_6rem] gap-2 items-center px-4 py-2 border-b border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">#</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase">List Name</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase text-right">Leads</span>
@@ -193,7 +263,7 @@ export function AddCampaignReview() {
 
               <div className="divide-y divide-slate-100">
                 {attachedLists.map((row, idx) => (
-                  <div key={getListId(row)} className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_5rem] gap-2 items-center px-4 py-2.5 hover:bg-slate-50/50 transition-colors">
+                  <div key={getListId(row)} className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem_6rem] gap-2 items-center px-4 py-2.5 hover:bg-slate-50/50 transition-colors">
                     <span className="w-5 h-5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 flex items-center justify-center">
                       {idx + 1}
                     </span>
@@ -215,6 +285,14 @@ export function AddCampaignReview() {
                       </Badge>
                     </div>
                     <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openRecycleModal(row)}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                        title="Recycle leads"
+                      >
+                        <RefreshCw size={12} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => navigate(`/lists/${getListId(row)}/mapping`)}
@@ -366,6 +444,125 @@ export function AddCampaignReview() {
           </div>
         </div>
       </div>
+
+      {/* ── Recycle Modal ── */}
+      {recycleOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setRecycleOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <RefreshCw size={14} className="text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Recycle Leads</h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[280px]">{recycleListName}</p>
+                </div>
+              </div>
+              <button onClick={() => setRecycleOpen(false)} className="w-7 h-7 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4">
+              <p className="text-xs text-slate-500 mb-4">
+                Select dispositions and set the max call count. Leads with total calls at or below the count will be recycled back into the dialer.
+              </p>
+
+              <div className="space-y-3">
+                {recycleEntries.map((entry, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    {/* Disposition select */}
+                    <select
+                      value={entry.dispositionId}
+                      onChange={e => updateRecycleEntry(idx, 'dispositionId', Number(e.target.value))}
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                    >
+                      <option value={0}>Select Disposition</option>
+                      {dispositions.map(d => (
+                        <option key={d.id} value={d.id}>{d.title}</option>
+                      ))}
+                    </select>
+
+                    {/* Call count */}
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Max Calls</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={entry.callCount}
+                        onChange={e => updateRecycleEntry(idx, 'callCount', Math.max(1, Number(e.target.value)))}
+                        className="w-16 text-xs border border-slate-200 rounded-lg px-2 py-2 text-center bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                      />
+                    </div>
+
+                    {/* Remove row */}
+                    {recycleEntries.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeRecycleEntry(idx)}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Add another disposition row */}
+              {recycleEntries.length < dispositions.length && (
+                <button
+                  type="button"
+                  onClick={addRecycleEntry}
+                  className="mt-3 text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                >
+                  + Add Disposition
+                </button>
+              )}
+
+              {/* Info box */}
+              <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="text-[11px] text-amber-700 leading-relaxed">
+                  <strong>How it works:</strong> Leads marked with the selected disposition whose total campaign calls are at or below the max call count will be removed from the called list, allowing them to be dialed again.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-200 bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setRecycleOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRecycleSubmit}
+                disabled={recycleMutation.isPending}
+                className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center gap-1.5"
+              >
+                {recycleMutation.isPending ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Recycling…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={12} />
+                    Recycle Leads
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

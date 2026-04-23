@@ -671,6 +671,7 @@ export function MerchantPage() {
   const [saveErr, setSaveErr]     = useState('')
   const [saving, setSaving]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['merchantPortal', leadToken],
@@ -864,6 +865,19 @@ export function MerchantPage() {
     setHasOwner2(checked)
     if (!checked && owner2SecIdx >= 0) {
     }
+  }
+
+  // ── Finish (submit) ──────────────────────────────────────────────────────
+  const handleFinish = async () => {
+    if (!leadToken) { setFinished(true); return }
+    setSubmitting(true)
+    try {
+      await publicAppService.submitMerchantApplication(leadToken)
+    } catch {
+      // Non-blocking — still show the success screen
+    }
+    setSubmitting(false)
+    setFinished(true)
   }
 
   // ── Navigate next ─────────────────────────────────────────────────────────
@@ -1201,9 +1215,12 @@ export function MerchantPage() {
             </div>
 
             {isLast ? (
-              <button type="button" onClick={() => setFinished(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,.3)' }}>
-                <Check size={14} /> Finish
+              <button type="button" onClick={handleFinish} disabled={submitting}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: submitting ? '#6ee7b7' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,.3)' }}>
+                {submitting
+                  ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Submitting…</>
+                  : <><Check size={14} /> Finish</>
+                }
               </button>
             ) : (
               <button type="button" onClick={handleNext} disabled={saving}

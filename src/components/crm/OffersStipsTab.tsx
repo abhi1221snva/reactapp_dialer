@@ -61,11 +61,27 @@ function StatusPill({ label, bg, text }: { label: string; bg: string; text: stri
 
 function AddOfferModal({ leadId, onClose }: { leadId: number; onClose: () => void }) {
   const qc = useQueryClient()
-  const [lenderName, setLenderName] = useState('')
+  const [selectedLender, setSelectedLender] = useState<{ id: number; name: string } | null>(null)
+  const [lenderSearch, setLenderSearch] = useState('')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
   const [amount, setAmount]         = useState('')
   const [factorRate, setFactorRate] = useState('')
   const [termDays, setTermDays]     = useState('')
   const [notes, setNotes]           = useState('')
+
+  const { data: lendersData } = useQuery({
+    queryKey: ['lenders-list'],
+    queryFn: async () => {
+      const res = await crmService.getLenders({ per_page: 200, status: 1 })
+      return (res.data?.data?.data ?? res.data?.data ?? []) as { id: number; lender_name: string }[]
+    },
+    staleTime: 60_000,
+  })
+  const lenders = lendersData ?? []
+
+  const filteredLenders = lenders.filter(l =>
+    l.lender_name.toLowerCase().includes(lenderSearch.toLowerCase())
+  )
 
   const mutation = useMutation({
     mutationFn: (data: Partial<LenderOffer>) => crmService.createOffer(leadId, data),
@@ -79,8 +95,10 @@ function AddOfferModal({ leadId, onClose }: { leadId: number; onClose: () => voi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!selectedLender) { toast.error('Please select a lender'); return }
     mutation.mutate({
-      lender_name: lenderName, offered_amount: parseFloat(amount),
+      lender_id: selectedLender.id, lender_name: selectedLender.name,
+      offered_amount: parseFloat(amount),
       factor_rate: parseFloat(factorRate), term_days: parseInt(termDays),
       notes: notes || undefined,
     } as Partial<LenderOffer>)
@@ -94,10 +112,42 @@ function AddOfferModal({ leadId, onClose }: { leadId: number; onClose: () => voi
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <div>
+          <div className="relative">
             <label className="text-xs text-slate-500 mb-1 block">Lender Name</label>
-            <input value={lenderName} onChange={e => setLenderName(e.target.value)} placeholder="e.g. First Choice Funding" required
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            <button type="button"
+              onClick={() => setDropdownOpen(o => !o)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <span className={selectedLender ? 'text-slate-800' : 'text-slate-400'}>
+                {selectedLender?.name || 'Select a lender...'}
+              </span>
+              <ChevronDown size={14} className="text-slate-400" />
+            </button>
+            {dropdownOpen && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-hidden">
+                <div className="p-2 border-b border-slate-100">
+                  <input
+                    autoFocus
+                    value={lenderSearch}
+                    onChange={e => setLenderSearch(e.target.value)}
+                    placeholder="Search lenders..."
+                    className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div className="overflow-y-auto max-h-40">
+                  {filteredLenders.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-slate-400">No lenders found</p>
+                  ) : filteredLenders.map(l => (
+                    <button key={l.id} type="button"
+                      onClick={() => { setSelectedLender({ id: l.id, name: l.lender_name }); setDropdownOpen(false); setLenderSearch('') }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition-colors ${selectedLender?.id === l.id ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-slate-700'}`}
+                    >
+                      {l.lender_name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

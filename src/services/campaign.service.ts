@@ -67,4 +67,12 @@ export const campaignService = {
 
   deleteCallTimer: (id: number) =>
     api.delete(`/call-timers/${id}`),
+
+  // On-demand recycle — removes leads from lead_report so they re-enter the dialer
+  recycleLists: (data: {
+    campaign_id: number
+    list_id: number
+    disposition: number[]
+    select_id: number[]
+  }) => api.post('/delete-list-disposition', data),
 }

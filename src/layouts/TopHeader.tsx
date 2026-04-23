@@ -164,9 +164,7 @@ export function TopHeader() {
     navigate(ENGINE_HOME[e])
   }
 
-  const avatarBg = engine === 'dialer'
-    ? 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)'
-    : 'linear-gradient(135deg, #059669 0%, #10B981 100%)'
+  const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='40' fill='%23e2e8f0'/%3E%3Ccircle cx='40' cy='30' r='12' fill='%2394a3b8'/%3E%3Cellipse cx='40' cy='62' rx='20' ry='14' fill='%2394a3b8'/%3E%3C/svg%3E"
 
   return (
     <header
@@ -302,21 +300,13 @@ export function TopHeader() {
             >
               {/* Avatar */}
               <div className="relative group/av flex-shrink-0">
-                {user.profile_pic ? (
-                  <img
-                    src={user.profile_pic}
-                    alt={user.name}
-                    className="w-8 h-8 rounded-full object-cover ring-2 ring-white/80"
-                    style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.10)' }}
-                  />
-                ) : (
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white ring-2 ring-white/80"
-                    style={{ background: avatarBg, boxShadow: '0 1px 4px rgba(0,0,0,0.10)' }}
-                  >
-                    {avatarUploading ? '…' : initials(user.name)}
-                  </div>
-                )}
+                <img
+                  src={user.profile_pic || DEFAULT_AVATAR}
+                  alt={user.name}
+                  className="w-8 h-8 rounded-full object-cover ring-2 ring-white/80"
+                  style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.10)' }}
+                  onError={e => { (e.target as HTMLImageElement).src = DEFAULT_AVATAR }}
+                />
                 <div
                   onClick={e => { e.stopPropagation(); avatarInputRef.current?.click() }}
                   className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover/av:opacity-100 transition-opacity cursor-pointer"

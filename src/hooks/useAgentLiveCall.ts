@@ -32,11 +32,13 @@ interface Options {
   onEnded?: (leadId: number) => void
   /** Optional: called when customer did not answer */
   onCustomerNoAnswer?: (leadId: number) => void
+  /** Optional: called when call fails due to provider error */
+  onCallFailed?: (reason: string) => void
 }
 
-export function useAgentLiveCall({ extension, onBridged, onEnded, onCustomerNoAnswer }: Options = {}) {
+export function useAgentLiveCall({ extension, onBridged, onEnded, onCustomerNoAnswer, onCallFailed }: Options = {}) {
   const pusherRef  = useRef<Pusher | null>(null)
-  const { setActiveLead, setCallState, startCallTimer } = useDialerStore()
+  const { setActiveLead, setCallState, setFailReason, startCallTimer } = useDialerStore()
   const user = useAuthStore((s) => s.user)
 
   // Resolve extension from prop or auth store user (prefer alt_extension for WebRTC)
@@ -98,11 +100,21 @@ export function useAgentLiveCall({ extension, onBridged, onEnded, onCustomerNoAn
     })
 
     // ── call.customer_noanswer: customer originate failed ────────────────────
-    channel.bind('call.customer_noanswer', (data: { lead_id: number; campaign_id: number }) => {
-      toast.error('Customer did not answer')
+    channel.bind('call.customer_noanswer', (data: { lead_id: number; campaign_id: number; reason?: string }) => {
+      const reason = data.reason || 'Customer did not answer'
+      toast.error(reason, { duration: 6000 })
+      setFailReason(reason)
+      setCallState('failed')
       onCustomerNoAnswer?.(data.lead_id)
-      // Transition to wrapping — conference will be torn down by backend
-      setCallState('wrapping')
+    })
+
+    // ── call.failed: provider / trunk / AMI originate error ─────────────────
+    channel.bind('call.failed', (data: { lead_id?: number; campaign_id?: number; reason?: string; message?: string }) => {
+      const reason = data.message || data.reason || 'Call failed — provider error'
+      toast.error(reason, { duration: 6000 })
+      setFailReason(reason)
+      setCallState('failed')
+      onCallFailed?.(reason)
     })
 
     pusherRef.current = pusher

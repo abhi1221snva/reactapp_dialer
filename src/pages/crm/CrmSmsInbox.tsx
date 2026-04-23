@@ -187,7 +187,8 @@ function ConversationItem({ conv, isActive, onClick }: {
 function MessageBubble({ msg, showDay, dayLabel }: {
   msg: SmsMessage; showDay: boolean; dayLabel: string
 }) {
-  const isOut = msg.direction === 'outbound'
+  const isOut    = msg.direction === 'outbound'
+  const isSystem = msg.direction === 'system'
 
   return (
     <>
@@ -205,57 +206,78 @@ function MessageBubble({ msg, showDay, dayLabel }: {
         </div>
       )}
 
-      <div style={{
-        display: 'flex',
-        justifyContent: isOut ? 'flex-end' : 'flex-start',
-        marginBottom: 6,
-        paddingLeft: isOut ? 48 : 0,
-        paddingRight: isOut ? 0 : 48,
-      }}>
-        <div style={{
-          maxWidth: '75%',
-          background: isOut
-            ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
-            : '#ffffff',
-          color: isOut ? '#fff' : '#1e293b',
-          padding: '9px 13px 7px',
-          borderRadius: isOut ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-          boxShadow: isOut
-            ? '0 2px 8px rgba(5,150,105,0.25)'
-            : '0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
-        }}>
-          {/* from/to line for outbound */}
-          {isOut && msg.from_number && (
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '0 0 4px', letterSpacing: '0.02em' }}>
-              From: {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
-            </p>
-          )}
-          {!isOut && msg.from_number && (
-            <p style={{ fontSize: 10, color: '#94a3b8', margin: '0 0 4px', letterSpacing: '0.02em' }}>
-              {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
-            </p>
-          )}
-          <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>
-            {msg.body}
-          </p>
+      {/* System message — centered gray note */}
+      {isSystem ? (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 3,
-            marginTop: 4,
-            justifyContent: isOut ? 'flex-end' : 'flex-start',
+            maxWidth: '85%',
+            background: '#f1f5f9',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            padding: '7px 14px',
+            textAlign: 'center',
           }}>
-            <span style={{ fontSize: 10.5, color: isOut ? 'rgba(255,255,255,0.7)' : '#94a3b8' }}>
+            <p style={{ fontSize: 12, lineHeight: 1.5, margin: 0, color: '#64748b', fontStyle: 'italic', wordBreak: 'break-word' }}>
+              {msg.body}
+            </p>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>
               {formatMsgTime(msg.created_at)}
             </span>
-            {isOut && (
-              msg.status === 'delivered'
-                ? <CheckCheck size={12} style={{ color: 'rgba(255,255,255,0.85)' }} />
-                : msg.status === 'sent'
-                  ? <Check size={12} style={{ color: 'rgba(255,255,255,0.6)' }} />
-                  : <Clock size={11} style={{ color: 'rgba(255,255,255,0.5)' }} />
-            )}
           </div>
         </div>
-      </div>
+      ) : (
+        <div style={{
+          display: 'flex',
+          justifyContent: isOut ? 'flex-end' : 'flex-start',
+          marginBottom: 6,
+          paddingLeft: isOut ? 48 : 0,
+          paddingRight: isOut ? 0 : 48,
+        }}>
+          <div style={{
+            maxWidth: '75%',
+            background: isOut
+              ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+              : '#ffffff',
+            color: isOut ? '#fff' : '#1e293b',
+            padding: '9px 13px 7px',
+            borderRadius: isOut ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+            boxShadow: isOut
+              ? '0 2px 8px rgba(5,150,105,0.25)'
+              : '0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+          }}>
+            {/* from/to line for outbound */}
+            {isOut && msg.from_number && (
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '0 0 4px', letterSpacing: '0.02em' }}>
+                From: {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
+              </p>
+            )}
+            {!isOut && msg.from_number && (
+              <p style={{ fontSize: 10, color: '#94a3b8', margin: '0 0 4px', letterSpacing: '0.02em' }}>
+                {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
+              </p>
+            )}
+            <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>
+              {msg.body}
+            </p>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 3,
+              marginTop: 4,
+              justifyContent: isOut ? 'flex-end' : 'flex-start',
+            }}>
+              <span style={{ fontSize: 10.5, color: isOut ? 'rgba(255,255,255,0.7)' : '#94a3b8' }}>
+                {formatMsgTime(msg.created_at)}
+              </span>
+              {isOut && (
+                msg.status === 'delivered'
+                  ? <CheckCheck size={12} style={{ color: 'rgba(255,255,255,0.85)' }} />
+                  : msg.status === 'sent'
+                    ? <Check size={12} style={{ color: 'rgba(255,255,255,0.6)' }} />
+                    : <Clock size={11} style={{ color: 'rgba(255,255,255,0.5)' }} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

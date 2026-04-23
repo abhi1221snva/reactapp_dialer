@@ -9,6 +9,7 @@ export const listService = {
       limit: params.limit,
       sort_order: 'desc',
       ...(params.search ? { title: params.search } : {}),
+      ...(params.filters?.is_active ? { is_active: params.filters.is_active } : {}),
     }),
 
   // Fetch all lists without pagination (up to 500)

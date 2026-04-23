@@ -207,4 +207,8 @@ export const publicAppService = {
   downloadMerchantPdf(token: string) {
     return http.get<Blob>(`/public/merchant/${token}/download`, { responseType: 'blob' })
   },
+
+  submitMerchantApplication(token: string) {
+    return http.post<{ success: boolean; message: string }>(`/public/merchant/${token}/submit`)
+  },
 }

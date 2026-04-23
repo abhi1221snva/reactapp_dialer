@@ -1,7 +1,32 @@
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
-import { Phone } from 'lucide-react'
+import axios from 'axios'
 
-export function AuthLayout() {
+const API = import.meta.env.VITE_API_URL ?? ''
+const DEFAULT_LOGO = `${API}/public/tenant/3/logo`
+const DEFAULT_COMPANY = 'Linkswitch'
+
+interface DomainBranding {
+  company_name: string | null
+  logo_url: string | null
+  client_id: number
+}
+
+export function AuthLayout({ children }: { children?: React.ReactNode }) {
+  const [branding, setBranding] = useState<DomainBranding | null>(null)
+
+  useEffect(() => {
+    const domain = window.location.hostname
+    if (!domain) return
+    axios
+      .get<{ success: boolean; data: DomainBranding | null }>(`${API}/public/domain-branding`, { params: { domain } })
+      .then(r => { if (r.data?.data) setBranding(r.data.data) })
+      .catch(() => {})
+  }, [])
+
+  const logoUrl = branding?.logo_url || DEFAULT_LOGO
+  const companyName = branding?.company_name || DEFAULT_COMPANY
+
   return (
     <div
       className="h-screen flex flex-col relative overflow-hidden"
@@ -78,26 +103,17 @@ export function AuthLayout() {
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-4 overflow-y-auto relative z-10">
         {/* Brand logo */}
         <div className="flex items-center gap-3 mb-5 animate-fadeIn">
-          <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+          <img
+            src={logoUrl}
+            alt={companyName}
             style={{
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
-              boxShadow: '0 0 0 1px rgba(139,92,246,0.35), 0 8px 32px rgba(99,102,241,0.55)',
+              maxHeight: 90,
+              maxWidth: 360,
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 4px 16px rgba(99,102,241,0.35))',
             }}
-          >
-            <Phone size={20} className="text-white" />
-          </div>
-          <span
-            className="text-2xl font-bold tracking-tight"
-            style={{
-              background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #94a3b8 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
-            DialerCRM
-          </span>
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
         </div>
 
         {/* Auth card — gradient border wrapper */}
@@ -116,13 +132,13 @@ export function AuthLayout() {
               WebkitBackdropFilter: 'blur(40px)',
             }}
           >
-            <Outlet />
+            {children || <Outlet />}
           </div>
         </div>
 
         {/* Footer */}
         <p className="mt-4 text-xs text-slate-700 text-center">
-          &copy; {new Date().getFullYear()} DialerCRM. All rights reserved.
+          &copy; {new Date().getFullYear()} {companyName}. All rights reserved.
           {' · '}
           <a href="#" className="hover:text-slate-500 transition-colors">Privacy</a>
           {' · '}

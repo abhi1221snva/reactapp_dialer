@@ -11,7 +11,7 @@ export function UserDetail() {
   const navigate = useNavigate()
   const authUser = useAuthStore(s => s.user)
 
-  const hasAccess = (authUser?.level ?? 0) >= LEVELS.SYSTEM_ADMIN
+  const hasAccess = (authUser?.level ?? 0) >= LEVELS.ADMIN
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['user-details', Number(id)],

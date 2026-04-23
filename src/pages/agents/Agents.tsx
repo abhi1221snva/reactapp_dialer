@@ -12,6 +12,7 @@ import { RowActions } from '../../components/ui/RowActions'
 import { agentService, type CreateAgentPayload, type UpdateAgentPayload } from '../../services/agent.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { useDialerHeader } from '../../layouts/DialerLayout'
+import { useAuthStore } from '../../stores/auth.store'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Agent extends Record<string, unknown> {
@@ -366,6 +367,7 @@ export function Agents() {
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 20 })
   const { setToolbar } = useDialerHeader()
+  const currentUserId = useAuthStore(s => s.user?.id)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
@@ -506,6 +508,10 @@ export function Agents() {
             icon: <Trash2 size={13} />,
             variant: 'delete',
             onClick: async () => {
+              if (a.id === currentUserId) {
+                toast.error('You cannot remove your own account')
+                return
+              }
               if (await showConfirm({ message: `Remove agent ${a.first_name}? This cannot be undone.`, confirmText: 'Yes, remove' })) deleteMutation.mutate(a.id)
             },
             disabled: deleteMutation.isPending,

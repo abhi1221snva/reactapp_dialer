@@ -45,6 +45,7 @@ interface MyAffiliateLink {
 
 // ── Affiliate Link Modal ───────────────────────────────────────────────────────
 function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -52,6 +53,17 @@ function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: MyAffiliateLink }>('/crm/affiliate/my-link')
       return res.data?.data
+    },
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: () => api.post<{ success: boolean; data: { affiliate_code: string; affiliate_url: string } }>('/crm/affiliate/generate-code', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-affiliate-link'] })
+      toast.success('Affiliate code generated!')
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err?.response?.data?.message ?? 'Failed to generate code')
     },
   })
 
@@ -110,8 +122,18 @@ function AffiliateLinkModal({ onClose }: { onClose: () => void }) {
               </div>
               <p className="text-sm font-bold text-slate-700">No affiliate code yet</p>
               <p className="text-xs text-slate-400 mt-1.5 max-w-xs mx-auto">
-                Go to <strong className="text-slate-600">Partners → Affiliate Links</strong> to generate your personal referral code.
+                Generate your personal referral code to start tracking leads.
               </p>
+              <button
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm disabled:opacity-60"
+              >
+                {generateMutation.isPending
+                  ? <><Loader2 size={14} className="animate-spin" /> Generating…</>
+                  : <><Link2 size={14} /> Generate Affiliate Code</>
+                }
+              </button>
             </div>
           ) : (
             <div className="space-y-4">

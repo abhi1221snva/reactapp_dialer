@@ -1,4 +1,4 @@
-import { PhoneForwarded, Voicemail, Grid3x3, PhoneOff, Phone, Mic, MicOff, Pause, Play } from 'lucide-react'
+import { PhoneForwarded, Voicemail, Grid3x3, PhoneOff, Phone, Mic, MicOff, Pause, Play, AlertTriangle, LogOut } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import type { CallState } from './types'
 
@@ -7,8 +7,10 @@ interface Props {
   duration: number
   muted: boolean
   holding: boolean
+  failReason?: string | null
   onDial: () => void
   onHangup: () => void
+  onEndSession?: () => void
   onTransfer: () => void
   onVoiceDrop: () => void
   onDialPad: () => void
@@ -21,12 +23,13 @@ interface Props {
  * Always visible during active dialer session.
  */
 export function CallControlBar({
-  callState, duration, muted, holding, onDial, onHangup, onTransfer,
+  callState, duration, muted, holding, failReason, onDial, onHangup, onEndSession, onTransfer,
   onVoiceDrop, onDialPad, onToggleMute, onToggleHold,
 }: Props) {
   const isActive = callState === 'in-call' || callState === 'ringing' || callState === 'dialing'
   const isRinging = callState === 'ringing' || callState === 'dialing'
   const isInCall = callState === 'in-call'
+  const isFailed = callState === 'failed'
 
   const fmtTime = (s: number) => {
     const m = Math.floor(s / 60)
@@ -40,30 +43,46 @@ export function CallControlBar({
         <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
 
           {/* ── Left: call status ───────────────────────────────── */}
-          <div className="flex items-center gap-3 pr-3 mr-1 border-r border-slate-200/60">
+          <div className={cn(
+            'flex items-center gap-3 pr-3 mr-1 border-r border-slate-200/60',
+            isFailed && 'min-w-[200px]',
+          )}>
             <div className="relative">
               <div className={cn(
                 'w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm transition-all',
                 isInCall   && 'bg-gradient-to-br from-emerald-500 to-teal-600',
                 isRinging  && 'bg-gradient-to-br from-amber-500 to-orange-600',
-                !isActive  && 'bg-gradient-to-br from-slate-400 to-slate-500',
+                isFailed   && 'bg-gradient-to-br from-red-500 to-rose-600',
+                !isActive && !isFailed && 'bg-gradient-to-br from-slate-400 to-slate-500',
               )}>
-                <Phone size={16} className="text-white" />
+                {isFailed ? <AlertTriangle size={16} className="text-white" /> : <Phone size={16} className="text-white" />}
               </div>
               {isInCall && (
                 <span className="absolute inset-0 rounded-2xl animate-pulse-ring" />
               )}
+              {isFailed && (
+                <span className="absolute inset-0 rounded-2xl animate-ping bg-red-400/30" />
+              )}
             </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {isInCall ? 'On Call' : isRinging ? 'Ringing…' : callState === 'wrap-up' ? 'Wrap-up' : 'Ready'}
-              </p>
+            <div className="min-w-0">
               <p className={cn(
-                'text-base font-bold tabular-nums leading-tight',
-                isInCall ? 'text-emerald-600' : 'text-slate-700',
+                'text-[10px] font-bold uppercase tracking-wider',
+                isFailed ? 'text-red-500' : 'text-slate-400',
               )}>
-                {isInCall ? fmtTime(duration) : '00:00'}
+                {isInCall ? 'On Call' : isRinging ? 'Ringing…' : isFailed ? 'Call Failed' : callState === 'wrap-up' ? 'Wrap-up' : 'Ready'}
               </p>
+              {isFailed && failReason ? (
+                <p className="text-xs font-semibold text-red-600 leading-tight truncate max-w-[180px]" title={failReason}>
+                  {failReason}
+                </p>
+              ) : (
+                <p className={cn(
+                  'text-base font-bold tabular-nums leading-tight',
+                  isInCall ? 'text-emerald-600' : 'text-slate-700',
+                )}>
+                  {isInCall ? fmtTime(duration) : '00:00'}
+                </p>
+              )}
             </div>
           </div>
 
@@ -90,6 +109,7 @@ export function CallControlBar({
               label="Dial Pad"
               shortcut="D"
               onClick={onDialPad}
+              disabled={!isInCall}
               variant="neutral"
             />
 
@@ -126,15 +146,27 @@ export function CallControlBar({
                 <kbd className="ml-1 text-[9px] font-mono bg-white/20 rounded px-1 py-[1px]">⏎</kbd>
               </button>
             ) : (
-              <button
-                onClick={onHangup}
-                className="group relative flex items-center gap-2 px-5 h-11 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white font-bold text-sm shadow-md hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all overflow-hidden"
-              >
-                <span className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors" />
-                <PhoneOff size={15} className="relative" />
-                <span className="relative">Hang Up</span>
-                <kbd className="relative ml-1 text-[9px] font-mono bg-white/20 rounded px-1 py-[1px]">␣</kbd>
-              </button>
+              <>
+                <button
+                  onClick={onHangup}
+                  className="group relative flex items-center gap-2 px-5 h-11 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white font-bold text-sm shadow-md hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all overflow-hidden"
+                >
+                  <span className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors" />
+                  <PhoneOff size={15} className="relative" />
+                  <span className="relative">Hang Up</span>
+                  <kbd className="relative ml-1 text-[9px] font-mono bg-white/20 rounded px-1 py-[1px]">␣</kbd>
+                </button>
+                {onEndSession && (
+                  <button
+                    onClick={onEndSession}
+                    className="flex items-center gap-1.5 h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700 font-semibold text-xs transition-all"
+                    title="End session — leave conference entirely"
+                  >
+                    <LogOut size={14} />
+                    <span className="hidden sm:inline">End Session</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

@@ -28,7 +28,7 @@ export const leadSourceService = {
     api.put('/add-lead-source', data),
 
   /** Update lead source — POST /update-lead-sources/{id} */
-  update: (id: number, data: LeadSourcePayload) =>
+  update: (id: number, data: Record<string, unknown>) =>
     api.post(`/update-lead-sources/${id}`, data),
 
   /** Delete lead source — GET /delete-lead-source/{id} */

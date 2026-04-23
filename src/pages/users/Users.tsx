@@ -4,7 +4,7 @@ import {
   Plus, Pencil, Trash2, UserCircle, Eye, X, Search,
   Phone, Globe, Users as UsersIcon, Settings, Hash,
   PhoneForwarded, Shield, Mail, Lock, KeyRound,
-  CheckCircle2, XCircle, Smartphone,
+  CheckCircle2, XCircle, Smartphone, Loader2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -17,7 +17,7 @@ import { initials } from '../../utils/format'
 import { getTimezoneLabel } from '../../constants/timezones'
 import { useServerTable } from '../../hooks/useServerTable'
 import { cn } from '../../utils/cn'
-import { confirmDelete } from '../../utils/confirmDelete'
+import { confirmDelete, showConfirm } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 import { ChangePasswordModal } from './ChangePasswordModal'
@@ -32,8 +32,11 @@ interface Agent {
   level?: number
   status?: number
   role_name?: string
+  profile_pic?: string
   [key: string]: unknown
 }
+
+const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='16' fill='%23e2e8f0'/%3E%3Ccircle cx='40' cy='30' r='12' fill='%2394a3b8'/%3E%3Cellipse cx='40' cy='62' rx='20' ry='14' fill='%2394a3b8'/%3E%3C/svg%3E"
 
 const capFirst = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
 
@@ -177,9 +180,12 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
             ) : (
               <>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
-                    {initials(fullName)}
-                  </div>
+                  <img
+                    src={(u?.profile_pic as string) || DEFAULT_AVATAR}
+                    alt={fullName}
+                    className="w-10 h-10 rounded-xl object-cover border border-white/30 flex-shrink-0"
+                    onError={e => { (e.target as HTMLImageElement).src = DEFAULT_AVATAR }}
+                  />
                   <div className="flex-1 min-w-0">
                     <h2 className="text-base font-bold text-white truncate leading-tight">{fullName}</h2>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -205,7 +211,7 @@ function ViewUserModal({ userId, onClose }: { userId: number; onClose: () => voi
                     { icon: Hash, val: String(u?.extension ?? '—'), lbl: 'Extension' },
                     { icon: UsersIcon, val: String(groupName), lbl: 'Group' },
 
-                    { icon: Lock, val: u?.vm_pin ? String(u.vm_pin) : '—', lbl: 'VM PIN' },
+                    ...((useAuthStore.getState().user?.level ?? 0) >= LEVELS.ADMIN ? [{ icon: Lock, val: u?.vm_pin ? String(u.vm_pin) : '—', lbl: 'VM PIN' }] : []),
                     { icon: Settings, val: cliLabel(u?.cli_setting), lbl: 'CLI' },
                     { icon: Phone, val: countryCode, lbl: 'Code' },
                   ].map(({ icon: SIcon, val, lbl }) => (
@@ -277,6 +283,7 @@ export function Users() {
   const table = useServerTable({ defaultLimit: 15 })
   const [viewUser, setViewUser] = useState<Agent | null>(null)
   const [pwUser, setPwUser] = useState<Agent | null>(null)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
   const { setToolbar } = useDialerHeader()
 
   useEffect(() => {
@@ -307,15 +314,18 @@ export function Users() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: number }) =>
-      userService.toggleStatus(id, status === 1 ? 0 : 1),
+    mutationFn: ({ id, status }: { id: number; status: number }) => {
+      setTogglingId(id)
+      return userService.toggleStatus(id, status === 1 ? 0 : 1)
+    },
     onSuccess: () => {
       toast.success('Status updated')
+      setTogglingId(null)
       qc.invalidateQueries({ queryKey: ['users'] })
       qc.invalidateQueries({ queryKey: ['user'] })
       qc.invalidateQueries({ queryKey: ['user-view'] })
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: () => { toast.error('Failed to update status'); setTogglingId(null) },
   })
 
   const deleteMutation = useMutation({
@@ -329,6 +339,7 @@ export function Users() {
         return
       }
       toast.success('User deleted')
+      table.setPage(1)
       qc.invalidateQueries({ queryKey: ['users'] })
     },
     onError: (err: unknown) => {
@@ -350,15 +361,15 @@ export function Users() {
         const lvl = (row.user_level || row.level || 1) as number
         const label = levelLabel(lvl)
         const gradient = ROLE_COLORS[label] ?? 'from-slate-400 to-slate-500'
-        const canDrillDown = (authUser?.level ?? 0) >= LEVELS.SYSTEM_ADMIN
+        const canDrillDown = (authUser?.level ?? 0) >= LEVELS.ADMIN
         return (
           <div className="flex items-center gap-3">
-            <div className={cn(
-              'w-9 h-9 rounded-xl bg-gradient-to-br text-white text-xs font-bold flex items-center justify-center flex-shrink-0 shadow-sm',
-              gradient
-            )}>
-              {initials(name)}
-            </div>
+            <img
+              src={row.profile_pic || DEFAULT_AVATAR}
+              alt={name}
+              className="w-9 h-9 rounded-xl object-cover flex-shrink-0 shadow-sm"
+              onError={e => { (e.target as HTMLImageElement).src = DEFAULT_AVATAR }}
+            />
             <div>
               {canDrillDown ? (
                 <button onClick={() => navigate(`/users/${row.id}/details`)}
@@ -394,12 +405,22 @@ export function Users() {
       key: 'status', header: 'Status',
       render: (row) => (
         <button
-          onClick={() => toggleMutation.mutate({ id: row.id, status: row.status ?? 0 })}
+          onClick={async () => {
+            const action = row.status === 1 ? 'deactivate' : 'activate'
+            const ok = await showConfirm({
+              title: `${action.charAt(0).toUpperCase() + action.slice(1)} User?`,
+              message: `Are you sure you want to ${action} this user?`,
+              confirmText: action.charAt(0).toUpperCase() + action.slice(1),
+              danger: row.status === 1,
+            })
+            if (ok) toggleMutation.mutate({ id: row.id, status: row.status ?? 0 })
+          }}
           disabled={toggleMutation.isPending}
           title={row.status === 1 ? 'Click to deactivate' : 'Click to activate'}
           className="cursor-pointer hover:opacity-75 transition-opacity"
         >
           <Badge variant={row.status === 1 ? 'green' : 'gray'}>
+            {togglingId === row.id ? <Loader2 size={12} className="animate-spin inline mr-1" /> : null}
             {row.status === 1 ? 'Active' : 'Inactive'}
           </Badge>
         </button>
@@ -439,7 +460,7 @@ export function Users() {
             variant: 'delete' as const,
             onClick: async () => { if (await confirmDelete()) deleteMutation.mutate(row.id) },
             disabled: deleteMutation.isPending || (isAgentRole && isSelf),
-            hidden: isAgentRole,
+            hidden: isAgentRole || isSelf,
           },
         ]} />
         )

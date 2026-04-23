@@ -50,7 +50,7 @@ export function EditMapping() {
   })
 
   // Fetch all labels
-  const { data: labelsData, isLoading: labelsLoading } = useQuery({
+  const { data: labelsData, isLoading: labelsLoading, isError: labelsError } = useQuery({
     queryKey: ['labels-all'],
     queryFn: () => labelService.listAll(),
   })
@@ -106,6 +106,16 @@ export function EditMapping() {
         throw new Error('Select a dialing column before saving.')
       }
 
+      // Confirm campaign move
+      if (newCampaignId && newCampaignId !== campaignId && campaignId > 0) {
+        const targetName = campaigns.find(c => c.id === newCampaignId)?.title
+          || campaigns.find(c => c.id === newCampaignId)?.campaign_name
+          || `Campaign #${newCampaignId}`
+        if (!window.confirm(`Move this list to "${targetName}"? This cannot be undone.`)) {
+          throw new Error('') // silently cancel
+        }
+      }
+
       // Save list details
       const payload: Record<string, unknown> = {
         list_id:     listId,
@@ -138,7 +148,8 @@ export function EditMapping() {
       navigate(`/lists/${listId}`)
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Failed to save changes.')
+      if (err.message) toast.error(err.message)
+      // Empty message = user cancelled confirmation dialog — no toast needed
     },
   })
 
@@ -187,7 +198,10 @@ export function EditMapping() {
         <div className="lt-right">
           <button
             className="lt-b"
-            onClick={() => navigate(`/lists/${listId}`)}
+            onClick={() => {
+              if (dirty && !window.confirm('You have unsaved changes. Discard and leave?')) return
+              navigate(`/lists/${listId}`)
+            }}
             disabled={saveMutation.isPending}
           >
             Cancel
@@ -206,6 +220,16 @@ export function EditMapping() {
   }, [headerKey, title, dirty, dialRow?.header, saveMutation.isPending])
 
   if (isLoading) return <PageLoader />
+
+  if (labelsError) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          Failed to load labels. Please refresh the page and try again.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -236,18 +260,14 @@ export function EditMapping() {
                 <label className="block text-[11px] font-semibold uppercase text-slate-500 tracking-wide mb-1">
                   Campaign
                 </label>
-                <select
+                <SearchableSelect
+                  options={campaigns.map(c => ({ value: String(c.id), label: c.title || c.campaign_name || `Campaign #${c.id}` }))}
+                  value={String(newCampaignId)}
+                  onChange={v => { setNewCampaignId(Number(v)); setDirty(true) }}
+                  placeholder="Search campaigns…"
+                  emptyLabel="-- Select Campaign --"
                   className="input"
-                  value={newCampaignId}
-                  onChange={e => { setNewCampaignId(Number(e.target.value)); setDirty(true) }}
-                >
-                  <option value={0}>-- Select Campaign --</option>
-                  {campaigns.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.title || c.campaign_name}
-                    </option>
-                  ))}
-                </select>
+                />
                 {newCampaignId !== campaignId && campaignId > 0 && (
                   <p className="text-[11px] text-amber-600 mt-1">
                     This will move the list to the selected campaign.

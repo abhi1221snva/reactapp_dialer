@@ -135,6 +135,7 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
   const { data: allDispositionsData } = useQuery({
     queryKey: ['dispositions-all'],
     queryFn: () => dispositionService.list({ page: 1, limit: 200, search: '', filters: {} }),
+    staleTime: 5 * 60 * 1000,
   })
   const allDispositions: Array<{ id: number; title: string }> =
     (allDispositionsData as { data?: { data?: unknown[] } })?.data?.data as Array<{ id: number; title: string }> ?? []
@@ -353,7 +354,6 @@ export function Campaigns() {
       campaignService.toggle(id, isActive(status) ? 'inactive' : 'active'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['campaigns'] })
-      qc.invalidateQueries({ queryKey: ['campaign'] })
     },
     onError: () => toast.error('Failed to update status'),
   })

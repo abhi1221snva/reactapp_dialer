@@ -98,6 +98,8 @@ export function WebPhone() {
   const registerSipAnswer   = useFloatingStore(s => s.registerSipAnswer)
   const registerSipDecline  = useFloatingStore(s => s.registerSipDecline)
   const registerSipDial     = useFloatingStore(s => s.registerSipDial)
+  const registerSipMute     = useFloatingStore(s => s.registerSipMute)
+  const registerSipHold     = useFloatingStore(s => s.registerSipHold)
   const campaignDialActive  = useFloatingStore(s => s.campaignDialActive)
   const setIsOpen = setPhoneOpen
   const { phoneRight } = useWidgetPositions()
@@ -646,6 +648,26 @@ export function WebPhone() {
   useEffect(() => {
     registerSipDial((phoneNumber: string) => {
       sipDialOutboundRef.current(phoneNumber)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Register SIP mute/hold so DialerInterface can toggle actual SIP session
+  const sipToggleMuteRef = useRef(sipToggleMute)
+  const sipToggleHoldRef = useRef(sipToggleHold)
+  sipToggleMuteRef.current = sipToggleMute
+  sipToggleHoldRef.current = sipToggleHold
+  useEffect(() => {
+    registerSipMute((muted: boolean) => {
+      // Only toggle if current state doesn't match desired state
+      if (!sipCallSess.current) return
+      sipCallSess.current.mute('audio', muted)
+      setIsMuted(muted)
+    })
+    registerSipHold((held: boolean) => {
+      if (!sipCallSess.current) return
+      if (held) sipCallSess.current.hold()
+      else sipCallSess.current.resume()
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

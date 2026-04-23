@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge'
 import { listService } from '../../services/list.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
+import Swal from 'sweetalert2'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { useDialerHeader } from '../../layouts/DialerLayout'
@@ -31,7 +32,7 @@ interface ListItem {
 export function Lists() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const table = useServerTable({ defaultLimit: 15 })
+  const table = useServerTable({ defaultLimit: 15, defaultFilters: { is_active: '1' } })
   const { setToolbar } = useDialerHeader()
 
   useEffect(() => {
@@ -165,7 +166,19 @@ export function Lists() {
               label: 'Delete',
               icon: <Trash2 size={13} />,
               variant: 'delete',
-              onClick: async () => { if (await confirmDelete(listName(row))) deleteMutation.mutate({ id, campaignId: cid }) },
+              onClick: async () => {
+                if (row.is_dialing === 1) {
+                  await Swal.fire({
+                    title: 'List is Currently Dialing',
+                    text: 'This list is actively being used for dialing. Please stop dialing before deleting.',
+                    icon: 'warning',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#6366f1',
+                  })
+                  return
+                }
+                if (await confirmDelete(listName(row))) deleteMutation.mutate({ id, campaignId: cid })
+              },
               disabled: deleteMutation.isPending,
             },
           ]} />

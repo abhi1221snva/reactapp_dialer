@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   ChevronDown, ArrowLeft, Radio, Zap, Users, Clock, SkipForward, ChevronLeft,
-  Search, Check, AlertTriangle,
+  Search, Check, AlertTriangle, Phone, PhoneOff,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
@@ -29,11 +29,11 @@ import { useAuthStore } from '../../../stores/auth.store'
 import { useAgentLiveCall } from '../../../hooks/useAgentLiveCall'
 import type { Lead, Disposition } from '../../../types'
 import type {
-  StudioCampaign, StudioLead, StudioDisposition, LeadField, SidebarTab,
+  StudioCampaign, StudioLead, StudioDisposition, StudioAgent, LeadField, SidebarTab,
 } from './types'
 
 // Studio's local CallState — derived from global store, NOT stored locally
-type StudioCallState = 'idle' | 'dialing' | 'ringing' | 'in-call' | 'wrap-up'
+type StudioCallState = 'idle' | 'dialing' | 'ringing' | 'in-call' | 'wrap-up' | 'failed'
 
 // ─── Disposition color palette ─────────────────────────────────────────────────
 // Maps d_type keywords to the DispositionModal's COLOR_CLASSES keys
@@ -87,8 +87,11 @@ function mapLeadToStudio(lead: Lead): StudioLead {
 
 // ─── Lead API response parser ──────────────────────────────────────────────────
 function parseApiLead(raw: Record<string, unknown>): Lead {
+  // campaignDialNext returns fields in `fields`, legacy getLead returns in `data`
   const fieldArr = Array.isArray(raw.data)
     ? raw.data as Array<{ label: string; value: unknown; is_dialing?: number }>
+    : Array.isArray(raw.fields)
+    ? raw.fields as Array<{ label: string; value: unknown; is_dialing?: number }>
     : []
   const fields: Record<string, string> = {}
   let firstName = '', lastName = '', email = '', address = '', city = '', state = ''
@@ -108,7 +111,7 @@ function parseApiLead(raw: Record<string, unknown>): Lead {
     id:           Number(raw.lead_id),
     lead_id:      Number(raw.lead_id),
     list_id:      Number(raw.list_id ?? 0),
-    phone_number: String(raw.number ?? ''),
+    phone_number: String(raw.phone_number ?? raw.number ?? ''),
     first_name:   firstName,
     last_name:    lastName,
     email, address, city, state, fields,
@@ -151,8 +154,10 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   const storeActiveLead = useDialerStore(s => s.activeLead)
   const storeDispos     = useDialerStore(s => s.dispositions)
   const callDuration    = useDialerStore(s => s.callDuration)
+  const failReason      = useDialerStore(s => s.failReason)
   const {
     setCallState, setActiveLead, setMuted, setOnHold,
+    setFailReason,
     isMuted, isOnHold, resetDialer,
     addCallLog, updateLastCallLog,
     pushLeadToHistory, goToPreviousLead, leadHistory,
@@ -162,8 +167,11 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   const phoneInCall           = useFloatingStore(s => s.phoneInCall)
   const phoneRegistered       = useFloatingStore(s => s.phoneRegistered)
   const phoneHasIncoming      = useFloatingStore(s => s.phoneHasIncoming)
+  const campaignDialActive    = useFloatingStore(s => s.campaignDialActive)
   const setCampaignDialActive = useFloatingStore(s => s.setCampaignDialActive)
   const setPhoneOpen          = useFloatingStore(s => s.setPhoneOpen)
+  const sipMuteHandler        = useFloatingStore(s => s.sipMuteHandler)
+  const sipHoldHandler        = useFloatingStore(s => s.sipHoldHandler)
 
   // ─── Local UI state ──────────────────────────────────────────────────────
   const [isDialingLocal, setIsDialingLocal] = useState(false)
@@ -174,6 +182,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   const [showDisposition, setShowDisposition] = useState(false)
   const [showDialPad, setShowDialPad]       = useState(false)
   const [campaignDropdown, setCampaignDropdown] = useState(false)
+  const [campSearch, setCampSearch]           = useState('')
   const [leadCounter, setLeadCounter]       = useState(1)
 
   // ─── Lead state (local — mapped from store for UI components) ────────────
@@ -186,6 +195,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
 
   // ─── Derived studio call state ────────────────────────────────────────────
   const callState: StudioCallState =
+    storeState === 'failed'   ? 'failed'  :
     storeState === 'ringing'  ? 'ringing' :
     storeState === 'in-call'  ? 'in-call' :
     storeState === 'wrapping' ? 'wrap-up' :
@@ -237,34 +247,94 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   }, [phoneInCall, storeState, setCallState, startCallTimer])
 
   // ─── SIP call ended remotely → transition to wrap-up ─────────────────────
+  // Only transition if a lead is assigned (prevents false trigger on network blip)
   useEffect(() => {
-    if (!phoneInCall && storeState === 'in-call') {
+    if (!phoneInCall && storeState === 'in-call' && storeActiveLead) {
       setCallState('wrapping')
     }
-  }, [phoneInCall, storeState, setCallState])
+  }, [phoneInCall, storeState, storeActiveLead, setCallState])
 
   // ─── SIP call failed during ringing (Asterisk rejected) → reset to ready ──
-  // Guard with !isDialingLocal to avoid false trigger during the brief window
-  // between setCallState('ringing') and sipDialOutbound's setPhoneState('calling').
+  // Guard with !isDialingLocal AND !campaignDialActive to avoid false trigger
+  // during the brief window between API returning and WebPhone receiving the call.
   useEffect(() => {
-    if (phoneRegistered && !phoneInCall && storeState === 'ringing' && !isDialingLocal) {
+    if (phoneRegistered && !phoneInCall && storeState === 'ringing' && !isDialingLocal && !campaignDialActive) {
       setCallState('ready')
       setCampaignDialActive(false)
     }
-  }, [phoneRegistered, phoneInCall, storeState, isDialingLocal, setCallState, setCampaignDialActive])
+  }, [phoneRegistered, phoneInCall, storeState, isDialingLocal, campaignDialActive, setCallState, setCampaignDialActive])
 
   // ─── Open disposition modal when call ends ────────────────────────────────
   useEffect(() => {
     if (storeState === 'wrapping') setShowDisposition(true)
   }, [storeState])
 
+  // ─── Auto-reset after call failure (5s) ─────────────────────────────────
+  useEffect(() => {
+    if (storeState !== 'failed') return
+    // Stop any ringback that may still be playing
+    ringbackRef.current?.pause()
+    if (ringbackRef.current) ringbackRef.current.currentTime = 0
+    setCampaignDialActive(false)
+    // Mark the call log as failed
+    updateLastCallLog({ status: 'failed' })
+    const timer = setTimeout(() => {
+      setCallState('ready')
+      setFailReason(null)
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [storeState]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Heartbeat (keep agent alive in pacing counters) ─────────────────────
   useEffect(() => {
+    // Report available on mount
+    dialerService.updateAgentState(campaign.id, 'available').catch(() => {})
     heartbeatRef.current = setInterval(() => {
       dialerService.heartbeat(campaign.id).catch(() => {})
     }, 30_000)
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current) }
   }, [campaign.id])
+
+  // ─── Agent pacing status (track state transitions) ─────────────────────
+  useEffect(() => {
+    if (storeState === 'wrapping') {
+      dialerService.updateAgentState(campaign.id, 'wrapping').catch(() => {})
+    } else if (storeState === 'ready' || storeState === 'idle') {
+      dialerService.updateAgentState(campaign.id, 'available').catch(() => {})
+    }
+  }, [storeState, campaign.id])
+
+  // ─── Fetch campaign agents (for transfer modal) ─────────────────────────
+  const { data: agentsData } = useQuery({
+    queryKey: ['campaign-agents', campaign.id],
+    queryFn: () => campaignDialerService.listAgents(campaign.id),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  })
+
+  const studioAgents: StudioAgent[] = (agentsData?.data?.agents ?? []).map((a) => {
+    const initials = (a.name ?? '')
+      .split(' ')
+      .map((w: string) => w[0] ?? '')
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+    const statusMap: Record<string, StudioAgent['status']> = {
+      available: 'available',
+      on_call: 'busy',
+      on_break: 'away',
+      after_call_work: 'busy',
+      offline: 'offline',
+    }
+    return {
+      id: a.user_id,
+      name: a.name,
+      extension: String(a.extension ?? ''),
+      department: '',
+      status: statusMap[a.status] ?? 'offline',
+      avatar: initials || '??',
+    }
+  })
 
   // ─── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -276,6 +346,8 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   }, [])
 
   // ─── Mutations ────────────────────────────────────────────────────────────
+
+  // Full hang-up (legacy / end-session): tears down the entire call
   const hangUpMutation = useMutation({
     mutationFn: () => dialerService.hangUp({ id: campaign.id }),
     onSuccess: () => {
@@ -284,7 +356,39 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       setCallState('wrapping')
     },
     onError: () => {
-      // Move to wrapping even on error so agent can disposition
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      updateLastCallLog({ status: 'connected', duration: callDuration })
+      setCallState('wrapping')
+    },
+  })
+
+  // Next customer: hang up customer only, dial next lead (persistent conference)
+  const nextCustomerMutation = useMutation({
+    mutationFn: () => campaignDialerService.nextCustomer(campaign.id),
+    onSuccess: (res) => {
+      const data = res.data
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      updateLastCallLog({ status: 'connected', duration: callDuration })
+      useDialerStore.setState({ callDuration: 0 })
+
+      if (data.status === 'no_more_leads') {
+        toast('No more leads in queue — wrapping up', { icon: 'ℹ️' })
+        setCallState('wrapping')
+        return
+      }
+
+      // Next lead arrived — update lead data, stay in-call
+      if (data.lead_id) {
+        pushLeadToHistory()
+        const storeLead = parseApiLead(data as unknown as Record<string, unknown>)
+        setActiveLead(storeLead)
+        setLeadCounter((n) => n + 1)
+        startCallTimer()
+        toast.success('Next customer connected')
+      }
+    },
+    onError: () => {
+      toast.error('Failed to connect next customer — ending call')
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
       updateLastCallLog({ status: 'connected', duration: callDuration })
       setCallState('wrapping')
@@ -292,11 +396,11 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   })
 
   const saveDispositionMutation = useMutation({
-    mutationFn: ({ dispoId, pauseCalling }: { dispoId: number; pauseCalling: boolean }) => {
+    mutationFn: ({ dispoId, pauseCalling, notes }: { dispoId: number; pauseCalling: boolean; notes: string }) => {
       const leadId = storeActiveLead?.lead_id ?? storeActiveLead?.id ?? 0
       // Auto-dial mode: use campaign dialer endpoint (leads are in list_data)
       if (isAutoDialMode) {
-        return campaignDialerService.saveDisposition(leadId, dispoId, undefined, campaign.id)
+        return campaignDialerService.saveDisposition(leadId, dispoId, notes || undefined, campaign.id)
       }
       return dialerService.saveDisposition({
         lead_id:        leadId,
@@ -304,6 +408,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
         disposition_id: dispoId,
         api_call:       0,
         pause_calling:  pauseCalling ? 1 : 0,
+        comment:        notes || undefined,
       })
     },
     onSuccess: () => {
@@ -311,14 +416,18 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       setShowDisposition(false)
       resetDialer()
       setLeadCounter((n) => n + 1)
-      // Backend addLeadToExtensionLive already queued next lead — fetch it now
-      dialerService
-        .getLead()
-        .then((r) => {
-          const raw = r.data as Record<string, unknown>
-          if (raw?.success && raw.lead_id) setActiveLead(parseApiLead(raw))
-        })
-        .catch(() => {})
+      // Auto-dial mode: backend DialNextLeadJob dispatches next call in ~2s.
+      // Agent clicks "Start Call" to trigger next lead (no pre-fetch needed).
+      // Legacy mode: backend addLeadToExtensionLive queues next lead — fetch it.
+      if (!isAutoDialMode) {
+        dialerService
+          .getLead()
+          .then((r) => {
+            const raw = r.data as Record<string, unknown>
+            if (raw?.success && raw.lead_id) setActiveLead(parseApiLead(raw))
+          })
+          .catch(() => {})
+      }
     },
     onError: (err: unknown) => {
       const msg =
@@ -399,7 +508,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     setPhoneOpen, addCallLog, updateLastCallLog,
   ])
 
-  const canLeaveOrSwitch = storeState !== 'in-call' && storeState !== 'ringing'
+  const canLeaveOrSwitch = storeState !== 'in-call' && storeState !== 'ringing' && storeState !== 'failed'
   const leftRemaining    = campaign.totalLeads - campaign.calledLeads
 
   // ─── Skip to next lead (no call) ─────────────────────────────────────────
@@ -429,16 +538,60 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     setComment('')
   }, [canLeaveOrSwitch, leadHistory, goToPreviousLead])
 
+  // ─── Mute/Hold handlers (bridge to WebPhone SIP session) ─────────────────
+  const handleToggleMute = useCallback(() => {
+    const next = !isMuted
+    setMuted(next)
+    sipMuteHandler?.(next)
+  }, [isMuted, setMuted, sipMuteHandler])
+
+  const handleToggleHold = useCallback(() => {
+    const next = !isOnHold
+    setOnHold(next)
+    sipHoldHandler?.(next)
+  }, [isOnHold, setOnHold, sipHoldHandler])
+
   // ─── Disposition handlers ─────────────────────────────────────────────────
-  const handleDispositionSave = (dispoId: string, pauseCalling: boolean) => {
-    saveDispositionMutation.mutate({ dispoId: Number(dispoId), pauseCalling })
+  const handleDispositionSave = (dispoId: string, pauseCalling: boolean, notes: string) => {
+    saveDispositionMutation.mutate({ dispoId: Number(dispoId), pauseCalling, notes })
   }
 
-  const handleRedial = () => {
+  const handleRedial = useCallback(async () => {
     setShowDisposition(false)
+    const currentLead = storeActiveLead
+    if (!currentLead?.lead_id) {
+      // No lead to redial — fall back to next lead
+      setCallState('ready')
+      setTimeout(handleDial, 200)
+      return
+    }
+    if (!webphoneOk) {
+      toast.error('WebPhone not connected')
+      setPhoneOpen(true)
+      return
+    }
     setCallState('ready')
-    setTimeout(handleDial, 200)
-  }
+    try {
+      // Redial: call campaignDialNext with specific lead_id to AMI originate same lead
+      const leadId = currentLead.lead_id ?? currentLead.id
+      const res = await dialerService.campaignDialNext(campaign.id, leadId)
+      const raw = res.data as Record<string, unknown>
+      if (raw?.success) {
+        // Re-set the lead from the response (phone_number may have refreshed)
+        const storeLead = parseApiLead(raw)
+        setActiveLead(storeLead)
+        setCampaignDialActive(true)
+        setCallState('ringing')
+        setPhoneOpen(true)
+        toast.success('Redialing same lead — answer your webphone', { duration: 5000 })
+      } else {
+        toast.error(String(raw?.message || 'Redial failed'))
+      }
+    } catch {
+      toast.error('Redial failed — trying next lead instead')
+      setTimeout(handleDial, 200)
+    }
+  }, [storeActiveLead, webphoneOk, campaign.id, handleDial, setCallState, setActiveLead, setCampaignDialActive, setPhoneOpen])
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
@@ -449,12 +602,12 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
         e.preventDefault(); handleDial()
       }
       if (e.key === ' ' && callState === 'in-call') {
-        e.preventDefault(); hangUpMutation.mutate()
+        e.preventDefault(); nextCustomerMutation.mutate()
       }
       if (e.key === 't' && callState === 'in-call')  setShowTransfer(true)
       if (e.key === 'd')                              setShowDialPad(true)
-      if (e.key === 'm' && callState === 'in-call')  setMuted(!isMuted)
-      if (e.key === 'h' && callState === 'in-call')  setOnHold(!isOnHold)
+      if (e.key === 'm' && callState === 'in-call')  handleToggleMute()
+      if (e.key === 'h' && callState === 'in-call')  handleToggleHold()
       if (['1','2','3','4','5','6'].includes(e.key)) {
         const map: Record<string, SidebarTab> = {
           '1':'lead','2':'sms','3':'email','4':'script','5':'notes','6':'events',
@@ -464,7 +617,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [callState, showDisposition, handleDial, isMuted, isOnHold]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [callState, showDisposition, handleDial, handleToggleMute, handleToggleHold]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="animate-fadeIn">
@@ -478,6 +631,21 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
           <p className="text-sm font-semibold text-indigo-800 flex-1">
             Auto-Dial Active — your WebPhone will ring when the system connects a lead. Answer to begin.
           </p>
+        </div>
+      )}
+
+      {/* ─── Call failed banner ──────────────────────────────────── */}
+      {callState === 'failed' && failReason && (
+        <div className="flex items-center gap-3 px-4 py-2.5 mb-3 rounded-xl bg-red-50 border border-red-200 animate-fadeIn">
+          <span className="relative flex h-3 w-3 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+          </span>
+          <AlertTriangle size={16} className="text-red-600 shrink-0" />
+          <p className="text-sm font-semibold text-red-800 flex-1">
+            {failReason}
+          </p>
+          <span className="text-[10px] text-red-400 font-medium shrink-0">Auto-resetting…</span>
         </div>
       )}
 
@@ -500,7 +668,9 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       <TransferCallModal
         isOpen={showTransfer}
         onClose={() => setShowTransfer(false)}
-        agents={[]}
+        agents={studioAgents}
+        campaignId={campaign.id}
+        leadPhone={lead?.phone ?? ''}
       />
       <DispositionModal
         isOpen={showDisposition}
@@ -561,7 +731,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
 
             {campaignDropdown && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setCampaignDropdown(false)} />
+                <div className="fixed inset-0 z-10" onClick={() => { setCampaignDropdown(false); setCampSearch('') }} />
                 <div className="absolute left-0 top-full mt-2 w-[320px] rounded-2xl border border-slate-200 bg-white shadow-xl z-20 animate-slideUp overflow-hidden">
                   <div className="p-2 border-b border-slate-100">
                     <div className="relative">
@@ -569,12 +739,18 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
                       <input
                         type="text"
                         placeholder="Switch campaign…"
+                        value={campSearch}
+                        onChange={(e) => setCampSearch(e.target.value)}
                         className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/15"
                       />
                     </div>
                   </div>
                   <div className="max-h-72 overflow-y-auto py-1">
-                    {allCampaigns.map((c) => {
+                    {allCampaigns.filter((c) => {
+                      if (!campSearch.trim()) return true
+                      const q = campSearch.toLowerCase()
+                      return c.name.toLowerCase().includes(q) || c.dialMethod.toLowerCase().includes(q)
+                    }).map((c) => {
                       const isCurrent = c.id === campaign.id
                       const progress  = Math.round((c.calledLeads / (c.totalLeads || 1)) * 100)
                       return (
@@ -608,6 +784,38 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
                     })}
                   </div>
                 </div>
+              </>
+            )}
+          </div>
+
+          {/* Start / Hang-up / Next Customer buttons */}
+          <div className="flex items-center gap-1.5">
+            {callState !== 'in-call' && callState !== 'ringing' && callState !== 'dialing' ? (
+              <button
+                onClick={handleDial}
+                className="group flex items-center gap-2 px-4 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                <Phone size={13} className="group-hover:rotate-12 transition-transform" />
+                Start Dialing
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => nextCustomerMutation.mutate()}
+                  disabled={nextCustomerMutation.isPending}
+                  className="group flex items-center gap-2 px-4 h-9 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60"
+                >
+                  <PhoneOff size={13} />
+                  {nextCustomerMutation.isPending ? 'Connecting…' : 'Hang Up'}
+                </button>
+                <button
+                  onClick={() => hangUpMutation.mutate()}
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 text-xs font-semibold transition-all"
+                  title="End session — leave conference entirely"
+                >
+                  <PhoneOff size={11} />
+                  End Session
+                </button>
               </>
             )}
           </div>
@@ -693,13 +901,15 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
             duration={callDuration}
             muted={isMuted}
             holding={isOnHold}
+            failReason={failReason}
             onDial={handleDial}
-            onHangup={() => hangUpMutation.mutate()}
+            onHangup={() => nextCustomerMutation.mutate()}
+            onEndSession={() => hangUpMutation.mutate()}
             onTransfer={() => setShowTransfer(true)}
             onVoiceDrop={() => voicemailMutation.mutate()}
             onDialPad={() => setShowDialPad(true)}
-            onToggleMute={() => setMuted(!isMuted)}
-            onToggleHold={() => setOnHold(!isOnHold)}
+            onToggleMute={handleToggleMute}
+            onToggleHold={handleToggleHold}
           />
         </div>
 
@@ -709,7 +919,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
             onSms={() => setSidebarTab('sms')}
             onEmail={() => setSidebarTab('email')}
             onCall={handleDial}
-            disabled={callState === 'in-call' || callState === 'ringing' || callState === 'dialing'}
+            disabled={callState === 'in-call' || callState === 'ringing' || callState === 'dialing' || callState === 'failed'}
           />
         </div>
       </div>

@@ -31,6 +31,9 @@ export const agentService = {
   roles: () =>
     api.get('/agents/roles'),
 
+  allUsers: () =>
+    api.get('/agents/all-users'),
+
   create: (payload: CreateAgentPayload) =>
     api.post('/agents', payload),
 

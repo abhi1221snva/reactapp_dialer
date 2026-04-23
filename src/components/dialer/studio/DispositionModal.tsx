@@ -9,7 +9,7 @@ import type { StudioDisposition } from './types'
 interface Props {
   isOpen: boolean
   onClose: () => void
-  onSave: (dispoId: string, pauseCalling: boolean) => void
+  onSave: (dispoId: string, pauseCalling: boolean, notes: string) => void
   onRedial: () => void
   dispositions: StudioDisposition[]
   leadName?: string
@@ -52,7 +52,7 @@ export function DispositionModal({
       toast.error('Please select a disposition')
       return
     }
-    onSave(selectedId, pause)
+    onSave(selectedId, pause, notes)
     setSelectedId(null)
     setNotes('')
     setPause(false)

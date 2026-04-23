@@ -101,6 +101,23 @@ export const campaignDialerService = {
       campaign_id: campaignId,
     }),
 
+  // ── Persistent Conference: hang up customer only, dial next ─────────────────
+
+  /**
+   * Hang up only the customer channel while keeping agent in the conference.
+   * Immediately dials the next lead into the same conf room.
+   * POST /dialer/campaign/{id}/next-customer
+   */
+  nextCustomer: (campaignId: number) =>
+    api.post<{
+      success: boolean
+      status: 'next_lead' | 'no_more_leads'
+      message: string
+      lead_id?: number
+      phone_number?: string
+      fields?: Array<{ label: string; value: unknown; is_dialing?: number }>
+    }>(`/dialer/campaign/${campaignId}/next-customer`),
+
   // ── Agent assignment ────────────────────────────────────────────────────────
 
   /**
