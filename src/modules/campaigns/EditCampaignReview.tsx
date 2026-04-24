@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { listService } from '../../services/list.service'
 import { dispositionService } from '../../services/disposition.service'
+import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
 import { Badge } from '../../components/ui/Badge'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 
@@ -108,8 +109,24 @@ export function EditCampaignReview() {
   const callerIdLabel: Record<string, string> = {
     area_code: 'Area Code', area_code_random: 'Area Code + Randomizer', custom: 'Custom DID',
   }
-  const emailLabel: Record<string, string> = {
+  const { data: emailSettingsData } = useQuery({
+    queryKey: ['campaign-email-settings'],
+    queryFn: async () => {
+      const res = await emailSettingsService.list()
+      const payload = res.data?.data ?? res.data ?? {}
+      return (payload.list ?? []) as EmailSetting[]
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const staticEmailLabel: Record<string, string> = {
     '0': 'Disabled', '1': 'User Email', '2': 'Campaign Email', '3': 'System Email',
+  }
+  const resolveEmailLabel = (val: number | string | undefined): string => {
+    const key = String(val ?? '0')
+    if (staticEmailLabel[key]) return staticEmailLabel[key]
+    const setting = (emailSettingsData ?? []).find(s => s.id === Number(key))
+    if (setting) return setting.sender_name ? `${setting.sender_name} — ${setting.sender_email}` : setting.sender_email
+    return key === '0' ? 'Disabled' : `SMTP #${key}`
   }
   const hopperLabel = c.hopper_mode === 2 ? 'Random' : 'Linear'
   const isActive = c.status === 1 || c.status === '1' || c.status === 'active'
@@ -241,7 +258,7 @@ export function EditCampaignReview() {
               </p>
               <div className="divide-y divide-slate-100">
                 <InfoItem label="Timezone" value={c.timezone ?? 'America/New_York'} icon={Globe} />
-                <InfoItem label="Email" value={emailLabel[String(c.email ?? '0')] ?? '—'} icon={Mail} />
+                <InfoItem label="Email" value={resolveEmailLabel(c.email)} icon={Mail} />
                 <InfoItem label="CRM Integration" value={c.crm_type ? c.crm_type.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()) : 'None'} icon={Hash} />
               </div>
             </div>

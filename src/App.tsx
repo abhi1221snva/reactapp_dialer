@@ -119,9 +119,11 @@ import { SecuritySettings } from './pages/settings/SecuritySettings'
 import { DispositionList } from './modules/dispositions/DispositionList'
 import { EmailTemplates } from './pages/settings/EmailTemplates'
 import { SmsTemplates } from './pages/settings/SmsTemplates'
+import { DialerEmailSettings } from './pages/settings/DialerEmailSettings'
 import { DncList } from './modules/dnc/DncList'
 import { ExcludeList } from './modules/excludeList/ExcludeList'
 import { FaxList } from './modules/fax/FaxList'
+import { Settings } from './pages/settings/Settings'
 import { Ivr } from './pages/ivr/Ivr'
 import { RingGroups } from './pages/ringgroups/RingGroups'
 import { CallTimes }  from './pages/voice/CallTimes'
@@ -332,6 +334,7 @@ export default function App() {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/billing" element={<Billing />} />
 
+          <Route path="/settings" element={<Settings />} />
           <Route path="/settings/labels" element={<Labels />} />
           <Route path="/settings/dispositions" element={<DispositionList />} />
           <Route path="/settings/dnc" element={<DncList />} />
@@ -349,6 +352,7 @@ export default function App() {
           <Route path="/settings/lead-activity" element={<LeadActivity />} />
           <Route path="/settings/email-templates" element={<EmailTemplates />} />
           <Route path="/settings/sms-templates" element={<SmsTemplates />} />
+          <Route path="/settings/email-settings" element={<DialerEmailSettings />} />
 
           {/* Profile */}
           <Route path="/profile" element={<Profile />} />

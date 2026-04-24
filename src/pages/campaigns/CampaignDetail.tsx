@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
 import { campaignService } from '../../services/campaign.service'
+import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
 import { cn } from '../../utils/cn'
 
 interface CampaignDetailData {
@@ -139,13 +140,29 @@ export function CampaignDetail() {
     onError: () => toast.error('Failed to duplicate'),
   })
 
+  const { data: emailSettingsData } = useQuery({
+    queryKey: ['campaign-email-settings'],
+    queryFn: async () => {
+      const res = await emailSettingsService.list()
+      const payload = res.data?.data ?? res.data ?? {}
+      return (payload.list ?? []) as EmailSetting[]
+    },
+  })
+
   const callerIdLabel: Record<string, string> = {
     area_code: 'Area Code',
     area_code_random: 'Area Code & Randomizer',
     custom: 'Custom',
   }
-  const emailLabel: Record<string, string> = {
+  const staticEmailLabel: Record<string, string> = {
     '0': 'No', '1': 'With User Email', '2': 'With Campaign Email', '3': 'With System Email',
+  }
+  const resolveEmailLabel = (val: number | string | undefined): string => {
+    const key = String(val ?? '0')
+    if (staticEmailLabel[key]) return staticEmailLabel[key]
+    const setting = (emailSettingsData ?? []).find(s => s.id === Number(key))
+    if (setting) return setting.sender_name ? `${setting.sender_name} — ${setting.sender_email}` : setting.sender_email
+    return key === '0' ? 'No' : `SMTP #${key}`
   }
   const hopperModeLabel = d.hopper_mode === 2 ? 'Random' : 'Linear'
   const timeBased = Number(d.time_based_calling) === 1
@@ -324,7 +341,7 @@ export function CampaignDetail() {
                 <FeatureRow icon={Shield} label="AMD Detection" on={Number(d.amd) === 1} />
                 <FeatureRow icon={Globe} label="Call Transfer" on={Number(d.call_transfer) === 1} />
                 <FeatureRow icon={MessageSquare} label="SMS" on={Number(d.sms) === 1} />
-                <FeatureRow icon={Mail} label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
+                <FeatureRow icon={Mail} label="Email" value={resolveEmailLabel(d.email)} />
               </div>
             </div>
           </div>
@@ -351,7 +368,7 @@ export function CampaignDetail() {
         </SectionCard>
 
         <SectionCard icon={Mail} title="Communication" iconColor="text-emerald-500">
-          <DetailRow label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
+          <DetailRow label="Email" value={resolveEmailLabel(d.email)} />
           <OnOff val={d.sms} label="Send SMS" />
           <OnOff val={d.send_crm} label="Send to CRM" />
           <OnOff val={d.send_report} label="Send Report" />

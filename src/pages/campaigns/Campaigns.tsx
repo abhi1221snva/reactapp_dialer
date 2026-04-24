@@ -12,6 +12,7 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { Badge } from '../../components/ui/Badge'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
+import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
@@ -155,13 +156,30 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
     })
     .filter(Boolean) as Array<{ id: number; title: string }>
 
+  const { data: emailSettingsData } = useQuery({
+    queryKey: ['campaign-email-settings'],
+    queryFn: async () => {
+      const res = await emailSettingsService.list()
+      const payload = res.data?.data ?? res.data ?? {}
+      return (payload.list ?? []) as EmailSetting[]
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
   const callerIdLabel: Record<string, string> = {
     area_code: 'Area Code',
     area_code_random: 'Area Code & Randomizer',
     custom: 'Custom',
   }
-  const emailLabel: Record<string, string> = {
+  const staticEmailLabel: Record<string, string> = {
     '0': 'No', '1': 'User Email', '2': 'Campaign Email', '3': 'System Email',
+  }
+  const resolveEmailLabel = (val: number | string | undefined): string => {
+    const key = String(val ?? '0')
+    if (staticEmailLabel[key]) return staticEmailLabel[key]
+    const setting = (emailSettingsData ?? []).find(s => s.id === Number(key))
+    if (setting) return setting.sender_name ? `${setting.sender_name} — ${setting.sender_email}` : setting.sender_email
+    return key === '0' ? 'No' : `SMTP #${key}`
   }
 
   const hopperModeLabel = d.hopper_mode === 2 ? 'Random' : 'Linear'
@@ -280,7 +298,7 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
 
               {/* Communication */}
               <CampaignSectionCard icon={Mail} title="Communication" iconColor="text-violet-500">
-                <CampaignDetailRow label="Email" value={emailLabel[String(d.email ?? '0')] ?? '—'} />
+                <CampaignDetailRow label="Email" value={resolveEmailLabel(d.email)} />
                 <CampaignOnOff val={d.sms} label="Send SMS" />
                 <CampaignOnOff val={d.send_crm} label="Send to CRM" />
                 <CampaignOnOff val={d.send_report} label="Send Report" />

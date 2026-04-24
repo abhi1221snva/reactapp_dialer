@@ -30,6 +30,7 @@ import { DealTab } from '../../components/crm/DealTab'
 import { ComplianceTab } from '../../components/crm/ComplianceTab'
 import { BankStatementTab } from '../../components/crm/BankStatementTab'
 import { DripLeadPanel } from '../../components/crm/DripLeadPanel'
+import { NotesPanel } from '../../components/crm/NotesPanel'
 import { DocumentUploadButton, type StagedFile } from '../../components/crm/DocumentUploadButton'
 import { bankStatementService, type BankStatementSession } from '../../services/bankStatement.service'
 import { ApprovalsSection } from '../../components/crm/ApprovalsSection'
@@ -4923,20 +4924,9 @@ export function CrmLeadDetail() {
     enabled: !!leadId,
   })
 
-  const generatePortalMutation = useMutation({
-    mutationFn: () => crmService.generateMerchantPortal(leadId),
-    onSuccess: () => {
-      toast.success('Portal link generated')
-      qc.invalidateQueries({ queryKey: ['merchant-portal', leadId] })
-    },
-    onError: () => toast.error('Failed to generate portal link'),
-  })
-
   const handleMerchantPortal = () => {
     if (merchantPortal?.url) {
       navigator.clipboard.writeText(merchantPortal.url).then(() => toast.success('Merchant link copied!'))
-    } else {
-      generatePortalMutation.mutate()
     }
   }
 
@@ -5175,15 +5165,15 @@ export function CrmLeadDetail() {
               </button>
               <button
                 onClick={handleMerchantPortal}
-                disabled={generatePortalMutation.isPending}
+                disabled={!merchantPortal?.url}
                 className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium text-amber-700 transition-all hover:shadow-sm disabled:opacity-50"
                 style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#fef3c7'; e.currentTarget.style.transform = 'translateY(-1px)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.transform = 'translateY(0)' }}
-                title={merchantPortal?.url ? 'Copy merchant portal link' : 'Generate merchant portal link'}
+                title="Copy merchant portal link"
               >
-                {generatePortalMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : merchantPortal?.url ? <Copy size={13} /> : <ExternalLink size={13} />}
-                <span className="hidden sm:inline">{merchantPortal?.url ? 'Copy Link' : 'Merchant Link'}</span>
+                <Copy size={13} />
+                <span className="hidden sm:inline">Copy Link</span>
               </button>
               <div className="w-px h-5 bg-slate-200 mx-0.5" />
               <button
@@ -5206,8 +5196,9 @@ export function CrmLeadDetail() {
 
       </div>
 
-      {/* ── SINGLE CARD ── */}
+      {/* ── MAIN CONTENT + NOTES PANEL ── */}
       <div className="mx-auto px-3 pt-3 pb-8" style={{ maxWidth: '100%' }}>
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-3">
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm flex flex-col overflow-x-hidden" style={{ minHeight: 'calc(100vh - 140px)' }}>
 
           {/* Unified tab bar */}
@@ -5409,6 +5400,15 @@ export function CrmLeadDetail() {
           </div>
 
         </div>
+
+        {/* ── Notes Panel (right sidebar) ── */}
+        <div className="hidden xl:block" style={{ minHeight: 'calc(100vh - 140px)' }}>
+          <div className="sticky top-3 h-[calc(100vh-160px)]">
+            <NotesPanel leadId={leadId} />
+          </div>
+        </div>
+
+        </div>{/* /grid */}
       </div>
 
       {showPdfModal && (
