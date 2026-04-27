@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Pencil, Trash2, List, Search, X } from 'lucide-react'
+import { Plus, Eye, Pencil, Trash2, List, Search, X, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -14,6 +14,7 @@ import { RowActions } from '../../components/ui/RowActions'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 import { useAuthStore } from '../../stores/auth.store'
 import { LEVELS } from '../../utils/permissions'
+import { RecycleLeadsModal } from '../../components/RecycleLeadsModal'
 
 interface ListItem {
   id: number
@@ -34,8 +35,9 @@ interface ListItem {
 export function Lists() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const table = useServerTable({ defaultLimit: 15, defaultFilters: { is_active: '1' } })
+  const table = useServerTable({ defaultLimit: 15 })
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [recycleTarget, setRecycleTarget] = useState<{ campaignId: number; listId: number; listName: string } | null>(null)
   const { setToolbar } = useDialerHeader()
   const user = useAuthStore(s => s.user)
   const userLevel = user?.level ?? 1
@@ -214,6 +216,13 @@ export function Lists() {
               onClick: () => navigate(`/lists/${id}/mapping`),
             },
             {
+              label: 'Recycle',
+              icon: <RefreshCw size={13} />,
+              variant: 'success',
+              onClick: () => setRecycleTarget({ campaignId: cid, listId: id, listName: listName(row) }),
+              hidden: !cid,
+            },
+            {
               label: 'Delete',
               icon: <Trash2 size={13} />,
               variant: 'delete',
@@ -274,6 +283,15 @@ export function Lists() {
         selectable={canBulkDelete}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
+      />
+
+      <RecycleLeadsModal
+        isOpen={!!recycleTarget}
+        campaignId={recycleTarget?.campaignId ?? 0}
+        listId={recycleTarget?.listId ?? 0}
+        listName={recycleTarget?.listName ?? ''}
+        onClose={() => setRecycleTarget(null)}
+        onSuccess={invalidate}
       />
     </div>
   )

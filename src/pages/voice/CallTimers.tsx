@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Timer, Plus, Pencil, Trash2, X, CheckCircle2, AlertCircle,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2,
-  Megaphone,
+  Megaphone, AlertTriangle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
@@ -89,6 +89,8 @@ export function CallTimers() {
   const [search, setSearch]       = useState('')
   const [page, setPage]           = useState(1)
   const [blockedInfo, setBlockedInfo] = useState<BlockedDeleteInfo | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'single'; timer: CallTimer } | { type: 'bulk'; ids: number[] } | null>(null)
   const { setToolbar } = useDialerHeader()
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -108,6 +110,26 @@ export function CallTimers() {
   const totalRows  = filtered.length
   const totalPages = Math.max(1, Math.ceil(totalRows / LIMIT))
   const pageRows   = filtered.slice((page - 1) * LIMIT, page * LIMIT)
+
+  // Clear selection when search/page changes
+  useEffect(() => { setSelectedIds([]) }, [search, page])
+
+  // ── Selection helpers ──────────────────────────────────────────────────────
+  const pageIds = pageRows.map(t => t.id)
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.includes(id))
+  const somePageSelected = pageIds.some(id => selectedIds.includes(id))
+
+  function toggleSelectAll() {
+    if (allPageSelected) {
+      setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)))
+    } else {
+      setSelectedIds(prev => [...new Set([...prev, ...pageIds])])
+    }
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -136,8 +158,10 @@ export function CallTimers() {
     onSuccess: () => {
       toast.success('Timer deleted')
       qc.invalidateQueries({ queryKey: ['call-timers-list'] })
+      setDeleteConfirm(null)
     },
     onError: (err: unknown, timer) => {
+      setDeleteConfirm(null)
       const e = err as { response?: { status?: number; data?: { message?: string; campaigns?: AssignedCampaign[] } } }
       const data = e.response?.data
       if (e.response?.status === 400 && Array.isArray(data?.campaigns) && data!.campaigns!.length > 0) {
@@ -145,6 +169,28 @@ export function CallTimers() {
         return
       }
       toast.error(data?.message || 'Failed to delete timer')
+    },
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const results = await Promise.allSettled(
+        ids.map(id => campaignService.deleteCallTimer(id))
+      )
+      const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      return { total: ids.length, failed: failed.length }
+    },
+    onSuccess: ({ total, failed }) => {
+      const deleted = total - failed
+      if (deleted > 0) toast.success(`Deleted ${deleted} timer${deleted !== 1 ? 's' : ''}`)
+      if (failed > 0) toast.error(`${failed} timer${failed !== 1 ? 's' : ''} could not be deleted (may be assigned to campaigns)`)
+      setSelectedIds([])
+      setDeleteConfirm(null)
+      qc.invalidateQueries({ queryKey: ['call-timers-list'] })
+    },
+    onError: () => {
+      toast.error('Bulk delete failed')
+      setDeleteConfirm(null)
     },
   })
 
@@ -164,8 +210,21 @@ export function CallTimers() {
   }
 
   function handleDelete(timer: CallTimer) {
-    if (!window.confirm(`Delete "${timer.title}"? This cannot be undone.`)) return
-    deleteMutation.mutate(timer)
+    setDeleteConfirm({ type: 'single', timer })
+  }
+
+  function handleBulkDelete() {
+    if (selectedIds.length === 0) return
+    setDeleteConfirm({ type: 'bulk', ids: [...selectedIds] })
+  }
+
+  function confirmDelete() {
+    if (!deleteConfirm) return
+    if (deleteConfirm.type === 'single') {
+      deleteMutation.mutate(deleteConfirm.timer)
+    } else {
+      bulkDeleteMutation.mutate(deleteConfirm.ids)
+    }
   }
 
   function setDay(day: DayKey, field: keyof DaySchedule, value: string | boolean) {
@@ -192,6 +251,8 @@ export function CallTimers() {
     saveMutation.mutate()
   }
 
+  const isDeleting = deleteMutation.isPending || bulkDeleteMutation.isPending
+
   // ── Toolbar injection ──────────────────────────────────────────────────────
   useEffect(() => {
     setToolbar(
@@ -207,6 +268,11 @@ export function CallTimers() {
         </div>
         <div className="lt-divider" />
         <div className="lt-right">
+          {selectedIds.length > 0 && (
+            <button onClick={handleBulkDelete} className="lt-b" style={{ color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2' }}>
+              <Trash2 size={13} /> Delete ({selectedIds.length})
+            </button>
+          )}
           <button onClick={openCreate} className="lt-b lt-p">
             <Plus size={13} /> Add Timer
           </button>
@@ -226,6 +292,25 @@ export function CallTimers() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
+                <th className="px-4 py-3 w-10">
+                  <div
+                    className={cn(
+                      'w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-all',
+                      allPageSelected
+                        ? 'bg-indigo-600 border-indigo-600'
+                        : somePageSelected
+                          ? 'bg-indigo-200 border-indigo-400'
+                          : 'border-slate-300 bg-white hover:border-indigo-400'
+                    )}
+                    onClick={toggleSelectAll}
+                  >
+                    {(allPageSelected || somePageSelected) && (
+                      <svg width="8" height="6" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-left">
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     <Timer size={10} /> Timer Name
@@ -242,13 +327,13 @@ export function CallTimers() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-16 text-center">
+                  <td colSpan={4} className="px-4 py-16 text-center">
                     <Loader2 size={24} className="animate-spin text-indigo-400 mx-auto" />
                   </td>
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-16 text-center">
+                  <td colSpan={4} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
                         <Timer size={24} className="text-slate-300" />
@@ -263,8 +348,24 @@ export function CallTimers() {
               ) : (
                 pageRows.map(timer => {
                   const openDays = DAY_KEYS.filter(d => timer.week_plan?.[d])
+                  const isSelected = selectedIds.includes(timer.id)
                   return (
-                    <tr key={timer.id} className="group border-b border-slate-100 hover:bg-slate-50/70 transition-colors last:border-b-0">
+                    <tr key={timer.id} className={cn('group border-b border-slate-100 hover:bg-slate-50/70 transition-colors last:border-b-0', isSelected && 'bg-indigo-50/40')}>
+                      <td className="px-4 py-3.5 w-10">
+                        <div
+                          className={cn(
+                            'w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-all',
+                            isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white hover:border-indigo-400'
+                          )}
+                          onClick={() => toggleSelect(timer.id)}
+                        >
+                          {isSelected && (
+                            <svg width="8" height="6" viewBox="0 0 10 8" fill="none">
+                              <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -370,7 +471,7 @@ export function CallTimers() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -485,6 +586,45 @@ export function CallTimers() {
         </div>
       )}
 
+      {/* Delete Confirmation Popup (SweetAlert style) */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-fadeIn">
+            <div className="flex flex-col items-center px-6 pt-7 pb-2 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <AlertTriangle size={30} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">
+                {deleteConfirm.type === 'single' ? 'Delete Timer?' : `Delete ${deleteConfirm.ids.length} Timer${deleteConfirm.ids.length !== 1 ? 's' : ''}?`}
+              </h3>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                {deleteConfirm.type === 'single'
+                  ? <>Are you sure you want to delete <span className="font-semibold text-slate-700">"{capFirst(deleteConfirm.timer.title)}"</span>? This action cannot be undone.</>
+                  : <>Are you sure you want to delete <span className="font-semibold text-slate-700">{deleteConfirm.ids.length} selected timer{deleteConfirm.ids.length !== 1 ? 's' : ''}</span>? This action cannot be undone.</>
+                }
+              </p>
+            </div>
+            <div className="flex gap-3 px-6 py-5">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Blocked-delete popup: timer is in use by campaign(s) */}
       {blockedInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -497,7 +637,7 @@ export function CallTimers() {
                 <div>
                   <p className="text-sm font-bold text-slate-900">Cannot delete timer</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    <span className="font-semibold text-slate-700">“{capFirst(blockedInfo.timer.title)}”</span> is assigned to {blockedInfo.campaigns.length === 1 ? 'this campaign' : `these ${blockedInfo.campaigns.length} campaigns`}. Detach it first.
+                    <span className="font-semibold text-slate-700">"{capFirst(blockedInfo.timer.title)}"</span> is assigned to {blockedInfo.campaigns.length === 1 ? 'this campaign' : `these ${blockedInfo.campaigns.length} campaigns`}. Detach it first.
                   </p>
                 </div>
               </div>

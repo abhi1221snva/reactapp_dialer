@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, Loader2, RefreshCw, Eye, EyeOff, Copy, AlertCircle, User, Settings, CheckCircle2, XCircle, Search } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, RefreshCw, Eye, EyeOff, Copy, AlertCircle, CheckCircle2, XCircle, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { userService } from '../../services/user.service'
 import { didService } from '../../services/did.service'
@@ -41,7 +41,6 @@ function genPin(): string {
 function capFirst(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
 }
-// formatUSPhone replaced by centralized formatPartialPhoneUS from utils/format
 function mapExtType(val: string): string {
   if (val === 'extension') return 'ext'
   if (val === 'ring_group') return 'que'
@@ -51,21 +50,11 @@ function mapExtType(val: string): string {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-// TIMEZONES imported from ../../constants/timezones
 const USER_LEVELS = [
   { value: 1, label: 'Agent' },
   { value: 3, label: 'Associate' },
   { value: 5, label: 'Manager' },
   { value: 7, label: 'Admin' },
-]
-const DIALER_MODES = [
-  { value: 'webphone', label: 'WebPhone' },
-  { value: 'extension', label: 'Extension' },
-  { value: 'mobile_app', label: 'Mobile App' },
-]
-const EXTENSION_TYPES = [
-  { value: 'ext', label: 'Extension' },
-  { value: 'que', label: 'Ring group/Queue' },
 ]
 const CLI_SETTINGS = [
   { value: 0, label: 'Area Code' },
@@ -197,18 +186,10 @@ const COUNTRY_CODES = [
   { code:'+263',short:'ZW',name:'Zimbabwe' },
 ]
 
-// Inline style constants (pixel-matched from campaign)
-const LABEL: React.CSSProperties = { display:'flex',alignItems:'center',gap:3,fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.6px',marginBottom:4 }
-const FLEX_ROW: React.CSSProperties = { display:'flex',gap:16,alignItems:'flex-start' }
-const FLEX_ROW_MT: React.CSSProperties = { display:'flex',gap:16,marginTop:14 }
-const FLEX1: React.CSSProperties = { flex:'1 1 0' }
-const ACT_BTN: React.CSSProperties = { width:38,height:38,border:'1.5px solid #e2e8f0',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',background:'#fff',cursor:'pointer',flexShrink:0 }
-const TOGGLE_ACTIVE: React.CSSProperties = { background:'#818cf8',color:'#fff',borderColor:'#818cf8' }
-
-// Inline CSS (matches ApplyPage / MerchantPage styling)
+// Inline CSS — matches live campaign create page
 const CPN_STYLES = `
-.cpn-fi{width:100%;height:38px;padding:0 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
-.cpn-fi:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+.cpn-fi{width:100%;height:36px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+.cpn-fi:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
 .cpn-fi::placeholder{color:#94a3b8}
 .cpn-fi:disabled{opacity:.45;cursor:not-allowed}
 select.cpn-fi{appearance:none;cursor:pointer;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:13px}
@@ -218,15 +199,17 @@ select.cpn-fi{appearance:none;cursor:pointer;padding-right:28px;background-image
 .cpn-toggle button{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;color:#64748b;border:none;cursor:pointer;transition:all .15s;background:transparent;white-space:nowrap}
 .cpn-toggle button.active{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .cpn-toggle button:hover:not(.active){color:#475569}
-.cpn-toggle-sm{display:inline-flex;background:#f1f5f9;border-radius:6px;padding:1.5px;gap:1px}
-.cpn-toggle-sm button{padding:3px 10px;border-radius:5px;font-size:11px;font-weight:600;color:#64748b;border:none;cursor:pointer;transition:all .15s;background:transparent;white-space:nowrap;line-height:1.4}
-.cpn-toggle-sm button.active{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.08)}
-.cpn-toggle-sm button:hover:not(.active){color:#475569}
-.cpn-g4{display:grid;grid-template-columns:repeat(1,1fr);gap:14px 16px}
+.cpn-g4{display:grid;grid-template-columns:repeat(1,1fr);gap:12px 16px}
 @media(min-width:640px){.cpn-g4{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:1024px){.cpn-g4{grid-template-columns:repeat(4,1fr)}}
-@keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes cpnReveal{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 `
+
+// Inline style constants
+const LABEL: React.CSSProperties = { display:'block',fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:4 }
+const FLEX_ROW: React.CSSProperties = { display:'flex',gap:16,alignItems:'flex-start' }
+const FLEX1: React.CSSProperties = { flex:'1 1 0' }
+const TOGGLE_ACTIVE: React.CSSProperties = { background:'#8faef3',color:'#fff',borderColor:'#8faef3' }
 
 // ---------------------------------------------------------------------------
 // Default form
@@ -259,7 +242,6 @@ export function UserForm() {
   const authLevel = authUser?.level ?? 0
   const isAgentRole = authLevel < LEVELS.MANAGER
 
-  // Agents can only edit their own record; block create and editing others
   if (isAgentRole && (!isEdit || String(authUser?.id) !== id)) {
     return <NotFound />
   }
@@ -326,7 +308,6 @@ export function UserForm() {
     }
   }, [servers, isEdit])
 
-  // Auto-select first group when groups load (create mode only)
   useEffect(() => {
     if (!isEdit && groups.length > 0 && !initialGroupSet.current) {
       initialGroupSet.current = true
@@ -334,7 +315,6 @@ export function UserForm() {
     }
   }, [groups, isEdit])
 
-  // Close country code dropdown on outside click
   useEffect(() => {
     if (!ccOpen) return
     const handler = (e: MouseEvent) => {
@@ -361,14 +341,14 @@ export function UserForm() {
         user_level:Number(u.user_level||u.level)||1,
         status:Number(u.status??1),
         group_id:Array.isArray(u.group)?(u.group as Array<{group_id:number}>).map(g=>Number(g.group_id)):Array.isArray(u.group_id)?(u.group_id as number[]):(u.group_id?[Number(u.group_id)]:[]),
-        voicemail:Number(u.voicemail??0), voicemail_send_to_email:Number(u.voicemail_send_to_email??0),
+        voicemail:Number(u.voicemail)==1?1:0, voicemail_send_to_email:Number(u.voicemail_send_to_email)==1?1:0,
         vm_pin:(u.vm_pin as string)||'',
-        follow_me:Number(u.follow_me??0), call_forward:Number(u.call_forward??0),
-        twinning:Number(u.twinning??0),
-        no_answer_redirect:Number(u.no_answer_redirect??0), no_answer_phone:(u.no_answer_phone as string)||'',
+        follow_me:Number(u.follow_me)==1?1:0, call_forward:Number(u.call_forward)==1?1:0,
+        twinning:Number(u.twinning)==1?1:0,
+        no_answer_redirect:Number(u.no_answer_redirect)==1?1:0, no_answer_phone:(u.no_answer_phone as string)||'',
         cli_setting:Number(u.cli_setting??0), cli:(u.cli as string)||'',
-        receive_sms_on_email:Number(u.receive_sms_on_email??0), receive_sms_on_mobile:Number(u.receive_sms_on_mobile??0),
-        ip_filtering:Number(u.ip_filtering??0), enable_2fa:Number(u.enable_2fa??0), app_status:Number(u.app_status??0),
+        receive_sms_on_email:Number(u.receive_sms_on_email)==1?1:0, receive_sms_on_mobile:Number(u.receive_sms_on_mobile)==1?1:0,
+        ip_filtering:Number(u.ip_filtering)==1?1:0, enable_2fa:Number(u.enable_2fa)==1?1:0, app_status:Number(u.app_status)==1?1:0,
       }))
     }
   }, [existing])
@@ -478,41 +458,37 @@ export function UserForm() {
     saveMutation.mutate()
   }
 
-  /* toggle renderer (mirrors campaign sidebar toggles) */
-  const renderToggle = (val:number, setVal:(v:number)=>void, first:string, firstVal:number, second:string, secondVal:number) => (
-    <div className="cpn-toggle" style={{ width:'100%', display:'flex' }}>
-      <button type="button" className={val===firstVal?'active':''} onClick={()=>setVal(firstVal)}
-        style={{ flex:'1 1 0%', ...(val===firstVal?TOGGLE_ACTIVE:{}) }}>{first}</button>
-      <button type="button" className={val===secondVal?'active':''} onClick={()=>setVal(secondVal)}
-        style={{ flex:'1 1 0%', ...(val===secondVal?TOGGLE_ACTIVE:{}) }}>{second}</button>
-    </div>
-  )
-
-  /* compact inline toggle for sidebar (label + toggle on same row) */
-  const TOGGLE_ACTIVE_SM: React.CSSProperties = { background:'#818cf8',color:'#fff',borderColor:'#818cf8' }
-  const renderInlineToggle = (label:string, val:number, setVal:(v:number)=>void, first:string, firstVal:number, second:string, secondVal:number) => (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 0' }}>
-      <span style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', flexShrink:0 }}>{label}</span>
-      <div className="cpn-toggle-sm" style={{ width:120, flexShrink:0, display:'flex' }}>
-        <button type="button" className={val===firstVal?'active':''} onClick={()=>setVal(firstVal)}
-          style={{ flex:'1 1 0%', ...(val===firstVal?TOGGLE_ACTIVE_SM:{}) }}>{first}</button>
-        <button type="button" className={val===secondVal?'active':''} onClick={()=>setVal(secondVal)}
-          style={{ flex:'1 1 0%', ...(val===secondVal?TOGGLE_ACTIVE_SM:{}) }}>{second}</button>
-      </div>
-    </div>
-  )
-
   if (isEdit && loadingExisting) return <PageLoader />
 
   /* error hint */
-  const err = (field: keyof FormErrors) => errors[field] ? <span style={{ fontSize:11,color:'#ef4444',marginTop:4,display:'flex',alignItems:'center',gap:3 }}><AlertCircle size={11}/>{errors[field]}</span> : null
+  const err = (field: keyof FormErrors) => errors[field]
+    ? <span style={{ fontSize:11,color:'#ef4444',marginTop:4,display:'flex',alignItems:'center',gap:3 }}><AlertCircle size={11}/>{errors[field]}</span>
+    : null
+
+  /* sidebar toggle renderer — matches campaign page */
+  const renderToggle = (label:string, val:number, setVal:(v:number)=>void, first:string, firstVal:number, second:string, secondVal:number) => {
+    const n = Number(val)
+    const isFirst = n === firstVal || (isNaN(n) && firstVal === 0)
+    const isSecond = !isFirst && (n === secondVal || (isNaN(n) && secondVal === 0))
+    return (
+      <div>
+        <label style={LABEL}>{label}</label>
+        <div className="cpn-toggle" style={{ width:'100%', display:'flex' }}>
+          <button type="button" className={isFirst?'active':''} onClick={()=>setVal(firstVal)}
+            style={{ flex:'1 1 0%', ...(isFirst?TOGGLE_ACTIVE:{}) }}>{first}</button>
+          <button type="button" className={isSecond?'active':''} onClick={()=>setVal(secondVal)}
+            style={{ flex:'1 1 0%', ...(isSecond?TOGGLE_ACTIVE:{}) }}>{second}</button>
+        </div>
+      </div>
+    )
+  }
 
   // ════════════════════════════════════════════════════════════════════════
   return (
-    <div className="-mx-5 -mt-5 flex flex-col animate-fadeIn" style={{ height:'calc(100vh - 70px)' }}>
+    <div className="-mx-5 -mt-5 flex flex-col" style={{ height:'calc(100vh - 70px)' }}>
       <style>{CPN_STYLES}</style>
 
-      {/* ── Header bar (identical to campaign) ──────────────────────────── */}
+      {/* ── Header bar ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0">
         <div className="flex items-center gap-3">
           <button type="button" onClick={()=>navigate('/users')}
@@ -530,45 +506,36 @@ export function UserForm() {
           </button>
           <button type="button" onClick={handleSubmit} disabled={saveMutation.isPending}
             className="px-5 py-2 text-xs font-semibold text-white rounded-lg flex items-center gap-2 disabled:opacity-50 transition-all"
-            style={{ background:'linear-gradient(135deg, #4f46e5, #3730a3)', boxShadow:'0 2px 8px rgba(79,70,229,0.3)' }}>
-            {saveMutation.isPending
-              ? <Loader2 size={14} className="animate-spin" />
-              : <Save size={14} />}
+            style={{ background:'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow:'0 2px 8px rgba(37,99,235,0.3)' }}>
+            {saveMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {isEdit ? 'Update Extension' : 'Create Extension'}
           </button>
         </div>
       </div>
 
-      {/* ── Blue gradient line ──────────────────────────────────────────── */}
-      <div style={{ height:3, background:'linear-gradient(90deg, #c7d2fe, #4f46e5)' }} />
+      {/* ── Blue gradient line ──────────────────────────────────── */}
+      <div style={{ height:3, background:'linear-gradient(90deg, #bfdbfe, #3b82f6)' }} />
 
-      {/* ── Form body (2-column grid identical to campaign) ─────────────── */}
+      {/* ── Two-column layout ──────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-0">
 
-          {/* ═══ LEFT COLUMN ══════════════════════════════════════════════ */}
-          <div ref={formRef} className="overflow-y-auto scroll-smooth border-r border-slate-200" style={{ background:'#f1f5f9' }}>
-            <div className="p-5" style={{ animation:'fadeSlide .25s ease' }}>
+          {/* ═══ LEFT COLUMN — Form ═════════════════════════════ */}
+          <div ref={formRef} className="overflow-y-auto scroll-smooth border-r border-slate-200 bg-white">
+            <div className="p-5">
 
               {submitted && Object.keys(errors).length > 0 && (
-                <div style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', color:'#7f1d1d', fontSize:13, display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                <div className="cpn-reveal" style={{ background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:10,padding:'10px 14px',color:'#7f1d1d',fontSize:13,display:'flex',alignItems:'center',gap:8,marginBottom:16 }}>
                   <AlertCircle size={14} style={{ flexShrink:0 }} />
                   Please fix {Object.keys(errors).length} error{Object.keys(errors).length > 1 ? 's' : ''} before saving.
                 </div>
               )}
 
-              <div style={{ background:'#fff', borderRadius:16, border:`1.5px solid ${submitted && Object.keys(errors).length > 0 ? '#fca5a5' : '#e2e8f0'}`, padding:'24px', boxShadow:'0 2px 12px rgba(15,23,42,.05)' }}>
-
               {/* Section 1: Extension Details */}
               <section>
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(79,70,229,0.08)', display:'flex', alignItems:'center', justifyContent:'center', color:'#4f46e5' }}>
-                    <User size={16} />
-                  </div>
-                  <div>
-                    <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:'#0f172a' }}>Extension Details</h3>
-                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>Basic user and contact information</p>
-                  </div>
+                <div style={{ marginBottom:16 }}>
+                  <h3 style={{ fontSize:14,fontWeight:700,color:'#1f2937',borderLeft:'3px solid #2563eb',paddingLeft:10,lineHeight:1.3 }}>Extension Details</h3>
+                  <div style={{ height:1,background:'#e5e7eb',marginTop:8 }} />
                 </div>
                 <div className="cpn-g4">
                   <div>
@@ -587,9 +554,9 @@ export function UserForm() {
                     <div style={{ position:'relative' }}>
                       <input type="email" className={fiCls('email') + (emailStatus === 'taken' ? ' err' : '')} placeholder="user@company.com"
                         value={form.email} onChange={e=>{set('email',e.target.value);checkEmailAvailability(e.target.value)}} />
-                      {emailStatus === 'checking' && <Loader2 size={14} className="animate-spin" style={{ position:'absolute',right:10,top:12,color:'#94a3b8' }} />}
-                      {emailStatus === 'available' && <CheckCircle2 size={14} style={{ position:'absolute',right:10,top:12,color:'#22c55e' }} />}
-                      {emailStatus === 'taken' && <XCircle size={14} style={{ position:'absolute',right:10,top:12,color:'#ef4444' }} />}
+                      {emailStatus === 'checking' && <Loader2 size={14} className="animate-spin" style={{ position:'absolute',right:10,top:11,color:'#94a3b8' }} />}
+                      {emailStatus === 'available' && <CheckCircle2 size={14} style={{ position:'absolute',right:10,top:11,color:'#22c55e' }} />}
+                      {emailStatus === 'taken' && <XCircle size={14} style={{ position:'absolute',right:10,top:11,color:'#ef4444' }} />}
                     </div>
                     {emailStatus === 'available' && <span style={{ fontSize:11,color:'#22c55e',marginTop:2,display:'block' }}>Email is available</span>}
                     {emailStatus === 'taken' && <span style={{ fontSize:11,color:'#ef4444',marginTop:2,display:'block' }}>Email already exists</span>}
@@ -597,15 +564,15 @@ export function UserForm() {
                   </div>
                   <div>
                     <label style={LABEL}>Phone Number <span className="text-red-400">*</span></label>
-                    <div style={{ display:'flex', gap:4 }}>
-                      <div ref={ccRef} style={{ position:'relative', width:80, flexShrink:0 }}>
+                    <div style={{ display:'flex',gap:4 }}>
+                      <div ref={ccRef} style={{ position:'relative',width:80,flexShrink:0 }}>
                         <button type="button" className="cpn-fi" onClick={()=>{setCcOpen(v=>!v);setCcSearch('')}}
                           style={{ display:'flex',alignItems:'center',justifyContent:'space-between',paddingRight:6,cursor:'pointer',fontSize:12,color:'#0f172a',textAlign:'left' }}>
                           <span>{(()=>{const c=COUNTRY_CODES.find(x=>x.code===form.country_code&&x.short!=='CA');return c?`${c.short} ${c.code}`:form.country_code})()}</span>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><path d="M19 9l-7 7-7-7"/></svg>
                         </button>
                         {ccOpen && (
-                          <div style={{ position:'absolute',top:'100%',left:0,right:0,marginTop:2,background:'#fff',border:'1.5px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:50,minWidth:220,maxHeight:260,display:'flex',flexDirection:'column' }}>
+                          <div style={{ position:'absolute',top:'100%',left:0,right:0,marginTop:2,background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:50,minWidth:220,maxHeight:260,display:'flex',flexDirection:'column' }}>
                             <div style={{ padding:'6px 8px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:6 }}>
                               <Search size={12} style={{ color:'#94a3b8',flexShrink:0 }} />
                               <input autoFocus className="cpn-fi" placeholder="Search country..."
@@ -642,24 +609,19 @@ export function UserForm() {
               </section>
 
               {/* Section 2: Configuration */}
-              <section className="mt-8" style={{ paddingTop:20, borderTop:'1.5px solid #e2e8f0' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(124,58,237,0.08)', display:'flex', alignItems:'center', justifyContent:'center', color:'#7c3aed' }}>
-                    <Settings size={16} />
-                  </div>
-                  <div>
-                    <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:'#0f172a' }}>Configuration</h3>
-                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>Extension settings and preferences</p>
-                  </div>
+              <section className="mt-6">
+                <div style={{ marginBottom:16 }}>
+                  <h3 style={{ fontSize:14,fontWeight:700,color:'#1f2937',borderLeft:'3px solid #2563eb',paddingLeft:10,lineHeight:1.3 }}>Configuration</h3>
+                  <div style={{ height:1,background:'#e5e7eb',marginTop:8 }} />
                 </div>
 
-                {/* Row 1: Extension | Password | Voicemail PIN */}
-                <div style={FLEX_ROW_MT}>
+                {/* Row: Extension | Password | Voicemail PIN */}
+                <div style={FLEX_ROW}>
                   <div style={FLEX1}>
                     <label style={LABEL}>Extension {!isEdit && <span className="text-red-400">*</span>}</label>
                     <div style={{ position:'relative' }}>
                       <input className={fiCls('extension')} value={form.extension} readOnly disabled
-                        style={{ background:'#f8fafc', color:'#1e293b', cursor:'not-allowed', fontFamily:'monospace', fontWeight:600, opacity:1, paddingRight:!isEdit?36:11 }} />
+                        style={{ background:'#f8fafc',color:'#1e293b',cursor:'not-allowed',fontFamily:'monospace',fontWeight:600,opacity:1,paddingRight:!isEdit?36:10 }} />
                       {!isEdit && (
                         <button type="button" onClick={()=>set('extension',genExtension())} title="Regenerate"
                           style={{ position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',cursor:'pointer',color:'#94a3b8',borderRadius:4 }}>
@@ -671,10 +633,10 @@ export function UserForm() {
                   </div>
                   {!isEdit && (
                   <div style={FLEX1}>
-                    <label style={LABEL}>Password</label>
+                    <label style={LABEL}>Password <span className="text-red-400">*</span></label>
                     <div style={{ position:'relative' }}>
-                      <input type={showPassword?'text':'password'} className="cpn-fi"
-                        style={{ paddingRight:90, background:'#f8fafc',fontFamily:'monospace' }}
+                      <input type={showPassword?'text':'password'} className={fiCls('password')}
+                        style={{ paddingRight:90,background:'#f8fafc',fontFamily:'monospace' }}
                         value={form.password}
                         onChange={e=>set('password',e.target.value)}
                         autoComplete="new-password" />
@@ -699,7 +661,7 @@ export function UserForm() {
                   <div style={FLEX1}>
                     <label style={LABEL}>Voicemail PIN</label>
                     <div style={{ position:'relative' }}>
-                      <input type="text" inputMode="numeric" className="cpn-fi" style={{ background:'#f8fafc', color:'#1e293b', fontFamily:'monospace', fontWeight:600, paddingRight:36 }}
+                      <input type="text" inputMode="numeric" className="cpn-fi" style={{ background:'#f8fafc',color:'#1e293b',fontFamily:'monospace',fontWeight:600,paddingRight:36 }}
                         value={form.vm_pin} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,4);set('vm_pin',v)}}
                         placeholder="e.g. 1234" maxLength={4} />
                       <button type="button" onClick={()=>set('vm_pin',genPin())} title="Generate PIN"
@@ -710,8 +672,8 @@ export function UserForm() {
                   </div>
                 </div>
 
-                {/* Row 2: Asterisk Server | Timezone */}
-                <div style={FLEX_ROW_MT}>
+                {/* Row: Asterisk Server | Timezone */}
+                <div style={{ ...FLEX_ROW, marginTop:12 }}>
                   {showServerField && servers.length > 0 && (
                     <div style={FLEX1}>
                       <label style={LABEL}>Asterisk Server {!isEdit && <span className="text-red-400">*</span>}</label>
@@ -730,14 +692,14 @@ export function UserForm() {
                       options={TIMEZONES.map(tz => ({ value: tz.value, label: tz.label }))}
                       value={form.timezone}
                       onChange={v => set('timezone', v)}
-                      placeholder="Select timezone…"
+                      placeholder="Select timezone..."
                     />
                   </div>
                 </div>
 
-                {/* Row 2b: User Role (visible to managers+) */}
+                {/* Row: User Role */}
                 {authLevel >= LEVELS.MANAGER && (
-                  <div style={FLEX_ROW_MT}>
+                  <div style={{ ...FLEX_ROW, marginTop:12 }}>
                     <div style={FLEX1}>
                       <label style={LABEL}>User Role / Level</label>
                       <select className="cpn-fi" value={form.user_level}
@@ -749,8 +711,8 @@ export function UserForm() {
                   </div>
                 )}
 
-                {/* Row 3: Agent Group | CLI Setting | Custom CLI (dynamic) */}
-                <div style={FLEX_ROW_MT}>
+                {/* Row: Agent Group | CLI Setting | Custom CLI */}
+                <div style={{ ...FLEX_ROW, marginTop:12 }}>
                   <div style={FLEX1}>
                     <label style={LABEL}>Agent Group</label>
                     <SearchableSelect
@@ -758,7 +720,7 @@ export function UserForm() {
                       options={groups.map(g => ({ value: String(g.id), label: labelOf(g) }))}
                       value={String(form.group_id[0] || '')}
                       onChange={v => set('group_id', v ? [Number(v)] : [])}
-                      placeholder="Select group…"
+                      placeholder="Select group..."
                     />
                   </div>
                   <div style={FLEX1}>
@@ -789,39 +751,30 @@ export function UserForm() {
                 </div>
               </section>
 
-              </div>{/* end card */}
             </div>
           </div>
 
-          {/* ═══ RIGHT SIDEBAR ══════════════════════════════════════════ */}
-          <div style={{ background:'#f8fafc', borderLeft:'1.5px solid #e2e8f0' }} className="overflow-y-auto">
-            <div style={{ padding:'12px 14px' }}>
+          {/* ═══ RIGHT SIDEBAR ═════════════════════════════════ */}
+          <div style={{ background:'#f8fafc',borderLeft:'1px solid #e2e8f0' }} className="overflow-y-auto">
+            <div className="p-4 space-y-3">
 
-              {/* Sidebar header */}
-              <div style={{ display:'flex', alignItems:'center', gap:10, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0', marginBottom:6 }}>
-                <div style={{ width:26, height:26, borderRadius:7, background:'rgba(79,70,229,0.08)', display:'flex', alignItems:'center', justifyContent:'center', color:'#4f46e5' }}>
-                  <Settings size={12} />
-                </div>
-                <span style={{ fontSize:12, fontWeight:700, color:'#0f172a' }}>Quick Settings</span>
-              </div>
+              {renderToggle('Status', form.status, v=>set('status',v), 'Active',1, 'Inactive',0)}
+              {renderToggle('Follow Me', form.follow_me, v=>set('follow_me',v), 'No',0, 'Yes',1)}
+              {renderToggle('Call Forward', form.call_forward, v=>set('call_forward',v), 'No',0, 'Yes',1)}
 
-              {renderInlineToggle('Status', form.status, v=>set('status',v), 'Active',1, 'Inactive',0)}
-              {renderInlineToggle('Follow Me', form.follow_me, v=>set('follow_me',v), 'No',0, 'Yes',1)}
-              {renderInlineToggle('Call Forward', form.call_forward, v=>set('call_forward',v), 'No',0, 'Yes',1)}
+              <div style={{ height:1,background:'#e2e8f0',margin:'4px 0' }} />
 
-              <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
+              {renderToggle('Twinning', form.twinning, v=>set('twinning',v), 'No',0, 'Yes',1)}
+              {renderToggle('Voicemail', form.voicemail, v=>set('voicemail',v), 'Active',1, 'Inactive',0)}
 
-              {renderInlineToggle('Twinning', form.twinning, v=>set('twinning',v), 'No',0, 'Yes',1)}
-              {renderInlineToggle('Voicemail', form.voicemail, v=>set('voicemail',v), 'Active',1, 'Inactive',0)}
+              <div style={{ height:1,background:'#e2e8f0',margin:'4px 0' }} />
 
-              <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
+              {renderToggle('IP Filtering', form.ip_filtering, v=>set('ip_filtering',v), 'Active',1, 'Inactive',0)}
+              {renderToggle('Enable 2FA', form.enable_2fa, v=>set('enable_2fa',v), 'No',0, 'Yes',1)}
 
-              {renderInlineToggle('IP Filtering', form.ip_filtering, v=>set('ip_filtering',v), 'Active',1, 'Inactive',0)}
-              {renderInlineToggle('Enable 2FA', form.enable_2fa, v=>set('enable_2fa',v), 'No',0, 'Yes',1)}
+              <div style={{ height:1,background:'#e2e8f0',margin:'4px 0' }} />
 
-              <div style={{ height:1, background:'#e2e8f0', margin:'4px 0' }} />
-
-              {renderInlineToggle('Mobile App', form.app_status, v=>set('app_status',v), 'Active',1, 'Inactive',0)}
+              {renderToggle('Mobile App', form.app_status, v=>set('app_status',v), 'Active',1, 'Inactive',0)}
 
             </div>
           </div>

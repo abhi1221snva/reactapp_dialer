@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, CheckCircle2, Save, Radio, Phone, Clock, Tag, Mail, Zap, List,
-  Globe, Hash, Users,
+  Globe, Hash, Users, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
@@ -11,6 +12,7 @@ import { dispositionService } from '../../services/disposition.service'
 import { smtpService, type SmtpSetting } from '../../services/smtp.service'
 import { Badge } from '../../components/ui/Badge'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { RecycleLeadsModal } from '../../components/RecycleLeadsModal'
 
 interface CampaignData {
   id?: number; title?: string; description?: string; status?: number | string
@@ -73,7 +75,9 @@ function TogglePill({ label, on }: { label: string; on: boolean }) {
 export function EditCampaignReview() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const campaignId = Number(id)
+  const [recycleTarget, setRecycleTarget] = useState<{ listId: number; listName: string } | null>(null)
 
   const { data: campaignData, isLoading } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -345,6 +349,7 @@ export function EditCampaignReview() {
                   <th className="px-5 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Leads</th>
                   <th className="px-5 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                   <th className="px-5 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dialing</th>
+                  <th className="px-5 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider w-16">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -372,6 +377,15 @@ export function EditCampaignReview() {
                         {row.is_dialing === 1 ? 'Yes' : 'No'}
                       </Badge>
                     </td>
+                    <td className="px-5 py-3.5 text-center">
+                      <button
+                        onClick={() => setRecycleTarget({ listId: row.list_id ?? row.id, listName: getListName(row) })}
+                        className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 flex items-center justify-center transition-colors mx-auto"
+                        title="Recycle Leads"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -380,7 +394,7 @@ export function EditCampaignReview() {
                 <tr className="bg-slate-50/80 border-t border-slate-200">
                   <td colSpan={2} className="px-5 py-3 text-xs font-bold text-slate-500 uppercase">Total</td>
                   <td className="px-5 py-3 text-right text-sm font-bold text-slate-800">{totalLeads.toLocaleString()}</td>
-                  <td colSpan={2} />
+                  <td colSpan={3} />
                 </tr>
               </tfoot>
             </table>
@@ -402,6 +416,18 @@ export function EditCampaignReview() {
           Update Campaign
         </button>
       </div>
+
+      <RecycleLeadsModal
+        isOpen={!!recycleTarget}
+        campaignId={campaignId}
+        listId={recycleTarget?.listId ?? 0}
+        listName={recycleTarget?.listName ?? ''}
+        onClose={() => setRecycleTarget(null)}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ['campaign', campaignId] })
+          qc.invalidateQueries({ queryKey: ['campaign-lists-review', campaignId] })
+        }}
+      />
     </div>
   )
 }

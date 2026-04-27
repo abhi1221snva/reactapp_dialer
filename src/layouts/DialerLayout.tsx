@@ -45,7 +45,6 @@ const DIALER_TITLES: Record<string, string> = {
   '/voicemail':                     'Voicemail Drops',
   '/voicemail/mailbox':             'Mailbox',
   '/ring-groups':                   'Ring Groups',
-  '/call-times':                    'Call Times',
   '/holidays':                      'Holidays',
   '/extension-groups':              'Extension Groups',
   '/agents':                        'Agents',

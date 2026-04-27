@@ -6,13 +6,17 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Save, Loader2, AlertCircle, Pencil,
-  ChevronDown, X, Search, CheckCircle2,
+  ChevronDown, X, Search, CheckCircle2, List,
+  Power, Trash2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
+import { showConfirm } from '../../utils/confirmDelete'
 import { dispositionService } from '../../services/disposition.service'
+import { listService } from '../../services/list.service'
 import { userService } from '../../services/user.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { Badge } from '../../components/ui/Badge'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { scrollToFirstError } from '../../utils/publicFormValidation'
@@ -146,6 +150,12 @@ interface CampaignApiData {
   no_agent_available_action?: number | null; no_agent_dropdown_action?: number | string | null
   disposition?: Array<{ id: number; title: string }>
   crm_type?: string | null
+}
+
+interface ListRow {
+  id: number; list_id?: number; title?: string; list_name?: string; l_title?: string
+  lead_count?: number; rowListData?: number; is_active?: number; is_dialing?: number
+  [key: string]: unknown
 }
 
 // ─────────────────────────────────────────────
@@ -440,6 +450,37 @@ export function EditCampaign() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? (callTimersData as any).data.data.data
     : []
+
+  const { data: listsData, isLoading: listsLoading } = useQuery({
+    queryKey: ['campaign-lists-edit', campaignId],
+    queryFn: () => listService.listByCampaign(campaignId, { page: 1, limit: 100, search: '', filters: {} }),
+    enabled: Boolean(campaignId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+  const attachedLists: ListRow[] = (listsData as { data?: { data?: ListRow[] } })?.data?.data ?? []
+  const getListName = (row: ListRow) => row.l_title ?? row.title ?? row.list_name ?? `List #${row.list_id ?? row.id}`
+  const getLeadCount = (row: ListRow) => row.lead_count ?? row.rowListData ?? 0
+  const totalLeads = attachedLists.reduce((sum, r) => sum + Number(getLeadCount(r)), 0)
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ listId, status }: { listId: number; status: number }) =>
+      listService.toggleStatus(listId, campaignId, status),
+    onSuccess: () => {
+      toast.success('List status updated')
+      queryClient.invalidateQueries({ queryKey: ['campaign-lists-edit', campaignId] })
+    },
+    onError: () => toast.error('Failed to update status'),
+  })
+
+  const removeListMutation = useMutation({
+    mutationFn: (listId: number) => campaignService.detachList(campaignId, listId),
+    onSuccess: () => {
+      toast.success('List removed from campaign')
+      queryClient.invalidateQueries({ queryKey: ['campaign-lists-edit', campaignId] })
+    },
+    onError: () => toast.error('Failed to remove list'),
+  })
 
   // Populate form from API
   useEffect(() => {
@@ -1043,6 +1084,106 @@ export function EditCampaign() {
                     </div>
                   )}
                 </div>
+              </section>
+
+              {/* === Section: Attached Lists === */}
+              <section className="mt-6">
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', borderLeft: '3px solid #10b981', paddingLeft: 10, lineHeight: 1.3 }}>
+                    Attached Lists
+                  </h3>
+                  <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
+                </div>
+                {listsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-400 py-6 justify-center">
+                    <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin flex-shrink-0" />
+                    Loading lists…
+                  </div>
+                ) : attachedLists.length === 0 ? (
+                  <div className="text-center py-8">
+                    <List size={20} className="text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-slate-400">No lists attached to this campaign.</p>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-10">#</th>
+                          <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">List Name</th>
+                          <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Leads</th>
+                          <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dialing</th>
+                          <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {attachedLists.map((row, idx) => {
+                          const lid = row.list_id ?? row.id
+                          return (
+                          <tr key={lid} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-2.5 text-xs font-medium text-slate-400">{idx + 1}</td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
+                                  <List size={12} className="text-white" />
+                                </div>
+                                <span className="text-[13px] font-semibold text-slate-800">{getListName(row)}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <span className="text-[13px] font-bold text-slate-700">{Number(getLeadCount(row)).toLocaleString()}</span>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <Badge variant={row.is_active === 1 ? 'green' : 'gray'}>
+                                {row.is_active === 1 ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <Badge variant={row.is_dialing === 1 ? 'blue' : 'gray'}>
+                                {row.is_dialing === 1 ? 'Yes' : 'No'}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button type="button" title={row.is_active === 1 ? 'Deactivate' : 'Activate'}
+                                  onClick={() => toggleStatusMutation.mutate({ listId: lid, status: row.is_active === 1 ? 0 : 1 })}
+                                  className={cn('w-7 h-7 rounded-lg flex items-center justify-center transition-all',
+                                    row.is_active === 1
+                                      ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                                      : 'text-slate-400 bg-slate-50 hover:bg-slate-100')}>
+                                  <Power size={13} />
+                                </button>
+                                <button type="button" title="Remove from campaign"
+                                  onClick={async () => {
+                                    const confirmed = await showConfirm({
+                                      title: 'Remove List?',
+                                      message: `"${getListName(row)}" will be removed from this campaign. The list itself will not be deleted.`,
+                                      confirmText: 'Yes, remove',
+                                      icon: 'warning',
+                                      danger: true,
+                                    })
+                                    if (confirmed) removeListMutation.mutate(lid)
+                                  }}
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 bg-slate-50 hover:bg-red-50 hover:text-red-500 transition-all">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50/80 border-t border-slate-200">
+                          <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-slate-500 uppercase">Total</td>
+                          <td className="px-4 py-2.5 text-right text-[13px] font-bold text-slate-800">{totalLeads.toLocaleString()}</td>
+                          <td colSpan={3} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
               </section>
 
             </div>

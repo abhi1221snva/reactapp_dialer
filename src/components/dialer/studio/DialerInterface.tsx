@@ -264,11 +264,13 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   }, [phoneInCall, storeState, setCallState, startCallTimer])
 
   // ─── SIP call ended remotely → transition to wrap-up ─────────────────────
-  // Only transition if a lead is assigned (prevents false trigger on network blip)
-  // Also clear isInConference since the agent's SIP leg dropped
+  // Only for NON-conference (first-call) mode where the SIP leg IS the call.
+  // In persistent conference mode, the call lifecycle is managed by Pusher
+  // events (call.ended) and the hangupCustomer API — not by SIP state changes.
+  // A brief SIP re-INVITE or network blip must NOT trigger premature wrap-up.
   useEffect(() => {
+    if (isInConference.current) return // Pusher events manage conference lifecycle
     if (!phoneInCall && storeState === 'in-call' && storeActiveLead) {
-      isInConference.current = false
       setCallState('wrapping')
     }
   }, [phoneInCall, storeState, storeActiveLead, setCallState])
@@ -406,21 +408,27 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     },
   })
 
-  // Hang up call — terminates SIP session and tells backend to clean up
+  // Hang up call — tells backend to AMI-hangup the merchant/customer channel
   const hangupCustomerMutation = useMutation({
     mutationFn: () => campaignDialerService.hangupCustomer(campaign.id),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      // Only transition to wrapping when the AMI hangup actually succeeded
+      if (res.data?.success === false) {
+        toast.error(res.data?.message || 'Hangup failed — call may still be active. Try "End Session".', { duration: 8000 })
+        return // Stay in-call — don't show disposition for a call that's still alive
+      }
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
       // Do NOT call terminateSipCall() — agent stays in conference for next dial
       updateLastCallLog({ status: 'connected', duration: callDuration })
       useDialerStore.setState({ callDuration: 0 })
       setCallState('wrapping')
     },
-    onError: () => {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-      // Keep agent in conference even on error — use End Session to fully leave
-      updateLastCallLog({ status: 'connected', duration: callDuration })
-      setCallState('wrapping')
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Failed to hang up customer — call may still be active'
+      toast.error(msg, { duration: 8000 })
+      // Do NOT transition to wrapping — call is still alive, agent should use End Session
     },
   })
 

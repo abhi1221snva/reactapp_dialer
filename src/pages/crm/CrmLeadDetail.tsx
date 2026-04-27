@@ -3999,6 +3999,8 @@ function PdfPreviewModal({ leadId, leadName, onClose }: { leadId: number; leadNa
       return (res.data?.data ?? res.data) as { html: string; lead_name: string; template_name: string }
     },
     retry: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 
   function handlePrint() {

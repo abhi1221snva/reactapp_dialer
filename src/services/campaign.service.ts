@@ -71,6 +71,13 @@ export const campaignService = {
   deleteCallTimer: (id: number) =>
     api.delete(`/call-timers/${id}`),
 
+  // Fetch disposition counts for a campaign list (from lead_report)
+  getListDispositions: (campaignId: number, listId: number) =>
+    api.post<{ data: Array<{ id: number; name: string; record_count: number }> }>(
+      '/list-disposition',
+      { campaign_id: campaignId, list_id: listId }
+    ),
+
   // On-demand recycle — removes leads from lead_report so they re-enter the dialer
   recycleLists: (data: {
     campaign_id: number

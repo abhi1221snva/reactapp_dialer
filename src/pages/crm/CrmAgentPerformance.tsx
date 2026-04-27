@@ -176,7 +176,7 @@ function Leaderboard({ rows, onSelect }: { rows: AgentPerformanceRow[]; onSelect
 
 // ─── Agent Detail View ───────────────────────────────────────────────────────
 
-function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void }) {
+function AgentDetail({ agentId, onBack, hideBack }: { agentId: number; onBack: () => void; hideBack?: boolean }) {
   const { data: rawDetail, isLoading } = useQuery({
     queryKey: ['agent-detail', agentId],
     queryFn: () => quietFetch<AgentDetailResponse>(() => crmService.getAgentPerformanceDetail(agentId)),
@@ -198,7 +198,7 @@ function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void 
     return (
       <div className="text-center py-16">
         <p className="text-sm text-slate-500">No data available for this agent.</p>
-        <button onClick={onBack} className="mt-3 text-sm text-emerald-600 underline">Back to Leaderboard</button>
+        {!hideBack && <button onClick={onBack} className="mt-3 text-sm text-emerald-600 underline">Back to Leaderboard</button>}
       </div>
     )
   }
@@ -220,13 +220,13 @@ function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void 
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="action-btn"><ChevronLeft size={16} /></button>
+        {!hideBack && <button onClick={onBack} className="action-btn"><ChevronLeft size={16} /></button>}
         <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-sm font-bold text-emerald-700">
           {detail.agent_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
         </div>
         <div>
           <h2 className="text-base font-semibold text-slate-900">{detail.agent_name}</h2>
-          <p className="text-xs text-slate-500">Agent Performance Detail</p>
+          <p className="text-xs text-slate-500">{hideBack ? 'My Performance' : 'Agent Performance Detail'}</p>
         </div>
       </div>
 
@@ -531,20 +531,24 @@ function BonusesTab() {
 
 export function CrmAgentPerformance() {
   const { setDescription, setActions } = useCrmHeader()
+  const { user } = useAuthStore()
+  const userLevel = user?.level ?? 1
+  const isAgentView = userLevel < LEVELS.ADMIN
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null)
 
   useEffect(() => {
-    setDescription('Track agent lead performance and pipeline')
+    setDescription(isAgentView ? 'Your lead performance and pipeline' : 'Track agent lead performance and pipeline')
     setActions(undefined)
     return () => { setDescription(undefined); setActions(undefined) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isAgentView])
 
   const { data: rawSummary } = useQuery({
     queryKey: ['agent-perf-summary'],
     queryFn: () => quietFetch<AgentPerformanceSummary>(() => crmService.getAgentPerformanceSummary()),
     staleTime: 60_000,
     retry: false,
+    enabled: !isAgentView,
   })
 
   const { data: rawLeaderboard } = useQuery({
@@ -552,10 +556,20 @@ export function CrmAgentPerformance() {
     queryFn: () => quietFetch<AgentPerformanceRow[]>(() => crmService.getLeaderboard()),
     staleTime: 60_000,
     retry: false,
+    enabled: !isAgentView,
   })
 
   const summary = rawSummary ?? null
   const leaderboard = rawLeaderboard ?? []
+
+  // Agents see only their own performance — no leaderboard
+  if (isAgentView && user?.id) {
+    return (
+      <div className="space-y-5">
+        <AgentDetail agentId={user.id} onBack={() => {}} hideBack />
+      </div>
+    )
+  }
 
   // If an agent is selected, show their detail view
   if (selectedAgent) {
