@@ -32,6 +32,13 @@ export interface AgentLiveInfo {
   call_status: 'ringing' | 'connected' | 'bridged' | null
 }
 
+export interface QueueDispositionRow {
+  disposition_id: number | null
+  disposition_title: string | null
+  status: string
+  count: number
+}
+
 export interface CampaignAgentInfo {
   user_id: number
   name: string
@@ -150,6 +157,25 @@ export const campaignDialerService = {
    */
   removeAgent: (campaignId: number, userId: number) =>
     api.delete(`/dialer/campaign/${campaignId}/agents/${userId}`),
+
+  // ── Queue summary + re-queue ─────────────────────────────────────────────────
+
+  /**
+   * Disposition-grouped counts for a campaign's lead queue.
+   * GET /dialer/campaign/{id}/queue-summary
+   */
+  getQueueSummary: (campaignId: number) =>
+    api.get<{ data: QueueDispositionRow[] }>(`/dialer/campaign/${campaignId}/queue-summary`),
+
+  /**
+   * Re-queue completed/failed leads back to pending.
+   * POST /dialer/campaign/{id}/requeue
+   */
+  requeueLeads: (campaignId: number, dispositionIds: number[], statuses: string[]) =>
+    api.post<{ message: string; requeued: number }>(
+      `/dialer/campaign/${campaignId}/requeue`,
+      { disposition_ids: dispositionIds, statuses }
+    ),
 
   // ── Lead CDR / Activity ──────────────────────────────────────────────────────
 

@@ -8,12 +8,13 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Play, Square, RefreshCw, Phone, UserPlus, UserMinus } from 'lucide-react'
+import { Play, Square, RefreshCw, Phone, UserPlus, UserMinus, RotateCcw, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   campaignDialerService,
   type CampaignQueueStats,
   type CampaignAgentInfo,
+  type QueueDispositionRow,
 } from '../../services/campaignDialer.service'
 import { dialerService } from '../../services/dialer.service'
 import { crmService } from '../../services/crm.service'
@@ -46,12 +47,171 @@ function StatBox({ label, value, cls }: { label: string; value: number; cls: str
   )
 }
 
+// ─── Disposition summary row (pivoted) ────────────────────────────────────────
+
+interface DispoSummary {
+  disposition_id: number | null
+  disposition_title: string | null
+  completed: number
+  failed: number
+  pending: number
+}
+
+function pivotSummary(rows: QueueDispositionRow[]): DispoSummary[] {
+  const map = new Map<number | null, DispoSummary>()
+  for (const r of rows) {
+    const key = r.disposition_id
+    if (!map.has(key)) {
+      map.set(key, { disposition_id: key, disposition_title: r.disposition_title, completed: 0, failed: 0, pending: 0 })
+    }
+    const entry = map.get(key)!
+    if (r.status === 'completed') entry.completed = Number(r.count)
+    else if (r.status === 'failed') entry.failed = Number(r.count)
+    else if (r.status === 'pending') entry.pending = Number(r.count)
+  }
+  return Array.from(map.values())
+}
+
+// ─── Requeue Modal ───────────────────────────────────────────────────────────
+
+function RequeueModal({
+  campaignId,
+  dispositions,
+  onClose,
+  onSuccess,
+}: {
+  campaignId: number
+  dispositions: DispoSummary[]
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<number | null>>(
+    new Set(dispositions.map((d) => d.disposition_id))
+  )
+  const [statuses, setStatuses] = useState<Set<string>>(new Set(['completed', 'failed']))
+
+  const toggleDispo = (id: number | null) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const toggleStatus = (s: string) => {
+    setStatuses((prev) => {
+      const next = new Set(prev)
+      if (next.has(s)) next.delete(s)
+      else next.add(s)
+      return next
+    })
+  }
+
+  const totalLeads = dispositions
+    .filter((d) => selectedIds.has(d.disposition_id))
+    .reduce((sum, d) => {
+      let n = 0
+      if (statuses.has('completed')) n += d.completed
+      if (statuses.has('failed')) n += d.failed
+      return sum + n
+    }, 0)
+
+  const requeueMutation = useMutation({
+    mutationFn: () =>
+      campaignDialerService.requeueLeads(
+        campaignId,
+        Array.from(selectedIds).filter((id): id is number => id !== null),
+        Array.from(statuses)
+      ),
+    onSuccess: (res) => {
+      toast.success(res.data.message)
+      onSuccess()
+    },
+    onError: () => toast.error('Failed to re-queue leads'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+          <h3 className="font-semibold text-white flex items-center gap-2">
+            <RotateCcw className="w-4 h-4 text-indigo-400" />
+            Re-Queue Leads
+          </h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div>
+            <p className="text-xs text-gray-400 mb-2">Select statuses to re-queue:</p>
+            <div className="flex gap-3">
+              {(['completed', 'failed'] as const).map((s) => (
+                <label key={s} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={statuses.has(s)}
+                    onChange={() => toggleStatus(s)}
+                    className="accent-indigo-500"
+                  />
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-400 mb-2">Select dispositions:</p>
+            <div className="space-y-1.5">
+              {dispositions.map((d) => (
+                <label
+                  key={d.disposition_id ?? 'none'}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-700 rounded-lg text-sm text-gray-200 cursor-pointer hover:bg-gray-600"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(d.disposition_id)}
+                    onChange={() => toggleDispo(d.disposition_id)}
+                    className="accent-indigo-500"
+                  />
+                  <span className="flex-1">{d.disposition_title || 'No disposition'}</span>
+                  <span className="text-xs text-gray-400">
+                    {statuses.has('completed') ? `${d.completed}C` : ''}
+                    {statuses.has('completed') && statuses.has('failed') ? ' / ' : ''}
+                    {statuses.has('failed') ? `${d.failed}F` : ''}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-700 flex items-center justify-between">
+          <span className="text-xs text-gray-400">{totalLeads} lead(s) will be re-queued</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-lg">
+              Cancel
+            </button>
+            <button
+              onClick={() => requeueMutation.mutate()}
+              disabled={selectedIds.size === 0 || statuses.size === 0 || requeueMutation.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg disabled:opacity-50"
+            >
+              {requeueMutation.isPending ? 'Re-queuing...' : 'Re-Queue'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function CampaignAutoDialer() {
   const qc = useQueryClient()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newAgentId, setNewAgentId] = useState<number | ''>('')
+  const [showRequeue, setShowRequeue] = useState(false)
 
   // ── Data queries ───────────────────────────────────────────────────────────
 
@@ -89,6 +249,17 @@ export function CampaignAutoDialer() {
     enabled: !!selectedId,
     staleTime: 60_000,
   })
+
+  // Queue disposition summary (polled every 10s)
+  const { data: summaryData } = useQuery({
+    queryKey: ['campaign-queue-summary', selectedId],
+    queryFn: () => campaignDialerService.getQueueSummary(selectedId!),
+    enabled: !!selectedId,
+    refetchInterval: 10000,
+  })
+
+  const dispoSummary = pivotSummary((summaryData?.data?.data ?? []) as QueueDispositionRow[])
+  const hasCompletedOrFailed = dispoSummary.some((d) => d.completed > 0 || d.failed > 0)
 
   const stats: CampaignQueueStats | null = statusData?.data?.stats ?? null
   const liveCalls: Array<Record<string, unknown>> = (statusData?.data?.live_calls ?? []) as Array<Record<string, unknown>>
@@ -347,6 +518,61 @@ export function CampaignAutoDialer() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Disposition summary + Re-Queue */}
+          {hasCompletedOrFailed && (
+            <div className="bg-gray-800 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-white flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-indigo-400" />
+                  Disposition Summary
+                </h3>
+                <button
+                  onClick={() => setShowRequeue(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-medium text-white"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Re-Queue Leads
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 text-xs border-b border-gray-700">
+                      <th className="text-left py-2 pr-4 font-medium">Disposition</th>
+                      <th className="text-right py-2 px-3 font-medium">Pending</th>
+                      <th className="text-right py-2 px-3 font-medium">Completed</th>
+                      <th className="text-right py-2 pl-3 font-medium">Failed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dispoSummary.map((d) => (
+                      <tr key={d.disposition_id ?? 'none'} className="border-b border-gray-700/50">
+                        <td className="py-2 pr-4 text-gray-200">{d.disposition_title || 'No disposition'}</td>
+                        <td className="py-2 px-3 text-right text-yellow-300">{d.pending || 0}</td>
+                        <td className="py-2 px-3 text-right text-green-300">{d.completed || 0}</td>
+                        <td className="py-2 pl-3 text-right text-red-300">{d.failed || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {showRequeue && selectedId && (
+            <RequeueModal
+              campaignId={selectedId}
+              dispositions={dispoSummary.filter((d) => d.completed > 0 || d.failed > 0)}
+              onClose={() => setShowRequeue(false)}
+              onSuccess={() => {
+                setShowRequeue(false)
+                qc.invalidateQueries({ queryKey: ['campaign-dialer-status', selectedId] })
+                qc.invalidateQueries({ queryKey: ['campaign-queue-summary', selectedId] })
+              }}
+            />
           )}
 
           {/* Instructions */}

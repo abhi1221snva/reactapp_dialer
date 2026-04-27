@@ -335,28 +335,16 @@ function RingGroupFormModal({
             <select className="input" value={form.ring_type}
               onChange={e => setForm(p => ({ ...p, ring_type: Number(e.target.value) }))}>
               <option value={1}>Ring All</option>
-              <option value={2}>Sequence</option>
               <option value={3}>Round Robin</option>
             </select>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Description</label>
-            <input className="input" value={form.description}
-              onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-              placeholder="Optional description" maxLength={500} />
-          </div>
-          <div>
-            <label className="label">Receive On</label>
-            <select className="input" value={form.receive_on}
-              onChange={e => setForm(p => ({ ...p, receive_on: e.target.value }))}>
-              {RECEIVE_ON_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
+        <div>
+          <label className="label">Description</label>
+          <input className="input" value={form.description}
+            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+            placeholder="Optional description" maxLength={500} />
         </div>
 
         <div>

@@ -32,6 +32,8 @@ interface RecycleRuleItem {
   day?: string
   time?: string
   call_time?: number
+  target_system?: 'legacy' | 'campaign_queue'
+  max_attempts?: number
   is_deleted?: number
   created_at?: string
   [key: string]: unknown
@@ -176,6 +178,8 @@ function RecycleRuleModal({
   })
   const [time, setTime] = useState(editRule?.time ?? '09:00')
   const [callTime, setCallTime] = useState(editRule?.call_time ? String(editRule.call_time) : '1')
+  const [targetSystem, setTargetSystem] = useState<'legacy' | 'campaign_queue'>(editRule?.target_system ?? 'legacy')
+  const [maxAttempts, setMaxAttempts] = useState(editRule?.max_attempts ? String(editRule.max_attempts) : '3')
 
   const { data: campaignsData } = useQuery({
     queryKey: ['campaigns-all'],
@@ -199,25 +203,21 @@ function RecycleRuleModal({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (isEdit) {
-        await recycleRuleService.softDelete(editRule!.id)
-        return recycleRuleService.create({
-          campaign_id: Number(campaignId),
-          list_id: Number(listId),
-          disposition: selectedDispositions.map(Number),
-          day: selectedDays.map(d => d.toLowerCase()),
-          time,
-          call_time: Number(callTime),
-        })
-      }
-      return recycleRuleService.create({
+      const payload = {
         campaign_id: Number(campaignId),
         list_id: Number(listId),
         disposition: selectedDispositions.map(Number),
         day: selectedDays.map(d => d.toLowerCase()),
         time,
         call_time: Number(callTime),
-      })
+        target_system: targetSystem,
+        max_attempts: Number(maxAttempts),
+      }
+      if (isEdit) {
+        await recycleRuleService.softDelete(editRule!.id)
+        return recycleRuleService.create(payload)
+      }
+      return recycleRuleService.create(payload)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Recycle rule updated' : 'Recycle rule created')
@@ -320,6 +320,28 @@ function RecycleRuleModal({
                 placeholder="1"
                 value={callTime}
                 onChange={e => setCallTime(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="form-group">
+              <label className="label">Target System</label>
+              <select className="input" value={targetSystem} onChange={e => setTargetSystem(e.target.value as 'legacy' | 'campaign_queue')}>
+                <option value="legacy">Legacy (lead_report)</option>
+                <option value="campaign_queue">Campaign Queue</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="label">Max Attempts</label>
+              <input
+                type="number"
+                className="input"
+                min="1"
+                max="99"
+                placeholder="3"
+                value={maxAttempts}
+                onChange={e => setMaxAttempts(e.target.value)}
               />
             </div>
           </div>
@@ -474,6 +496,15 @@ export function RecycleRules() {
       header: 'Time',
       render: (row) => (
         <span className="text-sm text-slate-600">{row.time || '—'}</span>
+      ),
+    },
+    {
+      key: 'target_system',
+      header: 'Target',
+      render: (row) => (
+        <Badge variant={row.target_system === 'campaign_queue' ? 'blue' : 'gray'}>
+          {row.target_system === 'campaign_queue' ? 'Campaign Queue' : 'Legacy'}
+        </Badge>
       ),
     },
     {
