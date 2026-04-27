@@ -650,6 +650,7 @@ export interface BulkStatusChangePayload {
 
 export interface BulkDeletePayload {
   lead_ids: number[]
+  confirm?: boolean
 }
 
 export interface BulkExportPayload {
@@ -960,57 +961,52 @@ export interface RenewalPipelineItem extends FundedDeal {
 // ─── Agent Performance ───────────────────────────────────────────────────────
 
 export interface AgentPerformanceSummary {
-  total_funded_volume: number
-  total_deals: number
-  total_commissions: number
-  avg_deal_size: number
-  renewal_rate: number
-  default_rate: number
+  total_leads: number
+  new_leads: number
+  submitted: number
+  approved: number
+  funded: number
+  conversion_rate: number
 }
 
 export interface AgentPerformanceRow {
   agent_id: number
   agent_name: string
-  deals: number
-  funded_volume: number
-  commission: number
+  total_leads: number
+  funded: number
+  approved: number
+  submitted: number
   conversion_rate: number
-  avg_deal_size: number
   [key: string]: unknown
 }
 
-export interface AgentDealRecord {
-  deal_id: number
+export interface AgentLeadRecord {
   lead_id: number
-  company_name?: string
-  lender_name?: string
-  funded_amount: number
-  factor_rate?: number
-  commission: number
-  status: string
-  funding_date: string
+  business_name?: string
+  lead_status: string
+  lead_type: string
+  created_at: string
   [key: string]: unknown
 }
 
 export interface AgentMonthlyTrend {
   month: string
-  deals: number
-  funded_volume: number
-  commission: number
+  leads: number
 }
 
 export interface AgentDetailResponse {
   agent_id: number
   agent_name: string
   summary: {
-    total_deals: number
-    funded_volume: number
-    total_commission: number
-    avg_deal_size: number
-    pipeline_value: number
+    total_leads: number
+    funded: number
+    approved: number
+    submitted: number
+    docs_in: number
+    app_out: number
     conversion_rate: number
   }
-  deals: AgentDealRecord[]
+  leads: AgentLeadRecord[]
   monthly_trend: AgentMonthlyTrend[]
 }
 
@@ -1029,7 +1025,7 @@ export interface AgentBonus {
   [key: string]: unknown
 }
 
-export type LeaderboardMetric = 'funded_volume' | 'deals' | 'commission' | 'conversion_rate'
+export type LeaderboardMetric = 'total_leads' | 'funded' | 'approved' | 'submitted'
 
 // ─── Per-Lender Validation & Submission ─────────────────────────────────────
 

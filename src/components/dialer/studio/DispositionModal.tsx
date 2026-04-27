@@ -66,7 +66,7 @@ export function DispositionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
 
       <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl animate-slideUp overflow-hidden max-h-[92vh] flex flex-col">
         {/* Header */}
@@ -187,7 +187,7 @@ export function DispositionModal({
             <RotateCcw size={14} /> Redial
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="btn-ghost">Cancel</button>
+            <button onClick={onClose} className="btn-ghost">Minimize</button>
             <button
               onClick={handleSave}
               disabled={!selectedId}

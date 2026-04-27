@@ -172,13 +172,16 @@ export function AdminClients() {
   const [editing, setEditing]   = useState<AdminClient | null>(null)
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['admin-clients', page, search, status],
-    queryFn: () => adminClientService.list({ page, per_page: PER_PAGE, search, status }),
+    queryKey: ['admin-clients', search, status],
+    queryFn: () => adminClientService.list({ page: 1, per_page: 500, search, status }),
   })
 
   const listData = data?.data?.data
-  const clients: AdminClient[] = listData?.clients ?? []
-  const total = listData?.total ?? 0
+  const VISIBLE_CLIENT_IDS = [3, 11]
+  const clients: AdminClient[] = (listData?.clients ?? []).filter(
+    (c: AdminClient) => VISIBLE_CLIENT_IDS.includes(c.id),
+  )
+  const total = clients.length
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 

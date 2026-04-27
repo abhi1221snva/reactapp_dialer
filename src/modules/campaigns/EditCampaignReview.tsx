@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { listService } from '../../services/list.service'
 import { dispositionService } from '../../services/disposition.service'
-import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
+import { smtpService, type SmtpSetting } from '../../services/smtp.service'
 import { Badge } from '../../components/ui/Badge'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 
@@ -109,12 +109,12 @@ export function EditCampaignReview() {
   const callerIdLabel: Record<string, string> = {
     area_code: 'Area Code', area_code_random: 'Area Code + Randomizer', custom: 'Custom DID',
   }
-  const { data: emailSettingsData } = useQuery({
-    queryKey: ['campaign-email-settings'],
+  const { data: smtpSettingsData } = useQuery({
+    queryKey: ['campaign-smtp-settings'],
     queryFn: async () => {
-      const res = await emailSettingsService.list()
-      const payload = res.data?.data ?? res.data ?? {}
-      return (payload.list ?? []) as EmailSetting[]
+      const res = await smtpService.list()
+      const payload = res.data?.data ?? res.data ?? []
+      return (Array.isArray(payload) ? payload : payload.data ?? []) as SmtpSetting[]
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -124,8 +124,8 @@ export function EditCampaignReview() {
   const resolveEmailLabel = (val: number | string | undefined): string => {
     const key = String(val ?? '0')
     if (staticEmailLabel[key]) return staticEmailLabel[key]
-    const setting = (emailSettingsData ?? []).find(s => s.id === Number(key))
-    if (setting) return setting.sender_name ? `${setting.sender_name} — ${setting.sender_email}` : setting.sender_email
+    const setting = (smtpSettingsData ?? []).find(s => s.id === Number(key))
+    if (setting) return setting.from_name ? `${setting.from_name} — ${setting.from_email}` : setting.from_email
     return key === '0' ? 'Disabled' : `SMTP #${key}`
   }
   const hopperLabel = c.hopper_mode === 2 ? 'Random' : 'Linear'

@@ -14,6 +14,7 @@ import { Badge } from '../../components/ui/Badge'
 import { authService } from '../../services/auth.service'
 import { userService } from '../../services/user.service'
 import { cn, capFirst } from '../../utils/cn'
+import { formatPartialPhoneUS } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 
 const SECTIONS = [
@@ -97,7 +98,10 @@ export function Settings() {
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
   const updateProfileMutation = useMutation({
-    mutationFn: () => authService.updateProfile(profileForm as unknown as FormData),
+    mutationFn: () => {
+      const payload = { ...profileForm, phone: profileForm.phone?.replace(/\D/g, '') || '' }
+      return authService.updateProfile(payload as unknown as FormData)
+    },
     onSuccess: () => toast.success('Profile updated'),
   })
 
@@ -248,7 +252,7 @@ export function Settings() {
                 </div>
                 <div className="form-group">
                   <label className="label">Phone</label>
-                  <input className="input" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} />
+                  <input type="tel" className="input" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: formatPartialPhoneUS(e.target.value) }))} placeholder="(555) 555-5555" maxLength={14} />
                 </div>
                 <div className="form-group">
                   <label className="label">Email</label>

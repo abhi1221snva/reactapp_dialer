@@ -9,9 +9,11 @@ import { listService } from '../../services/list.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
 import Swal from 'sweetalert2'
-import { confirmDelete } from '../../utils/confirmDelete'
+import { confirmDelete, showConfirm } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { useDialerHeader } from '../../layouts/DialerLayout'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 
 interface ListItem {
   id: number
@@ -33,7 +35,45 @@ export function Lists() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15, defaultFilters: { is_active: '1' } })
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { setToolbar } = useDialerHeader()
+  const user = useAuthStore(s => s.user)
+  const userLevel = user?.level ?? 1
+  const canBulkDelete = userLevel >= LEVELS.ADMIN
+
+  const invalidate = () => {
+    setSelectedIds([])
+    qc.invalidateQueries({ queryKey: ['lists'] })
+  }
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: number[]) => listService.bulkDelete(ids),
+    onSuccess: (res) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r = res as any
+      const deleted = r?.data?.data?.deleted ?? 0
+      const failed = r?.data?.data?.failed ?? []
+      if (failed.length > 0) {
+        toast.success(`${deleted} list(s) deleted. Failed: ${failed.join(', ')}`)
+      } else {
+        toast.success(`${deleted} list(s) deleted`)
+      }
+      invalidate()
+    },
+    onError: () => toast.error('Failed to delete selected lists'),
+  })
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    const confirmed = await showConfirm({
+      title: 'Delete Selected Lists?',
+      message: `${selectedIds.length} list(s) and all their data will be permanently deleted. This cannot be undone.`,
+      confirmText: 'Yes, delete all',
+      icon: 'warning',
+      danger: true,
+    })
+    if (confirmed) bulkDeleteMutation.mutate(selectedIds)
+  }
 
   useEffect(() => {
     setToolbar(
@@ -49,6 +89,17 @@ export function Lists() {
         </div>
         <div className="lt-divider" />
         <div className="lt-right">
+          {canBulkDelete && selectedIds.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="lt-b"
+              style={{ background: '#ef4444', color: '#fff', borderColor: '#ef4444' }}
+            >
+              <Trash2 size={13} />
+              {bulkDeleteMutation.isPending ? 'Deleting…' : `Delete (${selectedIds.length})`}
+            </button>
+          )}
           <button onClick={() => navigate('/lists/create')} className="lt-b lt-p">
             <Plus size={13} /> Add List
           </button>
@@ -61,14 +112,14 @@ export function Lists() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, campaignId, status }: { id: number; campaignId: number; status: number }) =>
       listService.toggleStatus(id, campaignId, status === 1 ? 0 : 1),
-    onSuccess: () => { toast.success('Status updated'); qc.invalidateQueries({ queryKey: ['lists'] }); qc.invalidateQueries({ queryKey: ['list'] }) },
+    onSuccess: () => { toast.success('Status updated'); invalidate(); qc.invalidateQueries({ queryKey: ['list'] }) },
     onError: () => toast.error('Failed to update status'),
   })
 
   const deleteMutation = useMutation({
     mutationFn: ({ id, campaignId }: { id: number; campaignId: number }) =>
       listService.delete(id, campaignId),
-    onSuccess: () => { toast.success('List deleted'); qc.invalidateQueries({ queryKey: ['lists'] }) },
+    onSuccess: () => { toast.success('List deleted'); invalidate() },
     onError: () => toast.error('Failed to delete list'),
   })
 
@@ -220,6 +271,9 @@ export function Lists() {
         limit={table.limit}
         onPageChange={table.setPage}
         hideToolbar
+        selectable={canBulkDelete}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
     </div>
   )

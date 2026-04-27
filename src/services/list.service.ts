@@ -46,6 +46,10 @@ export const listService = {
   delete: (listId: number, campaignId: number) =>
     api.post('/edit-list', { list_id: listId, campaign_id: campaignId, is_deleted: 1 }),
 
+  // Bulk delete multiple lists
+  bulkDelete: (ids: number[]) =>
+    api.post('/bulk-delete-lists', { ids }),
+
   // Paginated leads for a list — POST /list-data/{id}/content
   getLeads: (listId: number, params: { start: number; limit: number; search?: string; search_by?: string }) =>
     api.post(`/list-data/${listId}/content`, {

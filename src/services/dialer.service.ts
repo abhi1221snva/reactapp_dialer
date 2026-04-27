@@ -145,4 +145,14 @@ export const dialerService = {
    */
   getPacingSnapshot: (campaignId: number) =>
     api.get(`/dialer/pacing/${campaignId}`),
+
+  // ── Lead Update ────────────────────────────────────────────────────────────
+  /** POST /update-lead/{leadId} — updates list_data columns (option_1…option_30) */
+  updateLead: (leadId: number, data: Record<string, string>) =>
+    api.post(`/update-lead/${leadId}`, data),
+
+  // ── Lead Notes / Comments ─────────────────────────────────────────────────
+  /** POST /view-notes/{leadId} — returns comments for a lead */
+  viewNotes: (leadId: number) =>
+    api.post(`/view-notes/${leadId}`),
 }

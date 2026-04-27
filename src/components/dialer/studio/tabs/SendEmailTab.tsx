@@ -1,9 +1,73 @@
-import { useState } from 'react'
-import { Mail, Send, Sparkles, Paperclip } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Mail, Send, Sparkles, Paperclip, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../../utils/cn'
-import { MOCK_EMAIL_TEMPLATES } from '../mockData'
+import { emailTemplateService } from '../../../../services/emailTemplate.service'
+import { crmService } from '../../../../services/crm.service'
+import { useAuthStore } from '../../../../stores/auth.store'
 import type { StudioLead } from '../types'
+
+interface EmailTemplate {
+  id: number
+  template_name: string
+  template_html: string
+  subject: string
+  status: string | number
+}
+
+/** Strip HTML tags to plain text */
+function stripHtml(html: string): string {
+  // Replace <br>, <br/>, </p>, </div>, </li> with newlines
+  let text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<\/td>/gi, '\t')
+  // Remove remaining tags
+  text = text.replace(/<[^>]+>/g, '')
+  // Decode common HTML entities
+  text = text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+  // Collapse excessive newlines
+  text = text.replace(/\n{3,}/g, '\n\n').trim()
+  return text
+}
+
+/** Replace [[key]], {{key}}, and {key} placeholders with lead + agent data */
+function resolvePlaceholders(text: string, lead: StudioLead, agent?: { first_name: string; last_name: string; name: string; email: string }): string {
+  const map: Record<string, string> = {
+    first_name: lead.firstName,
+    last_name: lead.lastName,
+    phone_number: lead.phone,
+    email: lead.email,
+    company_name: lead.company,
+    company: lead.company,
+    state: lead.state,
+    country: lead.country,
+  }
+  if (agent) {
+    map.agent = agent.name
+    map.agent_name = agent.name
+    map.agent_first_name = agent.first_name
+    map.agent_last_name = agent.last_name
+    map.agent_email = agent.email
+    map.specialist_first_name = agent.first_name
+    map.specialist_last_name = agent.last_name
+    map.specialist_name = agent.name
+  }
+  lead.customFields?.forEach((f) => {
+    map[f.key] = f.value
+  })
+
+  return text
+    .replace(/\[\[([^\]]+)\]\]/g, (m, key) => map[key] ?? m)
+    .replace(/\{\{([^}]+)\}\}/g, (m, key) => map[key.trim()] ?? m)
+    .replace(/\{([^{}]+)\}/g, (m, key) => map[key] ?? m)
+}
 
 interface Props {
   lead: StudioLead
@@ -14,25 +78,56 @@ export function SendEmailTab({ lead }: Props) {
   const [body, setBody] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
   const [sending, setSending] = useState(false)
+  const [templates, setTemplates] = useState<EmailTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const authUser = useAuthStore((s) => s.user)
+
+  // Fetch real email templates on mount
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    emailTemplateService.list()
+      .then((res) => {
+        if (cancelled) return
+        const list: EmailTemplate[] = res.data?.data ?? res.data ?? []
+        setTemplates(list.filter((t) => Number(t.status) === 1))
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Failed to load email templates')
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const pickTemplate = (id: number) => {
-    const t = MOCK_EMAIL_TEMPLATES.find((x) => x.id === id)
+    const t = templates.find((x) => x.id === id)
     if (!t) return
     setSelected(id)
-    setSubject(t.subject)
-    setBody(t.body.replace(/{first_name}/g, lead.firstName))
+    const agent = authUser ? { first_name: authUser.first_name, last_name: authUser.last_name, name: `${authUser.first_name} ${authUser.last_name}`.trim(), email: authUser.email } : undefined
+    setSubject(resolvePlaceholders(t.subject ?? '', lead, agent))
+    setBody(resolvePlaceholders(stripHtml(t.template_html ?? ''), lead, agent))
   }
 
-  const send = () => {
+  const send = async () => {
     if (!subject.trim() || !body.trim()) return
     setSending(true)
-    setTimeout(() => {
-      setSending(false)
+    try {
+      if (lead.id) {
+        await crmService.sendMerchantEmail(lead.id, {
+          to: lead.email,
+          subject: subject.trim(),
+          body: body.trim(),
+        })
+      }
       toast.success(`Email sent to ${lead.email}`)
       setSubject('')
       setBody('')
       setSelected(null)
-    }, 700)
+    } catch {
+      toast.error('Failed to send email')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -52,20 +147,28 @@ export function SendEmailTab({ lead }: Props) {
           {/* Templates */}
           <div>
             <label className="label-xs">Templates</label>
-            <div className="flex flex-wrap gap-1.5">
-              {MOCK_EMAIL_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => pickTemplate(t.id)}
-                  className={cn(
-                    'chip',
-                    selected === t.id && 'bg-violet-100 text-violet-700',
-                  )}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                <Loader2 size={12} className="animate-spin" /> Loading templates…
+              </div>
+            ) : templates.length === 0 ? (
+              <p className="text-xs text-slate-400 py-1">No email templates found.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => pickTemplate(t.id)}
+                    className={cn(
+                      'chip',
+                      selected === t.id && 'bg-violet-100 text-violet-700',
+                    )}
+                  >
+                    {t.template_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Subject */}

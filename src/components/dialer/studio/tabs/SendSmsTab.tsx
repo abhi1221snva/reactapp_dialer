@@ -1,9 +1,52 @@
-import { useState } from 'react'
-import { MessageSquare, Send, Sparkles, Phone } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { MessageSquare, Send, Sparkles, Phone, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../../utils/cn'
-import { MOCK_SMS_TEMPLATES } from '../mockData'
+import { smsTemplateService } from '../../../../services/smsTemplate.service'
+import { crmService } from '../../../../services/crm.service'
+import { useAuthStore } from '../../../../stores/auth.store'
 import type { StudioLead } from '../types'
+
+interface SmsTemplate {
+  templete_id: number
+  templete_name: string
+  templete_desc: string
+  status: number
+}
+
+/** Replace [[key]], {{key}}, and {key} placeholders with lead + agent data */
+function resolvePlaceholders(text: string, lead: StudioLead, agent?: { first_name: string; last_name: string; name: string; email: string }): string {
+  const map: Record<string, string> = {
+    first_name: lead.firstName,
+    last_name: lead.lastName,
+    phone_number: lead.phone,
+    email: lead.email,
+    company_name: lead.company,
+    company: lead.company,
+    state: lead.state,
+    country: lead.country,
+  }
+  // Agent / specialist placeholders
+  if (agent) {
+    map.agent = agent.name
+    map.agent_name = agent.name
+    map.agent_first_name = agent.first_name
+    map.agent_last_name = agent.last_name
+    map.agent_email = agent.email
+    map.specialist_first_name = agent.first_name
+    map.specialist_last_name = agent.last_name
+    map.specialist_name = agent.name
+  }
+  // Include custom fields
+  lead.customFields?.forEach((f) => {
+    map[f.key] = f.value
+  })
+
+  return text
+    .replace(/\[\[([^\]]+)\]\]/g, (m, key) => map[key] ?? m)
+    .replace(/\{\{([^}]+)\}\}/g, (m, key) => map[key.trim()] ?? m)
+    .replace(/\{([^{}]+)\}/g, (m, key) => map[key] ?? m)
+}
 
 interface Props {
   lead: StudioLead
@@ -13,27 +56,51 @@ export function SendSmsTab({ lead }: Props) {
   const [body, setBody] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
   const [sending, setSending] = useState(false)
+  const [templates, setTemplates] = useState<SmsTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const authUser = useAuthStore((s) => s.user)
+
+  // Fetch real SMS templates on mount
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    smsTemplateService.list()
+      .then((res) => {
+        if (cancelled) return
+        const list: SmsTemplate[] = res.data?.data ?? res.data ?? []
+        // Only show active templates
+        setTemplates(list.filter((t) => Number(t.status) === 1))
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Failed to load SMS templates')
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const pickTemplate = (id: number) => {
-    const t = MOCK_SMS_TEMPLATES.find((x) => x.id === id)
+    const t = templates.find((x) => x.templete_id === id)
     if (!t) return
     setSelected(id)
-    setBody(t.body
-      .replace('{first_name}', lead.firstName)
-      .replace('{agent}', 'Priya')
-      .replace('{company}', lead.company),
-    )
+    const agent = authUser ? { first_name: authUser.first_name, last_name: authUser.last_name, name: `${authUser.first_name} ${authUser.last_name}`.trim(), email: authUser.email } : undefined
+    setBody(resolvePlaceholders(t.templete_desc, lead, agent))
   }
 
-  const send = () => {
+  const send = async () => {
     if (!body.trim()) return
     setSending(true)
-    setTimeout(() => {
-      setSending(false)
+    try {
+      if (lead.id) {
+        await crmService.sendLeadSms(lead.id, { to: lead.phone, body: body.trim() })
+      }
       toast.success(`SMS sent to ${lead.phone}`)
       setBody('')
       setSelected(null)
-    }, 700)
+    } catch {
+      toast.error('Failed to send SMS')
+    } finally {
+      setSending(false)
+    }
   }
 
   const charCount = body.length
@@ -58,20 +125,28 @@ export function SendSmsTab({ lead }: Props) {
           {/* Templates */}
           <div>
             <label className="label-xs">Quick Templates</label>
-            <div className="flex flex-wrap gap-1.5">
-              {MOCK_SMS_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => pickTemplate(t.id)}
-                  className={cn(
-                    'chip',
-                    selected === t.id && 'bg-indigo-100 text-indigo-700',
-                  )}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                <Loader2 size={12} className="animate-spin" /> Loading templates…
+              </div>
+            ) : templates.length === 0 ? (
+              <p className="text-xs text-slate-400 py-1">No SMS templates found.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {templates.map((t) => (
+                  <button
+                    key={t.templete_id}
+                    onClick={() => pickTemplate(t.templete_id)}
+                    className={cn(
+                      'chip',
+                      selected === t.templete_id && 'bg-indigo-100 text-indigo-700',
+                    )}
+                  >
+                    {t.templete_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Message */}

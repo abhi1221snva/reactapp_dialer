@@ -9,7 +9,7 @@ import {
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
 import { campaignService } from '../../services/campaign.service'
-import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
+import { smtpService, type SmtpSetting } from '../../services/smtp.service'
 import { cn } from '../../utils/cn'
 
 interface CampaignDetailData {
@@ -140,12 +140,12 @@ export function CampaignDetail() {
     onError: () => toast.error('Failed to duplicate'),
   })
 
-  const { data: emailSettingsData } = useQuery({
-    queryKey: ['campaign-email-settings'],
+  const { data: smtpSettingsData } = useQuery({
+    queryKey: ['campaign-smtp-settings'],
     queryFn: async () => {
-      const res = await emailSettingsService.list()
-      const payload = res.data?.data ?? res.data ?? {}
-      return (payload.list ?? []) as EmailSetting[]
+      const res = await smtpService.list()
+      const payload = res.data?.data ?? res.data ?? []
+      return (Array.isArray(payload) ? payload : payload.data ?? []) as SmtpSetting[]
     },
   })
 
@@ -160,8 +160,8 @@ export function CampaignDetail() {
   const resolveEmailLabel = (val: number | string | undefined): string => {
     const key = String(val ?? '0')
     if (staticEmailLabel[key]) return staticEmailLabel[key]
-    const setting = (emailSettingsData ?? []).find(s => s.id === Number(key))
-    if (setting) return setting.sender_name ? `${setting.sender_name} — ${setting.sender_email}` : setting.sender_email
+    const setting = (smtpSettingsData ?? []).find(s => s.id === Number(key))
+    if (setting) return setting.from_name ? `${setting.from_name} — ${setting.from_email}` : setting.from_email
     return key === '0' ? 'No' : `SMTP #${key}`
   }
   const hopperModeLabel = d.hopper_mode === 2 ? 'Random' : 'Linear'

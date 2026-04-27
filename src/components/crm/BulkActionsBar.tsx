@@ -129,7 +129,7 @@ export function BulkActionsBar({ selectedIds, statuses, agents, onClear, onRefre
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () => crmService.bulkDelete({ lead_ids: selectedIds }),
+    mutationFn: () => crmService.bulkDelete({ lead_ids: selectedIds, confirm: true }),
     onSuccess: () => {
       toast.success(`Deleted ${selectedIds.length} lead(s)`)
       onClear(); onRefresh()

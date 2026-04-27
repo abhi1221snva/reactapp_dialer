@@ -9,6 +9,29 @@ import { dispositionService } from '../../services/disposition.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import { cn } from '../../utils/cn'
+
+// ── Types & constants for weekly schedule ────────────────────────────
+type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+type DaySchedule = { enabled: boolean; start: string; end: string }
+type WeekSchedule = Record<DayKey, DaySchedule>
+type ScheduleMode = 'none' | 'simple' | 'weekly'
+
+const ALL_DAYS: DayKey[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+const DAY_LABELS: Record<DayKey, string> = {
+  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
+  friday: 'Fri', saturday: 'Sat', sunday: 'Sun',
+}
+
+const DEFAULT_WEEK_SCHEDULE: WeekSchedule = {
+  monday:    { enabled: true,  start: '09:00', end: '17:00' },
+  tuesday:   { enabled: true,  start: '09:00', end: '17:00' },
+  wednesday: { enabled: true,  start: '09:00', end: '17:00' },
+  thursday:  { enabled: true,  start: '09:00', end: '17:00' },
+  friday:    { enabled: true,  start: '09:00', end: '17:00' },
+  saturday:  { enabled: false, start: '09:00', end: '17:00' },
+  sunday:    { enabled: false, start: '09:00', end: '17:00' },
+}
 
 const DIAL_MODES = [
   { value: 'preview_and_dial', label: 'Preview & Dial' },
@@ -51,6 +74,77 @@ const DEFAULT_FORM = {
 const SECTION_HEADER = 'text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3'
 const FIELD_LABEL = 'block text-[11px] font-semibold uppercase text-slate-500 tracking-wide mb-1'
 
+// ── WeekScheduleGrid component ───────────────────────────────────────
+function WeekScheduleGrid({
+  schedule,
+  onChange,
+}: {
+  schedule: WeekSchedule
+  onChange: (schedule: WeekSchedule) => void
+}) {
+  const updateDay = (day: DayKey, patch: Partial<DaySchedule>) => {
+    onChange({ ...schedule, [day]: { ...schedule[day], ...patch } })
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-slate-50 border-b border-slate-200">
+            <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Day</th>
+            <th className="text-center px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px] w-12">On</th>
+            <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Start</th>
+            <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">End</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ALL_DAYS.map((day, i) => {
+            const ds = schedule[day]
+            return (
+              <tr
+                key={day}
+                className={cn(
+                  'border-b border-slate-100 last:border-0 transition-opacity',
+                  !ds.enabled && 'opacity-40'
+                )}
+              >
+                <td className="px-3 py-2 font-medium text-slate-700">{DAY_LABELS[day]}</td>
+                <td className="px-3 py-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={ds.enabled}
+                    onChange={e => updateDay(day, { enabled: e.target.checked })}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    type="time"
+                    className="input text-xs py-1 px-2"
+                    value={ds.start}
+                    disabled={!ds.enabled}
+                    onChange={e => updateDay(day, { start: e.target.value })}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    type="time"
+                    className="input text-xs py-1 px-2"
+                    value={ds.end}
+                    disabled={!ds.enabled}
+                    onChange={e => updateDay(day, { end: e.target.value })}
+                  />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Main form component ──────────────────────────────────────────────
 export function CampaignForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -58,6 +152,11 @@ export function CampaignForm() {
   const clientId = useAuthStore(s => s.user?.parent_id)
   const [form, setForm] = useState(DEFAULT_FORM)
   const formLoaded = useRef(false)
+
+  // Weekly schedule state
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('none')
+  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE)
+  const [existingTimerId, setExistingTimerId] = useState<number | null>(null)
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
     queryKey: ['campaign', id],
@@ -100,11 +199,38 @@ export function CampaignForm() {
         status: c.status || 'active',
         disposition_id: dispIds,
       })
+
+      // Determine schedule mode from existing campaign data
+      const schedId = (c as Record<string, unknown>).call_schedule_id
+      if (schedId) {
+        setScheduleMode('weekly')
+        setExistingTimerId(Number(schedId))
+        // Fetch the call timer to populate the week schedule
+        campaignService.getCallTimer(Number(schedId)).then((res: unknown) => {
+          const timerData = (res as { data?: { data?: { week_plan?: Record<string, { start: string; end: string }>; timezone?: string } } })?.data?.data
+          const wp = timerData?.week_plan
+          if (wp && typeof wp === 'object') {
+            const merged = { ...DEFAULT_WEEK_SCHEDULE }
+            ALL_DAYS.forEach(day => {
+              if (wp[day]) merged[day] = { enabled: true, start: wp[day].start, end: wp[day].end }
+              else merged[day] = { ...merged[day], enabled: false }
+            })
+            setWeekSchedule(merged)
+          }
+          if (timerData?.timezone) {
+            setForm(f => ({ ...f, timezone: timerData.timezone as string }))
+          }
+        }).catch(() => {/* ignore */})
+      } else if (Number(c.time_based_calling) === 1) {
+        setScheduleMode('simple')
+      } else {
+        setScheduleMode('none')
+      }
     }
   }, [existing])
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const name = form.campaign_name.charAt(0).toUpperCase() + form.campaign_name.slice(1)
       const payload: Record<string, unknown> = {
         ...form,
@@ -117,6 +243,45 @@ export function CampaignForm() {
       } else {
         payload.custom_caller_id = 0
       }
+
+      // Handle schedule mode
+      if (scheduleMode === 'none') {
+        payload.time_based_calling = 0
+        payload.call_schedule_id = null
+      } else if (scheduleMode === 'simple') {
+        payload.time_based_calling = 1
+        // Clear call_schedule_id if switching away from weekly
+        if (existingTimerId) {
+          payload.call_schedule_id = null
+        }
+      } else if (scheduleMode === 'weekly') {
+        payload.time_based_calling = 1
+
+        // Build week_plan from schedule (only enabled days)
+        const weekPlan: Record<string, { start: string; end: string }> = {}
+        ALL_DAYS.forEach(day => {
+          if (weekSchedule[day].enabled) {
+            weekPlan[day] = { start: weekSchedule[day].start, end: weekSchedule[day].end }
+          }
+        })
+
+        const timerTitle = `${name} Schedule`
+        let callScheduleId: number | undefined
+
+        if (existingTimerId) {
+          await campaignService.updateCallTimer(existingTimerId, { title: timerTitle, week_plan: weekPlan })
+          callScheduleId = existingTimerId
+        } else {
+          const timerRes = await campaignService.createCallTimer({ title: timerTitle, week_plan: weekPlan })
+          callScheduleId = (timerRes as { data?: { data?: { id?: number } } })?.data?.data?.id
+          if (callScheduleId) setExistingTimerId(callScheduleId)
+        }
+
+        if (callScheduleId) {
+          payload.call_schedule_id = callScheduleId
+        }
+      }
+
       if (isEdit) {
         return campaignService.update({ ...payload, campaign_id: Number(id) })
       }
@@ -130,6 +295,23 @@ export function CampaignForm() {
       toast.error('Failed to save campaign')
     },
   })
+
+  const handleSave = () => {
+    if (scheduleMode === 'weekly') {
+      const enabledDays = ALL_DAYS.filter(d => weekSchedule[d].enabled)
+      if (enabledDays.length === 0) {
+        toast.error('Weekly schedule must have at least one day enabled')
+        return
+      }
+      for (const day of enabledDays) {
+        if (weekSchedule[day].start >= weekSchedule[day].end) {
+          toast.error(`${DAY_LABELS[day]}: start time must be before end time`)
+          return
+        }
+      }
+    }
+    saveMutation.mutate()
+  }
 
   const set = (key: string, value: unknown) =>
     setForm(f => ({ ...f, [key]: value }))
@@ -155,6 +337,12 @@ export function CampaignForm() {
     setForm(f => ({ ...f, disposition_id: [] }))
 
   if (isEdit && loadingExisting) return <PageLoader />
+
+  const SCHEDULE_MODES: { value: ScheduleMode; label: string }[] = [
+    { value: 'none', label: 'No Limit' },
+    { value: 'simple', label: 'Simple' },
+    { value: 'weekly', label: 'Weekly Schedule' },
+  ]
 
   return (
     <div className="-mx-5 -mt-3 flex flex-col" style={{ height: 'calc(100vh - 70px)' }}>
@@ -187,7 +375,7 @@ export function CampaignForm() {
             Cancel
           </button>
           <button
-            onClick={() => saveMutation.mutate()}
+            onClick={handleSave}
             disabled={!form.campaign_name || saveMutation.isPending}
             className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 h-auto disabled:opacity-50"
           >
@@ -271,7 +459,7 @@ export function CampaignForm() {
                       options={groups.map((g: { id: number; group_name: string }) => ({ value: String(g.id), label: g.group_name }))}
                       value={String(form.group_id)}
                       onChange={v => set('group_id', v)}
-                      placeholder="Select group…"
+                      placeholder="Select group..."
                       emptyLabel="— None —"
                     />
                   </div>
@@ -297,15 +485,30 @@ export function CampaignForm() {
                     <Clock size={14} className="text-indigo-500" />
                     <h3 className={SECTION_HEADER + ' mb-0 pb-0 border-0'}>Call Schedule</h3>
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={Boolean(form.time_based_calling)}
-                      onChange={e => set('time_based_calling', e.target.checked ? 1 : 0)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                    <span className="text-xs text-slate-600 font-medium">Enable time-based calling</span>
-                  </label>
+                  <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
+                    {SCHEDULE_MODES.map(mode => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() => setScheduleMode(mode.value)}
+                        className={cn(
+                          'px-3 py-1.5 text-[11px] font-medium transition-all border-r border-slate-200 last:border-r-0',
+                          scheduleMode === mode.value
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white text-slate-600 hover:bg-slate-50'
+                        )}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {Boolean(form.time_based_calling) && (
+                {scheduleMode === 'none' && (
+                  <p className="text-xs text-slate-400 italic">No time restrictions — calls will run all day.</p>
+                )}
+
+                {scheduleMode === 'simple' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-4">
                     <div>
                       <label className={FIELD_LABEL}>Start Time</label>
@@ -326,8 +529,16 @@ export function CampaignForm() {
                   </div>
                 )}
 
-                {!form.time_based_calling && (
-                  <p className="text-xs text-slate-400 italic">Time-based calling is disabled — calls will run all day.</p>
+                {scheduleMode === 'weekly' && (
+                  <div className="space-y-4">
+                    <div className="max-w-xs">
+                      <label className={FIELD_LABEL}>Timezone</label>
+                      <select className="input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
+                        {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                      </select>
+                    </div>
+                    <WeekScheduleGrid schedule={weekSchedule} onChange={setWeekSchedule} />
+                  </div>
                 )}
               </section>
 
@@ -402,7 +613,7 @@ export function CampaignForm() {
       {/* ── Mobile save bar ────────────────────────────────────────────── */}
       <div className="sm:hidden flex items-center gap-3 px-5 py-3 bg-white border-t border-slate-200 shadow-lg flex-shrink-0">
         <button
-          onClick={() => saveMutation.mutate()}
+          onClick={handleSave}
           disabled={!form.campaign_name || saveMutation.isPending}
           className="btn-primary flex-1 justify-center disabled:opacity-50"
         >

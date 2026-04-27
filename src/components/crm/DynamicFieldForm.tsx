@@ -6,6 +6,7 @@ import type { UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-f
 import { crmService } from '../../services/crm.service'
 import type { CrmLabel, FieldCondition } from '../../types/crm.types'
 import { buildFieldRules, parseFieldOptions } from '../../utils/fieldValidation'
+import { formatPartialPhoneUS, formatPhoneNumber } from '../../utils/format'
 import AddressAutocomplete from '../ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
@@ -87,6 +88,10 @@ function isSSNField(fieldKey: string, fieldType: string): boolean {
   return fieldType === 'ssn' || /\bssn\b/i.test(fieldKey)
 }
 
+function isPhoneField(fieldKey: string, fieldType: string): boolean {
+  return fieldType === 'phone' || fieldType === 'phone_number' || /\bphone\b/i.test(fieldKey)
+}
+
 // ── Thin alias kept so renderInput() call-sites below are unchanged ──────────
 const parseOptions = parseFieldOptions
 
@@ -124,6 +129,45 @@ function SsnInput({ fieldKey, register, rules, defaultValue, placeholder }: {
         const fmt = formatSSN(e.target.value)
         setDisplay(fmt)
         // Pass formatted value to react-hook-form
+        e.target.value = fmt
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
+
+// ── Phone Input component (auto-formats digits to (XXX) XXX-XXXX) ────────────
+function PhoneInput({ fieldKey, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const [display, setDisplay] = useState(() => formatPartialPhoneUS(defaultValue.replace(/\D/g, '')))
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    validate: (val: string) => {
+      if (!val || val.trim() === '') return true
+      const digits = val.replace(/\D/g, '')
+      return digits.length === 10 || 'Phone number must be exactly 10 digits'
+    },
+  })
+
+  return (
+    <input
+      type="tel"
+      {...rest}
+      value={display}
+      className="crm-fi"
+      placeholder={placeholder}
+      maxLength={14}
+      inputMode="tel"
+      onChange={e => {
+        const fmt = formatPartialPhoneUS(e.target.value)
+        setDisplay(fmt)
         e.target.value = fmt
         rhfOnChange(e)
       }}
@@ -252,14 +296,12 @@ function renderInput(
   // ── Phone ──────────────────────────────────────────────────────────────────
   if (field_type === 'phone_number' || field_type === 'phone') {
     return (
-      <input
-        type="tel"
-        {...register(field_key, rules)}
-        className={baseClass}
-        placeholder={ph || '10-digit number'}
+      <PhoneInput
+        fieldKey={field_key}
+        register={register}
+        rules={rules}
         defaultValue={defaultValue as string ?? ''}
-        maxLength={15}
-        inputMode="numeric"
+        placeholder={ph || '(555) 555-5555'}
       />
     )
   }
@@ -305,8 +347,12 @@ function DisplayValue({ value, dataType, fieldKey }: { value: unknown; dataType:
     )
   }
   const raw = value !== null && value !== undefined && value !== '' ? String(value) : null
-  // Format SSN values as XXX-XX-XXXX for display
-  const str = raw && isSSNField(fieldKey ?? '', dataType) ? formatSSN(raw) : raw
+  // Format SSN / phone values for display
+  const str = raw && isSSNField(fieldKey ?? '', dataType)
+    ? formatSSN(raw)
+    : raw && isPhoneField(fieldKey ?? '', dataType)
+      ? formatPhoneNumber(raw)
+      : raw
   return str
     ? <p className="text-sm font-medium text-slate-800 leading-snug">{str}</p>
     : <p className="text-sm text-slate-300">—</p>

@@ -5,6 +5,8 @@ import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { confirmDelete } from '../../utils/confirmDelete'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -226,6 +228,8 @@ function RulesTab() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<CommissionRule | null>(null)
+  const { user } = useAuthStore()
+  const isManager = (user?.level ?? 1) >= LEVELS.ASSOCIATE
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['commission-rules'],
@@ -250,21 +254,23 @@ function RulesTab() {
 
   return (
     <>
-      <div className="flex items-center justify-end mb-4">
-        <button
-          onClick={() => { setEditing(null); setShowModal(true) }}
-          className="btn-success flex items-center gap-2"
-        >
-          <Plus size={15} /> Add Rule
-        </button>
-      </div>
+      {isManager && (
+        <div className="flex items-center justify-end mb-4">
+          <button
+            onClick={() => { setEditing(null); setShowModal(true) }}
+            className="btn-success flex items-center gap-2"
+          >
+            <Plus size={15} /> Add Rule
+          </button>
+        </div>
+      )}
 
       <div className="table-wrapper">
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
-                {['Lender', 'Deal Type', 'Commission Type', 'Value', 'Agent Split %', 'Status', 'Actions'].map(h => (
+                {['Lender', 'Deal Type', 'Commission Type', 'Value', 'Agent Split %', 'Status', ...(isManager ? ['Actions'] : [])].map(h => (
                   <th key={h} className={h === 'Actions' ? 'text-right' : ''}>{h}</th>
                 ))}
               </tr>
@@ -326,29 +332,31 @@ function RulesTab() {
                       <span className="badge badge-gray">Inactive</span>
                     )}
                   </td>
-                  <td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => { setEditing(rule); setShowModal(true) }}
-                        className="action-btn"
-                        title="Edit"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (await confirmDelete(`Rule for ${rule.deal_type}`)) {
-                            deleteMutation.mutate(rule.id)
-                          }
-                        }}
-                        disabled={deleteMutation.isPending}
-                        className="action-btn text-red-400 hover:text-red-600"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+                  {isManager && (
+                    <td className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => { setEditing(rule); setShowModal(true) }}
+                          className="action-btn"
+                          title="Edit"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (await confirmDelete(`Rule for ${rule.deal_type}`)) {
+                              deleteMutation.mutate(rule.id)
+                            }
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="action-btn text-red-400 hover:text-red-600"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -371,6 +379,8 @@ function RulesTab() {
 
 function LedgerTab() {
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const isManager = (user?.level ?? 1) >= LEVELS.ASSOCIATE
   const [statusFilter, setStatusFilter] = useState<LedgerStatus>('all')
   const [period, setPeriod] = useState<LedgerPeriod>('month')
 
@@ -479,7 +489,7 @@ function LedgerTab() {
             <thead>
               <tr>
                 {['Lead ID', 'Funded Amount', 'Gross Commission', 'Agent Commission',
-                  'Company Commission', 'Status', 'Action'].map(h => (
+                  'Company Commission', 'Status', ...(isManager ? ['Action'] : [])].map(h => (
                   <th key={h} className={h === 'Action' ? 'text-right' : ''}>{h}</th>
                 ))}
               </tr>
@@ -539,20 +549,22 @@ function LedgerTab() {
                       <span className="badge badge-amber">Pending</span>
                     )}
                   </td>
-                  <td className="text-right">
-                    {item.status === 'pending' && (
-                      <button
-                        onClick={() => markPaidMutation.mutate(item.id)}
-                        disabled={markPaidMutation.isPending}
-                        className="btn-success text-xs px-3 py-1.5 flex items-center gap-1 ml-auto disabled:opacity-50"
-                      >
-                        {markPaidMutation.isPending
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : <CheckCircle size={11} />}
-                        Mark Paid
-                      </button>
-                    )}
-                  </td>
+                  {isManager && (
+                    <td className="text-right">
+                      {item.status === 'pending' && (
+                        <button
+                          onClick={() => markPaidMutation.mutate(item.id)}
+                          disabled={markPaidMutation.isPending}
+                          className="btn-success text-xs px-3 py-1.5 flex items-center gap-1 ml-auto disabled:opacity-50"
+                        >
+                          {markPaidMutation.isPending
+                            ? <Loader2 size={11} className="animate-spin" />
+                            : <CheckCircle size={11} />}
+                          Mark Paid
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -569,7 +581,9 @@ type Tab = 'rules' | 'ledger'
 
 export function CrmCommissions() {
   const { setDescription, setActions } = useCrmHeader()
-  const [activeTab, setActiveTab] = useState<Tab>('rules')
+  const { user } = useAuthStore()
+  const isManager = (user?.level ?? 1) >= LEVELS.ASSOCIATE
+  const [activeTab, setActiveTab] = useState<Tab>(isManager ? 'rules' : 'ledger')
 
   useEffect(() => {
     setDescription('Manage commission rules and track payouts')

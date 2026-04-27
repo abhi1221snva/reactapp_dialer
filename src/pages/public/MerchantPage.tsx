@@ -13,6 +13,7 @@ import {
   MerchantDocument, PublicDocumentType,
 } from '../../services/publicApp.service'
 import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
+import { formatPartialPhoneUS } from '../../utils/format'
 import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
@@ -162,7 +163,18 @@ function FormField({ f, value, onChange, error }: {
         isPublic
       />
     )
-    const t = { tel: 'tel', email: 'email', date: 'date', number: 'number' }[f.type] ?? 'text'
+    const isPhone = f.type === 'tel' || f.type === 'phone' || f.type === 'phone_number' || /\bphone\b/i.test(f.key)
+    if (isPhone) return (
+      <input type="tel" value={value}
+        {...dbAttrs}
+        maxLength={14}
+        inputMode="tel"
+        placeholder={ph.tel ?? f.placeholder ?? ''}
+        onChange={e => onChange(f.key, formatPartialPhoneUS(e.target.value))}
+        {...fb}
+        style={base} />
+    )
+    const t = { email: 'email', date: 'date', number: 'number' }[f.type] ?? 'text'
     return <input type={t} value={value} onChange={e => onChange(f.key, e.target.value)}
       {...fb} {...dbAttrs} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
   })()
@@ -183,8 +195,9 @@ function FormField({ f, value, onChange, error }: {
 }
 
 // ─── Signature pad ────────────────────────────────────────────────────────────
-function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
+function SigPad({ token, existingUrl, onSaved, onModeChange, field = 'signature_image' }: {
   token: string; existingUrl: string | null; onSaved: (url: string) => void
+  onModeChange?: (mode: 'view' | 'draw') => void
   field?: 'signature_image' | 'owner_2_signature_image'
 }) {
   const ref    = useRef<HTMLCanvasElement>(null)
@@ -244,7 +257,7 @@ function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
     setSaving(true); setErr('')
     try {
       const r = await publicAppService.saveSignature(token, ref.current!.toDataURL('image/png'), field)
-      onSaved(r.data.signature_url); setMode('view')
+      onSaved(r.data.signature_url); setMode('view'); onModeChange?.('view')
     } catch (e: unknown) {
       setErr((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to save.')
     } finally { setSaving(false) }
@@ -259,7 +272,7 @@ function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
         <img src={existingUrl} alt="Signature" style={{ maxHeight: 80, maxWidth: 400, filter: 'contrast(1.2)' }} />
         <p style={{ margin: 0, fontSize: 12, color: C.muted }}>This signature is included in your application PDF.</p>
       </div>
-      <button type="button" onClick={() => setMode('draw')}
+      <button type="button" onClick={() => { setMode('draw'); onModeChange?.('draw') }}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 15px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
         <RefreshCw size={13} /> Retake
       </button>
@@ -282,7 +295,7 @@ function SigPad({ token, existingUrl, onSaved, field = 'signature_image' }: {
       {err && <p style={{ margin: 0, fontSize: 12, color: C.error, display: 'flex', alignItems: 'center', gap: 5 }}><AlertCircle size={12} />{err}</p>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={clear} style={{ padding: '7px 16px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.textMid, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
-        {existingUrl && <button type="button" onClick={() => setMode('view')} style={{ padding: '7px 16px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.textMid, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>}
+        {existingUrl && <button type="button" onClick={() => { setMode('view'); onModeChange?.('view') }} style={{ padding: '7px 16px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.textMid, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>}
         <button type="button" onClick={save} disabled={saving || !hasLines}
           style={{ padding: '7px 20px', border: 'none', borderRadius: 8, background: saving || !hasLines ? '#c7d2fe' : C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: saving || !hasLines ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: saving || !hasLines ? 'none' : '0 2px 8px rgba(79,70,229,.3)' }}>
           {saving ? <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Saving…</> : <><Check size={13} />Save Signature</>}
@@ -314,7 +327,7 @@ function parseSubValues(raw: string | null | undefined): string[] {
 const fmtSize = (n: number) => n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`
 const fileExt = (n: string) => n.split('.').pop()?.toLowerCase() ?? 'file'
 
-function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDocument[]; onUploaded: () => void }) {
+function DocStep({ token, docs, onUploaded, onQueueChange }: { token: string; docs: MerchantDocument[]; onUploaded: () => void; onQueueChange?: (count: number) => void }) {
   // ── Local file queue (like affiliate) ──
   const [queue, setQueue]             = useState<UploadFile[]>([])
   const [over, setOver]               = useState(false)
@@ -340,6 +353,8 @@ function DocStep({ token, docs, onUploaded }: { token: string; docs: MerchantDoc
   const defaultType = types[0]?.title ?? ''
 
   const confirmFile = confirmId ? queue.find(f => f.id === confirmId) : null
+
+  useEffect(() => { onQueueChange?.(queue.length) }, [queue.length, onQueueChange])
 
   // ── Add files to local queue ──
   const addToQueue = (files: File[]) => {
@@ -670,8 +685,11 @@ export function MerchantPage() {
   const [fieldErrors, setFErrors] = useState<Record<string, string>>({})
   const [saveErr, setSaveErr]     = useState('')
   const [saving, setSaving]       = useState(false)
+  const [sigErr, setSigErr]       = useState('')
+  const [sigDrawing, setSigDrawing] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [pendingDocCount, setPendingDocCount] = useState(0)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['merchantPortal', leadToken],
@@ -681,8 +699,9 @@ export function MerchantPage() {
   })
 
   useEffect(() => {
-    if (data?.lead?.signature_url   !== undefined) setSigUrl(data.lead.signature_url)
-    if (data?.lead?.signature_url_2 !== undefined) setSigUrl2(data.lead.signature_url_2)
+    const bust = (u: string | null) => u ? `${u}${u.includes('?') ? '&' : '?'}v=${Date.now()}` : null
+    if (data?.lead?.signature_url   !== undefined) setSigUrl(bust(data.lead.signature_url))
+    if (data?.lead?.signature_url_2 !== undefined) setSigUrl2(bust(data.lead.signature_url_2))
   }, [data?.lead?.signature_url, data?.lead?.signature_url_2])
 
   // Auto-detect Owner 2 data — if any Owner 2 fields already have values, enable the toggle
@@ -844,7 +863,11 @@ export function MerchantPage() {
   // ── Field helpers ─────────────────────────────────────────────────────────
   const getVals = (secIdx: number, sec: PublicFormSection): Record<string, string> => {
     const base: Record<string, string> = {}
-    sec.fields.forEach((f: PublicFormField) => { base[f.key] = lead.fields[f.key] || '' })
+    sec.fields.forEach((f: PublicFormField) => {
+      const raw = lead.fields[f.key] || ''
+      const isPhone = f.type === 'tel' || f.type === 'phone' || f.type === 'phone_number' || /\bphone\b/i.test(f.key)
+      base[f.key] = isPhone ? formatPartialPhoneUS(raw) : raw
+    })
     return { ...base, ...(edits[secIdx] ?? {}) }
   }
 
@@ -916,17 +939,28 @@ export function MerchantPage() {
           setSaveErr(resp?.message || 'Save failed.')
         }
       } finally { setSaving(false) }
+    } else if (curInfo.type === 'sig') {
+      if (!sigUrl || sigDrawing) {
+        setSigErr('Please save your signature before continuing.')
+        return
+      }
+      setSigErr('')
+      setStep(s => Math.min(s + 1, TOTAL - 1))
     } else {
       setStep(s => Math.min(s + 1, TOTAL - 1))
     }
   }
 
-  const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setFErrors({}); setSaveErr('') }
+  const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setFErrors({}); setSaveErr(''); setSigErr('') }
 
   // Sidebar / dot nav — backward free, forward requires validation
   const handleStepNav = (target: number) => {
     if (target === step) return
     if (target > step) {
+      if (curInfo.type === 'sig' && (!sigUrl || sigDrawing)) {
+        setSigErr('Please save your signature before continuing.')
+        return
+      }
       if (curInfo.type === 'section' && curSec) {
         const vals = getVals(curSecIdx, curSec)
         const errs = validateSection(curSec.fields, vals)
@@ -935,6 +969,7 @@ export function MerchantPage() {
     } else {
       setFErrors({})
       setSaveErr('')
+      setSigErr('')
     }
     setStep(target)
   }
@@ -1173,7 +1208,7 @@ export function MerchantPage() {
                       <span style={{ fontSize: 11, color: C.error }}>*</span>
                       {sigUrl && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                     </div>
-                    <SigPad token={leadToken!} existingUrl={sigUrl} onSaved={url => { setSigUrl(url); refresh() }} field="signature_image" />
+                    <SigPad token={leadToken!} existingUrl={sigUrl} onSaved={url => { setSigUrl(`${url}?v=${Date.now()}`); setSigErr(''); refresh() }} onModeChange={m => setSigDrawing(m === 'draw')} field="signature_image" />
                   </div>
 
                   {/* ── Signature 2: Co-Applicant (only when Owner 2 checked) ── */}
@@ -1187,15 +1222,20 @@ export function MerchantPage() {
                         <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
                         {sigUrl2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                       </div>
-                      <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(url); refresh() }} field="owner_2_signature_image" />
+                      <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(`${url}?v=${Date.now()}`); refresh() }} field="owner_2_signature_image" />
                     </div>
                   )}
                 </div>
+                {sigErr && (
+                  <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, marginTop: 12 }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />{sigErr}
+                  </div>
+                )}
               </div>
             ) : (
               /* ── Documents step ── */
               <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
-                <DocStep token={leadToken!} docs={lead.documents ?? []} onUploaded={refresh} />
+                <DocStep token={leadToken!} docs={lead.documents ?? []} onUploaded={refresh} onQueueChange={setPendingDocCount} />
               </div>
             )}
           </div>
@@ -1215,13 +1255,20 @@ export function MerchantPage() {
             </div>
 
             {isLast ? (
-              <button type="button" onClick={handleFinish} disabled={submitting}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: submitting ? '#6ee7b7' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,.3)' }}>
-                {submitting
-                  ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Submitting…</>
-                  : <><Check size={14} /> Finish</>
-                }
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {pendingDocCount > 0 && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.amber, fontSize: 12, fontWeight: 600 }}>
+                    <AlertCircle size={13} />{pendingDocCount} file{pendingDocCount > 1 ? 's' : ''} not uploaded yet
+                  </span>
+                )}
+                <button type="button" onClick={handleFinish} disabled={submitting || pendingDocCount > 0}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: submitting || pendingDocCount > 0 ? '#94a3b8' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting || pendingDocCount > 0 ? 'not-allowed' : 'pointer', boxShadow: submitting || pendingDocCount > 0 ? 'none' : '0 2px 8px rgba(16,185,129,.3)' }}>
+                  {submitting
+                    ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Submitting…</>
+                    : <><Check size={14} /> Finish</>
+                  }
+                </button>
+              </div>
             ) : (
               <button type="button" onClick={handleNext} disabled={saving}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: saving ? '#a5b4fc' : C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 2px 8px rgba(79,70,229,.3)', transition: 'all .15s' }}>

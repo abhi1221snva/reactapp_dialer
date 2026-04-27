@@ -57,11 +57,13 @@ interface FloatingState {
   sipDialHandler: ((phoneNumber: string) => void | Promise<void>) | null
   registerSipDial: (fn: (phoneNumber: string) => void | Promise<void>) => void
 
-  // ── SIP mute/hold ── (WebPhone registers, DialerInterface calls) ──────────
+  // ── SIP mute/hold/hangup ── (WebPhone registers, DialerInterface calls) ───
   sipMuteHandler: ((muted: boolean) => void) | null
   sipHoldHandler: ((held: boolean) => void) | null
+  sipHangupHandler: (() => void) | null
   registerSipMute: (fn: (muted: boolean) => void) => void
   registerSipHold: (fn: (held: boolean) => void) => void
+  registerSipHangup: (fn: () => void) => void
 
   // ── Chat unread ────────────────────────────────────────────────────────────
   chatUnread: number
@@ -131,8 +133,10 @@ export const useFloatingStore = create<FloatingState>((set) => ({
 
   sipMuteHandler: null,
   sipHoldHandler: null,
+  sipHangupHandler: null,
   registerSipMute: (fn) => set({ sipMuteHandler: fn }),
   registerSipHold: (fn) => set({ sipHoldHandler: fn }),
+  registerSipHangup: (fn) => set({ sipHangupHandler: fn }),
 
   chatUnread: 0,
   setChatUnread: (n) => set({ chatUnread: n }),

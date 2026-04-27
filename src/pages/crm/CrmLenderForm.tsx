@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
+import { formatPartialPhoneUS } from '../../utils/format'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import type { Lender } from '../../types/crm.types'
 import { cn } from '../../utils/cn'
@@ -300,7 +301,7 @@ function lenderToForm(lender: Lender): FormState {
     secondary_email3:         e.secondary_email3 ?? '',
     secondary_email4:         e.secondary_email4 ?? '',
     contact_person:           lender.contact_person ?? '',
-    phone:                    lender.phone ?? '',
+    phone:                    formatPartialPhoneUS(lender.phone ?? ''),
     min_credit_score:         String(e.min_credit_score ?? ''),
     max_negative_days:        String(e.max_negative_days ?? ''),
     max_advance:              String(e.max_advance ?? ''),
@@ -448,6 +449,7 @@ export function CrmLenderForm() {
     mutationFn: async () => {
       const lenderPayload: Record<string, unknown> = {
         ...form,
+        phone: form.phone.replace(/\D/g, ''),
         prohibited_industry: form.prohibited_industry.join(','),
       }
 
@@ -737,7 +739,7 @@ export function CrmLenderForm() {
               </div>
               <div>
                 <label className="label">Phone</label>
-                <input className="input w-full" type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="(617) 657-1601" />
+                <input className="input w-full" type="tel" value={form.phone} onChange={e => set('phone', formatPartialPhoneUS(e.target.value))} placeholder="(555) 555-5555" maxLength={14} inputMode="tel" />
               </div>
               <div>
                 <label className="label">Contact Person</label>

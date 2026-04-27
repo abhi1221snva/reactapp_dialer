@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Loader2, X, Mail, RefreshCw,
-  Send, Eye, EyeOff, ChevronDown,
-  Check, Server, AlertCircle,
+  Eye, EyeOff, ChevronDown,
+  Server,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '../../components/ui/Badge'
@@ -11,47 +11,49 @@ import { RowActions } from '../../components/ui/RowActions'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { cn } from '../../utils/cn'
 import {
-  emailSettingsService,
+  smtpService,
   DRIVER_PRESETS,
-  MAIL_TYPES,
-  type EmailSetting,
-  type EmailSettingPayload,
-  type EmailMailType,
-} from '../../services/emailSettings.service'
+  SENDER_TYPES,
+  type SmtpSetting,
+  type SmtpPayload,
+  type SmtpSenderType,
+} from '../../services/smtp.service'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const DRIVERS = ['Sendgrid', 'Zoho', 'Google', 'Mailgun', 'SES', 'Sendpulse', 'Custom']
 const ENCRYPTIONS = ['TLS', 'SSL', 'NONE']
 
-function mailTypeLabel(t: string) {
-  return MAIL_TYPES.find(m => m.value === t)?.label ?? t
+function senderTypeLabel(t: string) {
+  return SENDER_TYPES.find(m => m.value === t)?.label ?? t
 }
 
 // ── Form Modal ────────────────────────────────────────────────────────────────
 interface FormState {
-  mail_type:       EmailMailType
+  sender_type:     SmtpSenderType
   mail_driver:     string
   mail_host:       string
   mail_port:       string
   mail_username:   string
   mail_password:   string
   mail_encryption: string
-  sender_email:    string
-  sender_name:     string
-  send_email_via:  'custom' | 'user_email'
+  from_email:      string
+  from_name:       string
+  user_id:         string
+  campaign_id:     string
 }
 
 const BLANK: FormState = {
-  mail_type:       'notification',
+  sender_type:     'default',
   mail_driver:     'Sendgrid',
   mail_host:       'smtp.sendgrid.net',
   mail_port:       '587',
   mail_username:   '',
   mail_password:   '',
   mail_encryption: 'TLS',
-  sender_email:    '',
-  sender_name:     '',
-  send_email_via:  'custom',
+  from_email:      '',
+  from_name:       '',
+  user_id:         '',
+  campaign_id:     '',
 }
 
 function SettingModal({
@@ -59,7 +61,7 @@ function SettingModal({
   onClose,
   onSaved,
 }: {
-  editing?: EmailSetting | null
+  editing?: SmtpSetting | null
   onClose: () => void
   onSaved: () => void
 }) {
@@ -68,29 +70,26 @@ function SettingModal({
 
   const [form, setForm]         = useState<FormState>(BLANK)
   const [showPwd, setShowPwd]   = useState(false)
-  const [testTo, setTestTo]     = useState('')
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [testing, setTesting]   = useState(false)
 
   // Populate on edit
   useEffect(() => {
     if (editing) {
       setForm({
-        mail_type:       editing.mail_type as EmailMailType,
+        sender_type:     editing.sender_type as SmtpSenderType,
         mail_driver:     editing.mail_driver,
         mail_host:       editing.mail_host,
         mail_port:       String(editing.mail_port),
         mail_username:   editing.mail_username,
         mail_password:   '',    // never pre-fill password
         mail_encryption: editing.mail_encryption,
-        sender_email:    editing.sender_email,
-        sender_name:     editing.sender_name,
-        send_email_via:  editing.send_email_via,
+        from_email:      editing.from_email ?? '',
+        from_name:       editing.from_name ?? '',
+        user_id:         editing.user_id ? String(editing.user_id) : '',
+        campaign_id:     editing.campaign_id ? String(editing.campaign_id) : '',
       })
     } else {
       setForm(BLANK)
     }
-    setTestResult(null)
   }, [editing])
 
   // Auto-fill host/port/encryption when driver changes
@@ -112,25 +111,26 @@ function SettingModal({
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload: Partial<EmailSettingPayload> = {
-        mail_type:       form.mail_type,
+      const payload: Partial<SmtpPayload> = {
         mail_driver:     form.mail_driver,
         mail_host:       form.mail_host,
-        mail_port:       Number(form.mail_port),
+        mail_port:       form.mail_port,
         mail_username:   form.mail_username,
         mail_encryption: form.mail_encryption,
-        sender_email:    form.sender_email,
-        sender_name:     form.sender_name,
-        send_email_via:  form.send_email_via,
+        sender_type:     form.sender_type,
+        from_email:      form.from_email || undefined,
+        from_name:       form.from_name || undefined,
       }
       if (form.mail_password) payload.mail_password = form.mail_password
+      if (form.sender_type === 'user' && form.user_id) payload.user_id = Number(form.user_id)
+      if (form.sender_type === 'campaign' && form.campaign_id) payload.campaign_id = Number(form.campaign_id)
       return isEdit
-        ? emailSettingsService.update(editing!.id, payload)
-        : emailSettingsService.create(payload as EmailSettingPayload)
+        ? smtpService.update(editing!.id, payload)
+        : smtpService.create(payload as SmtpPayload)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Settings updated' : 'Settings created')
-      qc.invalidateQueries({ queryKey: ['dialer-email-settings'] })
+      qc.invalidateQueries({ queryKey: ['smtp-settings'] })
       onSaved()
     },
     onError: (e: unknown) => {
@@ -139,38 +139,7 @@ function SettingModal({
     },
   })
 
-  // Test email
-  async function handleTest() {
-    if (!testTo) { toast.error('Enter a test recipient email'); return }
-    if (!form.mail_host || !form.mail_username || !form.mail_password) {
-      toast.error('Fill in host, username and password before testing')
-      return
-    }
-    setTesting(true)
-    setTestResult(null)
-    try {
-      const res = await emailSettingsService.testEmail({
-        config: {
-          mail_host:      form.mail_host,
-          mail_port:      Number(form.mail_port),
-          mail_username:  form.mail_username,
-          mail_password:  form.mail_password,
-          mail_encryption:form.mail_encryption,
-          sender_email:   form.sender_email,
-          sender_name:    form.sender_name,
-        },
-        test_to: testTo,
-      })
-      setTestResult(res.data)
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Test failed'
-      setTestResult({ success: false, message: msg })
-    } finally {
-      setTesting(false)
-    }
-  }
-
-  const canSave = form.mail_username && form.sender_email && (isEdit || form.mail_password)
+  const canSave = form.mail_username && (form.sender_type === 'user' || form.from_email) && (isEdit || form.mail_password)
 
   return (
     <div
@@ -190,7 +159,7 @@ function SettingModal({
                 <Mail size={16} className="text-indigo-600" />
               </div>
               <h2 className="text-sm font-bold text-slate-900">
-                {isEdit ? 'Edit Email Configuration' : 'New Email Configuration'}
+                {isEdit ? 'Edit SMTP Configuration' : 'New SMTP Configuration'}
               </h2>
             </div>
             <button onClick={onClose}
@@ -203,15 +172,15 @@ function SettingModal({
         {/* Body */}
         <div className="px-6 py-5 space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto">
 
-          {/* Row: type + driver */}
+          {/* Row: sender type + driver */}
           <div className="grid grid-cols-2 gap-4">
             <div className="form-group">
-              <label className="label">Mail Type <span className="text-red-500">*</span></label>
+              <label className="label">Sender Type <span className="text-red-500">*</span></label>
               <div className="relative">
                 <select className="input w-full appearance-none pr-8"
-                  value={form.mail_type}
-                  onChange={e => set('mail_type', e.target.value)}>
-                  {MAIL_TYPES.map(m => (
+                  value={form.sender_type}
+                  onChange={e => set('sender_type', e.target.value as SmtpSenderType)}>
+                  {SENDER_TYPES.map(m => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
@@ -231,6 +200,24 @@ function SettingModal({
               </div>
             </div>
           </div>
+
+          {/* Conditional: User ID / Campaign ID */}
+          {form.sender_type === 'user' && (
+            <div className="form-group">
+              <label className="label">User ID <span className="text-red-500">*</span></label>
+              <input className="input w-full text-sm" type="number" placeholder="Enter user ID"
+                value={form.user_id}
+                onChange={e => set('user_id', e.target.value)} />
+            </div>
+          )}
+          {form.sender_type === 'campaign' && (
+            <div className="form-group">
+              <label className="label">Campaign ID <span className="text-red-500">*</span></label>
+              <input className="input w-full text-sm" type="number" placeholder="Enter campaign ID"
+                value={form.campaign_id}
+                onChange={e => set('campaign_id', e.target.value)} />
+            </div>
+          )}
 
           {/* SMTP Connection */}
           <div className="rounded-xl border border-slate-200 overflow-hidden">
@@ -307,102 +294,30 @@ function SettingModal({
           </div>
 
           {/* Sender Details */}
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-              <Mail size={13} className="text-slate-500" />
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Sender Details</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="form-group mb-0">
-                  <label className="label">From Email <span className="text-red-500">*</span></label>
-                  <input className="input w-full text-sm" type="email" placeholder="noreply@company.com"
-                    value={form.sender_email}
-                    onChange={e => set('sender_email', e.target.value)} />
-                </div>
-                <div className="form-group mb-0">
-                  <label className="label">From Name</label>
-                  <input className="input w-full text-sm" placeholder="Company Name"
-                    value={form.sender_name}
-                    onChange={e => set('sender_name', e.target.value)} />
-                </div>
+          {form.sender_type !== 'user' && (
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <Mail size={13} className="text-slate-500" />
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Sender Details</span>
               </div>
-
-              {form.mail_type !== 'notification' && (
-                <div className="form-group mb-0">
-                  <label className="label">Send Email Via</label>
-                  <div className="flex gap-2">
-                    {[
-                      { value: 'custom',     label: 'Custom Sender' },
-                      { value: 'user_email', label: 'User Email' },
-                    ].map(opt => (
-                      <button key={opt.value} type="button"
-                        onClick={() => set('send_email_via', opt.value)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors',
-                          form.send_email_via === opt.value
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                        )}
-                      >
-                        {form.send_email_via === opt.value && <Check size={11} />}
-                        {opt.label}
-                      </button>
-                    ))}
+              <div className="p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="form-group mb-0">
+                    <label className="label">From Email <span className="text-red-500">*</span></label>
+                    <input className="input w-full text-sm" type="email" placeholder="noreply@company.com"
+                      value={form.from_email}
+                      onChange={e => set('from_email', e.target.value)} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="label">From Name</label>
+                    <input className="input w-full text-sm" placeholder="Company Name"
+                      value={form.from_name}
+                      onChange={e => set('from_name', e.target.value)} />
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Test Email */}
-          <div className="rounded-xl border border-dashed border-slate-300 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50/60 border-b border-dashed border-slate-300">
-              <Send size={13} className="text-slate-500" />
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Send Test Email</span>
-            </div>
-            <div className="p-4">
-              <div className="flex gap-2">
-                <input
-                  className="input flex-1 text-sm"
-                  type="email"
-                  placeholder="recipient@example.com"
-                  value={testTo}
-                  onChange={e => setTestTo(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={handleTest}
-                  disabled={testing || !testTo}
-                  className="btn-outline flex items-center gap-1.5 text-sm whitespace-nowrap disabled:opacity-50"
-                >
-                  {testing
-                    ? <><Loader2 size={13} className="animate-spin" /> Sending...</>
-                    : <><Send size={13} /> Send Test</>
-                  }
-                </button>
               </div>
-
-              {/* Test result banner */}
-              {testResult && (
-                <div className={cn(
-                  'mt-3 flex items-start gap-2 p-3 rounded-lg text-sm',
-                  testResult.success
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                )}>
-                  {testResult.success
-                    ? <Check size={15} className="mt-0.5 flex-shrink-0 text-emerald-600" />
-                    : <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-red-500" />
-                  }
-                  <span>{testResult.message}</span>
-                </div>
-              )}
-              <p className="text-[11px] text-slate-400 mt-2">
-                Tests are sent using the form values above — configuration is not saved until you click Save.
-              </p>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -427,61 +342,65 @@ export function DialerEmailSettings() {
   const qc = useQueryClient()
 
   const [showModal, setShowModal] = useState(false)
-  const [editing,   setEditing]   = useState<EmailSetting | null>(null)
+  const [editing,   setEditing]   = useState<SmtpSetting | null>(null)
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['dialer-email-settings'],
+    queryKey: ['smtp-settings'],
     queryFn: async () => {
-      const res = await emailSettingsService.list()
-      const payload = res.data?.data ?? res.data ?? {}
-      return (payload.list ?? []) as EmailSetting[]
+      const res = await smtpService.list()
+      const payload = res.data?.data ?? res.data ?? []
+      // Backend returns array directly or { total, data } when paginated
+      return (Array.isArray(payload) ? payload : payload.data ?? []) as SmtpSetting[]
     },
     staleTime: 0,
   })
 
-  const settings: EmailSetting[] = data ?? []
+  const settings: SmtpSetting[] = data ?? []
 
   // Toggle active/inactive
   const toggleMutation = useMutation({
-    mutationFn: (id: number) => emailSettingsService.toggle(id),
+    mutationFn: (s: SmtpSetting) => {
+      const isActive = s.status === 1 || (s.status as unknown) == 1
+      return smtpService.toggleStatus(s.id, isActive ? 0 : 1)
+    },
     onSuccess: () => {
       toast.success('Status updated')
-      qc.invalidateQueries({ queryKey: ['dialer-email-settings'] })
+      qc.invalidateQueries({ queryKey: ['smtp-settings'] })
     },
     onError: () => toast.error('Failed to update status'),
   })
 
   // Delete
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => emailSettingsService.delete(id),
+    mutationFn: (id: number) => smtpService.delete(id),
     onSuccess: () => {
       toast.success('Configuration deleted')
-      qc.invalidateQueries({ queryKey: ['dialer-email-settings'] })
+      qc.invalidateQueries({ queryKey: ['smtp-settings'] })
     },
     onError: () => toast.error('Failed to delete'),
   })
 
-  async function handleDelete(s: EmailSetting) {
-    if (await confirmDelete(`${mailTypeLabel(s.mail_type)} (${s.sender_email})`)) {
+  async function handleDelete(s: SmtpSetting) {
+    if (await confirmDelete(`${senderTypeLabel(s.sender_type)} SMTP (${s.from_email || s.mail_username})`)) {
       deleteMutation.mutate(s.id)
     }
   }
 
-  function openEdit(s: EmailSetting) { setEditing(s); setShowModal(true) }
+  function openEdit(s: SmtpSetting) { setEditing(s); setShowModal(true) }
   function openAdd()                  { setEditing(null); setShowModal(true) }
 
   return (
     <div className="space-y-5">
 
-      {/* ── Page Header ── */}
+      {/* Page Header */}
       <div>
-        <h1 className="text-lg font-bold text-slate-900">Email Settings</h1>
+        <h1 className="text-lg font-bold text-slate-900">SMTP Settings</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          Configure SMTP email accounts for notifications, submissions and online applications
+          Configure SMTP email accounts for the phone system — system emails, campaign emails, and per-user email sending
         </p>
       </div>
 
-      {/* ── Toolbar ── */}
+      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span>{settings.length} configuration{settings.length !== 1 ? 's' : ''}</span>
@@ -497,20 +416,20 @@ export function DialerEmailSettings() {
         </div>
       </div>
 
-      {/* ── Info banner ── */}
+      {/* Info banner */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
         <Mail size={16} className="text-indigo-600 mt-0.5 flex-shrink-0" />
         <div>
-          <p className="text-sm font-medium text-indigo-800">Dynamic Email Routing</p>
+          <p className="text-sm font-medium text-indigo-800">Phone System Email Routing</p>
           <p className="text-xs text-indigo-700 mt-0.5">
-            Each configuration is tied to a mail type. The system automatically picks the active
-            configuration for the given type when sending notifications, submissions, or applications.
-            You can have multiple configs per type but only the active one is used.
+            Each SMTP configuration is tied to a sender type. System type is used for platform-wide emails,
+            Campaign type for campaign-specific sends, and User type for individual agent emails.
+            Only one System and one per Campaign/User setting is allowed.
           </p>
         </div>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div className="table-wrapper bg-white">
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
           <span className="text-xs text-slate-500 font-medium">
@@ -527,7 +446,7 @@ export function DialerEmailSettings() {
           <table className="table">
             <thead>
               <tr>
-                <th>Type</th>
+                <th>Sender Type</th>
                 <th>Provider</th>
                 <th>From</th>
                 <th>Host</th>
@@ -551,7 +470,7 @@ export function DialerEmailSettings() {
                       <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
                         <Mail size={22} className="opacity-40" />
                       </div>
-                      <p className="font-medium text-slate-500">No email configurations yet</p>
+                      <p className="font-medium text-slate-500">No SMTP configurations yet</p>
                       <p className="text-xs text-slate-400 mt-1">Click "Add Configuration" to set up your first SMTP account</p>
                     </div>
                   </td>
@@ -559,17 +478,22 @@ export function DialerEmailSettings() {
               ) : (
                 settings.map(s => {
                   const isActive = s.status === 1 || (s.status as unknown) == 1
+                  const context = s.sender_type === 'campaign' && s.campaign_id
+                    ? `Campaign #${s.campaign_id}`
+                    : s.sender_type === 'user' && s.user_id
+                      ? `User #${s.user_id}`
+                      : null
                   return (
                     <tr key={s.id} className="group">
-                      {/* Type */}
+                      {/* Sender Type */}
                       <td>
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
                             <Mail size={13} className="text-indigo-600" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{mailTypeLabel(s.mail_type)}</p>
-                            <p className="text-[11px] text-slate-400">{s.mail_type}</p>
+                            <p className="text-sm font-medium text-slate-900">{senderTypeLabel(s.sender_type)}</p>
+                            {context && <p className="text-[11px] text-slate-400">{context}</p>}
                           </div>
                         </div>
                       </td>
@@ -581,8 +505,8 @@ export function DialerEmailSettings() {
 
                       {/* From */}
                       <td>
-                        <p className="text-sm text-slate-700">{s.sender_email}</p>
-                        {s.sender_name && <p className="text-[11px] text-slate-400">{s.sender_name}</p>}
+                        <p className="text-sm text-slate-700">{s.from_email || '—'}</p>
+                        {s.from_name && <p className="text-[11px] text-slate-400">{s.from_name}</p>}
                       </td>
 
                       {/* Host */}
@@ -593,7 +517,7 @@ export function DialerEmailSettings() {
                       {/* Status */}
                       <td>
                         <button
-                          onClick={() => toggleMutation.mutate(s.id)}
+                          onClick={() => toggleMutation.mutate(s)}
                           disabled={toggleMutation.isPending}
                           title={isActive ? 'Click to deactivate' : 'Click to activate'}
                           className="disabled:opacity-60"

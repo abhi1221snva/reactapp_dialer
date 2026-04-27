@@ -152,6 +152,10 @@ export const crmService = {
     })
   },
 
+  // ── Agent Dashboard ─────────────────────────────────────────────────────────
+  getAgentDashboard: () =>
+    api.get('/crm/agent-dashboard'),
+
   // ── Analytics ───────────────────────────────────────────────────────────────
   getStatusDistribution: (period: AnalyticsPeriod = 'month') =>
     api.get('/crm/analytics/status-distribution', { params: { period } }),
@@ -719,4 +723,24 @@ export const crmService = {
 
   deleteAgentBonus: (id: number) =>
     api.delete(`/crm/agent-bonuses/${id}`),
+
+  // ── PDF Lead Extraction ───────────────────────────────────────────────────
+  uploadPdfForExtraction: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post<{ success: boolean; message: string; data: Record<string, string> }>(
+      '/upload-pdf-reader',
+      fd,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60_000 },
+    )
+  },
+
+  // ── PDF Reader Settings (field mapping) ─────────────────────────────────
+  getPdfReaderMappings: () =>
+    api.get<{ success: boolean; data: Array<{ id: number; pdf_label: string; crm_label_id: number | null; status: string }> }>(
+      '/pdf-reader-setting',
+    ),
+
+  updatePdfReaderMappings: (data: Record<number, number | null>) =>
+    api.post('/update-pdf-reader', { data }),
 }

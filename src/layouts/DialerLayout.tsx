@@ -24,7 +24,7 @@ const DIALER_TITLES: Record<string, string> = {
   '/settings/dispositions':         'Dispositions',
   '/settings/dnc':                  'DNC List',
   '/settings/exclude':              'Exclude List',
-  '/settings/fax':                  'Fax Settings',
+
   '/settings/security':             'Security Settings',
   '/settings/2fa-setup':            '2FA Setup',
   '/settings/lead-sources':         'Lead Sources',

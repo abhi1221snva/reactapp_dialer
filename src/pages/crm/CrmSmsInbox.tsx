@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import type { SmsConversation, SmsMessage, SmsAgent } from '../../types/crm.types'
+import { formatPartialPhoneUS, formatPhoneNumber, toE164 } from '../../utils/format'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -34,34 +35,7 @@ function formatDayLabel(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 }
 
-/** Format digits as user types into (XXX)XXX-XXXX */
-function formatPhoneInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10)
-  if (digits.length <= 3) return digits.length ? `(${digits}` : ''
-  if (digits.length <= 6) return `(${digits.slice(0, 3)})${digits.slice(3)}`
-  return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6)}`
-}
-
-/** Convert (XXX)XXX-XXXX display value to E.164 +1XXXXXXXXXX for API */
-function toE164(display: string): string {
-  const digits = display.replace(/\D/g, '')
-  if (digits.length === 10) return `+1${digits}`
-  if (digits.length === 11 && digits[0] === '1') return `+${digits}`
-  return display // already E.164 or unusual — pass as-is
-}
-
-/** Format a raw phone string into (NXX) NXX-XXXX or +1 (NXX) NXX-XXXX */
-function formatPhone(raw: string): string {
-  if (!raw) return raw
-  const digits = raw.replace(/\D/g, '')
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-  }
-  if (digits.length === 11 && digits[0] === '1') {
-    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
-  }
-  return raw // return as-is for unusual formats
-}
+// Local formatPhoneInput, toE164, formatPhone replaced by centralized imports from utils/format
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
@@ -153,7 +127,7 @@ function ConversationItem({ conv, isActive, onClick }: {
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             maxWidth: 148, fontWeight: hasUnread ? 500 : 400,
           }}>
-            {formatPhone(conv.lead_phone)}
+            {formatPhoneNumber(conv.lead_phone)}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 4 }}>
             {conv.agent_name && (
@@ -248,12 +222,12 @@ function MessageBubble({ msg, showDay, dayLabel }: {
             {/* from/to line for outbound */}
             {isOut && msg.from_number && (
               <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '0 0 4px', letterSpacing: '0.02em' }}>
-                From: {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
+                From: {formatPhoneNumber(msg.from_number)} → {formatPhoneNumber(msg.to_number)}
               </p>
             )}
             {!isOut && msg.from_number && (
               <p style={{ fontSize: 10, color: '#94a3b8', margin: '0 0 4px', letterSpacing: '0.02em' }}>
-                {formatPhone(msg.from_number)} → {formatPhone(msg.to_number)}
+                {formatPhoneNumber(msg.from_number)} → {formatPhoneNumber(msg.to_number)}
               </p>
             )}
             <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>
@@ -312,8 +286,8 @@ function SenderSelect({ numbers, value, onChange, compact = false }: {
           {numbers.map(n => (
             <option key={n.id} value={n.phone_number}>
               {n.friendly_name !== n.phone_number
-                ? `${n.friendly_name} (${formatPhone(n.phone_number)})`
-                : formatPhone(n.phone_number)}
+                ? `${n.friendly_name} (${formatPhoneNumber(n.phone_number)})`
+                : formatPhoneNumber(n.phone_number)}
             </option>
           ))}
         </select>
@@ -615,7 +589,7 @@ export function CrmSmsInbox() {
                 type="tel"
                 placeholder="To: (XXX)XXX-XXXX"
                 value={newPhone}
-                onChange={e => setNewPhone(formatPhoneInput(e.target.value))}
+                onChange={e => setNewPhone(formatPartialPhoneUS(e.target.value))}
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   padding: '7px 10px', fontSize: 12,
@@ -786,7 +760,7 @@ export function CrmSmsInbox() {
               {activeConv && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
                   <Phone size={10} style={{ color: '#94a3b8' }} />
-                  <span style={{ fontSize: 12, color: '#64748b' }}>{formatPhone(activeConv.lead_phone)}</span>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>{formatPhoneNumber(activeConv.lead_phone)}</span>
                   {activeConv.agent_name && (
                     <span style={{
                       fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 20,

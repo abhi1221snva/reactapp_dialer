@@ -100,6 +100,7 @@ export function WebPhone() {
   const registerSipDial     = useFloatingStore(s => s.registerSipDial)
   const registerSipMute     = useFloatingStore(s => s.registerSipMute)
   const registerSipHold     = useFloatingStore(s => s.registerSipHold)
+  const registerSipHangup   = useFloatingStore(s => s.registerSipHangup)
   const campaignDialActive  = useFloatingStore(s => s.campaignDialActive)
   const setIsOpen = setPhoneOpen
   const { phoneRight } = useWidgetPositions()
@@ -652,11 +653,13 @@ export function WebPhone() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Register SIP mute/hold so DialerInterface can toggle actual SIP session
+  // Register SIP mute/hold/hangup so DialerInterface can control the SIP session
   const sipToggleMuteRef = useRef(sipToggleMute)
   const sipToggleHoldRef = useRef(sipToggleHold)
+  const sipHangUpRef     = useRef(sipHangUp)
   sipToggleMuteRef.current = sipToggleMute
   sipToggleHoldRef.current = sipToggleHold
+  sipHangUpRef.current     = sipHangUp
   useEffect(() => {
     registerSipMute((muted: boolean) => {
       // Only toggle if current state doesn't match desired state
@@ -666,8 +669,13 @@ export function WebPhone() {
     })
     registerSipHold((held: boolean) => {
       if (!sipCallSess.current) return
-      if (held) sipCallSess.current.hold()
-      else sipCallSess.current.resume()
+      try {
+        if (held) sipCallSess.current.hold()
+        else sipCallSess.current.resume()
+      } catch { /* ignore */ }
+    })
+    registerSipHangup(() => {
+      sipHangUpRef.current()
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -918,18 +926,20 @@ export function WebPhone() {
                   </p>
                 )}
               </div>
-              <button
-                onClick={sipHangUp}
-                style={{
-                  width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer',
-                  background: 'linear-gradient(135deg,#EF4444,#DC2626)',
-                  boxShadow: '0 6px 28px rgba(239,68,68,0.45)',
-                  color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '0.05em',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <PhoneOff size={17} /> Cancel Call
-              </button>
+              {!campaignDialActive && (
+                <button
+                  onClick={sipHangUp}
+                  style={{
+                    width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer',
+                    background: 'linear-gradient(135deg,#EF4444,#DC2626)',
+                    boxShadow: '0 6px 28px rgba(239,68,68,0.45)',
+                    color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '0.05em',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}
+                >
+                  <PhoneOff size={17} /> Cancel Call
+                </button>
+              )}
             </div>
           )}
 
@@ -953,47 +963,51 @@ export function WebPhone() {
                 </p>
               </div>
 
-              {/* DTMF */}
-              <div style={{ padding: '0 14px 6px' }}>
-                <div style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', padding: '6px 12px' }}>
-                  <input
-                    ref={numberInputRef}
-                    readOnly
-                    className="w-full bg-transparent outline-none font-mono"
-                    style={{ fontSize: 13, fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', border: 'none' }}
-                    placeholder="DTMF…"
-                    value={number}
+              {/* DTMF, CallControls, Hangup — hidden when managed by Dialer Studio */}
+              {!campaignDialActive && (
+                <>
+                  {/* DTMF */}
+                  <div style={{ padding: '0 14px 6px' }}>
+                    <div style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', padding: '6px 12px' }}>
+                      <input
+                        ref={numberInputRef}
+                        readOnly
+                        className="w-full bg-transparent outline-none font-mono"
+                        style={{ fontSize: 13, fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', border: 'none' }}
+                        placeholder="DTMF…"
+                        value={number}
+                      />
+                    </div>
+                  </div>
+
+                  <DialPad onPress={sipDtmf} compact />
+
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '6px 0' }} />
+
+                  <CallControls
+                    isMuted={isMuted}
+                    isOnHold={isOnHold}
+                    onToggleMute={sipToggleMute}
+                    onToggleHold={sipToggleHold}
+                    onTransfer={sipTransfer}
                   />
-                </div>
-              </div>
 
-              <DialPad onPress={sipDtmf} compact />
-
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '6px 0' }} />
-
-              <CallControls
-                isMuted={isMuted}
-                isOnHold={isOnHold}
-                onToggleMute={sipToggleMute}
-                onToggleHold={sipToggleHold}
-                onTransfer={sipTransfer}
-              />
-
-              {/* Hang up */}
-              <div style={{ padding: '8px 14px 16px' }}>
-                <button
-                  onClick={sipHangUp}
-                  style={{
-                    width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer',
-                    background: 'linear-gradient(135deg,#EF4444,#DC2626)',
-                    boxShadow: '0 6px 28px rgba(239,68,68,0.45)',
-                    color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '0.05em',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  }}
-                >
-                  <PhoneOff size={18} /> HANG UP
-                </button>
-              </div>
+                  <div style={{ padding: '8px 14px 16px' }}>
+                    <button
+                      onClick={sipHangUp}
+                      style={{
+                        width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer',
+                        background: 'linear-gradient(135deg,#EF4444,#DC2626)',
+                        boxShadow: '0 6px 28px rgba(239,68,68,0.45)',
+                        color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '0.05em',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      }}
+                    >
+                      <PhoneOff size={18} /> HANG UP
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

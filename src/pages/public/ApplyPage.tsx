@@ -5,13 +5,14 @@ import {
   Building2, User, Users, BarChart2, DollarSign, Landmark, FileText,
   Check, X, Upload, Eye, EyeOff, Printer,
   AlertCircle, CheckCircle2, ShieldCheck, ChevronRight,
-  Edit3, ArrowLeft, ArrowRight, Phone, Mail, Clock,
+  Edit3, ArrowLeft, ArrowRight, Phone, Mail, Clock, RefreshCw,
 } from 'lucide-react'
 import {
   publicAppService, extractPdfFilename,
   PublicFormSection, PublicFormField, PublicCompany, SubmitResult,
   PublicDocumentType,
 } from '../../services/publicApp.service'
+import { formatPhoneNumber, formatPartialPhoneUS } from '../../utils/format'
 import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
 import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
@@ -163,7 +164,18 @@ function FormField({ f, value, onChange, error }: {
         isPublic
       />
     )
-    const t = ({ tel: 'tel', email: 'email', date: 'date', number: 'number' } as Record<string, string>)[f.type] ?? 'text'
+    const isPhone = f.type === 'tel' || f.type === 'phone' || f.type === 'phone_number' || /\bphone\b/i.test(f.key)
+    if (isPhone) return (
+      <input type="tel" value={value}
+        {...dbAttrs}
+        maxLength={14}
+        inputMode="tel"
+        placeholder={ph.tel ?? f.placeholder ?? ''}
+        onChange={e => onChange(f.key, formatPartialPhoneUS(e.target.value))}
+        {...fb}
+        style={base} />
+    )
+    const t = ({ email: 'email', date: 'date', number: 'number' } as Record<string, string>)[f.type] ?? 'text'
     return <input type={t} value={value} onChange={e => onChange(f.key, e.target.value)}
       {...fb} {...dbAttrs} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
   })()
@@ -184,7 +196,7 @@ function FormField({ f, value, onChange, error }: {
 }
 
 // ─── Signature pad (canvas, stores to local state) ────────────────────────────
-function SigPad({ onSave, saved }: { onSave: (d: string) => void; saved: boolean }) {
+function SigPad({ onSave, saved, savedDataUrl }: { onSave: (d: string) => void; saved: boolean; savedDataUrl?: string }) {
   const ref      = useRef<HTMLCanvasElement>(null)
   const last     = useRef<{ x: number; y: number } | null>(null)
   const drawingRef = useRef(false)
@@ -239,11 +251,12 @@ function SigPad({ onSave, saved }: { onSave: (d: string) => void; saved: boolean
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.success, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.7 }}>
           <CheckCircle2 size={13} /> Signature captured
         </div>
+        {savedDataUrl && <img src={savedDataUrl} alt="Signature" style={{ maxHeight: 80, maxWidth: 400, filter: 'contrast(1.2)' }} />}
         <p style={{ margin: 0, fontSize: 12, color: C.muted }}>Your signature will be included with your application.</p>
       </div>
       <button type="button" onClick={() => { clear(); onSave('') }}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 15px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: C.card, color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-        Retake
+        <RefreshCw size={13} /> Retake
       </button>
     </div>
   )
@@ -545,6 +558,7 @@ export function ApplyPage() {
   const [docs, setDocs]         = useState<UploadFile[]>([])
   const [submitting, setSub]    = useState(false)
   const [subErr, setSubErr]     = useState('')
+  const [sigErr, setSigErr]     = useState('')
   const [result, setResult]     = useState<SubmitResult | null>(null)
   const [hasOwner2, setHasOwner2] = useState(false)
 
@@ -594,7 +608,11 @@ export function ApplyPage() {
   }
 
   const validate = (): boolean => {
-    if (isSig || isDoc) return true   // sig/doc steps — no fields to check
+    if (isSig) {
+      if (!sigSaved) { setSigErr('Please save your signature before continuing.'); return false }
+      return true
+    }
+    if (isDoc) return true
     const errors = runValidation()
     setErrs(errors)
     if (Object.keys(errors).length > 0) {
@@ -606,8 +624,16 @@ export function ApplyPage() {
 
   // Navigate forward — ALWAYS validates first. Step NEVER changes on failure.
   const handleNext = () => {
-    if (isSig || isDoc) {
-      // Sig / Doc steps — no form fields, allow freely
+    if (isSig) {
+      if (!sigSaved) {
+        setSigErr('Please save your signature before continuing.')
+        return
+      }
+      setSigErr('')
+      setStep(s => Math.min(s + 1, TOTAL - 1))
+      return
+    }
+    if (isDoc) {
       setStep(s => Math.min(s + 1, TOTAL - 1))
       return
     }
@@ -621,7 +647,7 @@ export function ApplyPage() {
     setStep(s => Math.min(s + 1, TOTAL - 1))
   }
 
-  const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setErrs({}); setSubErr('') }
+  const handleBack = () => { setStep(s => Math.max(s - 1, 0)); setErrs({}); setSubErr(''); setSigErr('') }
 
   // Sidebar / dot nav — backward always free, forward gates on validate()
   const handleStepNav = (target: number) => {
@@ -782,7 +808,7 @@ export function ApplyPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {company?.company_phone && (
             <a href={`tel:${company.company_phone}`} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#94a3b8', fontSize: 12, textDecoration: 'none' }}>
-              <Phone size={12} /> {company.company_phone}
+              <Phone size={12} /> {formatPhoneNumber(company.company_phone)}
             </a>
           )}
           {company?.support_email && (
@@ -970,7 +996,7 @@ export function ApplyPage() {
                       <span style={{ fontSize: 11, color: C.error }}>*</span>
                       {sigSaved && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                     </div>
-                    <SigPad onSave={(d) => { setSig(d); setSigSaved(!!d) }} saved={sigSaved} />
+                    <SigPad onSave={(d) => { setSig(d); setSigSaved(!!d); if (d) setSigErr('') }} saved={sigSaved} savedDataUrl={sig} />
                   </div>
 
                   {/* ── Signature 2: Co-Applicant (only when Owner 2 checked) ── */}
@@ -984,10 +1010,15 @@ export function ApplyPage() {
                         <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
                         {sigSaved2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                       </div>
-                      <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d) }} saved={sigSaved2} />
+                      <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d) }} saved={sigSaved2} savedDataUrl={sig2} />
                     </div>
                   )}
                 </div>
+                {sigErr && (
+                  <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, marginTop: 12 }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />{sigErr}
+                  </div>
+                )}
               </div>
             ) : (
               /* ── Documents step ── */

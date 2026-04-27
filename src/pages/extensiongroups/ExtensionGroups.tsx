@@ -388,7 +388,11 @@ export function ExtensionGroups() {
   const table = useServerTable({ defaultLimit: 15 })
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<ExtGroup | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { setToolbar } = useDialerHeader()
+
+  // Clear selection on page/search/filter change
+  useEffect(() => { setSelectedIds([]) }, [table.page, table.search, table.filters])
 
   useEffect(() => {
     setToolbar(
@@ -415,11 +419,50 @@ export function ExtensionGroups() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => extensiongroupService.delete(id),
-    onSuccess: async () => {
+    onSuccess: async (res) => {
+      const body = (res as { data?: { success?: boolean | number | string; message?: string } })?.data
+      const succeeded =
+        body?.success === true  ||
+        body?.success === 1     ||
+        body?.success === 'true'||
+        body?.success === '1'
+      if (!succeeded) {
+        toast.error(body?.message || 'Failed to delete group')
+        return
+      }
       toast.success('Group deleted')
       await qc.invalidateQueries({ queryKey: ['extension-groups'] })
     },
-    onError: () => toast.error('Failed to delete group'),
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { message?: string; errors?: string[] } } }
+      const msg = axiosErr.response?.data?.message
+        || axiosErr.response?.data?.errors?.[0]
+        || 'Failed to delete group'
+      toast.error(msg)
+    },
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const results = await Promise.allSettled(ids.map(id => extensiongroupService.delete(id)))
+      const failedResults = results.filter(r => r.status === 'rejected')
+      const failedReasons = failedResults.map(r => {
+        const err = (r as PromiseRejectedResult).reason as { response?: { data?: { message?: string; errors?: string[] } } }
+        return err?.response?.data?.message || err?.response?.data?.errors?.[0] || 'Unknown error'
+      })
+      return { total: ids.length, failed: failedResults.length, failedReasons }
+    },
+    onSuccess: ({ total, failed, failedReasons }) => {
+      if (failed === 0) toast.success(`Deleted ${total} group(s)`)
+      else {
+        const uniqueReasons = [...new Set(failedReasons)]
+        toast.error(`${failed} of ${total} failed: ${uniqueReasons.join('; ')}`)
+      }
+      setSelectedIds([])
+      table.setPage(1)
+      qc.invalidateQueries({ queryKey: ['extension-groups'] })
+    },
+    onError: () => toast.error('Bulk delete failed'),
   })
 
   const toggleMutation = useMutation({
@@ -522,7 +565,41 @@ export function ExtensionGroups() {
         onResetFilters={table.resetFilters} hasActiveFilters={table.hasActiveFilters}
         page={table.page} limit={table.limit} onPageChange={table.setPage}
         hideToolbar
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
+
+      {/* Bulk delete bar */}
+      {selectedIds.length > 0 && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl"
+          style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' }}
+        >
+          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0" style={{ background: 'rgba(99,102,241,0.25)', color: '#a5b4fc' }}>
+            {selectedIds.length} selected
+          </span>
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <button
+            onClick={async () => {
+              if (await showConfirm({
+                title: `Delete ${selectedIds.length} Group${selectedIds.length > 1 ? 's' : ''}?`,
+                message: `${selectedIds.length} extension group${selectedIds.length > 1 ? 's' : ''} will be permanently deleted. This cannot be undone.`,
+                confirmText: 'Yes, delete',
+              })) bulkDeleteMutation.mutate(selectedIds)
+            }}
+            disabled={bulkDeleteMutation.isPending}
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg font-semibold bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors flex-shrink-0"
+          >
+            {bulkDeleteMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+            Delete
+          </button>
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <button onClick={() => setSelectedIds([])} className="p-1 rounded-md hover:bg-white/10 transition-colors flex-shrink-0" title="Clear selection">
+            <X size={14} style={{ color: 'rgba(255,255,255,0.5)' }} />
+          </button>
+        </div>
+      )}
 
       <ExtGroupFormModal
         isOpen={modal}

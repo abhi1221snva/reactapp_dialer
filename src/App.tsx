@@ -51,6 +51,7 @@ import { CrmLenderForm } from './pages/crm/CrmLenderForm'
 import { CrmLenderApis } from './pages/crm/CrmLenderApis'
 import { CrmLenderApiLogs } from './pages/crm/CrmLenderApiLogs'
 import { CrmPdfTemplates } from './pages/crm/CrmPdfTemplates'
+import { PdfReaderSettings } from './pages/crm/PdfReaderSettings'
 import { CrmAutomations } from './pages/crm/CrmAutomations'
 import { CrmDripCampaigns } from './pages/crm/CrmDripCampaigns'
 import { CrmDripCampaignBuilder } from './pages/crm/CrmDripCampaignBuilder'
@@ -122,7 +123,7 @@ import { SmsTemplates } from './pages/settings/SmsTemplates'
 import { DialerEmailSettings } from './pages/settings/DialerEmailSettings'
 import { DncList } from './modules/dnc/DncList'
 import { ExcludeList } from './modules/excludeList/ExcludeList'
-import { FaxList } from './modules/fax/FaxList'
+
 import { Settings } from './pages/settings/Settings'
 import { Ivr } from './pages/ivr/Ivr'
 import { RingGroups } from './pages/ringgroups/RingGroups'
@@ -259,6 +260,7 @@ export default function App() {
           <Route path="/crm/email-templates" element={<CrmEmailTemplates />} />
           <Route path="/crm/sms-templates" element={<CrmSmsTemplates />} />
           <Route path="/crm/pdf-templates" element={<CrmPdfTemplates />} />
+          <Route path="/crm/pdf-reader-settings" element={<PdfReaderSettings />} />
           <Route path="/crm/lenders" element={<CrmLenders />} />
           <Route path="/crm/lender-performance" element={<CrmLenderPerformance />} />
           <Route path="/crm/lenders/create" element={<CrmLenderForm />} />
@@ -339,7 +341,7 @@ export default function App() {
           <Route path="/settings/dispositions" element={<DispositionList />} />
           <Route path="/settings/dnc" element={<DncList />} />
           <Route path="/settings/exclude" element={<ExcludeList />} />
-          <Route path="/settings/fax" element={<FaxList />} />
+
           <Route path="/settings/security" element={<SecuritySettings />} />
           <Route path="/settings/2fa-setup" element={<TwoFactorSetup />} />
 

@@ -12,7 +12,6 @@ import toast from 'react-hot-toast'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
 import { userService } from '../../services/user.service'
-import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
@@ -436,15 +435,6 @@ export function EditCampaign() {
 
   const { data: callTimersData } = useQuery({ queryKey: ['call-timers-list'], queryFn: () => campaignService.listCallTimers() })
 
-  const { data: emailSettingsData } = useQuery({
-    queryKey: ['campaign-email-settings'],
-    queryFn: async () => {
-      const res = await emailSettingsService.list()
-      const payload = res.data?.data ?? res.data ?? {}
-      return (payload.list ?? []) as EmailSetting[]
-    },
-  })
-  const emailSettings: EmailSetting[] = emailSettingsData ?? []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const callTimers: Array<{ id: number; title: string }> = Array.isArray((callTimersData as any)?.data?.data?.data)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -726,19 +716,10 @@ export function EditCampaign() {
                   <div>
                     <label style={LBL}>Send Email</label>
                     <select {...register('email', { valueAsNumber: true })} className="cpn-fi">
-                      <option value={0}>Off</option>
-                      {emailSettings.filter(s => s.status === 1 || (s.status as unknown) == 1).map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.sender_name ? `${s.sender_name} — ${s.sender_email}` : s.sender_email} ({s.mail_driver})
-                        </option>
-                      ))}
-                      {emailSettings.filter(s => s.status === 1 || (s.status as unknown) == 1).length === 0 && (
-                        <>
-                          <option value={1}>User Email</option>
-                          <option value={2}>Campaign Email</option>
-                          <option value={3}>System Email</option>
-                        </>
-                      )}
+                      <option value={0}>No</option>
+                      <option value={1}>With User Email</option>
+                      <option value={2}>With Campaign Email</option>
+                      <option value={3}>With System Email</option>
                     </select>
                   </div>
                 </div>

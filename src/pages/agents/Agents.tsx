@@ -13,6 +13,7 @@ import { agentService, type CreateAgentPayload, type UpdateAgentPayload } from '
 import { useServerTable } from '../../hooks/useServerTable'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 import { useAuthStore } from '../../stores/auth.store'
+import { formatPartialPhoneUS, formatPhoneNumber } from '../../utils/format'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Agent extends Record<string, unknown> {
@@ -39,12 +40,7 @@ interface RoleOption {
 function capFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
-function formatUSPhone(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 10)
-  if (d.length <= 3) return d
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
-}
+// formatUSPhone replaced by centralized formatPartialPhoneUS / formatPhoneNumber from utils/format
 
 function agentInitials(a: Agent) {
   return ((a.first_name?.[0] ?? '') + (a.last_name?.[0] ?? '')).toUpperCase() || '?'
@@ -102,7 +98,7 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
     first_name: editing?.first_name ?? '',
     last_name:  editing?.last_name  ?? '',
     email:      editing?.email      ?? '',
-    mobile:     editing?.mobile ? formatUSPhone(editing.mobile) : '',
+    mobile:     editing?.mobile ? formatPartialPhoneUS(editing.mobile) : '',
     role_id:    editing?.role       ?? (roles[0]?.id ?? 0),
     password:   '',
     password_confirmation: '',
@@ -117,7 +113,7 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
       first_name: editing?.first_name ?? '',
       last_name:  editing?.last_name  ?? '',
       email:      editing?.email      ?? '',
-      mobile:     editing?.mobile ? formatUSPhone(editing.mobile) : '',
+      mobile:     editing?.mobile ? formatPartialPhoneUS(editing.mobile) : '',
       role_id:    editing?.role       ?? (roles[0]?.id ?? 0),
       password:   '',
       password_confirmation: '',
@@ -213,7 +209,7 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
               <div className="relative">
                 <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input type="tel" className="input pl-9" placeholder="(555) 555-5555"
-                  value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: formatUSPhone(e.target.value) }))} maxLength={14} />
+                  value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: formatPartialPhoneUS(e.target.value) }))} maxLength={14} />
               </div>
             </div>
             <div>
@@ -448,7 +444,7 @@ export function Agents() {
       render: (a) => (
         <div>
           <p className="text-sm text-slate-700">{a.email}</p>
-          {a.mobile && <p className="text-xs text-slate-500">{formatUSPhone(a.mobile)}</p>}
+          {a.mobile && <p className="text-xs text-slate-500">{formatPhoneNumber(a.mobile)}</p>}
         </div>
       ),
     },

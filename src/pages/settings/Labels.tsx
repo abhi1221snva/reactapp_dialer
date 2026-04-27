@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2,
-  GripVertical, Tag, Save, X, Check, Search,
+  GripVertical, Tag, Save, X, Check, Search, Loader2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -10,7 +10,7 @@ import { Badge } from '../../components/ui/Badge'
 import { labelService } from '../../services/label.service'
 import { useServerTable } from '../../hooks/useServerTable'
 import { formatDateTime } from '../../utils/format'
-import { confirmDelete } from '../../utils/confirmDelete'
+import { confirmDelete, showConfirm } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
@@ -264,7 +264,11 @@ export function Labels() {
   const [showCreate, setShowCreate] = useState(false)
   const [editLabel, setEditLabel] = useState<LabelItem | null>(null)
   const [showReorder, setShowReorder] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { setToolbar } = useDialerHeader()
+
+  // Clear selection on page/search/filter change
+  useEffect(() => { setSelectedIds([]) }, [table.page, table.search, table.filters])
 
   useEffect(() => {
     setToolbar(
@@ -305,6 +309,22 @@ export function Labels() {
     mutationFn: (id: number) => labelService.delete(id),
     onSuccess: () => { toast.success('Label deleted'); invalidate() },
     onError: () => toast.error('Failed to delete label'),
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const results = await Promise.allSettled(ids.map(id => labelService.delete(id)))
+      const failed = results.filter(r => r.status === 'rejected').length
+      return { total: ids.length, failed }
+    },
+    onSuccess: ({ total, failed }) => {
+      if (failed === 0) toast.success(`Deleted ${total} label(s)`)
+      else toast.error(`${failed} of ${total} deletions failed`)
+      setSelectedIds([])
+      table.setPage(1)
+      invalidate()
+    },
+    onError: () => toast.error('Bulk delete failed'),
   })
 
   const columns: Column<LabelItem>[] = [
@@ -423,8 +443,42 @@ export function Labels() {
           limit={table.limit}
           onPageChange={table.setPage}
           hideToolbar
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
         />
       </div>
+
+      {/* Bulk delete bar */}
+      {selectedIds.length > 0 && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl"
+          style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' }}
+        >
+          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0" style={{ background: 'rgba(99,102,241,0.25)', color: '#a5b4fc' }}>
+            {selectedIds.length} selected
+          </span>
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <button
+            onClick={async () => {
+              if (await showConfirm({
+                title: `Delete ${selectedIds.length} Label${selectedIds.length > 1 ? 's' : ''}?`,
+                message: `${selectedIds.length} label${selectedIds.length > 1 ? 's' : ''} will be permanently deleted. This cannot be undone.`,
+                confirmText: 'Yes, delete',
+              })) bulkDeleteMutation.mutate(selectedIds)
+            }}
+            disabled={bulkDeleteMutation.isPending}
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg font-semibold bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors flex-shrink-0"
+          >
+            {bulkDeleteMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+            Delete
+          </button>
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <button onClick={() => setSelectedIds([])} className="p-1 rounded-md hover:bg-white/10 transition-colors flex-shrink-0" title="Clear selection">
+            <X size={14} style={{ color: 'rgba(255,255,255,0.5)' }} />
+          </button>
+        </div>
+      )}
     </>
   )
 }

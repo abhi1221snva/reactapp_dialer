@@ -17,7 +17,7 @@ import { TIMEZONES } from '../../constants/timezones'
 import { Badge } from '../../components/ui/Badge'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { cn } from '../../utils/cn'
-import { formatDateTime, timeAgo, formatPhoneNumber } from '../../utils/format'
+import { formatDateTime, timeAgo, formatPhoneNumber, formatPartialPhoneUS } from '../../utils/format'
 import { showConfirm } from '../../utils/confirmDelete'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -126,21 +126,7 @@ function ProfileInfoSection({ user, avatarFile, onNameChange }: ProfileInfoProps
   }, [profileData])
 
   const handlePhoneChange = (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, 11)
-    let formatted = ''
-    if (digits.length === 0) {
-      formatted = ''
-    } else if (digits.startsWith('1')) {
-      const rest = digits.slice(1)
-      if (rest.length <= 3)      formatted = `+1 (${rest}`
-      else if (rest.length <= 6) formatted = `+1 (${rest.slice(0, 3)}) ${rest.slice(3)}`
-      else                       formatted = `+1 (${rest.slice(0, 3)}) ${rest.slice(3, 6)}-${rest.slice(6, 10)}`
-    } else {
-      if (digits.length <= 3)      formatted = `(${digits}`
-      else if (digits.length <= 6) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3)}`
-      else                         formatted = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
-    }
-    setForm((f) => ({ ...f, mobile: formatted }))
+    setForm((f) => ({ ...f, mobile: formatPartialPhoneUS(raw) }))
   }
 
   const avatarMutation = useMutation({

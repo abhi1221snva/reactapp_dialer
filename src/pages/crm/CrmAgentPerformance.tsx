@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  DollarSign, TrendingUp, Users, BarChart3, Trophy, ArrowUpRight,
-  ArrowDownRight, Minus, ChevronLeft, Loader2, Plus, X, Pencil, Trash2,
-  CheckCircle, AlertTriangle, RefreshCw, Award, Target, Calendar,
+  DollarSign, TrendingUp, Users, BarChart3, Trophy, UserPlus,
+  Send, ChevronLeft, Loader2, Plus, X, Pencil, Trash2,
+  CheckCircle, RefreshCw, Award, Target, Calendar,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 import type {
   AgentPerformanceSummary,
   AgentPerformanceRow,
@@ -17,7 +19,6 @@ import type {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Silently catch 403/404 from API and return null instead of throwing (avoids global toast). */
 async function quietFetch<T>(fn: () => Promise<{ data: { data?: T } | T }>): Promise<T | null> {
   try {
     const res = await fn()
@@ -31,13 +32,13 @@ async function quietFetch<T>(fn: () => Promise<{ data: { data?: T } | T }>): Pro
   }
 }
 
-const usd = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n ?? 0)
+const pct = (n: number) => `${(n ?? 0).toFixed(1)}%`
+
+const num = (n: number) =>
+  new Intl.NumberFormat('en-US').format(n ?? 0)
 
 const usdFull = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
-
-const pct = (n: number) => `${(n ?? 0).toFixed(1)}%`
 
 function fmtDate(d: string) {
   if (!d) return '—'
@@ -64,8 +65,19 @@ const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-emerald-100 text-emerald-700',
   clawback: 'bg-red-100 text-red-700',
   funded: 'bg-emerald-100 text-emerald-700',
-  in_repayment: 'bg-blue-100 text-blue-700',
-  defaulted: 'bg-red-100 text-red-600',
+  submitted: 'bg-amber-100 text-amber-700',
+  new_lead: 'bg-slate-100 text-slate-600',
+  docs_in: 'bg-blue-100 text-blue-700',
+  app_out: 'bg-indigo-100 text-indigo-700',
+  declined: 'bg-red-100 text-red-600',
+  contract_in: 'bg-cyan-100 text-cyan-700',
+  contract_out: 'bg-teal-100 text-teal-700',
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  hot: 'bg-red-100 text-red-700',
+  warm: 'bg-amber-100 text-amber-700',
+  cold: 'bg-blue-100 text-blue-700',
 }
 
 // ─── Summary Cards ───────────────────────────────────────────────────────────
@@ -73,12 +85,12 @@ const STATUS_COLORS: Record<string, string> = {
 function SummaryCards({ summary }: { summary: AgentPerformanceSummary | null }) {
   if (!summary) return null
   const cards = [
-    { label: 'Total Funded Volume', value: usd(summary.total_funded_volume), icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Total Deals',         value: String(summary.total_deals),      icon: Target,     color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
-    { label: 'Total Commissions',   value: usd(summary.total_commissions),   icon: Trophy,     color: 'text-amber-600',   bg: 'bg-amber-50'   },
-    { label: 'Avg Deal Size',       value: usd(summary.avg_deal_size),       icon: BarChart3,  color: 'text-slate-600',   bg: 'bg-slate-50'   },
-    { label: 'Renewal Rate',        value: pct(summary.renewal_rate),        icon: RefreshCw,  color: 'text-blue-600',    bg: 'bg-blue-50'    },
-    { label: 'Default Rate',        value: pct(summary.default_rate),        icon: AlertTriangle, color: 'text-red-500',  bg: 'bg-red-50'     },
+    { label: 'Total Leads',     value: num(summary.total_leads), icon: Users,       color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
+    { label: 'New Leads',       value: num(summary.new_leads),   icon: UserPlus,    color: 'text-blue-600',    bg: 'bg-blue-50'    },
+    { label: 'Submitted',       value: num(summary.submitted),   icon: Send,        color: 'text-amber-600',   bg: 'bg-amber-50'   },
+    { label: 'Approved',        value: num(summary.approved),    icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Funded',          value: num(summary.funded),      icon: DollarSign,  color: 'text-green-600',   bg: 'bg-green-50'   },
+    { label: 'Conversion Rate', value: pct(summary.conversion_rate), icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
   ]
 
   return (
@@ -106,23 +118,23 @@ function Leaderboard({ rows, onSelect }: { rows: AgentPerformanceRow[]; onSelect
       <div className="overflow-x-auto">
         <table className="table" style={{ tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 80 }} />
+            <col style={{ width: 70 }} />
             <col style={{ width: '24%' }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '14%' }} />
             <col style={{ width: '12%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '14%' }} />
           </colgroup>
           <thead>
             <tr>
               <th className="text-left">Rank</th>
               <th className="text-left">Agent</th>
-              <th className="text-right">Deals</th>
-              <th className="text-right">Funded Volume</th>
-              <th className="text-right">Commission</th>
+              <th className="text-right">Total Leads</th>
+              <th className="text-right">Funded</th>
+              <th className="text-right">Approved</th>
+              <th className="text-right">Submitted</th>
               <th className="text-right">Conversion</th>
-              <th className="text-right">Avg Deal Size</th>
             </tr>
           </thead>
           <tbody>
@@ -143,16 +155,16 @@ function Leaderboard({ rows, onSelect }: { rows: AgentPerformanceRow[]; onSelect
                 <td>
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-emerald-100 flex-shrink-0 flex items-center justify-center text-xs font-bold text-emerald-700">
-                      {row.agent_name.split(' ').map(n => n[0]).join('')}
+                      {row.agent_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                     </div>
                     <span className="text-sm font-medium text-slate-900 truncate">{row.agent_name}</span>
                   </div>
                 </td>
-                <td className="text-right"><span className="text-sm font-semibold text-slate-800">{row.deals}</span></td>
-                <td className="text-right"><span className="text-sm font-semibold text-emerald-700">{usd(row.funded_volume)}</span></td>
-                <td className="text-right"><span className="text-sm font-semibold text-indigo-700">{usd(row.commission)}</span></td>
-                <td className="text-right"><span className="text-sm text-slate-700">{pct(row.conversion_rate)}</span></td>
-                <td className="text-right"><span className="text-sm text-slate-600">{usd(row.avg_deal_size)}</span></td>
+                <td className="text-right"><span className="text-sm font-semibold text-slate-800">{num(row.total_leads)}</span></td>
+                <td className="text-right"><span className="text-sm font-semibold text-emerald-700">{num(row.funded)}</span></td>
+                <td className="text-right"><span className="text-sm font-semibold text-blue-700">{num(row.approved)}</span></td>
+                <td className="text-right"><span className="text-sm text-slate-700">{num(row.submitted)}</span></td>
+                <td className="text-right"><span className="text-sm text-slate-600">{pct(row.conversion_rate)}</span></td>
               </tr>
             ))}
           </tbody>
@@ -193,16 +205,16 @@ function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void 
 
   const stats = detail.summary
   const statCards = [
-    { label: 'Total Deals', value: String(stats.total_deals), icon: Target, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Funded Volume', value: usd(stats.funded_volume), icon: DollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Total Commission', value: usd(stats.total_commission), icon: Trophy, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Avg Deal Size', value: usd(stats.avg_deal_size), icon: BarChart3, color: 'text-slate-600', bg: 'bg-slate-50' },
-    { label: 'Pipeline Value', value: usd(stats.pipeline_value), icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Conversion Rate', value: pct(stats.conversion_rate), icon: ArrowUpRight, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Total Leads',     value: num(stats.total_leads),     icon: Users,       color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
+    { label: 'Funded',          value: num(stats.funded),           icon: DollarSign,  color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Approved',        value: num(stats.approved),         icon: CheckCircle, color: 'text-blue-600',    bg: 'bg-blue-50'    },
+    { label: 'Submitted',       value: num(stats.submitted),        icon: Send,        color: 'text-amber-600',   bg: 'bg-amber-50'   },
+    { label: 'Docs In',         value: num(stats.docs_in),          icon: Target,      color: 'text-slate-600',   bg: 'bg-slate-50'   },
+    { label: 'Conversion Rate', value: pct(stats.conversion_rate),  icon: TrendingUp,  color: 'text-purple-600',  bg: 'bg-purple-50'  },
   ]
 
   // Trend helpers
-  const maxVol = Math.max(...detail.monthly_trend.map(t => t.funded_volume), 1)
+  const maxLeads = Math.max(...detail.monthly_trend.map(t => t.leads), 1)
 
   return (
     <div className="space-y-5">
@@ -210,7 +222,7 @@ function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void 
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="action-btn"><ChevronLeft size={16} /></button>
         <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-sm font-bold text-emerald-700">
-          {detail.agent_name.split(' ').map(n => n[0]).join('')}
+          {detail.agent_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
         </div>
         <div>
           <h2 className="text-base font-semibold text-slate-900">{detail.agent_name}</h2>
@@ -233,54 +245,65 @@ function AgentDetail({ agentId, onBack }: { agentId: number; onBack: () => void 
 
       {/* Monthly Trend */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h3 className="text-sm font-semibold text-slate-800 mb-4">Monthly Trend</h3>
-        <div className="flex items-end gap-2 h-32">
-          {detail.monthly_trend.map(t => {
-            const h = Math.max((t.funded_volume / maxVol) * 100, 8)
-            return (
-              <div key={t.month} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-[10px] font-medium text-emerald-700">{usd(t.funded_volume)}</span>
-                <div
-                  className="w-full bg-emerald-200 rounded-t-md transition-all"
-                  style={{ height: `${h}%` }}
-                  title={`${fmtMonth(t.month)}: ${t.deals} deals, ${usd(t.funded_volume)}`}
-                />
-                <span className="text-[10px] text-slate-500">{fmtMonth(t.month)}</span>
-              </div>
-            )
-          })}
-        </div>
+        <h3 className="text-sm font-semibold text-slate-800 mb-4">Monthly Lead Trend</h3>
+        {detail.monthly_trend.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-6">No monthly data available</p>
+        ) : (
+          <div className="flex items-end gap-2 h-32">
+            {detail.monthly_trend.map(t => {
+              const h = Math.max((t.leads / maxLeads) * 100, 8)
+              return (
+                <div key={t.month} className="flex-1 flex flex-col items-center gap-1">
+                  <span className="text-[10px] font-medium text-indigo-700">{t.leads}</span>
+                  <div
+                    className="w-full bg-indigo-200 rounded-t-md transition-all"
+                    style={{ height: `${h}%` }}
+                    title={`${fmtMonth(t.month)}: ${t.leads} leads`}
+                  />
+                  <span className="text-[10px] text-slate-500">{fmtMonth(t.month)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Deals Table */}
+      {/* Leads Table */}
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="px-5 py-3 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-800">Deal History</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Recent Leads</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
-                {['Lead', 'Company', 'Lender', 'Funded', 'Factor', 'Commission', 'Status', 'Date'].map(h => (
+                {['Lead ID', 'Business Name', 'Status', 'Type', 'Date'].map(h => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {detail.deals.map(d => (
-                <tr key={d.deal_id}>
-                  <td><span className="text-sm font-mono text-slate-600">#{d.lead_id}</span></td>
-                  <td><span className="text-sm font-medium text-slate-900">{d.company_name || '—'}</span></td>
-                  <td><span className="text-sm text-slate-600">{d.lender_name || '—'}</span></td>
-                  <td><span className="text-sm font-semibold text-emerald-700">{usd(d.funded_amount)}</span></td>
-                  <td><span className="text-sm text-slate-700">{d.factor_rate?.toFixed(2) ?? '—'}</span></td>
-                  <td><span className="text-sm font-semibold text-indigo-700">{usdFull(d.commission)}</span></td>
+              {detail.leads.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-sm text-slate-400">No leads found</td>
+                </tr>
+              ) : detail.leads.map(l => (
+                <tr key={l.lead_id}>
+                  <td><span className="text-sm font-mono text-slate-600">#{l.lead_id}</span></td>
+                  <td><span className="text-sm font-medium text-slate-900">{l.business_name || '—'}</span></td>
                   <td>
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[d.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                      {d.status.replace(/_/g, ' ')}
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[l.lead_status] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {l.lead_status.replace(/_/g, ' ')}
                     </span>
                   </td>
-                  <td><span className="text-sm text-slate-600">{fmtDate(d.funding_date)}</span></td>
+                  <td>
+                    {l.lead_type ? (
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${TYPE_COLORS[l.lead_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                        {l.lead_type}
+                      </span>
+                    ) : '—'}
+                  </td>
+                  <td><span className="text-sm text-slate-600">{fmtDate(l.created_at)}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -391,6 +414,8 @@ function BonusModal({ editing, onClose, onSaved }: {
 
 function BonusesTab() {
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const isManager = (user?.level ?? 1) >= LEVELS.ASSOCIATE
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<AgentBonus | null>(null)
 
@@ -414,19 +439,21 @@ function BonusesTab() {
 
   return (
     <>
-      <div className="flex items-center justify-end mb-4">
-        <button onClick={() => { setEditing(null); setShowModal(true) }}
-          className="btn-success flex items-center gap-2">
-          <Plus size={15} /> Add Bonus
-        </button>
-      </div>
+      {isManager && (
+        <div className="flex items-center justify-end mb-4">
+          <button onClick={() => { setEditing(null); setShowModal(true) }}
+            className="btn-success flex items-center gap-2">
+            <Plus size={15} /> Add Bonus
+          </button>
+        </div>
+      )}
 
       <div className="table-wrapper">
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
-                {['Agent', 'Type', 'Description', 'Amount', 'Period', 'Status', 'Actions'].map(h => (
+                {['Agent', 'Type', 'Description', 'Amount', 'Period', 'Status', ...(isManager ? ['Actions'] : [])].map(h => (
                   <th key={h} className={h === 'Actions' ? 'text-right' : ''}>{h}</th>
                 ))}
               </tr>
@@ -468,18 +495,20 @@ function BonusesTab() {
                       {b.status}
                     </span>
                   </td>
-                  <td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setEditing(b); setShowModal(true) }} className="action-btn" title="Edit">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => deleteMutation.mutate(b.id)}
-                        disabled={deleteMutation.isPending}
-                        className="action-btn text-red-400 hover:text-red-600" title="Delete">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+                  {isManager && (
+                    <td className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => { setEditing(b); setShowModal(true) }} className="action-btn" title="Edit">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => deleteMutation.mutate(b.id)}
+                          disabled={deleteMutation.isPending}
+                          className="action-btn text-red-400 hover:text-red-600" title="Delete">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -500,21 +529,17 @@ function BonusesTab() {
 
 // ─── Page Component ──────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'agent' | 'bonuses'
-
 export function CrmAgentPerformance() {
   const { setDescription, setActions } = useCrmHeader()
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null)
 
   useEffect(() => {
-    setDescription('Track agent deal performance, commissions, and bonuses')
+    setDescription('Track agent lead performance and pipeline')
     setActions(undefined)
     return () => { setDescription(undefined); setActions(undefined) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Fetch data with sample fallback
   const { data: rawSummary } = useQuery({
     queryKey: ['agent-perf-summary'],
     queryFn: () => quietFetch<AgentPerformanceSummary>(() => crmService.getAgentPerformanceSummary()),
@@ -532,75 +557,29 @@ export function CrmAgentPerformance() {
   const summary = rawSummary ?? null
   const leaderboard = rawLeaderboard ?? []
 
-  const handleAgentSelect = (agentId: number) => {
-    setSelectedAgent(agentId)
-    setActiveTab('agent')
+  // If an agent is selected, show their detail view
+  if (selectedAgent) {
+    return (
+      <div className="space-y-5">
+        <AgentDetail agentId={selectedAgent} onBack={() => setSelectedAgent(null)} />
+      </div>
+    )
   }
 
-  const tabs: { label: string; value: Tab; icon: typeof Users }[] = [
-    { label: 'Overview',  value: 'overview', icon: BarChart3 },
-    { label: 'Agent Detail', value: 'agent', icon: Users },
-    { label: 'Bonuses',   value: 'bonuses',  icon: Award },
-  ]
-
+  // Default: overview with summary + leaderboard
   return (
     <div className="space-y-5">
-      {/* Tab Bar */}
-      <div className="flex gap-1 border-b border-slate-200">
-        {tabs.map(tab => (
-          <button
-            key={tab.value}
-            onClick={() => setActiveTab(tab.value)}
-            className={[
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              activeTab === tab.value
-                ? 'border-emerald-500 text-emerald-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700',
-            ].join(' ')}
-          >
-            <tab.icon size={14} />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Overview Tab */}
-      {activeTab === 'overview' && (
-        <div className="space-y-5">
-          <SummaryCards summary={summary} />
-          <div className="bg-white rounded-xl border border-slate-200">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <Trophy size={15} className="text-amber-500" />
-                Agent Leaderboard
-              </h3>
-              <p className="text-xs text-slate-400">Click a row to view agent detail</p>
-            </div>
-            <Leaderboard rows={leaderboard} onSelect={handleAgentSelect} />
-          </div>
+      <SummaryCards summary={summary} />
+      <div className="bg-white rounded-xl border border-slate-200">
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <Trophy size={15} className="text-amber-500" />
+            Agent Leaderboard
+          </h3>
+          <p className="text-xs text-slate-400">Click a row to view agent detail</p>
         </div>
-      )}
-
-      {/* Agent Detail Tab */}
-      {activeTab === 'agent' && (
-        selectedAgent ? (
-          <AgentDetail agentId={selectedAgent} onBack={() => { setSelectedAgent(null); setActiveTab('overview') }} />
-        ) : (
-          <div className="text-center py-16">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-              <Users size={24} className="text-emerald-400" />
-            </div>
-            <p className="text-sm font-medium text-slate-700">Select an agent from the leaderboard</p>
-            <p className="text-xs text-slate-400 mt-1">Click on an agent row in the Overview tab to view their details.</p>
-            <button onClick={() => setActiveTab('overview')} className="mt-3 text-sm text-emerald-600 underline">
-              Go to Overview
-            </button>
-          </div>
-        )
-      )}
-
-      {/* Bonuses Tab */}
-      {activeTab === 'bonuses' && <BonusesTab />}
+        <Leaderboard rows={leaderboard} onSelect={setSelectedAgent} />
+      </div>
     </div>
   )
 }

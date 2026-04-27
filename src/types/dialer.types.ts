@@ -35,11 +35,17 @@ export interface Lead {
   city?: string
   state?: string
   fields?: Record<string, string>
+  /** Original display labels from list_header (key = lowercase field key, value = original label) */
+  fieldLabels?: Record<string, string>
+  /** DB column names from list_header (key = lowercase field key, value = option_N column) */
+  fieldColumns?: Record<string, string>
 }
 
 export interface Disposition {
   id: number
   disposition: string
+  /** API returns `title` instead of `disposition` */
+  title?: string
   d_type: string
   hotkey?: string
   color?: string

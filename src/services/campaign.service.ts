@@ -26,6 +26,9 @@ export const campaignService = {
   delete: (id: number) =>
     api.post('/delete-campaign', { campaign_id: id }),
 
+  bulkDelete: (ids: number[]) =>
+    api.post('/bulk-delete-campaigns', { campaign_ids: ids }),
+
   toggle: (id: number, status: string) =>
     api.post('/status-update-campaign', { campaign_id: id, status }),
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -88,8 +88,10 @@ function bucketFields(fields: CrmLabel[] = []) {
 export function CrmLeadCreate() {
   const { id } = useParams<{ id: string }>()
   const navigate  = useNavigate()
+  const location  = useLocation()
   const isEdit    = Boolean(id)
   const leadId    = id ? Number(id) : undefined
+  const prefillData = (location.state as { prefillData?: Record<string, string> } | null)?.prefillData
   const qc = useQueryClient()
   const [apiError,         setApiError]         = useState<string | null>(null)
   const [hasSecondOwner,   setHasSecondOwner]   = useState(false)
@@ -224,6 +226,32 @@ export function CrmLeadCreate() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing, leadFields])
 
+  // ── Pre-fill form from PDF extraction (location.state.prefillData) ──
+  useEffect(() => {
+    if (!prefillData || isEdit) return
+    if (!leadFields) return
+
+    const validKeys = new Set([
+      ...CORE_FIELD_DEFS.map(f => f.key),
+      ...leadFields.map(f => f.field_key),
+    ])
+
+    let filled = 0
+    for (const [key, value] of Object.entries(prefillData)) {
+      if (validKeys.has(key) && value) {
+        ;(setValue as (n: string, v: unknown) => void)(key, String(value))
+        filled++
+      }
+    }
+
+    if (filled > 0) {
+      toast.success(`Pre-filled ${filled} field${filled > 1 ? 's' : ''} from PDF`)
+    } else {
+      toast('No matching fields found in PDF data', { icon: '\u26A0\uFE0F' })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillData, leadFields, isEdit])
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
@@ -261,8 +289,7 @@ export function CrmLeadCreate() {
       else navigate('/crm/leads')
     },
     onError: (err) => {
-      const msg = handleApiError(err)
-      toast.error(msg ?? 'Failed to create lead')
+      handleApiError(err)
       setApiError(null)
     },
   })
@@ -276,8 +303,7 @@ export function CrmLeadCreate() {
       navigate(`/crm/leads/${leadId}`)
     },
     onError: (err) => {
-      const msg = handleApiError(err)
-      toast.error(msg ?? 'Failed to update lead')
+      handleApiError(err)
       setApiError(null)
     },
   })

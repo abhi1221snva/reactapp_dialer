@@ -38,6 +38,19 @@ export function formatPartialPhoneUS(digits: string): string {
   return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
 }
 
+/** Strip all non-digits from a phone string, returning raw digits only */
+export function stripPhone(val: string): string {
+  return val.replace(/\D/g, '')
+}
+
+/** Convert a US phone (formatted or raw 10-digit) to E.164 format: +1XXXXXXXXXX */
+export function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) return `+1${digits}`
+  if (digits.length === 11 && digits[0] === '1') return `+${digits}`
+  return phone
+}
+
 export function formatDate(date: string | Date, timezone?: string): string {
   if (!date) return '-'
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }

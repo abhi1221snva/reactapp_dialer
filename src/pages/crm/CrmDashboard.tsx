@@ -14,8 +14,10 @@ import {
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { useAuthStore } from '../../stores/auth.store'
+import { useAuth } from '../../hooks/useAuth'
 import { initials } from '../../utils/format'
 import { cn } from '../../utils/cn'
+import { CrmAgentDashboard } from './CrmAgentDashboard'
 import type { AnalyticsPeriod } from '../../types/crm.types'
 
 
@@ -151,6 +153,15 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function CrmDashboard() {
+  const { isAgent } = useAuth()
+
+  // Agents see their own focused dashboard
+  if (isAgent) return <CrmAgentDashboard />
+
+  return <AdminDashboard />
+}
+
+function AdminDashboard() {
   const navigate = useNavigate()
   const [period, setPeriod] = useState<AnalyticsPeriod>('month')
   const { setDescription, setActions } = useCrmHeader()

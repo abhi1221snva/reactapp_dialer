@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import api from '../../api/axios'
 import { useAuthStore } from '../../stores/auth.store'
+import { formatPartialPhoneUS } from '../../utils/format'
 
 interface CompanySettings {
   id: number | null
@@ -252,7 +253,7 @@ export function CrmCompanySettings() {
       setForm({
         company_name:    data.company_name    ?? '',
         company_email:   data.company_email   ?? data.support_email ?? '',
-        company_phone:   data.company_phone   ?? '',
+        company_phone:   formatPartialPhoneUS(data.company_phone ?? ''),
         company_address: data.company_address ?? '',
         state:           data.state           ?? '',
         city:            data.city            ?? '',
@@ -271,7 +272,7 @@ export function CrmCompanySettings() {
   const updateUser = useAuthStore(s => s.updateUser)
 
   const mutation = useMutation({
-    mutationFn: () => settingsApi.update(form),
+    mutationFn: () => settingsApi.update({ ...form, company_phone: form.company_phone?.replace(/\D/g, '') || '' }),
     onSuccess: () => {
       toast.success('Settings saved!')
       qc.invalidateQueries({ queryKey: ['company-settings'] })
@@ -429,8 +430,10 @@ export function CrmCompanySettings() {
                     <input
                       type="tel"
                       value={form.company_phone}
-                      onChange={e => handleChange('company_phone', e.target.value)}
-                      placeholder="(555) 123-4567"
+                      onChange={e => handleChange('company_phone', formatPartialPhoneUS(e.target.value))}
+                      placeholder="(555) 555-5555"
+                      maxLength={14}
+                      inputMode="tel"
                       className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50
                         focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 focus:bg-white
                         text-slate-800 placeholder:text-slate-300 transition-all"

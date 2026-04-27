@@ -118,6 +118,16 @@ export const campaignDialerService = {
       fields?: Array<{ label: string; value: unknown; is_dialing?: number }>
     }>(`/dialer/campaign/${campaignId}/next-customer`),
 
+  /**
+   * Hang up only the customer channel — agent stays in conference for disposition.
+   * Does NOT auto-dial the next lead (unlike nextCustomer).
+   * POST /dialer/campaign/{id}/hangup-customer
+   */
+  hangupCustomer: (campaignId: number) =>
+    api.post<{ success: boolean; message: string; previous_lead_id?: number }>(
+      `/dialer/campaign/${campaignId}/hangup-customer`
+    ),
+
   // ── Agent assignment ────────────────────────────────────────────────────────
 
   /**
@@ -140,4 +150,29 @@ export const campaignDialerService = {
    */
   removeAgent: (campaignId: number, userId: number) =>
     api.delete(`/dialer/campaign/${campaignId}/agents/${userId}`),
+
+  // ── Lead CDR / Activity ──────────────────────────────────────────────────────
+
+  /**
+   * Fetch CDR records for a specific lead.
+   * GET /dialer/lead/{leadId}/cdr
+   */
+  getLeadCdr: (leadId: number) =>
+    api.get<{ data: CdrRecord[] }>(`/dialer/lead/${leadId}/cdr`),
+}
+
+export interface CdrRecord {
+  id: number
+  extension: string | null
+  route: 'IN' | 'OUT' | string
+  type: 'dialer' | 'manual' | string
+  number: string | null
+  duration: number | null
+  start_time: string | null
+  end_time: string | null
+  call_recording: string | null
+  campaign_id: number | null
+  disposition_id: number | null
+  lead_id: number | null
+  disposition_title: string | null
 }

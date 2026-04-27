@@ -5,6 +5,7 @@ import { ArrowLeft, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { formatPartialPhoneUS } from '../../utils/format'
 
 const DEFAULT_FORM = {
   first_name: '',
@@ -73,7 +74,7 @@ export function LeadForm() {
         first_name: l.first_name || '',
         last_name: l.last_name || '',
         email: l.email || '',
-        phone_number: l.phone_number || '',
+        phone_number: formatPartialPhoneUS(l.phone_number || ''),
         company_name: l.company_name || '',
         address: l.address || '',
         city: l.city || '',
@@ -91,10 +92,11 @@ export function LeadForm() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      const payload = { ...form, phone_number: form.phone_number.replace(/\D/g, '') }
       if (isEdit) {
-        return leadService.update(Number(id), form as Record<string, unknown>)
+        return leadService.update(Number(id), payload as Record<string, unknown>)
       }
-      return leadService.create(form as Record<string, unknown>)
+      return leadService.create(payload as Record<string, unknown>)
     },
     onSuccess: () => {
       toast.success(isEdit ? 'Lead updated' : 'Lead created')
@@ -160,12 +162,13 @@ export function LeadForm() {
           <div className="form-group">
             <label className="label">Phone Number <span className="text-red-500">*</span></label>
             <input
+              type="tel"
               className={`input${formErrors.phone_number ? ' border-red-400 focus:ring-red-400' : ''}`}
               value={form.phone_number}
-              onChange={e => set('phone_number', e.target.value)}
-              placeholder="10-digit number"
-              maxLength={15}
-              inputMode="numeric"
+              onChange={e => set('phone_number', formatPartialPhoneUS(e.target.value))}
+              placeholder="(555) 555-5555"
+              maxLength={14}
+              inputMode="tel"
             />
             {formErrors.phone_number && (
               <p className="mt-1 text-xs text-red-500">{formErrors.phone_number}</p>

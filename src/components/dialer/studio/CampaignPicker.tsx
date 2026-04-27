@@ -1,5 +1,8 @@
-import { useState } from 'react'
-import { Radio, Users, TrendingUp, Zap, Search, ChevronRight, PlayCircle, WifiOff, ShieldAlert } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import {
+  Radio, Zap, Search, ChevronRight,
+  WifiOff, ShieldAlert, ArrowUpDown, ArrowUp, ArrowDown,
+} from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import type { StudioCampaign } from './types'
 
@@ -12,17 +15,51 @@ interface Props {
   webphoneOk?: boolean
 }
 
+type StatusFilter = 'all' | 'active' | 'paused'
+type SortKey = 'name' | 'remaining' | 'progress' | 'totalLeads' | 'status'
+type SortDir = 'asc' | 'desc'
+
+function getRemaining(c: StudioCampaign) { return c.totalLeads - c.calledLeads }
+function getProgress(c: StudioCampaign) { return c.totalLeads ? (c.calledLeads / c.totalLeads) * 100 : 0 }
+
 /**
- * Pre-dialer campaign picker.
- * Displayed when no campaign is selected yet. Clean premium SaaS card grid.
+ * Pre-dialer campaign picker — full-width sortable table with status dropdown filter.
  */
 export function CampaignPicker({ campaigns, onSelect, isLoading, error, webphoneConfigured = true, webphoneOk = true }: Props) {
   const [query, setQuery] = useState('')
-  const filtered = campaigns.filter((c) =>
-    c.name.toLowerCase().includes(query.toLowerCase()),
-  )
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
-  // ── Loading skeleton ───────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = campaigns
+    if (query) list = list.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+    if (statusFilter !== 'all') list = list.filter((c) => c.status === statusFilter)
+
+    list = [...list].sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'name':       cmp = a.name.localeCompare(b.name); break
+        case 'remaining':  cmp = getRemaining(a) - getRemaining(b); break
+        case 'progress':   cmp = getProgress(a) - getProgress(b); break
+        case 'totalLeads': cmp = a.totalLeads - b.totalLeads; break
+        case 'status':     cmp = a.status.localeCompare(b.status); break
+      }
+      return sortDir === 'desc' ? -cmp : cmp
+    })
+    return list
+  }, [campaigns, query, statusFilter, sortKey, sortDir])
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const activeCt = campaigns.filter((c) => c.status === 'active').length
+  const pausedCt = campaigns.length - activeCt
+  const totalQueued = campaigns.reduce((s, c) => s + getRemaining(c), 0)
+
+  // ── Loading skeleton ─────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="animate-fadeIn">
@@ -31,25 +68,16 @@ export function CampaignPicker({ campaigns, onSelect, isLoading, error, webphone
           <div className="h-7 w-40 bg-slate-200 rounded-lg animate-pulse" />
         </div>
         <p className="text-sm text-slate-400 mb-6">Loading your campaigns…</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="card animate-pulse space-y-3">
-              <div className="h-11 w-11 rounded-xl bg-slate-200" />
-              <div className="h-4 w-3/4 bg-slate-200 rounded" />
-              <div className="h-3 w-1/2 bg-slate-100 rounded" />
-              <div className="grid grid-cols-3 gap-2 pt-2">
-                {[0,1,2].map((j) => <div key={j} className="h-8 bg-slate-100 rounded-lg" />)}
-              </div>
-              <div className="h-2 w-full bg-slate-100 rounded-full" />
-              <div className="h-10 w-full bg-slate-100 rounded-xl" />
-            </div>
+            <div key={i} className="h-14 bg-slate-100 rounded-xl animate-pulse" />
           ))}
         </div>
       </div>
     )
   }
 
-  // ── Error state ────────────────────────────────────────────────────────────
+  // ── Error state ──────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="animate-fadeIn empty-dashed">
@@ -63,7 +91,7 @@ export function CampaignPicker({ campaigns, onSelect, isLoading, error, webphone
   return (
     <div className="animate-fadeIn">
       {/* Hero header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
@@ -79,156 +107,212 @@ export function CampaignPicker({ campaigns, onSelect, isLoading, error, webphone
 
         <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 shadow-sm">
           <Zap size={14} className="text-indigo-600" />
-          <span className="text-xs font-semibold text-slate-700">
-            {campaigns.filter((c) => c.status === 'active').length} Active
-          </span>
+          <span className="text-xs font-semibold text-slate-700">{activeCt} Active</span>
           <span className="text-slate-200">·</span>
-          <span className="text-xs text-slate-500">
-            {campaigns.reduce((sum, c) => sum + (c.totalLeads - c.calledLeads), 0).toLocaleString()} leads queued
-          </span>
+          <span className="text-xs text-slate-500">{totalQueued.toLocaleString()} leads queued</span>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-5">
-        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search campaigns…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-        />
+      {/* Toolbar: Search + Status dropdown */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-0">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search campaigns…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+          />
+        </div>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 font-medium focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer"
+        >
+          <option value="all">All ({campaigns.length})</option>
+          <option value="active">Active ({activeCt})</option>
+          <option value="paused">Paused ({pausedCt})</option>
+        </select>
       </div>
 
-      {/* Grid */}
+      {/* Empty state */}
       {filtered.length === 0 ? (
         <div className="empty-dashed">
           <Radio size={28} className="text-slate-300 mb-3" />
-          <p className="font-semibold text-slate-600">No campaigns match your search</p>
-          <p className="text-xs text-slate-400 mt-1">Try a different keyword</p>
+          <p className="font-semibold text-slate-600">
+            {campaigns.length === 0 ? 'No campaigns assigned' : 'No campaigns match your filters'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {campaigns.length === 0
+              ? 'Contact your administrator to assign campaigns to your account.'
+              : 'Try adjusting your search or filter.'}
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((c, i) => {
-            const remaining = c.totalLeads - c.calledLeads
-            const progress = c.totalLeads ? Math.round((c.calledLeads / c.totalLeads) * 100) : 0
-            const isPaused = c.status === 'paused'
-            const isBlocked = !webphoneOk
-            const isDisabled = isPaused || isBlocked
-            return (
-              <button
-                key={c.id}
-                onClick={() => !isDisabled && onSelect(c)}
-                disabled={isDisabled}
-                style={{ animationDelay: `${i * 40}ms` }}
-                className={cn(
-                  'text-left card-hover animate-slideUp group relative overflow-hidden',
-                  isDisabled && 'opacity-60 cursor-not-allowed hover:shadow-none hover:translate-y-0',
-                )}
-              >
-                {/* Gradient accent bar */}
-                <div className={cn('absolute inset-x-0 top-0 h-1 bg-gradient-to-r', c.color)} />
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/60">
+                <SortHeader label="Campaign" sortKey="name" current={sortKey} dir={sortDir} onSort={toggleSort} className="pl-4" />
+                <SortHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={toggleSort} className="hidden sm:table-cell" />
+                <SortHeader label="Mode" sortKey="name" current={sortKey} dir={sortDir} onSort={toggleSort} sortable={false} className="hidden lg:table-cell" />
+                <SortHeader label="Total" sortKey="totalLeads" current={sortKey} dir={sortDir} onSort={toggleSort} className="hidden md:table-cell text-right" />
+                <SortHeader label="Remaining" sortKey="remaining" current={sortKey} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortHeader label="Progress" sortKey="progress" current={sortKey} dir={sortDir} onSort={toggleSort} className="hidden sm:table-cell" />
+                <th className="py-3 px-4 text-right">
+                  <span className="sr-only">Action</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filtered.map((c) => {
+                const remaining = getRemaining(c)
+                const progress = Math.round(getProgress(c))
+                const isPaused = c.status === 'paused'
+                const isBlocked = !webphoneOk
+                const isDisabled = isPaused || isBlocked
+                return (
+                  <tr
+                    key={c.id}
+                    onClick={() => !isDisabled && onSelect(c)}
+                    className={cn(
+                      'group transition-colors',
+                      isDisabled
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'cursor-pointer hover:bg-indigo-50/40',
+                    )}
+                  >
+                    {/* Campaign name + color dot */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn('w-2.5 h-2.5 rounded-full shrink-0 bg-gradient-to-br', c.color)} />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 truncate">{c.name}</p>
+                          <p className="text-xs text-slate-400 sm:hidden">
+                            {c.dialMethod} · {isPaused ? 'Paused' : 'Live'}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
 
-                <div className="flex items-start justify-between mb-4">
-                  <div className={cn(
-                    'w-11 h-11 rounded-xl flex items-center justify-center shadow-sm bg-gradient-to-br',
-                    c.color,
-                  )}>
-                    <Radio size={18} className="text-white" />
-                  </div>
-                  <span className={cn(
-                    'badge text-[10px]',
-                    isPaused ? 'badge-gray' : 'badge-green',
-                  )}>
-                    <span className={cn(
-                      'w-1.5 h-1.5 rounded-full',
-                      isPaused ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse',
-                    )} />
-                    {isPaused ? 'Paused' : 'Live'}
-                  </span>
-                </div>
+                    {/* Status */}
+                    <td className="py-3 px-4 hidden sm:table-cell">
+                      <span className={cn(
+                        'inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full',
+                        isPaused
+                          ? 'bg-slate-100 text-slate-500'
+                          : 'bg-emerald-50 text-emerald-700',
+                      )}>
+                        <span className={cn(
+                          'w-1.5 h-1.5 rounded-full',
+                          isPaused ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse',
+                        )} />
+                        {isPaused ? 'Paused' : 'Live'}
+                      </span>
+                    </td>
 
-                <h3 className="font-bold text-slate-900 text-base leading-snug mb-1 line-clamp-2">
-                  {c.name}
-                </h3>
-                <p className="text-xs text-slate-500 capitalize mb-4">
-                  {c.dialMethod} &middot; Ratio {c.ratio}:1
-                </p>
+                    {/* Mode */}
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      <span className="text-xs text-slate-500">{c.dialMethod} · {c.ratio}:1</span>
+                    </td>
 
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400 uppercase tracking-wider">
-                      <Users size={9} /> Total
-                    </div>
-                    <p className="text-sm font-bold text-slate-900 mt-0.5">
-                      {c.totalLeads.toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400 uppercase tracking-wider">
-                      <TrendingUp size={9} /> Called
-                    </div>
-                    <p className="text-sm font-bold text-slate-900 mt-0.5">
-                      {c.calledLeads.toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400 uppercase tracking-wider">
-                      <Zap size={9} /> Left
-                    </div>
-                    <p className="text-sm font-bold text-indigo-600 mt-0.5">
-                      {remaining.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
+                    {/* Total */}
+                    <td className="py-3 px-4 text-right hidden md:table-cell">
+                      <span className="text-slate-700 font-medium tabular-nums">
+                        {c.totalLeads.toLocaleString()}
+                      </span>
+                    </td>
 
-                {/* Progress */}
-                <div>
-                  <div className="flex justify-between text-[11px] text-slate-400 mb-1.5">
-                    <span>Progress</span>
-                    <span className="font-semibold text-slate-600">{progress}%</span>
-                  </div>
-                  <div className="progress-track">
-                    <div
-                      className={cn('progress-fill bg-gradient-to-r', c.color)}
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
+                    {/* Remaining */}
+                    <td className="py-3 px-4 text-right">
+                      <span className="font-semibold text-indigo-600 tabular-nums">
+                        {remaining.toLocaleString()}
+                      </span>
+                    </td>
 
-                {/* CTA */}
-                <div className={cn(
-                  'mt-5 flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all',
-                  isPaused
-                    ? 'bg-slate-100 text-slate-400'
-                    : isBlocked
-                      ? 'bg-rose-50 text-rose-600'
-                      : 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white',
-                )}>
-                  {isPaused ? (
-                    <><PlayCircle size={15} /> Campaign Paused</>
-                  ) : isBlocked ? (
-                    <>
-                      {webphoneConfigured
-                        ? <><WifiOff size={15} /> WebPhone Not Connected</>
-                        : <><ShieldAlert size={15} /> WebPhone Not Configured</>
-                      }
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle size={15} />
-                      Start Dialing
-                      <ChevronRight size={14} className="transition-transform duration-200 group-hover:translate-x-0.5" />
-                    </>
-                  )}
-                </div>
-              </button>
-            )
-          })}
+                    {/* Progress bar (inline) */}
+                    <td className="py-3 px-4 hidden sm:table-cell">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden min-w-[60px]">
+                          <div
+                            className={cn('h-full rounded-full bg-gradient-to-r', c.color)}
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500 tabular-nums w-8 text-right">{progress}%</span>
+                      </div>
+                    </td>
+
+                    {/* Action */}
+                    <td className="py-3 px-4 text-right">
+                      {isPaused ? (
+                        <span className="text-xs text-slate-400">Paused</span>
+                      ) : isBlocked ? (
+                        <span className="text-xs text-rose-500 flex items-center gap-1 justify-end">
+                          {webphoneConfigured ? <WifiOff size={12} /> : <ShieldAlert size={12} />}
+                          {webphoneConfigured ? 'No WebPhone' : 'Not Configured'}
+                        </span>
+                      ) : (
+                        <button className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 group-hover:text-indigo-700 transition-colors">
+                          Start
+                          <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          {/* Footer summary */}
+          <div className="border-t border-slate-100 px-4 py-2.5 bg-slate-50/40 flex items-center justify-between">
+            <span className="text-xs text-slate-400">
+              {filtered.length} campaign{filtered.length !== 1 ? 's' : ''}
+            </span>
+            <span className="text-xs text-slate-400">
+              {filtered.reduce((s, c) => s + getRemaining(c), 0).toLocaleString()} total leads remaining
+            </span>
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+/* ── Sortable table header cell ─────────────────────────────────────────────── */
+
+function SortHeader({
+  label, sortKey, current, dir, onSort, sortable = true, className,
+}: {
+  label: string
+  sortKey: SortKey
+  current: SortKey
+  dir: SortDir
+  onSort: (k: SortKey) => void
+  sortable?: boolean
+  className?: string
+}) {
+  const isActive = sortable && current === sortKey
+  return (
+    <th
+      className={cn(
+        'py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap',
+        sortable && 'cursor-pointer select-none hover:text-slate-700 transition-colors',
+        className,
+      )}
+      onClick={() => sortable && onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortable && (
+          isActive
+            ? (dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
+            : <ArrowUpDown size={12} className="opacity-30" />
+        )}
+      </span>
+    </th>
   )
 }

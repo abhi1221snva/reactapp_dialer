@@ -248,12 +248,16 @@ export function LeadInfoPanel() {
           {/* Custom fields */}
           {activeLead.fields && Object.keys(activeLead.fields as object).length > 0 && (
             <div className="border-t border-slate-100 pt-3 space-y-2 mt-3">
-              {Object.entries(activeLead.fields as Record<string, unknown>).map(([key, value]) => (
-                <div key={key} className="flex justify-between text-xs">
-                  <span className="text-slate-500 capitalize">{key.replace(/_/g, ' ')}</span>
-                  <span className="text-slate-700 font-medium">{String(value ?? '—')}</span>
-                </div>
-              ))}
+              {Object.entries(activeLead.fields as Record<string, unknown>).map(([key, value]) => {
+                const v = value != null ? String(value) : '—'
+                const display = /\bphone\b/i.test(key) && v !== '—' ? formatPhoneNumber(v) : v
+                return (
+                  <div key={key} className="flex justify-between text-xs">
+                    <span className="text-slate-500 capitalize">{key.replace(/_/g, ' ')}</span>
+                    <span className="text-slate-700 font-medium">{display}</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

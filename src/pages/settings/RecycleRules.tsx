@@ -13,10 +13,12 @@ import { campaignService } from '../../services/campaign.service'
 import { listService } from '../../services/list.service'
 import { dispositionService } from '../../services/disposition.service'
 import { useServerTable } from '../../hooks/useServerTable'
-import { confirmDelete } from '../../utils/confirmDelete'
+import { confirmDelete, showConfirm } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { cn, capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 
 interface RecycleRuleItem {
   id: number
@@ -346,7 +348,40 @@ export function RecycleRules() {
   const table = useServerTable({ defaultLimit: 15 })
   const [showCreate, setShowCreate] = useState(false)
   const [editingRule, setEditingRule] = useState<RecycleRuleItem | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { setToolbar } = useDialerHeader()
+  const user = useAuthStore(s => s.user)
+  const userLevel = user?.level ?? 1
+  const canBulkDelete = userLevel >= LEVELS.ADMIN
+
+  const invalidate = () => {
+    setSelectedIds([])
+    qc.invalidateQueries({ queryKey: ['recycle-rules'] })
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => recycleRuleService.delete(id),
+    onSuccess: () => { toast.success('Rule deleted'); invalidate() },
+    onError: () => toast.error('Failed to delete rule'),
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: number[]) => recycleRuleService.bulkDelete(ids),
+    onSuccess: (_data, ids) => { toast.success(`${ids.length} rule(s) deleted`); invalidate() },
+    onError: () => toast.error('Failed to delete selected rules'),
+  })
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    const confirmed = await showConfirm({
+      title: 'Delete Selected Rules?',
+      message: `${selectedIds.length} recycle rule(s) will be permanently deleted. This cannot be undone.`,
+      confirmText: 'Yes, delete all',
+      icon: 'warning',
+      danger: true,
+    })
+    if (confirmed) bulkDeleteMutation.mutate(selectedIds)
+  }
 
   useEffect(() => {
     setToolbar(
@@ -362,6 +397,17 @@ export function RecycleRules() {
         </div>
         <div className="lt-divider" />
         <div className="lt-right">
+          {canBulkDelete && selectedIds.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="lt-b"
+              style={{ background: '#ef4444', color: '#fff', borderColor: '#ef4444' }}
+            >
+              <Trash2 size={13} />
+              {bulkDeleteMutation.isPending ? 'Deleting…' : `Delete (${selectedIds.length})`}
+            </button>
+          )}
           <button onClick={() => setShowCreate(true)} className="lt-b lt-p">
             <Plus size={13} /> Add Rule
           </button>
@@ -369,14 +415,6 @@ export function RecycleRules() {
       </>
     )
     return () => setToolbar(undefined)
-  })
-
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['recycle-rules'] })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => recycleRuleService.delete(id),
-    onSuccess: () => { toast.success('Rule deleted'); invalidate() },
-    onError: () => toast.error('Failed to delete rule'),
   })
 
   const columns: Column<RecycleRuleItem>[] = [
@@ -502,6 +540,9 @@ export function RecycleRules() {
           limit={table.limit}
           onPageChange={table.setPage}
           hideToolbar
+          selectable={canBulkDelete}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
         />
       </div>
     </>

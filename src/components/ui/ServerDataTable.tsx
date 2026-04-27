@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -64,6 +64,11 @@ interface Props<T extends Record<string, unknown>> {
   /** When true, the built-in toolbar (search, filters, refresh) is hidden.
    *  Use this when the parent page renders the toolbar in the layout header instead. */
   hideToolbar?: boolean
+
+  // selection
+  selectable?: boolean
+  selectedIds?: number[]
+  onSelectionChange?: (ids: number[]) => void
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -181,6 +186,9 @@ export function ServerDataTable<T extends Record<string, unknown>>({
   page, limit, onPageChange,
   headerActions,
   hideToolbar = false,
+  selectable = false,
+  selectedIds = [],
+  onSelectionChange,
 }: Props<T>) {
 
   const params: TableParams = { page, limit, search, filters: activeFilters }
@@ -224,6 +232,36 @@ export function ServerDataTable<T extends Record<string, unknown>>({
       return sortDir === 'asc' ? cmp : -cmp
     })
   }, [rawRows, sortKey, sortDir, columns])
+
+  // ── Selection helpers ──
+  const pageIds = useMemo(() => rows.map(r => Number(r[keyField])), [rows, keyField])
+  const allOnPageSelected = selectable && pageIds.length > 0 && pageIds.every(id => selectedIds.includes(id))
+  const someOnPageSelected = selectable && pageIds.length > 0 && pageIds.some(id => selectedIds.includes(id)) && !allOnPageSelected
+
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someOnPageSelected
+  }, [someOnPageSelected])
+
+  const toggleAll = () => {
+    if (!onSelectionChange) return
+    if (allOnPageSelected) {
+      onSelectionChange(selectedIds.filter(id => !pageIds.includes(id)))
+    } else {
+      const set = new Set(selectedIds)
+      pageIds.forEach(id => set.add(id))
+      onSelectionChange(Array.from(set))
+    }
+  }
+
+  const toggleOne = (id: number) => {
+    if (!onSelectionChange) return
+    onSelectionChange(
+      selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]
+    )
+  }
+
+  const colCount = columns.length + (selectable ? 1 : 0)
 
   return (
     <div className="space-y-2">
@@ -296,6 +334,17 @@ export function ServerDataTable<T extends Record<string, unknown>>({
         <table className="table">
           <thead>
             <tr>
+              {selectable && (
+                <th className="w-10">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleAll}
+                    className="rounded accent-indigo-600 cursor-pointer"
+                  />
+                </th>
+              )}
               {columns.map(col => (
                 <th
                   key={col.key}
@@ -318,10 +367,10 @@ export function ServerDataTable<T extends Record<string, unknown>>({
           </thead>
           <tbody>
             {isLoading ? (
-              <SkeletonRows cols={columns.length} />
+              <SkeletonRows cols={colCount} />
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length}>
+                <td colSpan={colCount}>
                   <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                     {emptyIcon && <div className="mb-3 opacity-40">{emptyIcon}</div>}
                     <p className="font-medium text-slate-500">{emptyText}</p>
@@ -334,15 +383,29 @@ export function ServerDataTable<T extends Record<string, unknown>>({
                 </td>
               </tr>
             ) : (
-              rows.map((row, i) => (
-                <tr key={(row[keyField] as string) ?? i}>
-                  {columns.map(col => (
-                    <td key={col.key} className={col.className}>
-                      {col.render ? col.render(row) : String(row[col.key] ?? '–')}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              rows.map((row, i) => {
+                const rowId = Number(row[keyField])
+                const isSelected = selectable && selectedIds.includes(rowId)
+                return (
+                  <tr key={(row[keyField] as string) ?? i} className={isSelected ? 'bg-indigo-50' : undefined}>
+                    {selectable && (
+                      <td className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleOne(rowId)}
+                          className="rounded accent-indigo-600 cursor-pointer"
+                        />
+                      </td>
+                    )}
+                    {columns.map(col => (
+                      <td key={col.key} className={col.className}>
+                        {col.render ? col.render(row) : String(row[col.key] ?? '–')}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>

@@ -1,17 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  ChevronDown, ArrowLeft, Radio, Zap, Users, Clock, SkipForward, ChevronLeft,
-  Search, Check, AlertTriangle, Phone, PhoneOff,
+  ChevronDown, ArrowLeft, Radio, Zap, Users,
+  Search, Check, AlertTriangle, Phone, PhoneOff, X,
+  PhoneForwarded, Voicemail, Grid3x3, Mic, MicOff, Pause, Play, LogOut, Tag,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
 
 import { StudioSidebar } from './StudioSidebar'
 import { LeadDetailsForm } from './LeadDetailsForm'
-import { CommentBox } from './CommentBox'
-import { FloatingQuickActions } from './FloatingQuickActions'
-import { CallControlBar } from './CallControlBar'
+
 import { TransferCallModal } from './TransferCallModal'
 import { DispositionModal } from './DispositionModal'
 import { DialPadModal } from './DialPadModal'
@@ -45,16 +44,18 @@ const GROUP_COLOR: Record<StudioDisposition['group'], string> = {
 
 function mapDisposition(d: Disposition): StudioDisposition {
   const type  = (d.d_type ?? '').toLowerCase()
-  const label = (d.disposition ?? '').toLowerCase()
+  // API returns `title`, frontend type has `disposition` — handle both
+  const rawLabel = d.disposition || d.title || ''
+  const labelLc = rawLabel.toLowerCase()
   const group: StudioDisposition['group'] =
-    type.includes('sale') || type.includes('pos') || type.includes('appoint') || label.includes('appoint')
+    type.includes('sale') || type.includes('pos') || type.includes('appoint') || labelLc.includes('appoint')
       ? 'positive'
       : type.includes('neg') || type.includes('dnc') || type.includes('remove') || type.includes('bad')
       ? 'negative'
       : 'neutral'
   return {
     id:    String(d.id),
-    label: d.disposition,
+    label: rawLabel,
     color: d.color ?? GROUP_COLOR[group],
     group,
   }
@@ -62,10 +63,13 @@ function mapDisposition(d: Disposition): StudioDisposition {
 
 // ─── Lead mapping ──────────────────────────────────────────────────────────────
 function mapLeadToStudio(lead: Lead): StudioLead {
+  const labels = lead.fieldLabels ?? {}
+  const columns = lead.fieldColumns ?? {}
   const customFields: LeadField[] = Object.entries(lead.fields ?? {}).map(([key, value]) => ({
     key,
-    label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    label: labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
     value,
+    column: columns[key],
     type: key.includes('email')
       ? 'email'
       : key.includes('phone') || key.includes('mobile')
@@ -89,16 +93,22 @@ function mapLeadToStudio(lead: Lead): StudioLead {
 function parseApiLead(raw: Record<string, unknown>): Lead {
   // campaignDialNext returns fields in `fields`, legacy getLead returns in `data`
   const fieldArr = Array.isArray(raw.data)
-    ? raw.data as Array<{ label: string; value: unknown; is_dialing?: number }>
+    ? raw.data as Array<{ label: string; value: unknown; column_name?: string; is_dialing?: number }>
     : Array.isArray(raw.fields)
-    ? raw.fields as Array<{ label: string; value: unknown; is_dialing?: number }>
+    ? raw.fields as Array<{ label: string; value: unknown; column_name?: string; is_dialing?: number }>
     : []
   const fields: Record<string, string> = {}
+  const fieldLabels: Record<string, string> = {}
+  const fieldColumns: Record<string, string> = {}
   let firstName = '', lastName = '', email = '', address = '', city = '', state = ''
   for (const f of fieldArr) {
     const lbl = (f.label || '').toLowerCase().trim()
     const val = String(f.value ?? '')
-    if (lbl) fields[lbl] = val
+    if (lbl) {
+      fields[lbl] = val
+      fieldLabels[lbl] = (f.label || '').trim() // preserve original casing
+      if (f.column_name) fieldColumns[lbl] = f.column_name
+    }
     // Fuzzy matching — handles labels like "First Name1", "Email2111", "Last Name", etc.
     if (!firstName && lbl.includes('first'))                                firstName = val
     else if (!lastName  && lbl.includes('last'))                            lastName  = val
@@ -114,7 +124,7 @@ function parseApiLead(raw: Record<string, unknown>): Lead {
     phone_number: String(raw.phone_number ?? raw.number ?? ''),
     first_name:   firstName,
     last_name:    lastName,
-    email, address, city, state, fields,
+    email, address, city, state, fields, fieldLabels, fieldColumns,
   }
 }
 
@@ -170,14 +180,15 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   const campaignDialActive    = useFloatingStore(s => s.campaignDialActive)
   const setCampaignDialActive = useFloatingStore(s => s.setCampaignDialActive)
   const setPhoneOpen          = useFloatingStore(s => s.setPhoneOpen)
+  const setPhoneMinimized     = useFloatingStore(s => s.setPhoneMinimized)
   const sipMuteHandler        = useFloatingStore(s => s.sipMuteHandler)
   const sipHoldHandler        = useFloatingStore(s => s.sipHoldHandler)
+  const sipHangupHandler      = useFloatingStore(s => s.sipHangupHandler)
 
   // ─── Local UI state ──────────────────────────────────────────────────────
   const [isDialingLocal, setIsDialingLocal] = useState(false)
-  const [sidebarTab, setSidebarTab]         = useState<SidebarTab>('lead')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [comment, setComment]               = useState('')
+  const [sidebarTab, setSidebarTab]         = useState<SidebarTab | null>(null)
+
   const [showTransfer, setShowTransfer]     = useState(false)
   const [showDisposition, setShowDisposition] = useState(false)
   const [showDialPad, setShowDialPad]       = useState(false)
@@ -208,6 +219,9 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const ringbackRef  = useRef<HTMLAudioElement | null>(null)
+  const handleDialRef = useRef<() => void>(() => {})
+  /** True once the agent has entered a persistent ConfBridge session */
+  const isInConference = useRef(false)
 
   // ─── Call duration timer ─────────────────────────────────────────────────
   useEffect(() => {
@@ -235,21 +249,26 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       ringbackRef.current?.pause()
       if (ringbackRef.current) ringbackRef.current.currentTime = 0
     }
-    if (storeState !== 'ringing') setCampaignDialActive(false)
-  }, [storeState, phoneHasIncoming, setCampaignDialActive])
+  }, [storeState, phoneHasIncoming])
 
   // ─── WebPhone in-call signal → advance to in-call ────────────────────────
+  // Only for the FIRST call (agent answers webphone → enters ConfBridge).
+  // In persistent conference mode (isInConference=true), phoneInCall is
+  // already true, so we rely on Pusher call.bridged to transition instead.
   useEffect(() => {
-    if (phoneInCall && storeState === 'ringing') {
+    if (phoneInCall && storeState === 'ringing' && !isInConference.current) {
       setCallState('in-call')
       startCallTimer()
+      isInConference.current = true
     }
   }, [phoneInCall, storeState, setCallState, startCallTimer])
 
   // ─── SIP call ended remotely → transition to wrap-up ─────────────────────
   // Only transition if a lead is assigned (prevents false trigger on network blip)
+  // Also clear isInConference since the agent's SIP leg dropped
   useEffect(() => {
     if (!phoneInCall && storeState === 'in-call' && storeActiveLead) {
+      isInConference.current = false
       setCallState('wrapping')
     }
   }, [phoneInCall, storeState, storeActiveLead, setCallState])
@@ -264,10 +283,21 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     }
   }, [phoneRegistered, phoneInCall, storeState, isDialingLocal, campaignDialActive, setCallState, setCampaignDialActive])
 
-  // ─── Open disposition modal when call ends ────────────────────────────────
+  // ─── Open disposition modal when call ends & close sidebar tabs ──────────
+  // Re-fetch dispositions for the active campaign to guarantee they're populated
   useEffect(() => {
-    if (storeState === 'wrapping') setShowDisposition(true)
-  }, [storeState])
+    if (storeState === 'wrapping') {
+      dialerService
+        .getDispositionsByCampaign(campaign.id)
+        .then((r) => {
+          const fresh = r.data?.data || []
+          if (fresh.length) useDialerStore.getState().setDispositions(fresh)
+        })
+        .catch(() => {})
+      setShowDisposition(true)
+      setSidebarTab(null)
+    }
+  }, [storeState, campaign.id])
 
   // ─── Auto-reset after call failure (5s) ─────────────────────────────────
   useEffect(() => {
@@ -275,7 +305,10 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     // Stop any ringback that may still be playing
     ringbackRef.current?.pause()
     if (ringbackRef.current) ringbackRef.current.currentTime = 0
-    setCampaignDialActive(false)
+    // Only clear campaignDialActive if NOT in persistent conference
+    if (!isInConference.current) {
+      setCampaignDialActive(false)
+    }
     // Mark the call log as failed
     updateLastCallLog({ status: 'failed' })
     const timer = setTimeout(() => {
@@ -342,54 +375,50 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       if (timerRef.current) clearInterval(timerRef.current)
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       if (ringbackRef.current) { ringbackRef.current.pause(); ringbackRef.current = null }
+      isInConference.current = false
     }
   }, [])
 
   // ─── Mutations ────────────────────────────────────────────────────────────
 
-  // Full hang-up (legacy / end-session): tears down the entire call
+  // Helper: terminate the SIP call on the WebPhone side
+  const terminateSipCall = useCallback(() => {
+    sipHangupHandler?.()
+    setCampaignDialActive(false)
+  }, [sipHangupHandler, setCampaignDialActive])
+
+  // Full hang-up (end-session): tears down the entire call + writes CDR
   const hangUpMutation = useMutation({
     mutationFn: () => dialerService.hangUp({ id: campaign.id }),
     onSuccess: () => {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      isInConference.current = false
+      terminateSipCall()
       updateLastCallLog({ status: 'connected', duration: callDuration })
       setCallState('wrapping')
     },
     onError: () => {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      isInConference.current = false
+      terminateSipCall()
       updateLastCallLog({ status: 'connected', duration: callDuration })
       setCallState('wrapping')
     },
   })
 
-  // Next customer: hang up customer only, dial next lead (persistent conference)
-  const nextCustomerMutation = useMutation({
-    mutationFn: () => campaignDialerService.nextCustomer(campaign.id),
-    onSuccess: (res) => {
-      const data = res.data
+  // Hang up call — terminates SIP session and tells backend to clean up
+  const hangupCustomerMutation = useMutation({
+    mutationFn: () => campaignDialerService.hangupCustomer(campaign.id),
+    onSuccess: () => {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      // Do NOT call terminateSipCall() — agent stays in conference for next dial
       updateLastCallLog({ status: 'connected', duration: callDuration })
       useDialerStore.setState({ callDuration: 0 })
-
-      if (data.status === 'no_more_leads') {
-        toast('No more leads in queue — wrapping up', { icon: 'ℹ️' })
-        setCallState('wrapping')
-        return
-      }
-
-      // Next lead arrived — update lead data, stay in-call
-      if (data.lead_id) {
-        pushLeadToHistory()
-        const storeLead = parseApiLead(data as unknown as Record<string, unknown>)
-        setActiveLead(storeLead)
-        setLeadCounter((n) => n + 1)
-        startCallTimer()
-        toast.success('Next customer connected')
-      }
+      setCallState('wrapping')
     },
     onError: () => {
-      toast.error('Failed to connect next customer — ending call')
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      // Keep agent in conference even on error — use End Session to fully leave
       updateLastCallLog({ status: 'connected', duration: callDuration })
       setCallState('wrapping')
     },
@@ -398,8 +427,10 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   const saveDispositionMutation = useMutation({
     mutationFn: ({ dispoId, pauseCalling, notes }: { dispoId: number; pauseCalling: boolean; notes: string }) => {
       const leadId = storeActiveLead?.lead_id ?? storeActiveLead?.id ?? 0
-      // Auto-dial mode: use campaign dialer endpoint (leads are in list_data)
-      if (isAutoDialMode) {
+      // Always use campaign dialer endpoint for disposition — the legacy
+      // dialerService.saveDisposition sets extension_live.status=0 which
+      // destroys the persistent conference state.
+      if (isAutoDialMode || isInConference.current) {
         return campaignDialerService.saveDisposition(leadId, dispoId, notes || undefined, campaign.id)
       }
       return dialerService.saveDisposition({
@@ -411,23 +442,24 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
         comment:        notes || undefined,
       })
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success('Disposition saved')
       setShowDisposition(false)
-      resetDialer()
       setLeadCounter((n) => n + 1)
-      // Auto-dial mode: backend DialNextLeadJob dispatches next call in ~2s.
-      // Agent clicks "Start Call" to trigger next lead (no pre-fetch needed).
-      // Legacy mode: backend addLeadToExtensionLive queues next lead — fetch it.
-      if (!isAutoDialMode) {
-        dialerService
-          .getLead()
-          .then((r) => {
-            const raw = r.data as Record<string, unknown>
-            if (raw?.success && raw.lead_id) setActiveLead(parseApiLead(raw))
-          })
-          .catch(() => {})
+
+      // If pause calling was requested, reset to ready state without auto-dial
+      if (variables.pauseCalling) {
+        resetDialer()
+        setCampaignDialActive(false)
+        toast('Paused — click Start Call when ready', { icon: 'ℹ️' })
+        return
       }
+
+      // Auto-dial next lead
+      resetDialer()
+      setTimeout(() => {
+        handleDialRef.current()
+      }, 500)
     },
     onError: (err: unknown) => {
       const msg =
@@ -444,6 +476,9 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
   })
 
   // ─── Dial handler (Agent-First: AMI rings webphone, then auto-dials lead) ─
+  // Supports TWO modes:
+  //  A) First call: full originate → rings agent's webphone → ConfBridge → dial customer
+  //  B) Persistent conference: agent already in conf → dial next customer into same room
   const handleDial = useCallback(async () => {
     // Only dial when store is 'ready' (logged in, not active)
     if (storeState !== 'ready' && storeState !== 'idle') return
@@ -458,7 +493,42 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     try {
       pushLeadToHistory()
 
-      // Single API call: picks next lead + AMI originates to agent's webphone
+      // ── Persistent conference: agent already in ConfBridge ──────────────
+      if (phoneInCall && isInConference.current) {
+        const res = await campaignDialerService.nextCustomer(campaign.id)
+        const raw = res.data as Record<string, unknown>
+
+        if (raw?.status === 'no_more_leads') {
+          toast('No more leads in this campaign', { icon: 'ℹ️' })
+          return
+        }
+
+        if (raw?.success) {
+          const storeLead = parseApiLead(raw)
+          setActiveLead(storeLead)
+          setCallState('ringing')
+          useDialerStore.setState({ callDuration: 0 })
+
+          addCallLog({
+            id:            `${Date.now()}`,
+            lead_name:     [storeLead.first_name, storeLead.last_name].filter(Boolean).join(' ') || 'Unknown',
+            phone_number:  storeLead.phone_number,
+            status:        'no_answer',
+            duration:      0,
+            campaign_name: campaign.name,
+            started_at:    new Date().toISOString(),
+            lead_id:       storeLead.lead_id ?? storeLead.id,
+            campaign_id:   campaign.id,
+          })
+
+          toast.success('Dialing next lead...', { duration: 3000 })
+        } else {
+          toast.error(String(raw?.message || 'Failed to dial next lead'))
+        }
+        return
+      }
+
+      // ── First call: full originate → rings agent's webphone ────────────
       const res = await dialerService.campaignDialNext(campaign.id)
       const raw = res.data as Record<string, unknown>
 
@@ -472,6 +542,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       setActiveLead(storeLead)
 
       setCampaignDialActive(true)
+      setPhoneMinimized(true)
       setCallState('ringing')
 
       addCallLog({
@@ -503,10 +574,13 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       setIsDialingLocal(false)
     }
   }, [
-    storeState, isDialingLocal, webphoneOk, campaign.id, campaign.name,
+    storeState, isDialingLocal, webphoneOk, phoneInCall, campaign.id, campaign.name,
     pushLeadToHistory, setActiveLead, setCallState, setCampaignDialActive,
-    setPhoneOpen, addCallLog, updateLastCallLog,
+    setPhoneOpen, setPhoneMinimized, addCallLog, updateLastCallLog,
   ])
+
+  // Keep ref in sync so saveDispositionMutation can call handleDial without circular deps
+  handleDialRef.current = handleDial
 
   const canLeaveOrSwitch = storeState !== 'in-call' && storeState !== 'ringing' && storeState !== 'failed'
   const leftRemaining    = campaign.totalLeads - campaign.calledLeads
@@ -535,7 +609,6 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     if (!canLeaveOrSwitch || leadHistory.length === 0) return
     goToPreviousLead()
     setLeadCounter((n) => Math.max(1, n - 1))
-    setComment('')
   }, [canLeaveOrSwitch, leadHistory, goToPreviousLead])
 
   // ─── Mute/Hold handlers (bridge to WebPhone SIP session) ─────────────────
@@ -572,18 +645,23 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
     }
     setCallState('ready')
     try {
-      // Redial: call campaignDialNext with specific lead_id to AMI originate same lead
+      // Redial: call campaignDialNext with specific lead_id
       const leadId = currentLead.lead_id ?? currentLead.id
       const res = await dialerService.campaignDialNext(campaign.id, leadId)
       const raw = res.data as Record<string, unknown>
       if (raw?.success) {
-        // Re-set the lead from the response (phone_number may have refreshed)
         const storeLead = parseApiLead(raw)
         setActiveLead(storeLead)
-        setCampaignDialActive(true)
+        if (!isInConference.current) {
+          // First call — agent needs to answer webphone
+          setCampaignDialActive(true)
+          setPhoneMinimized(true)
+          toast.success('Redialing same lead — answer your webphone', { duration: 5000 })
+        } else {
+          // Persistent conference — customer dialed into existing conf
+          toast.success('Redialing same lead...', { duration: 3000 })
+        }
         setCallState('ringing')
-        setPhoneOpen(true)
-        toast.success('Redialing same lead — answer your webphone', { duration: 5000 })
       } else {
         toast.error(String(raw?.message || 'Redial failed'))
       }
@@ -591,7 +669,7 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       toast.error('Redial failed — trying next lead instead')
       setTimeout(handleDial, 200)
     }
-  }, [storeActiveLead, webphoneOk, campaign.id, handleDial, setCallState, setActiveLead, setCampaignDialActive, setPhoneOpen])
+  }, [storeActiveLead, webphoneOk, campaign.id, handleDial, setCallState, setActiveLead, setCampaignDialActive, setPhoneMinimized])
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
@@ -602,22 +680,29 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
         e.preventDefault(); handleDial()
       }
       if (e.key === ' ' && callState === 'in-call') {
-        e.preventDefault(); nextCustomerMutation.mutate()
+        e.preventDefault(); hangupCustomerMutation.mutate()
       }
       if (e.key === 't' && callState === 'in-call')  setShowTransfer(true)
       if (e.key === 'd')                              setShowDialPad(true)
       if (e.key === 'm' && callState === 'in-call')  handleToggleMute()
       if (e.key === 'h' && callState === 'in-call')  handleToggleHold()
-      if (['1','2','3','4','5','6'].includes(e.key)) {
+      if (['1','2','3','4','5'].includes(e.key)) {
         const map: Record<string, SidebarTab> = {
-          '1':'lead','2':'sms','3':'email','4':'script','5':'notes','6':'events',
+          '1':'sms','2':'email','3':'script','4':'notes','5':'events',
         }
-        setSidebarTab(map[e.key])
+        const target = map[e.key]
+        setSidebarTab(prev => prev === target ? null : target)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [callState, showDisposition, handleDial, handleToggleMute, handleToggleHold]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fmtTime = (s: number) => {
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+  }
 
   return (
     <div className="animate-fadeIn">
@@ -788,140 +873,152 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
             )}
           </div>
 
-          {/* Start / Hang-up / Next Customer buttons */}
-          <div className="flex items-center gap-1.5">
-            {callState !== 'in-call' && callState !== 'ringing' && callState !== 'dialing' ? (
-              <button
-                onClick={handleDial}
-                className="group flex items-center gap-2 px-4 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
-              >
-                <Phone size={13} className="group-hover:rotate-12 transition-transform" />
-                Start Dialing
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => nextCustomerMutation.mutate()}
-                  disabled={nextCustomerMutation.isPending}
-                  className="group flex items-center gap-2 px-4 h-9 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60"
-                >
-                  <PhoneOff size={13} />
-                  {nextCustomerMutation.isPending ? 'Connecting…' : 'Hang Up'}
-                </button>
-                <button
-                  onClick={() => hangUpMutation.mutate()}
-                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 text-xs font-semibold transition-all"
-                  title="End session — leave conference entirely"
-                >
-                  <PhoneOff size={11} />
-                  End Session
-                </button>
-              </>
-            )}
-          </div>
-
           {/* Stat pills */}
           <div className="hidden md:flex items-center gap-2">
             <StatPill icon={Users} label="Total"       value={campaign.totalLeads.toLocaleString()} tone="slate"   />
             <StatPill icon={Zap}   label="Remaining"   value={leftRemaining.toLocaleString()}        tone="indigo"  />
-            <StatPill icon={Clock} label="Lead #"      value={String(leadCounter)}                   tone="emerald" />
           </div>
 
           <div className="flex-1" />
-
-          {/* Lead nav */}
-          <div className="flex items-center gap-1.5">
-            <span className="hidden sm:inline text-[11px] text-slate-500 font-medium px-2">
-              Lead <span className="font-bold text-slate-700">#{leadCounter}</span>
-            </span>
-            <button
-              onClick={prevLead}
-              disabled={!canLeaveOrSwitch || leadHistory.length === 0}
-              className="btn-sm btn-outline gap-1 disabled:opacity-40"
-              title="Previous lead"
-            >
-              <ChevronLeft size={12} /> Prev
-            </button>
-            <button
-              onClick={skipLead}
-              disabled={!canLeaveOrSwitch}
-              className="btn-sm btn-outline gap-1 disabled:opacity-40"
-              title="Skip to next lead"
-            >
-              Skip <SkipForward size={12} />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* ─── 3-column layout ─────────────────────────────────────── */}
-      <div className="flex gap-4 mt-3 min-h-[calc(100vh-180px)]">
-        <StudioSidebar
-          active={sidebarTab}
-          onChange={setSidebarTab}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-        />
+      {/* ─── Action toolbar ──────────────────────────────────────── */}
+      <div className="sticky top-[52px] z-20 -mx-4 px-4 py-2 bg-white/90 backdrop-blur-md border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          {/* Tab buttons + call controls — only visible when in-call */}
+          {callState === 'in-call' && (
+            <>
+              <StudioSidebar
+                active={sidebarTab}
+                onChange={(tab) => setSidebarTab(prev => prev === tab ? null : tab)}
+              />
 
-        {/* CENTER */}
-        <div className="flex-1 min-w-0 flex flex-col gap-3">
-          <div className="flex-1">
-            {sidebarTab === 'lead' && (
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-3 max-w-[1180px]">
-                {lead ? (
-                  <LeadDetailsForm lead={lead} onUpdate={setLead} />
-                ) : (
-                  <div className="card flex flex-col items-center justify-center min-h-[200px] gap-3">
-                    <Radio size={24} className="text-slate-300" />
-                    <p className="text-sm text-slate-400">
-                      {callState === 'idle'
-                        ? 'Click "Start Call" to fetch the first lead'
-                        : 'Loading lead…'}
-                    </p>
-                  </div>
-                )}
-                <div className="xl:sticky xl:top-24 xl:self-start">
-                  <CommentBox value={comment} onChange={setComment} />
-                </div>
+              <div className="h-7 w-px bg-slate-200 mx-1" />
+
+              <div className="flex items-center gap-1">
+                <ToolbarBtn icon={PhoneForwarded} label="Transfer" onClick={() => setShowTransfer(true)} />
+                <ToolbarBtn icon={Voicemail} label="Voice Drop" onClick={() => voicemailMutation.mutate()} />
+                <ToolbarBtn icon={Grid3x3} label="Dial Pad" onClick={() => setShowDialPad(true)} />
               </div>
-            )}
-            {sidebarTab !== 'lead' && (
-              <div className="max-w-[880px]">
-                {sidebarTab === 'sms'    && <SendSmsTab    lead={lead ?? { id:0, firstName:'', lastName:'', email:'', phone:'', state:'', country:'', company:'', customFields:[] }} />}
-                {sidebarTab === 'email'  && <SendEmailTab  lead={lead ?? { id:0, firstName:'', lastName:'', email:'', phone:'', state:'', country:'', company:'', customFields:[] }} />}
-                {sidebarTab === 'script' && <AgentScriptTab lead={lead ?? { id:0, firstName:'', lastName:'', email:'', phone:'', state:'', country:'', company:'', customFields:[] }} />}
-                {sidebarTab === 'notes'  && <NotesTab />}
-                {sidebarTab === 'events' && <EventsTab />}
+
+              <div className="h-7 w-px bg-slate-200 mx-1" />
+
+              <div className="flex items-center gap-1">
+                <ToolbarBtn
+                  icon={isMuted ? MicOff : Mic}
+                  label={isMuted ? 'Unmute' : 'Mute'}
+                  onClick={handleToggleMute}
+                  active={isMuted}
+                />
+                <ToolbarBtn
+                  icon={isOnHold ? Play : Pause}
+                  label={isOnHold ? 'Resume' : 'Hold'}
+                  onClick={handleToggleHold}
+                  active={isOnHold}
+                />
               </div>
-            )}
+            </>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Call status + duration */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+            <div className={cn(
+              'w-2 h-2 rounded-full',
+              callState === 'in-call' ? 'bg-emerald-500 animate-pulse' :
+              callState === 'ringing' || callState === 'dialing' ? 'bg-amber-500 animate-pulse' :
+              callState === 'failed' ? 'bg-red-500' : 'bg-slate-300'
+            )} />
+            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+              {callState === 'in-call' ? 'On Call' : callState === 'ringing' || callState === 'dialing' ? 'Ringing' : callState === 'wrap-up' ? 'Wrap-up' : callState === 'failed' ? 'Failed' : 'Ready'}
+            </span>
+            <span className="text-sm font-bold tabular-nums text-slate-800">
+              {fmtTime(callDuration)}
+            </span>
           </div>
 
-          <CallControlBar
-            callState={callState}
-            duration={callDuration}
-            muted={isMuted}
-            holding={isOnHold}
-            failReason={failReason}
-            onDial={handleDial}
-            onHangup={() => nextCustomerMutation.mutate()}
-            onEndSession={() => hangUpMutation.mutate()}
-            onTransfer={() => setShowTransfer(true)}
-            onVoiceDrop={() => voicemailMutation.mutate()}
-            onDialPad={() => setShowDialPad(true)}
-            onToggleMute={handleToggleMute}
-            onToggleHold={handleToggleHold}
-          />
+          {/* Primary CTA */}
+          {callState === 'wrap-up' ? (
+            <button
+              onClick={() => setShowDisposition(true)}
+              className="group flex items-center gap-2 px-5 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              <Tag size={14} />
+              Save Disposition
+            </button>
+          ) : callState !== 'in-call' && callState !== 'ringing' && callState !== 'dialing' ? (
+            <button
+              onClick={handleDial}
+              className="group flex items-center gap-2 px-5 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              <Phone size={14} className="group-hover:rotate-12 transition-transform" />
+              Start Call
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => hangupCustomerMutation.mutate()}
+                disabled={hangupCustomerMutation.isPending}
+                className="group flex items-center gap-2 px-4 h-9 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white font-bold text-xs shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60"
+              >
+                <PhoneOff size={13} />
+                {hangupCustomerMutation.isPending ? 'Ending…' : 'Hang Up'}
+              </button>
+              <button
+                onClick={() => hangUpMutation.mutate()}
+                className="flex items-center gap-1.5 px-3 h-9 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 text-xs font-semibold transition-all"
+                title="End session — leave conference entirely"
+              >
+                <LogOut size={13} />
+                End Session
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Content panels ──────────────────────────────────────── */}
+      <div className="relative mt-3 min-h-[calc(100vh-240px)]">
+        {/* Lead Details — always full width */}
+        <div className={sidebarTab ? 'mr-[420px]' : ''}>
+          {lead ? (
+            <div className="space-y-3">
+              <LeadDetailsForm lead={lead} onUpdate={setLead} />
+            </div>
+          ) : (
+            <div className="card flex flex-col items-center justify-center min-h-[200px] gap-3">
+              <Radio size={24} className="text-slate-300" />
+              <p className="text-sm text-slate-400">
+                {callState === 'idle' ? 'Click "Start Call" to fetch the first lead' : 'Loading lead\u2026'}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* RIGHT floating actions */}
-        <div className="hidden lg:block shrink-0">
-          <FloatingQuickActions
-            onSms={() => setSidebarTab('sms')}
-            onEmail={() => setSidebarTab('email')}
-            onCall={handleDial}
-            disabled={callState === 'in-call' || callState === 'ringing' || callState === 'dialing' || callState === 'failed'}
-          />
-        </div>
+        {/* Tab content panel — fixed-width right panel */}
+        {sidebarTab && (
+          <div className="absolute top-0 right-0 w-[400px] overflow-y-auto max-h-[calc(100vh-240px)] rounded-2xl border border-slate-200 bg-white shadow-sm p-4 animate-fadeIn">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-slate-800">
+                {sidebarTab === 'sms' && 'Send SMS'}
+                {sidebarTab === 'email' && 'Send Email'}
+                {sidebarTab === 'script' && 'Agent Script'}
+                {sidebarTab === 'notes' && 'Notes'}
+                {sidebarTab === 'events' && 'Events'}
+              </h3>
+              <button onClick={() => setSidebarTab(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            {sidebarTab === 'sms'    && <SendSmsTab    lead={lead ?? { id:0, firstName:'', lastName:'', email:'', phone:'', state:'', country:'', company:'', customFields:[] }} />}
+            {sidebarTab === 'email'  && <SendEmailTab  lead={lead ?? { id:0, firstName:'', lastName:'', email:'', phone:'', state:'', country:'', company:'', customFields:[] }} />}
+            {sidebarTab === 'script' && <AgentScriptTab lead={lead ?? { id:0, firstName:'', lastName:'', email:'', phone:'', state:'', country:'', company:'', customFields:[] }} />}
+            {sidebarTab === 'notes'  && <NotesTab leadId={storeActiveLead?.lead_id ?? storeActiveLead?.id ?? 0} />}
+            {sidebarTab === 'events' && <EventsTab leadId={storeActiveLead?.lead_id ?? storeActiveLead?.id ?? 0} />}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -950,5 +1047,32 @@ function StatPill({ icon: Icon, label, value, tone }: StatPillProps) {
         <p className="text-[11px] font-bold text-slate-800 tabular-nums">{value}</p>
       </div>
     </div>
+  )
+}
+
+// ─── Toolbar Button ──────────────────────────────────────────────────────────
+interface ToolbarBtnProps {
+  icon: React.ElementType
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  active?: boolean
+}
+function ToolbarBtn({ icon: Icon, label, onClick, disabled, active }: ToolbarBtnProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'group flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-35 disabled:cursor-not-allowed',
+        active
+          ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800',
+      )}
+      title={label}
+    >
+      <Icon size={14} />
+      <span className="hidden lg:inline">{label}</span>
+    </button>
   )
 }

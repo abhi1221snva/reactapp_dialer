@@ -51,7 +51,7 @@ function DocViewerModal({ doc, leadId, onClose }: { doc: CrmDocument; leadId: nu
   const [viewLoading, setViewLoading] = useState(true)
   const [viewError, setViewError]   = useState(false)
   const [downloading, setDownloading] = useState(false)
-  const fileType = getFileType(doc.file_path)
+  const fileType = getFileType(doc.file_path || doc.file_name)
 
   useEffect(() => {
     if (fileType === 'other') { setViewLoading(false); return }
@@ -717,8 +717,8 @@ export function DocumentsPanel({ leadId }: { leadId: number }) {
 
             <div className="space-y-1.5">
               {visibleDocs.map(doc => {
-                const ic = getFileIcon(doc.file_path)
-                const isPdf = getFileType(doc.file_path) === 'pdf'
+                const ic = getFileIcon(doc.file_path || doc.file_name)
+                const isPdf = getFileType(doc.file_path || doc.file_name) === 'pdf'
                 const isBankStatement = isPdf && /bank.?statement/i.test(doc.document_type)
                 const bsSession = sessionByDocId.get(doc.id)
                 const isAnalyzing = analyzingDocId === doc.id && analyzeMut.isPending
@@ -810,9 +810,9 @@ export function DocumentsPanel({ leadId }: { leadId: number }) {
                             )}
                           </>
                         )}
-                        <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
+                        <button onClick={() => setViewDoc(doc)} disabled={!doc.file_path && !doc.file_name} className="p-1.5 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors disabled:opacity-30" title="Preview"><Eye size={13} /></button>
                         <button
-                          disabled={!doc.file_path}
+                          disabled={!doc.file_path && !doc.file_name}
                           className="p-1.5 rounded-md bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-30"
                           title="Download"
                           onClick={async () => {

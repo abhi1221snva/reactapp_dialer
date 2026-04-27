@@ -16,6 +16,8 @@ export interface LeadField {
   key: string
   label: string
   value: string
+  /** The DB column (option_1 … option_30) used by POST /update-lead/{id} */
+  column?: string
   type?: 'text' | 'email' | 'phone' | 'select' | 'number'
   readOnly?: boolean
   options?: string[]

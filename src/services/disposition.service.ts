@@ -60,6 +60,13 @@ export const dispositionService = {
     api.post('/status-update-disposition', { listId: dispositionId, status: newStatus }),
 
   // Soft delete — POST /edit-disposition with is_deleted: 1
-  delete: (dispositionId: number) =>
-    api.post('/edit-disposition', { disposition_id: dispositionId, is_deleted: 1 }),
+  delete: async (dispositionId: number) => {
+    const res = await api.post('/edit-disposition', { disposition_id: dispositionId, is_deleted: 1 })
+    // Backend may return 200 with success:"false" on failure — treat as error
+    const d = (res as { data?: { success?: string | boolean } }).data
+    if (d && (d.success === 'false' || d.success === false)) {
+      throw new Error((d as { message?: string }).message || 'Delete failed')
+    }
+    return res
+  },
 }

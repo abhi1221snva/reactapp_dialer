@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, UserCircle, Eye, X, Search,
@@ -284,7 +284,11 @@ export function Users() {
   const [viewUser, setViewUser] = useState<Agent | null>(null)
   const [pwUser, setPwUser] = useState<Agent | null>(null)
   const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { setToolbar } = useDialerHeader()
+
+  // Clear selection on page/search/filter change
+  useEffect(() => { setSelectedIds([]) }, [table.page, table.search, table.filters])
 
   useEffect(() => {
     setToolbar(
@@ -351,6 +355,28 @@ export function Users() {
       }
     },
   })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const results = await Promise.allSettled(ids.map(id => userService.delete(id)))
+      const failed = results.filter(r => r.status === 'rejected').length
+      return { total: ids.length, failed }
+    },
+    onSuccess: ({ total, failed }) => {
+      if (failed === 0) toast.success(`Deleted ${total} user(s)`)
+      else toast.error(`${failed} of ${total} deletions failed`)
+      setSelectedIds([])
+      table.setPage(1)
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: () => toast.error('Bulk delete failed'),
+  })
+
+  // Filter out self from selection for bulk delete
+  const deletableSelected = useMemo(
+    () => selectedIds.filter(id => id !== authUser?.id),
+    [selectedIds, authUser?.id]
+  )
 
   const columns: Column<Agent>[] = [
     {
@@ -498,7 +524,54 @@ export function Users() {
         limit={table.limit}
         onPageChange={table.setPage}
         hideToolbar
+        selectable={!isAgentRole}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
+
+      {/* Bulk delete bar */}
+      {deletableSelected.length > 0 && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl"
+          style={{
+            background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
+          <span
+            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
+            style={{ background: 'rgba(99,102,241,0.25)', color: '#a5b4fc' }}
+          >
+            {deletableSelected.length} selected
+          </span>
+
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+
+          <button
+            onClick={async () => {
+              if (await showConfirm({
+                title: `Delete ${deletableSelected.length} User${deletableSelected.length > 1 ? 's' : ''}?`,
+                message: `${deletableSelected.length} user${deletableSelected.length > 1 ? 's' : ''} will be permanently deleted. This cannot be undone.`,
+                confirmText: 'Yes, delete',
+              })) {
+                bulkDeleteMutation.mutate(deletableSelected)
+              }
+            }}
+            disabled={bulkDeleteMutation.isPending}
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg font-semibold bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors flex-shrink-0"
+          >
+            {bulkDeleteMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+            Delete
+          </button>
+
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+
+          <button onClick={() => setSelectedIds([])} className="p-1 rounded-md hover:bg-white/10 transition-colors flex-shrink-0" title="Clear selection">
+            <X size={14} style={{ color: 'rgba(255,255,255,0.5)' }} />
+          </button>
+        </div>
+      )}
 
       {viewUser && (
         <ViewUserModal

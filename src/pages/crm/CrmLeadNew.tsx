@@ -42,7 +42,7 @@ import { LendersPanel }         from '../../components/crm/LeadLendersPanel'
 import { RichEmailEditor }       from '../../components/crm/RichEmailEditor'
 import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import { confirmDelete }         from '../../utils/confirmDelete'
-import { formatPhoneNumber }    from '../../utils/format'
+import { formatPhoneNumber, formatPartialPhoneUS } from '../../utils/format'
 import type { CrmLead, LeadStatus, CrmDocument, CrmLabel, EmailTemplate, SmsTemplate } from '../../types/crm.types'
 import { useUIStore }           from '../../stores/ui.store'
 
@@ -181,6 +181,38 @@ function resolveFieldIcon(key: string, type?: string): LucideIcon {
   return Sparkles
 }
 
+// ─── Phone edit field (formatted input for RHF) ─────────────────────────────
+function PhoneEditField({ fieldKey, label, icon: FIcon, register, defaultValue }: {
+  fieldKey: string; label: string; icon: LucideIcon
+  register: ReturnType<typeof useForm>['register']; defaultValue: string
+}) {
+  const [display, setDisplay] = useState(() => formatPartialPhoneUS(defaultValue.replace(/\D/g, '')))
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey)
+  return (
+    <div className="flex flex-col gap-1 transition-all">
+      <label className="flex items-center gap-1.5 text-[9px] font-bold text-indigo-500 uppercase tracking-wider leading-none pl-0.5">
+        <FIcon size={9} className="text-indigo-400" />
+        {label}
+      </label>
+      <input
+        type="tel"
+        {...rest}
+        value={display}
+        maxLength={14}
+        inputMode="tel"
+        onChange={e => {
+          const fmt = formatPartialPhoneUS(e.target.value)
+          setDisplay(fmt)
+          e.target.value = fmt
+          rhfOnChange(e)
+        }}
+        className="w-full h-9 px-2.5 text-[12px] font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300"
+        placeholder="(555) 555-5555"
+      />
+    </div>
+  )
+}
+
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEditingProp, activeTab, onSendEmail, onSendSms }: {
   lead: CrmLead; leadId: number; leadFields: CrmLabel[]; onUpdated: () => void
@@ -281,18 +313,24 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
   // ── Single bordered field card — view or edit ──────────────────────────────
   function fieldCard(key: string, label: string, type?: string) {
     const raw       = lr[key]
-    const displayVal = key === 'phone_number' && raw
+    const isPhone   = type === 'phone' || type === 'phone_number' || type === 'tel' || /\bphone\b/i.test(key)
+    const displayVal = isPhone && raw
       ? formatPhoneNumber(String(raw))
       : raw != null && String(raw).trim() !== '' ? String(raw) : ''
     const FIcon     = resolveFieldIcon(key, type)
-    const copyable  = /^(email|phone_number)$/.test(key) || type === 'email' || type === 'phone' || type === 'phone_number'
-    const inputType = type === 'phone' || type === 'phone_number' ? 'tel'
+    const copyable  = /^(email|phone_number)$/.test(key) || type === 'email' || isPhone
+    const inputType = isPhone ? 'tel'
       : type === 'email' ? 'email'
       : type === 'number' ? 'number'
       : type === 'date' ? 'date'
       : 'text'
 
     if (editing) {
+      if (isPhone) {
+        return (
+          <PhoneEditField key={key} fieldKey={key} label={label} icon={FIcon} register={register} defaultValue={String(raw ?? '')} />
+        )
+      }
       return (
         <div key={key} className="flex flex-col gap-1 transition-all">
           <label className="flex items-center gap-1.5 text-[9px] font-bold text-indigo-500 uppercase tracking-wider leading-none pl-0.5">
@@ -321,7 +359,7 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
         </div>
         {/* Hover actions */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          {(key === 'phone_number' || type === 'phone' || type === 'phone_number') && displayVal && onSendSms && (
+          {isPhone && displayVal && onSendSms && (
             <button onClick={onSendSms} title="Send SMS"
               className="p-1 rounded text-violet-400 hover:bg-violet-50 hover:text-violet-600 transition-colors">
               <MessageSquare size={10} />

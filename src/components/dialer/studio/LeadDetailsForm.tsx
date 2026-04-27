@@ -1,27 +1,19 @@
 import { useState } from 'react'
 import {
-  User, Mail, Phone, MapPin, Building2, Globe, Copy, Check, Edit3, Save, X,
-  Star, Sparkles, Plus,
+  User, Mail, Phone, MapPin, Building2, Copy, Check, Edit3, Save, X,
+  Star, Loader2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
 import type { StudioLead, LeadField } from './types'
+import { formatPhoneNumber } from '../../../utils/format'
+import { dialerService } from '../../../services/dialer.service'
 
 interface Props {
   lead: StudioLead
   onUpdate: (lead: StudioLead) => void
 }
 
-// ─── Core (fixed) fields — always shown in primary grid ──────────────────────
-const CORE_FIELDS: { key: keyof StudioLead; label: string; icon: React.ElementType; type: 'text' | 'email' | 'tel'; copyable?: boolean }[] = [
-  { key: 'firstName', label: 'First Name', icon: User,      type: 'text'  },
-  { key: 'lastName',  label: 'Last Name',  icon: User,      type: 'text'  },
-  { key: 'email',     label: 'Email',      icon: Mail,      type: 'email', copyable: true },
-  { key: 'phone',     label: 'Phone',      icon: Phone,     type: 'tel',   copyable: true },
-  { key: 'state',     label: 'State',      icon: MapPin,    type: 'text'  },
-  { key: 'country',   label: 'Country',    icon: Globe,     type: 'text'  },
-  { key: 'company',   label: 'Company',    icon: Building2, type: 'text'  },
-]
 
 /**
  * Compact inline-editable lead form.
@@ -32,6 +24,7 @@ export function LeadDetailsForm({ lead, onUpdate }: Props) {
   const [editValue, setEditValue] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
   const [globalEdit, setGlobalEdit] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const beginEdit = (key: string, current: string) => {
     setEditingKey(key)
@@ -41,20 +34,28 @@ export function LeadDetailsForm({ lead, onUpdate }: Props) {
     setEditingKey(null)
     setEditValue('')
   }
-  const saveCore = (key: keyof StudioLead) => {
-    onUpdate({ ...lead, [key]: editValue })
-    toast.success('Updated', { duration: 1400 })
-    cancelEdit()
-  }
-  const saveCustom = (key: string) => {
-    onUpdate({
-      ...lead,
-      customFields: lead.customFields.map((f) =>
-        f.key === key ? { ...f, value: editValue } : f,
-      ),
-    })
-    toast.success('Updated', { duration: 1400 })
-    cancelEdit()
+  const saveCustom = async (key: string) => {
+    const field = lead.customFields.find((f) => f.key === key)
+    if (!field?.column) {
+      toast.error('Cannot save — field mapping unknown')
+      return
+    }
+    setSaving(true)
+    try {
+      await dialerService.updateLead(lead.id, { [field.column]: editValue })
+      onUpdate({
+        ...lead,
+        customFields: lead.customFields.map((f) =>
+          f.key === key ? { ...f, value: editValue } : f,
+        ),
+      })
+      toast.success('Updated', { duration: 1400 })
+      cancelEdit()
+    } catch {
+      toast.error('Failed to save')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const copy = async (value: string, key: string) => {
@@ -132,70 +133,44 @@ export function LeadDetailsForm({ lead, onUpdate }: Props) {
         </button>
       </div>
 
-      {/* ─── Contact fields ──────────────────────────────────── */}
-      <FieldSection
-        icon={User}
-        iconColor="text-indigo-500"
-        title="Contact Information"
-        count={CORE_FIELDS.length}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {CORE_FIELDS.map((f) => {
-            const current = String(lead[f.key] ?? '')
-            const isEditing = editingKey === f.key
-            return (
-              <InlineField
-                key={f.key}
-                icon={f.icon}
-                label={f.label}
-                value={current}
-                isEditing={isEditing}
-                editValue={editValue}
-                setEditValue={setEditValue}
-                type={f.type}
-                copyable={f.copyable}
-                copied={copied === f.key}
-                onCopy={() => copy(current, f.key)}
-                onBeginEdit={() => beginEdit(f.key, current)}
-                onCancelEdit={cancelEdit}
-                onSave={() => saveCore(f.key)}
-                forceEdit={globalEdit}
-              />
-            )
-          })}
-        </div>
-      </FieldSection>
-
-      {/* ─── Custom/dynamic fields ───────────────────────────── */}
+      {/* ─── Contact Information (dynamic fields from API) ──── */}
       {lead.customFields.length > 0 && (
         <FieldSection
-          icon={Sparkles}
-          iconColor="text-violet-500"
-          title="Custom Fields"
+          icon={User}
+          iconColor="text-indigo-500"
+          title="Contact Information"
           count={lead.customFields.length}
-          action={
-            <button className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors">
-              <Plus size={11} /> Add
-            </button>
-          }
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {lead.customFields.map((f: LeadField) => {
               const isEditing = editingKey === `custom:${f.key}`
+              const fieldIcon = f.key.includes('email') ? Mail
+                : f.key.includes('phone') || f.key.includes('mobile') ? Phone
+                : f.key.includes('state') || f.key.includes('city') || f.key.includes('address') || f.key.includes('zip') ? MapPin
+                : f.key.includes('company') || f.key.includes('business') ? Building2
+                : User
+              const isCopyable = f.key.includes('email') || f.key.includes('phone') || f.key.includes('mobile')
+              const isPhone = f.key.includes('phone') || f.key.includes('mobile')
+              const displayValue = isPhone ? formatPhoneNumber(f.value) : f.value
               return (
                 <InlineField
                   key={f.key}
-                  icon={Sparkles}
+                  icon={fieldIcon}
                   label={f.label}
-                  value={f.value}
-                  isEditing={isEditing}
+                  value={displayValue}
+                  isEditing={isPhone ? false : isEditing}
                   editValue={editValue}
                   setEditValue={setEditValue}
-                  type="text"
-                  onBeginEdit={() => beginEdit(`custom:${f.key}`, f.value)}
+                  type={f.type ?? 'text'}
+                  copyable={isCopyable}
+                  copied={copied === `custom:${f.key}`}
+                  onCopy={() => copy(f.value, `custom:${f.key}`)}
+                  onBeginEdit={isPhone ? () => {} : () => beginEdit(`custom:${f.key}`, f.value)}
                   onCancelEdit={cancelEdit}
                   onSave={() => saveCustom(f.key)}
-                  forceEdit={globalEdit}
+                  saving={saving && editingKey === `custom:${f.key}`}
+                  forceEdit={isPhone ? false : globalEdit}
+                  readOnly={isPhone}
                 />
               )
             })}
@@ -249,14 +224,16 @@ interface InlineFieldProps {
   onBeginEdit: () => void
   onCancelEdit: () => void
   onSave: () => void
+  saving?: boolean
   forceEdit?: boolean
+  readOnly?: boolean
 }
 
 function InlineField({
   icon: Icon, label, value, isEditing, editValue, setEditValue, type,
-  copyable, copied, onCopy, onBeginEdit, onCancelEdit, onSave, forceEdit,
+  copyable, copied, onCopy, onBeginEdit, onCancelEdit, onSave, saving, forceEdit, readOnly,
 }: InlineFieldProps) {
-  const active = isEditing || forceEdit
+  const active = isEditing || (forceEdit && !readOnly)
 
   return (
     <div className={cn(
@@ -291,11 +268,11 @@ function InlineField({
           />
         ) : (
           <p
-            onClick={onBeginEdit}
+            onClick={readOnly ? undefined : onBeginEdit}
             className={cn(
-              'text-[12px] font-semibold text-slate-800 mt-0.5 truncate cursor-text leading-tight transition-colors',
+              'text-[12px] font-semibold text-slate-800 mt-0.5 truncate leading-tight transition-colors',
               !value && 'text-slate-300',
-              'group-hover:text-indigo-700',
+              readOnly ? 'cursor-default' : 'cursor-text group-hover:text-indigo-700',
             )}
             title={value}
           >
@@ -310,14 +287,16 @@ function InlineField({
           <>
             <button
               onClick={onSave}
-              className="p-1 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+              disabled={saving}
+              className="p-1 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
               title="Save (Enter)"
             >
-              <Save size={9} />
+              {saving ? <Loader2 size={9} className="animate-spin" /> : <Save size={9} />}
             </button>
             <button
               onClick={onCancelEdit}
-              className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
+              disabled={saving}
+              className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors disabled:opacity-50"
               title="Cancel (Esc)"
             >
               <X size={9} />
@@ -334,13 +313,15 @@ function InlineField({
                 {copied ? <Check size={10} className="text-emerald-600" /> : <Copy size={10} />}
               </button>
             )}
-            <button
-              onClick={(e) => { e.stopPropagation(); onBeginEdit() }}
-              className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
-              title="Edit"
-            >
-              <Edit3 size={10} />
-            </button>
+            {!readOnly && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onBeginEdit() }}
+                className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                title="Edit"
+              >
+                <Edit3 size={10} />
+              </button>
+            )}
           </>
         )}
       </div>

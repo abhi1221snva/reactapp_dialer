@@ -4,7 +4,7 @@ import {
   Plus, Trash2, Pencil, Radio, Eye, Clock, Search,
   LayoutList, X, Tag, Users, Zap, Globe,
   Phone, Mail,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Loader2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -12,9 +12,9 @@ import { ServerDataTable, type Column } from '../../components/ui/ServerDataTabl
 import { Badge } from '../../components/ui/Badge'
 import { campaignService } from '../../services/campaign.service'
 import { dispositionService } from '../../services/disposition.service'
-import { emailSettingsService, type EmailSetting } from '../../services/emailSettings.service'
+import { smtpService, type SmtpSetting } from '../../services/smtp.service'
 import { useServerTable } from '../../hooks/useServerTable'
-import { confirmDelete } from '../../utils/confirmDelete'
+import { confirmDelete, showConfirm } from '../../utils/confirmDelete'
 import { RowActions } from '../../components/ui/RowActions'
 import { cn, capFirst } from '../../utils/cn'
 import { useDialerHeader } from '../../layouts/DialerLayout'
@@ -156,12 +156,12 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
     })
     .filter(Boolean) as Array<{ id: number; title: string }>
 
-  const { data: emailSettingsData } = useQuery({
-    queryKey: ['campaign-email-settings'],
+  const { data: smtpSettingsData } = useQuery({
+    queryKey: ['campaign-smtp-settings'],
     queryFn: async () => {
-      const res = await emailSettingsService.list()
-      const payload = res.data?.data ?? res.data ?? {}
-      return (payload.list ?? []) as EmailSetting[]
+      const res = await smtpService.list()
+      const payload = res.data?.data ?? res.data ?? []
+      return (Array.isArray(payload) ? payload : payload.data ?? []) as SmtpSetting[]
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -177,8 +177,8 @@ function CampaignDetailModal({ campaign, onClose }: { campaign: Campaign; onClos
   const resolveEmailLabel = (val: number | string | undefined): string => {
     const key = String(val ?? '0')
     if (staticEmailLabel[key]) return staticEmailLabel[key]
-    const setting = (emailSettingsData ?? []).find(s => s.id === Number(key))
-    if (setting) return setting.sender_name ? `${setting.sender_name} — ${setting.sender_email}` : setting.sender_email
+    const setting = (smtpSettingsData ?? []).find(s => s.id === Number(key))
+    if (setting) return setting.from_name ? `${setting.from_name} — ${setting.from_email}` : setting.from_email
     return key === '0' ? 'No' : `SMTP #${key}`
   }
 
@@ -342,7 +342,11 @@ export function Campaigns() {
   const qc = useQueryClient()
   const table = useServerTable({ defaultLimit: 15 })
   const [viewCampaign, setViewCampaign] = useState<Campaign | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { setToolbar } = useDialerHeader()
+
+  // Clear selection on page/search/filter change
+  useEffect(() => { setSelectedIds([]) }, [table.page, table.search, table.filters])
 
   useEffect(() => {
     setToolbar(
@@ -380,6 +384,22 @@ export function Campaigns() {
     mutationFn: (id: number) => campaignService.delete(id),
     onSuccess: () => { toast.success('Campaign deleted'); qc.invalidateQueries({ queryKey: ['campaigns'] }) },
     onError: () => toast.error('Failed to delete campaign'),
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const results = await Promise.allSettled(ids.map(id => campaignService.delete(id)))
+      const failed = results.filter(r => r.status === 'rejected').length
+      return { total: ids.length, failed }
+    },
+    onSuccess: ({ total, failed }) => {
+      if (failed === 0) toast.success(`Deleted ${total} campaign(s)`)
+      else toast.error(`${failed} of ${total} deletions failed`)
+      setSelectedIds([])
+      table.setPage(1)
+      qc.invalidateQueries({ queryKey: ['campaigns'] })
+    },
+    onError: () => toast.error('Bulk delete failed'),
   })
 
   const columns: Column<Campaign>[] = [
@@ -548,8 +568,42 @@ export function Campaigns() {
           limit={table.limit}
           onPageChange={table.setPage}
           hideToolbar
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
         />
       </div>
+
+      {/* Bulk delete bar */}
+      {selectedIds.length > 0 && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl"
+          style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' }}
+        >
+          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0" style={{ background: 'rgba(99,102,241,0.25)', color: '#a5b4fc' }}>
+            {selectedIds.length} selected
+          </span>
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <button
+            onClick={async () => {
+              if (await showConfirm({
+                title: `Delete ${selectedIds.length} Campaign${selectedIds.length > 1 ? 's' : ''}?`,
+                message: `${selectedIds.length} campaign${selectedIds.length > 1 ? 's' : ''} will be permanently deleted. This cannot be undone.`,
+                confirmText: 'Yes, delete',
+              })) bulkDeleteMutation.mutate(selectedIds)
+            }}
+            disabled={bulkDeleteMutation.isPending}
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg font-semibold bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors flex-shrink-0"
+          >
+            {bulkDeleteMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+            Delete
+          </button>
+          <div className="w-px h-5 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <button onClick={() => setSelectedIds([])} className="p-1 rounded-md hover:bg-white/10 transition-colors flex-shrink-0" title="Clear selection">
+            <X size={14} style={{ color: 'rgba(255,255,255,0.5)' }} />
+          </button>
+        </div>
+      )}
 
       {viewCampaign && (
         <CampaignDetailModal

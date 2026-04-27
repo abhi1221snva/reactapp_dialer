@@ -1,31 +1,9 @@
-import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
-import axios from 'axios'
 
-const API = import.meta.env.VITE_API_URL ?? ''
-const DEFAULT_LOGO = `${API}/public/tenant/3/logo`
 const DEFAULT_COMPANY = 'Linkswitch'
 
-interface DomainBranding {
-  company_name: string | null
-  logo_url: string | null
-  client_id: number
-}
-
 export function AuthLayout({ children }: { children?: React.ReactNode }) {
-  const [branding, setBranding] = useState<DomainBranding | null>(null)
-
-  useEffect(() => {
-    const domain = window.location.hostname
-    if (!domain) return
-    axios
-      .get<{ success: boolean; data: DomainBranding | null }>(`${API}/public/domain-branding`, { params: { domain } })
-      .then(r => { if (r.data?.data) setBranding(r.data.data) })
-      .catch(() => {})
-  }, [])
-
-  const logoUrl = branding?.logo_url || DEFAULT_LOGO
-  const companyName = branding?.company_name || DEFAULT_COMPANY
+  const companyName = DEFAULT_COMPANY
 
   return (
     <div
@@ -101,21 +79,6 @@ export function AuthLayout({ children }: { children?: React.ReactNode }) {
 
       {/* Center content */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-4 overflow-y-auto relative z-10">
-        {/* Brand logo */}
-        <div className="flex items-center gap-3 mb-5 animate-fadeIn">
-          <img
-            src={logoUrl}
-            alt={companyName}
-            style={{
-              maxHeight: 90,
-              maxWidth: 360,
-              objectFit: 'contain',
-              filter: 'drop-shadow(0 4px 16px rgba(99,102,241,0.35))',
-            }}
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
-        </div>
-
         {/* Auth card — gradient border wrapper */}
         <div
           className="w-full max-w-[460px] rounded-[22px] p-[1px]"
@@ -137,12 +100,12 @@ export function AuthLayout({ children }: { children?: React.ReactNode }) {
         </div>
 
         {/* Footer */}
-        <p className="mt-4 text-xs text-slate-700 text-center">
-          &copy; {new Date().getFullYear()} {companyName}. All rights reserved.
+        <p className="mt-5 text-[11px] text-slate-600 text-center tracking-wide">
+          &copy; {new Date().getFullYear()} {companyName}{companyName.endsWith('.') ? '' : '.'} All rights reserved.
           {' · '}
-          <a href="#" className="hover:text-slate-500 transition-colors">Privacy</a>
+          <a href="#" className="hover:text-slate-400 transition-colors duration-200">Privacy</a>
           {' · '}
-          <a href="#" className="hover:text-slate-500 transition-colors">Terms</a>
+          <a href="#" className="hover:text-slate-400 transition-colors duration-200">Terms</a>
         </p>
       </div>
     </div>

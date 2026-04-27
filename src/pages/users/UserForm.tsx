@@ -11,6 +11,7 @@ import { useAuthStore } from '../../stores/auth.store'
 import { isSuperAdmin, LEVELS } from '../../utils/permissions'
 import { NotFound } from '../NotFound'
 import { TIMEZONES } from '../../constants/timezones'
+import { formatPartialPhoneUS } from '../../utils/format'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,12 +41,7 @@ function genPin(): string {
 function capFirst(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
 }
-function formatUSPhone(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 10)
-  if (d.length <= 3) return d
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
-}
+// formatUSPhone replaced by centralized formatPartialPhoneUS from utils/format
 function mapExtType(val: string): string {
   if (val === 'extension') return 'ext'
   if (val === 'ring_group') return 'que'
@@ -355,7 +351,7 @@ export function UserForm() {
       setForm(f => ({
         ...f,
         first_name:(u.first_name as string)||'', last_name:(u.last_name as string)||'',
-        email:(u.email as string)||'', mobile:formatUSPhone((u.mobile as string)||''),
+        email:(u.email as string)||'', mobile:formatPartialPhoneUS((u.mobile as string)||''),
         country_code:(()=>{const raw=String(u.country_code||'1');return raw.startsWith('+')?raw:'+'+raw})(), password:'',
         extension:(u.extension as string)||'',
         extension_type:mapExtType((u.extension_type as string)||'ext'),
@@ -637,7 +633,7 @@ export function UserForm() {
                         )}
                       </div>
                       <input type="tel" className={fiCls('mobile')} style={{ flex:1 }}
-                        value={form.mobile} onChange={e=>set('mobile',formatUSPhone(e.target.value))}
+                        value={form.mobile} onChange={e=>set('mobile',formatPartialPhoneUS(e.target.value))}
                         placeholder="(555) 555-5555" maxLength={14} />
                     </div>
                     {err('mobile')}

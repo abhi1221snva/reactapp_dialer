@@ -76,7 +76,7 @@ export function CrmLayout() {
   const OWN_HEADER = new Set([
     '/crm/dashboard', '/crm/sms-inbox', '/crm/leads', '/crm/leads/create',
     '/crm/lead-fields', '/crm/lead-status', '/crm/document-types',
-    '/crm/email-templates', '/crm/sms-templates', '/crm/pdf-templates', '/crm/lenders',
+    '/crm/email-templates', '/crm/sms-templates', '/crm/pdf-templates', '/crm/pdf-reader-settings', '/crm/lenders',
     '/crm/drip-campaigns', '/crm/drip-campaigns/create',
   ])
   const showHeader = !OWN_HEADER.has(pathname)

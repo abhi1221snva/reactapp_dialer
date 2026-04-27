@@ -200,7 +200,7 @@ export function DialerStudio() {
           onSwitchCampaign={handleSwitchCampaign}
         />
       ) : (
-        <div className="max-w-6xl mx-auto py-4 space-y-4">
+        <div className="py-4 space-y-4">
           {/* WebPhone not configured — hard block, can't dial at all */}
           {!webphoneConfigured && (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200">

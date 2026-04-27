@@ -4,6 +4,7 @@ import { Activity, Clock, User, MessageSquare, Phone, Mail, FileText } from 'luc
 import { Badge } from '../../components/ui/Badge'
 import { leadService } from '../../services/lead.service'
 import api from '../../api/axios'
+import { formatPartialPhoneUS, formatPhoneNumber } from '../../utils/format'
 
 interface LeadOption {
   id: number
@@ -44,31 +45,7 @@ const TYPE_COLORS: Record<string, string> = {
   status_change: 'bg-slate-50 text-slate-600 border-slate-200',
 }
 
-/** Strip all non-digit characters */
-function digitsOnly(value: string): string {
-  return value.replace(/\D/g, '')
-}
-
-/** Format digits to US phone: (XXX) XXX-XXXX */
-function formatUsPhone(digits: string): string {
-  const d = digits.slice(0, 10)
-  if (d.length === 0) return ''
-  if (d.length <= 3) return `(${d}`
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
-}
-
-/** Display a phone number in US format */
-function displayUsPhone(phone?: string): string {
-  if (!phone) return ''
-  const d = digitsOnly(phone)
-  // Handle 11-digit numbers starting with 1
-  const normalized = d.length === 11 && d.startsWith('1') ? d.slice(1) : d
-  if (normalized.length === 10) {
-    return `(${normalized.slice(0, 3)}) ${normalized.slice(3, 6)}-${normalized.slice(6)}`
-  }
-  return phone
-}
+// Local phone formatters replaced by centralized imports from utils/format
 
 function formatTimestamp(ts?: string): string {
   if (!ts) return ''
@@ -112,9 +89,9 @@ export function LeadActivity() {
   // Handle phone input with formatting
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value
-    const digits = digitsOnly(input).slice(0, 10)
+    const digits = input.replace(/\D/g, '').slice(0, 10)
     setRawDigits(digits)
-    setDisplayValue(formatUsPhone(digits))
+    setDisplayValue(formatPartialPhoneUS(digits))
     setShowDropdown(true)
     if (!digits) setSelectedLead(null)
   }
@@ -149,8 +126,8 @@ export function LeadActivity() {
 
   const selectLead = (lead: LeadOption) => {
     setSelectedLead(lead)
-    setDisplayValue(displayUsPhone(lead.phone_number))
-    setRawDigits(digitsOnly(lead.phone_number || '').slice(0, 10))
+    setDisplayValue(formatPhoneNumber(lead.phone_number))
+    setRawDigits((lead.phone_number || '').replace(/\D/g, '').slice(0, 10))
     setShowDropdown(false)
   }
 
@@ -196,7 +173,7 @@ export function LeadActivity() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
                       <p className="text-[11px] text-slate-500">
-                        {displayUsPhone(lead.phone_number)}
+                        {formatPhoneNumber(lead.phone_number)}
                         {lead.email ? ` · ${lead.email}` : ''}
                       </p>
                     </div>
@@ -220,7 +197,7 @@ export function LeadActivity() {
                 {[selectedLead.first_name, selectedLead.last_name].filter(Boolean).join(' ') || 'Unknown'}
               </p>
               <p className="text-xs text-slate-500">
-                {displayUsPhone(selectedLead.phone_number)}
+                {formatPhoneNumber(selectedLead.phone_number)}
                 {selectedLead.email ? ` · ${selectedLead.email}` : ''}
               </p>
             </div>

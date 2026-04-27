@@ -5,7 +5,7 @@ import {
   Plus, Search, SlidersHorizontal, Loader2, X,
   Eye, Pencil, Trash2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Link2, Copy, Check, ExternalLink,
+  Link2, Copy, Check, ExternalLink, FileText,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
@@ -18,8 +18,11 @@ import { useCrmHeader } from '../../layouts/CrmLayout'
 import { formatPhoneNumber } from '../../utils/format'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { cn } from '../../utils/cn'
+import { useAuth } from '../../hooks/useAuth'
+import { LEVELS } from '../../utils/permissions'
 import type { CrmLead, CrmSearchParams } from '../../types/crm.types'
 import api from '../../api/axios'
+import { PdfUploadModal } from './PdfUploadModal'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -315,7 +318,10 @@ export function CrmLeadsList() {
   const [showFilters, setShowFilters]           = useState(false)
   const [selectedIds, setSelectedIds]           = useState<number[]>([])
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
+  const [showPdfUploadModal, setShowPdfUploadModal] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout>>()
+  const { user } = useAuth()
+  const showAssigned = (user?.level ?? 1) >= LEVELS.MANAGER
 
   // ── Lookups ──────────────────────────────────────────────────────────────────
 
@@ -618,10 +624,13 @@ export function CrmLeadsList() {
         {/* Divider */}
         <div className="lt-divider" />
 
-        {/* Right group — Affiliate + Add Lead */}
+        {/* Right group — Affiliate + Upload PDF + Add Lead */}
         <div className="lt-right">
           <button onClick={() => setShowAffiliateModal(true)} className="lt-b lt-og">
             <Link2 size={12} /> Affiliate
+          </button>
+          <button onClick={() => setShowPdfUploadModal(true)} className="lt-b lt-og">
+            <FileText size={12} /> Upload PDF
           </button>
           <button onClick={() => navigate('/crm/leads/create')} className="lt-b lt-g">
             <Plus size={13} /> Add Lead
@@ -682,7 +691,7 @@ export function CrmLeadsList() {
                 <th>Phone</th>
                 <th>Company</th>
                 <th>Status</th>
-                <th>Assigned</th>
+                {showAssigned && <th>Assigned</th>}
                 <th>Created</th>
                 <th className="w-12" />
               </tr>
@@ -691,7 +700,7 @@ export function CrmLeadsList() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="py-16">
+                  <td colSpan={showAssigned ? 10 : 9} className="py-16">
                     <div className="flex flex-col items-center gap-2 text-slate-400">
                       <Loader2 size={22} className="animate-spin text-indigo-400" />
                       <span className="text-sm">Loading leads…</span>
@@ -700,7 +709,7 @@ export function CrmLeadsList() {
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16">
+                  <td colSpan={showAssigned ? 10 : 9} className="py-16">
                     <div className="flex flex-col items-center gap-2 text-slate-400">
                       <Search size={28} className="opacity-30" />
                       <p className="text-sm font-medium">No leads found</p>
@@ -785,9 +794,11 @@ export function CrmLeadsList() {
                       </td>
 
                       {/* Assigned */}
-                      <td className="text-slate-500 text-xs">
-                        {(lead.assigned_name as string | undefined) ?? '—'}
-                      </td>
+                      {showAssigned && (
+                        <td className="text-slate-500 text-xs">
+                          {(lead.assigned_name as string | undefined) ?? '—'}
+                        </td>
+                      )}
 
                       {/* Created date */}
                       <td className="text-slate-400 text-xs whitespace-nowrap">
@@ -810,12 +821,12 @@ export function CrmLeadsList() {
                               variant: 'edit',
                               onClick: () => navigate(`/crm/leads/${lead.id}/edit`),
                             },
-                            {
+                            ...((user?.level ?? 1) >= LEVELS.ADMIN ? [{
                               label: 'Delete Lead',
                               icon:  <Trash2 size={13} />,
-                              variant: 'delete',
+                              variant: 'delete' as const,
                               onClick: () => handleDelete(lead.id),
-                            },
+                            }] : []),
                           ]}
                         />
                       </td>
@@ -848,9 +859,20 @@ export function CrmLeadsList() {
         onRefresh={() => refetch()}
       />
 
-      {/* ── Affiliate Link Modal ─────────────────────────────────────────────── */}
+      {/* ── Affiliate Link Modal ───────────────────────────────────��─────────── */}
       {showAffiliateModal && (
         <AffiliateLinkModal onClose={() => setShowAffiliateModal(false)} />
+      )}
+
+      {/* ── PDF Upload Modal ───────────────────────────────────────────────── */}
+      {showPdfUploadModal && (
+        <PdfUploadModal
+          onClose={() => setShowPdfUploadModal(false)}
+          onSuccess={(data) => {
+            setShowPdfUploadModal(false)
+            navigate('/crm/leads/create', { state: { prefillData: data } })
+          }}
+        />
       )}
 
       {/* ── Filter Drawer (slide-over) ───────────────────────────────────────── */}

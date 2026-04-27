@@ -96,7 +96,6 @@ const FALLBACK_SECTIONS: NavSection[] = [
     label: 'CORE',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, minLevel: 1 },
-      { to: '/dialer',             label: 'Dialer',        icon: Phone,     minLevel: 1 },
       { to: '/dialer-studio',      label: 'Dialer Studio', icon: Sparkles,  minLevel: 1 },
       { to: '/dialer/campaign-auto', label: 'Auto Dialer', icon: Zap,       minLevel: 3 },
     ],
