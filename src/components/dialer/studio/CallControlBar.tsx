@@ -1,4 +1,4 @@
-import { PhoneForwarded, Voicemail, Grid3x3, PhoneOff, Phone, Mic, MicOff, Pause, Play, AlertTriangle, LogOut } from 'lucide-react'
+import { PhoneForwarded, Voicemail, Grid3x3, PhoneOff, Phone, Mic, MicOff, Pause, Play, AlertTriangle } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import type { CallState } from './types'
 
@@ -10,7 +10,6 @@ interface Props {
   failReason?: string | null
   onDial: () => void
   onHangup: () => void
-  onEndSession?: () => void
   onTransfer: () => void
   onVoiceDrop: () => void
   onDialPad: () => void
@@ -23,7 +22,7 @@ interface Props {
  * Always visible during active dialer session.
  */
 export function CallControlBar({
-  callState, duration, muted, holding, failReason, onDial, onHangup, onEndSession, onTransfer,
+  callState, duration, muted, holding, failReason, onDial, onHangup, onTransfer,
   onVoiceDrop, onDialPad, onToggleMute, onToggleHold,
 }: Props) {
   const isActive = callState === 'in-call' || callState === 'ringing' || callState === 'dialing'
@@ -156,16 +155,6 @@ export function CallControlBar({
                   <span className="relative">Hang Up</span>
                   <kbd className="relative ml-1 text-[9px] font-mono bg-white/20 rounded px-1 py-[1px]">␣</kbd>
                 </button>
-                {onEndSession && (
-                  <button
-                    onClick={onEndSession}
-                    className="flex items-center gap-1.5 h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700 font-semibold text-xs transition-all"
-                    title="End session — leave conference entirely"
-                  >
-                    <LogOut size={14} />
-                    <span className="hidden sm:inline">End Session</span>
-                  </button>
-                )}
               </>
             )}
           </div>
