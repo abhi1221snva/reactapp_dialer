@@ -296,10 +296,11 @@ const APPLY_MAX_TOTAL_MB = 25
 const APPLY_MAX_FILE_B   = APPLY_MAX_FILE_MB * 1024 * 1024
 const APPLY_MAX_TOTAL_B  = APPLY_MAX_TOTAL_MB * 1024 * 1024
 
-function DocUpload({ files, onChange, docTypes }: {
+function DocUpload({ files, onChange, docTypes, isMobile }: {
   files: UploadFile[]
   onChange: (f: UploadFile[]) => void
   docTypes: PublicDocumentType[]
+  isMobile?: boolean
 }) {
   const [over, setOver]           = useState(false)
   const [err, setErr]             = useState('')
@@ -336,7 +337,7 @@ function DocUpload({ files, onChange, docTypes }: {
   const fmtSize = (n: number) => n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`
 
   return (
-    <div style={{ display: 'flex', gap: 20, height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 14 : 20, height: '100%' }}>
 
       {/* ── Remove confirmation modal ── */}
       {confirmFile && (
@@ -371,7 +372,7 @@ function DocUpload({ files, onChange, docTypes }: {
       )}
 
       {/* Left: drop zone */}
-      <div style={{ flex: '0 0 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ flex: isMobile ? 'none' : '0 0 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
           onDrop={e => { e.preventDefault(); setOver(false); add(Array.from(e.dataTransfer.files)) }}
           onClick={() => inp.current?.click()}
@@ -408,7 +409,7 @@ function DocUpload({ files, onChange, docTypes }: {
                 const selType = docTypes.find(t => t.title === f.docType) ?? null
                 const subValues = parseSubValues(selType?.values)
                 return (
-                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: `${ec}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <FileText size={16} color={ec} />
                     </div>
@@ -419,23 +420,25 @@ function DocUpload({ files, onChange, docTypes }: {
                         <span style={{ fontSize: 11, color: C.muted }}>{fmtSize(f.file.size)}</span>
                       </div>
                     </div>
-                    <select value={f.docType}
-                      onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, docType: e.target.value, subType: '' } : x))}
-                      style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 140 }}>
-                      {docTypes.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
-                    </select>
-                    {subValues.length > 0 && (
-                      <select value={f.subType}
-                        onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, subType: e.target.value } : x))}
-                        style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 120 }}>
-                        <option value="">Select…</option>
-                        {subValues.map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    )}
                     <button type="button" onClick={() => setConfirmId(f.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtle, padding: 4, display: 'flex', flexShrink: 0 }}>
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtle, padding: 4, display: 'flex', flexShrink: 0, order: isMobile ? -1 : 3, marginLeft: isMobile ? 'auto' : 0 }}>
                       <X size={15} />
                     </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', ...(isMobile ? { width: '100%' } : {}) }}>
+                      <select value={f.docType}
+                        onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, docType: e.target.value, subType: '' } : x))}
+                        style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: isMobile ? '100%' : 140, flex: isMobile ? 1 : undefined }}>
+                        {docTypes.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                      {subValues.length > 0 && (
+                        <select value={f.subType}
+                          onChange={e => onChange(files.map(x => x.id === f.id ? { ...x, subType: e.target.value } : x))}
+                          style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: isMobile ? '100%' : 120, flex: isMobile ? 1 : undefined }}>
+                          <option value="">Select…</option>
+                          {subValues.map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -561,6 +564,13 @@ export function ApplyPage() {
   const [sigErr, setSigErr]     = useState('')
   const [result, setResult]     = useState<SubmitResult | null>(null)
   const [hasOwner2, setHasOwner2] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   // Detect Owner 2 section
   const owner2SecIdx = sections.findIndex((s: PublicFormSection) =>
@@ -818,13 +828,13 @@ export function ApplyPage() {
             <div style={{ color: '#94a3b8', fontSize: 10, letterSpacing: 0.6 }}>FUNDING APPLICATION</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {company?.company_phone && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
+          {!isMobile && company?.company_phone && (
             <a href={`tel:${company.company_phone}`} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#94a3b8', fontSize: 12, textDecoration: 'none' }}>
               <Phone size={12} /> {formatPhoneNumber(company.company_phone)}
             </a>
           )}
-          {company?.support_email && (
+          {!isMobile && company?.support_email && (
             <>
               <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
               <a href={`mailto:${company.support_email}`} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#94a3b8', fontSize: 12, textDecoration: 'none' }}>
@@ -832,18 +842,20 @@ export function ApplyPage() {
               </a>
             </>
           )}
-          <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#94a3b8' }}>
-            <Clock size={12} />{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </div>
+          {!isMobile && <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />}
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#94a3b8' }}>
+              <Clock size={12} />{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+          )}
         </div>
       </header>
 
       {/* ── Body ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* ── Sidebar (220px) ── */}
-        <aside style={{ width: 220, background: C.sidebar, display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: `1px solid ${C.border}`, overflow: 'hidden' }}>
+        {/* ── Sidebar (220px, hidden on mobile) ── */}
+        <aside style={{ width: 220, background: C.sidebar, display: isMobile ? 'none' : 'flex', flexDirection: 'column', flexShrink: 0, borderRight: `1px solid ${C.border}`, overflow: 'hidden' }}>
           {/* Progress bar */}
           <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -897,25 +909,40 @@ export function ApplyPage() {
         {/* ── Main panel ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
 
+          {/* Mobile progress bar */}
+          {isMobile && (
+            <div style={{ padding: '10px 16px', background: C.card, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>Step {step + 1} of {TOTAL}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: pct === 100 ? C.success : C.indigo }}>{pct}%</span>
+              </div>
+              <div style={{ background: C.border, borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.round(((step + 1) / TOTAL) * 100)}%`, height: '100%', borderRadius: 4, background: pct === 100 ? 'linear-gradient(90deg,#10b981,#4ade80)' : `linear-gradient(90deg,${C.indigo},#818cf8)`, transition: 'width .3s ease' }} />
+              </div>
+            </div>
+          )}
+
           {/* Step header */}
-          <div style={{ padding: '16px 28px 0', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: `${curMeta.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: curMeta.color }}>
+          <div style={{ padding: isMobile ? '12px 16px 0' : '16px 28px 0', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 12 }}>
+              <div style={{ width: isMobile ? 34 : 40, height: isMobile ? 34 : 40, borderRadius: isMobile ? 10 : 12, background: `${curMeta.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: curMeta.color, flexShrink: 0 }}>
                 {curMeta.icon}
               </div>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>{allSteps[step]}</h2>
-                <p style={{ margin: 0, fontSize: 12, color: C.muted }}>
-                  {isSig
-                    ? `Step ${step + 1} of ${TOTAL} · Sign below to authorize your application`
-                    : isDoc
-                      ? `Step ${step + 1} of ${TOTAL} · Upload supporting documents`
-                      : `Step ${step + 1} of ${TOTAL} · ${curSec?.title ?? ''}`
-                  }
-                </p>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h2 style={{ margin: 0, fontSize: isMobile ? 15 : 16, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{allSteps[step]}</h2>
+                {!isMobile && (
+                  <p style={{ margin: 0, fontSize: 12, color: C.muted }}>
+                    {isSig
+                      ? `Step ${step + 1} of ${TOTAL} · Sign below to authorize your application`
+                      : isDoc
+                        ? `Step ${step + 1} of ${TOTAL} · Upload supporting documents`
+                        : `Step ${step + 1} of ${TOTAL} · ${curSec?.title ?? ''}`
+                    }
+                  </p>
+                )}
               </div>
               {isStepDone(step) && (
-                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: C.successBg, color: C.success, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, border: `1px solid ${C.successBdr}` }}>
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: C.successBg, color: C.success, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, border: `1px solid ${C.successBdr}`, flexShrink: 0 }}>
                   <CheckCircle2 size={12} /> Complete
                 </span>
               )}
@@ -923,10 +950,10 @@ export function ApplyPage() {
           </div>
 
           {/* Step content */}
-          <div key={step} className="step-enter" style={{ flex: 1, padding: '16px 28px', overflow: 'hidden' }}>
+          <div key={step} className="step-enter" style={{ flex: 1, padding: isMobile ? '12px 16px' : '16px 28px', overflow: 'hidden' }}>
             {!isSig && !isDoc && curSec ? (
               /* ── Form step ── */
-              <div ref={scrollRef} style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(errs).length ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div ref={scrollRef} style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${Object.keys(errs).length ? C.errorBdr : C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 {Object.keys(errs).length > 0 && (
                   <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />
@@ -938,9 +965,9 @@ export function ApplyPage() {
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />{subErr}
                   </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, alignContent: 'start' }}>
                   {curSec.fields.map((f: PublicFormField) => (
-                    <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
+                    <div key={f.key} style={{ gridColumn: !isMobile && f.type === 'textarea' ? '1 / -1' : undefined }}>
                       <FormField f={f} value={form[f.key] || ''} onChange={change} error={errs[f.key]} />
                     </div>
                   ))}
@@ -979,9 +1006,9 @@ export function ApplyPage() {
                           </div>
                           <span style={{ fontSize: 13, fontWeight: 700, color: '#0e7490' }}>Owner 2 Information</span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, alignContent: 'start' }}>
                           {sections[owner2SecIdx].fields.map((f: PublicFormField) => (
-                            <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
+                            <div key={f.key} style={{ gridColumn: !isMobile && f.type === 'textarea' ? '1 / -1' : undefined }}>
                               <FormField f={f} value={form[f.key] || ''} onChange={change} error={errs[f.key]} />
                             </div>
                           ))}
@@ -993,12 +1020,12 @@ export function ApplyPage() {
               </div>
             ) : isSig ? (
               /* ── Dual Signature step — side by side ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved && (!hasOwner2 || sigSaved2) ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${sigSaved && (!hasOwner2 || sigSaved2) ? C.successBdr : C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                   By signing, you certify that all information provided is accurate and complete.
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: hasOwner2 ? '1fr 1fr' : '1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: hasOwner2 && !isMobile ? '1fr 1fr' : '1fr', gap: 20 }}>
                   {/* ── Signature 1: Applicant ── */}
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -1014,7 +1041,7 @@ export function ApplyPage() {
 
                   {/* ── Signature 2: Co-Applicant (only when Owner 2 checked) ── */}
                   {hasOwner2 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: `1px solid ${C.border}`, paddingLeft: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: isMobile ? 'none' : `1px solid ${C.border}`, paddingLeft: isMobile ? 0 : 20, borderTop: isMobile ? `1px solid ${C.border}` : 'none', paddingTop: isMobile ? 20 : 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                         <div style={{ width: 24, height: 24, borderRadius: 6, background: '#0891b218', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Edit3 size={12} color="#0891b2" />
@@ -1035,38 +1062,40 @@ export function ApplyPage() {
               </div>
             ) : (
               /* ── Documents step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
-                <DocUpload files={docs} onChange={setDocs} docTypes={docTypes} />
+              <div style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
+                <DocUpload files={docs} onChange={setDocs} docTypes={docTypes} isMobile={isMobile} />
               </div>
             )}
           </div>
 
           {/* ── Bottom bar ── */}
-          <div style={{ height: 52, background: C.card, borderTop: `1px solid ${C.border}`, padding: '0 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 -2px 8px rgba(15,23,42,.05)' }}>
+          <div style={{ height: 52, background: C.card, borderTop: `1px solid ${C.border}`, padding: isMobile ? '0 12px' : '0 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 -2px 8px rgba(15,23,42,.05)' }}>
             <button type="button" onClick={handleBack} disabled={step === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: `1.5px solid ${step === 0 ? '#f1f5f9' : C.border}`, borderRadius: 8, background: 'transparent', color: step === 0 ? C.subtle : C.textMid, fontSize: 13, fontWeight: 600, cursor: step === 0 ? 'not-allowed' : 'pointer', transition: 'all .15s' }}>
-              <ArrowLeft size={14} /> Back
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: isMobile ? '7px 10px' : '7px 16px', border: `1.5px solid ${step === 0 ? '#f1f5f9' : C.border}`, borderRadius: 8, background: 'transparent', color: step === 0 ? C.subtle : C.textMid, fontSize: 13, fontWeight: 600, cursor: step === 0 ? 'not-allowed' : 'pointer', transition: 'all .15s' }}>
+              <ArrowLeft size={14} />{!isMobile && ' Back'}
             </button>
 
-            {/* Step dots */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {allSteps.map((title, i) => (
-                <button key={i} type="button" onClick={() => handleStepNav(i)}
-                  style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepMeta(title).color : isStepDone(i) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
-              ))}
-            </div>
+            {/* Step dots (hidden on mobile — progress bar shown at top instead) */}
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {allSteps.map((title, i) => (
+                  <button key={i} type="button" onClick={() => handleStepNav(i)}
+                    style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepMeta(title).color : isStepDone(i) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
+                ))}
+              </div>
+            )}
 
             {isLast ? (
               <button type="button" onClick={submit} disabled={submitting}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: submitting ? '#a5b4fc' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: submitting ? 'none' : '0 2px 8px rgba(16,185,129,.3)', transition: 'all .15s' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: isMobile ? '8px 14px' : '8px 20px', border: 'none', borderRadius: 8, background: submitting ? '#a5b4fc' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: submitting ? 'none' : '0 2px 8px rgba(16,185,129,.3)', transition: 'all .15s' }}>
                 {submitting
                   ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> Submitting…</>
-                  : <><Check size={14} /> Submit Application</>
+                  : <><Check size={14} /> Submit</>
                 }
               </button>
             ) : (
               <button type="button" onClick={handleNext}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,70,229,.3)', transition: 'all .15s' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: isMobile ? '8px 14px' : '8px 20px', border: 'none', borderRadius: 8, background: C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,70,229,.3)', transition: 'all .15s' }}>
                 Next <ArrowRight size={14} />
               </button>
             )}

@@ -327,7 +327,7 @@ function parseSubValues(raw: string | null | undefined): string[] {
 const fmtSize = (n: number) => n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`
 const fileExt = (n: string) => n.split('.').pop()?.toLowerCase() ?? 'file'
 
-function DocStep({ token, docs, onUploaded, onQueueChange }: { token: string; docs: MerchantDocument[]; onUploaded: () => void; onQueueChange?: (count: number) => void }) {
+function DocStep({ token, docs, onUploaded, onQueueChange, isMobile }: { token: string; docs: MerchantDocument[]; onUploaded: () => void; onQueueChange?: (count: number) => void; isMobile?: boolean }) {
   // ── Local file queue (like affiliate) ──
   const [queue, setQueue]             = useState<UploadFile[]>([])
   const [over, setOver]               = useState(false)
@@ -531,10 +531,10 @@ function DocStep({ token, docs, onUploaded, onQueueChange }: { token: string; do
         </div>
       )}
 
-      {/* ══════════ Left: Drop zone | Right: All files (queued + uploaded) ══════════ */}
-      <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
+      {/* ════════���═ Left: Drop zone | Right: All files (queued + uploaded) ═════════�� */}
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 14 : 20, flex: 1, minHeight: 0 }}>
         {/* Left: drop zone — full height */}
-        <div style={{ flex: '0 0 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ flex: isMobile ? 'none' : '0 0 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={e => { e.preventDefault(); setOver(false); addToQueue(Array.from(e.dataTransfer.files)) }}
             onClick={() => inp.current?.click()}
@@ -578,7 +578,7 @@ function DocStep({ token, docs, onUploaded, onQueueChange }: { token: string; do
                 const selType = types.find(t => t.title === f.docType) ?? null
                 const subs = parseSubValues(selType?.values)
                 return (
-                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: `${ec}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <FileText size={16} color={ec} />
                     </div>
@@ -589,23 +589,25 @@ function DocStep({ token, docs, onUploaded, onQueueChange }: { token: string; do
                         <span style={{ fontSize: 11, color: C.muted }}>{fmtSize(f.file.size)}</span>
                       </div>
                     </div>
-                    <select value={f.docType}
-                      onChange={e => setQueue(queue.map(x => x.id === f.id ? { ...x, docType: e.target.value, subType: '' } : x))}
-                      style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 140 }}>
-                      {types.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
-                    </select>
-                    {subs.length > 0 && (
-                      <select value={f.subType}
-                        onChange={e => setQueue(queue.map(x => x.id === f.id ? { ...x, subType: e.target.value } : x))}
-                        style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: 120 }}>
-                        <option value="">Select…</option>
-                        {subs.map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    )}
                     <button type="button" onClick={() => setConfirmId(f.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtle, padding: 4, display: 'flex', flexShrink: 0 }}>
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtle, padding: 4, display: 'flex', flexShrink: 0, order: isMobile ? -1 : 3, marginLeft: isMobile ? 'auto' : 0 }}>
                       <X size={15} />
                     </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', ...(isMobile ? { width: '100%' } : {}) }}>
+                      <select value={f.docType}
+                        onChange={e => setQueue(queue.map(x => x.id === f.id ? { ...x, docType: e.target.value, subType: '' } : x))}
+                        style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: isMobile ? '100%' : 140, flex: isMobile ? 1 : undefined }}>
+                        {types.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                      {subs.length > 0 && (
+                        <select value={f.subType}
+                          onChange={e => setQueue(queue.map(x => x.id === f.id ? { ...x, subType: e.target.value } : x))}
+                          style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 7px', color: C.textMid, background: C.card, cursor: 'pointer', maxWidth: isMobile ? '100%' : 120, flex: isMobile ? 1 : undefined }}>
+                          <option value="">Select…</option>
+                          {subs.map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -690,6 +692,7 @@ export function MerchantPage() {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pendingDocCount, setPendingDocCount] = useState(0)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['merchantPortal', leadToken],
@@ -716,6 +719,12 @@ export function MerchantPage() {
     const hasData = o2Fields.some((f: PublicFormField) => !!(data.lead.fields[f.key] || '').trim())
     if (hasData) setHasOwner2(true)
   }, [data])
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['merchantPortal', leadToken] })
 
@@ -1045,12 +1054,14 @@ export function MerchantPage() {
             <div style={{ color: '#94a3b8', fontSize: 10, letterSpacing: 0.6 }}>MERCHANT APPLICATION</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
           <StatusBadge status={lead.lead_status} />
-          <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#94a3b8' }}>
-            <Clock size={12} />{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </div>
+          {!isMobile && <>
+            <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#94a3b8' }}>
+              <Clock size={12} />{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+          </>}
           <div style={{ height: 16, width: 1, background: 'rgba(255,255,255,.15)' }} />
           <button type="button" onClick={handlePdfClick} disabled={pdfLoading}
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 7, color: 'rgba(255,255,255,.9)', fontSize: 12, fontWeight: 600, cursor: pdfLoading ? 'wait' : 'pointer' }}>
@@ -1063,8 +1074,8 @@ export function MerchantPage() {
       {/* ── Body ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* ── Sidebar (220px) ── */}
-        <aside style={{ width: 220, background: C.sidebar, display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: `1px solid ${C.border}`, overflow: 'hidden' }}>
+        {/* ── Sidebar (220px, hidden on mobile) ── */}
+        <aside style={{ width: 220, background: C.sidebar, display: isMobile ? 'none' : 'flex', flexDirection: 'column', flexShrink: 0, borderRight: `1px solid ${C.border}`, overflow: 'hidden' }}>
           <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.7 }}>Progress</span>
@@ -1114,25 +1125,40 @@ export function MerchantPage() {
         {/* ── Main panel ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
 
+          {/* Mobile progress bar */}
+          {isMobile && (
+            <div style={{ padding: '10px 16px', background: C.card, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>Step {step + 1} of {TOTAL}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: pct === 100 ? C.success : C.indigo }}>{pct}%</span>
+              </div>
+              <div style={{ background: C.border, borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.round(((step + 1) / TOTAL) * 100)}%`, height: '100%', borderRadius: 4, background: pct === 100 ? 'linear-gradient(90deg,#10b981,#4ade80)' : `linear-gradient(90deg,${C.indigo},#818cf8)`, transition: 'width .3s ease' }} />
+              </div>
+            </div>
+          )}
+
           {/* Step header */}
-          <div style={{ padding: '16px 28px 0', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: `${stepColor(curInfo)}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stepColor(curInfo) }}>
+          <div style={{ padding: isMobile ? '12px 16px 0' : '16px 28px 0', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 12 }}>
+              <div style={{ width: isMobile ? 34 : 40, height: isMobile ? 34 : 40, borderRadius: isMobile ? 10 : 12, background: `${stepColor(curInfo)}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stepColor(curInfo), flexShrink: 0 }}>
                 {stepIcon(curInfo)}
               </div>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>{stepLabel(curInfo)}</h2>
-                <p style={{ margin: 0, fontSize: 12, color: C.muted }}>
-                  {curInfo.type === 'section'
-                    ? `Step ${step + 1} of ${TOTAL} · ${sections[curSecIdx].title}`
-                    : curInfo.type === 'sig'
-                      ? `Step ${step + 1} of ${TOTAL} · Sign below to authorize your application`
-                      : `Step ${step + 1} of ${TOTAL} · Upload supporting documents`
-                  }
-                </p>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h2 style={{ margin: 0, fontSize: isMobile ? 15 : 16, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stepLabel(curInfo)}</h2>
+                {!isMobile && (
+                  <p style={{ margin: 0, fontSize: 12, color: C.muted }}>
+                    {curInfo.type === 'section'
+                      ? `Step ${step + 1} of ${TOTAL} · ${sections[curSecIdx].title}`
+                      : curInfo.type === 'sig'
+                        ? `Step ${step + 1} of ${TOTAL} · Sign below to authorize your application`
+                        : `Step ${step + 1} of ${TOTAL} · Upload supporting documents`
+                    }
+                  </p>
+                )}
               </div>
               {isStepDone(curInfo) && (
-                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: C.successBg, color: C.success, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, border: `1px solid ${C.successBdr}` }}>
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: C.successBg, color: C.success, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, border: `1px solid ${C.successBdr}`, flexShrink: 0 }}>
                   <CheckCircle2 size={12} /> Complete
                 </span>
               )}
@@ -1140,10 +1166,10 @@ export function MerchantPage() {
           </div>
 
           {/* Step content */}
-          <div key={step} className="step-enter" style={{ flex: 1, padding: '16px 28px', overflow: 'hidden' }}>
+          <div key={step} className="step-enter" style={{ flex: 1, padding: isMobile ? '12px 16px' : '16px 28px', overflow: 'hidden' }}>
             {curInfo.type === 'section' && curSec ? (
               /* ── Form step ── */
-              <div ref={scrollRef} style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${Object.keys(fieldErrors).length || saveErr ? C.errorBdr : C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div ref={scrollRef} style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${Object.keys(fieldErrors).length || saveErr ? C.errorBdr : C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 {Object.keys(fieldErrors).length > 0 && (
                   <div style={{ background: C.errorBg, border: `1px solid ${C.errorBdr}`, borderRadius: 8, padding: '9px 13px', color: '#7f1d1d', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />
@@ -1155,9 +1181,9 @@ export function MerchantPage() {
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />{saveErr}
                   </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, alignContent: 'start' }}>
                   {curSec.fields.map((f: PublicFormField) => (
-                    <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
+                    <div key={f.key} style={{ gridColumn: !isMobile && f.type === 'textarea' ? '1 / -1' : undefined }}>
                       <FormField f={f} value={getVals(curSecIdx, curSec!)[f.key] || ''}
                         onChange={(k, v) => setField(curSecIdx, k, v)} error={fieldErrors[f.key]} />
                     </div>
@@ -1197,9 +1223,9 @@ export function MerchantPage() {
                           </div>
                           <span style={{ fontSize: 13, fontWeight: 700, color: '#0e7490' }}>Owner 2 Information</span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignContent: 'start' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, alignContent: 'start' }}>
                           {sections[owner2SecIdx].fields.map((f: PublicFormField) => (
-                            <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
+                            <div key={f.key} style={{ gridColumn: !isMobile && f.type === 'textarea' ? '1 / -1' : undefined }}>
                               <FormField f={f} value={getVals(owner2SecIdx, sections[owner2SecIdx])[f.key] || ''}
                                 onChange={(k, v) => setField(owner2SecIdx, k, v)} error={fieldErrors[f.key]} />
                             </div>
@@ -1212,12 +1238,12 @@ export function MerchantPage() {
               </div>
             ) : curInfo.type === 'sig' ? (
               /* ── Dual Signature step — side by side ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${hasSig && (!hasOwner2 || !!sigUrl2) ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${hasSig && (!hasOwner2 || !!sigUrl2) ? C.successBdr : C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                   By signing, you certify that all information provided is accurate and complete.
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: hasOwner2 ? '1fr 1fr' : '1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: hasOwner2 && !isMobile ? '1fr 1fr' : '1fr', gap: 20 }}>
                   {/* ── Signature 1: Applicant ── */}
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -1233,7 +1259,7 @@ export function MerchantPage() {
 
                   {/* ── Signature 2: Co-Applicant (only when Owner 2 checked) ── */}
                   {hasOwner2 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: `1px solid ${C.border}`, paddingLeft: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: isMobile ? 'none' : `1px solid ${C.border}`, paddingLeft: isMobile ? 0 : 20, borderTop: isMobile ? `1px solid ${C.border}` : 'none', paddingTop: isMobile ? 20 : 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                         <div style={{ width: 24, height: 24, borderRadius: 6, background: '#0891b218', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Edit3 size={12} color="#0891b2" />
@@ -1254,35 +1280,37 @@ export function MerchantPage() {
               </div>
             ) : (
               /* ── Documents step ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${C.border}`, height: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
-                <DocStep token={leadToken!} docs={lead.documents ?? []} onUploaded={refresh} onQueueChange={setPendingDocCount} />
+              <div style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(15,23,42,.05)' }}>
+                <DocStep token={leadToken!} docs={lead.documents ?? []} onUploaded={refresh} onQueueChange={setPendingDocCount} isMobile={isMobile} />
               </div>
             )}
           </div>
 
           {/* ── Bottom bar ── */}
-          <div style={{ height: 52, background: C.card, borderTop: `1px solid ${C.border}`, padding: '0 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 -2px 8px rgba(15,23,42,.05)' }}>
+          <div style={{ height: 52, background: C.card, borderTop: `1px solid ${C.border}`, padding: isMobile ? '0 12px' : '0 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 -2px 8px rgba(15,23,42,.05)' }}>
             <button type="button" onClick={handleBack} disabled={step === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: `1.5px solid ${step === 0 ? '#f1f5f9' : C.border}`, borderRadius: 8, background: 'transparent', color: step === 0 ? C.subtle : C.textMid, fontSize: 13, fontWeight: 600, cursor: step === 0 ? 'not-allowed' : 'pointer', transition: 'all .15s' }}>
-              <ArrowLeft size={14} /> Back
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: isMobile ? '7px 10px' : '7px 16px', border: `1.5px solid ${step === 0 ? '#f1f5f9' : C.border}`, borderRadius: 8, background: 'transparent', color: step === 0 ? C.subtle : C.textMid, fontSize: 13, fontWeight: 600, cursor: step === 0 ? 'not-allowed' : 'pointer', transition: 'all .15s' }}>
+              <ArrowLeft size={14} />{!isMobile && ' Back'}
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {stepMap.map((info, i) => (
-                <button key={i} type="button" onClick={() => handleStepNav(i)}
-                  style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepColor(info) : isStepDone(info) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
-              ))}
-            </div>
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {stepMap.map((info, i) => (
+                  <button key={i} type="button" onClick={() => handleStepNav(i)}
+                    style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 3, background: i === step ? stepColor(info) : isStepDone(info) ? C.success : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
+                ))}
+              </div>
+            )}
 
             {isLast ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {pendingDocCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10 }}>
+                {pendingDocCount > 0 && !isMobile && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.amber, fontSize: 12, fontWeight: 600 }}>
                     <AlertCircle size={13} />{pendingDocCount} file{pendingDocCount > 1 ? 's' : ''} not uploaded yet
                   </span>
                 )}
                 <button type="button" onClick={handleFinish} disabled={submitting || pendingDocCount > 0}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: submitting || pendingDocCount > 0 ? '#94a3b8' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting || pendingDocCount > 0 ? 'not-allowed' : 'pointer', boxShadow: submitting || pendingDocCount > 0 ? 'none' : '0 2px 8px rgba(16,185,129,.3)' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: isMobile ? '8px 14px' : '8px 20px', border: 'none', borderRadius: 8, background: submitting || pendingDocCount > 0 ? '#94a3b8' : C.success, color: 'white', fontSize: 13, fontWeight: 700, cursor: submitting || pendingDocCount > 0 ? 'not-allowed' : 'pointer', boxShadow: submitting || pendingDocCount > 0 ? 'none' : '0 2px 8px rgba(16,185,129,.3)' }}>
                   {submitting
                     ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Submitting…</>
                     : <><Check size={14} /> Finish</>
@@ -1291,7 +1319,7 @@ export function MerchantPage() {
               </div>
             ) : (
               <button type="button" onClick={handleNext} disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none', borderRadius: 8, background: saving ? '#a5b4fc' : C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 2px 8px rgba(79,70,229,.3)', transition: 'all .15s' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: isMobile ? '8px 14px' : '8px 20px', border: 'none', borderRadius: 8, background: saving ? '#a5b4fc' : C.indigo, color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 2px 8px rgba(79,70,229,.3)', transition: 'all .15s' }}>
                 {saving
                   ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Saving…</>
                   : <>{showNextLabel}<ArrowRight size={14} /></>

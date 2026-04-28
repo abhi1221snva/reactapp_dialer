@@ -168,7 +168,12 @@ export function WebPhone() {
     setPhoneRegistered(phoneState === 'ready' || phoneState === 'in_call')
     setPhoneInCall(phoneState === 'in_call')
     setPhoneHasIncoming(phoneState === 'incoming')
-    return () => { setPhoneRegistered(false); setPhoneInCall(false); setPhoneHasIncoming(false) }
+    // Note: do NOT reset phoneInCall to false in the cleanup function.
+    // During React re-renders the WebPhone may briefly unmount/remount, and
+    // clearing phoneInCall causes DialerInterface to think the SIP call ended,
+    // which routes the next dial through Path A (full agent originate) instead
+    // of Path B (persistent conference / nextCustomer), re-ringing the agent.
+    // The phoneState-driven sync above is the single source of truth.
   }, [phoneState, setPhoneRegistered, setPhoneInCall, setPhoneHasIncoming])
 
   // ── Session events ────────────────────────────────────────────────────────

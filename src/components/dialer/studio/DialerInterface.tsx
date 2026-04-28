@@ -502,7 +502,10 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       pushLeadToHistory()
 
       // ── Persistent conference: agent already in ConfBridge ──────────────
-      if (phoneInCall && isInConference.current) {
+      // Use isInConference as the primary signal — phoneInCall can briefly
+      // flicker to false during WebPhone re-renders, causing a spurious
+      // Path A originate that re-rings the agent while already in conference.
+      if (isInConference.current) {
         const res = await campaignDialerService.nextCustomer(campaign.id)
         const raw = res.data as Record<string, unknown>
 
