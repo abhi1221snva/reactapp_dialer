@@ -609,7 +609,15 @@ export function ApplyPage() {
 
   const validate = (): boolean => {
     if (isSig) {
-      if (!sigSaved) { setSigErr('Please save your signature before continuing.'); return false }
+      const needPrimary = !sigSaved
+      const needCoApplicant = hasOwner2 && !sigSaved2
+      if (needPrimary || needCoApplicant) {
+        const parts: string[] = []
+        if (needPrimary) parts.push('applicant signature')
+        if (needCoApplicant) parts.push('co-applicant signature')
+        setSigErr(`Please save the ${parts.join(' and ')} before continuing.`)
+        return false
+      }
       return true
     }
     if (isDoc) return true
@@ -625,8 +633,13 @@ export function ApplyPage() {
   // Navigate forward — ALWAYS validates first. Step NEVER changes on failure.
   const handleNext = () => {
     if (isSig) {
-      if (!sigSaved) {
-        setSigErr('Please save your signature before continuing.')
+      const needPrimary = !sigSaved
+      const needCoApplicant = hasOwner2 && !sigSaved2
+      if (needPrimary || needCoApplicant) {
+        const parts: string[] = []
+        if (needPrimary) parts.push('applicant signature')
+        if (needCoApplicant) parts.push('co-applicant signature')
+        setSigErr(`Please save the ${parts.join(' and ')} before continuing.`)
         return
       }
       setSigErr('')
@@ -721,7 +734,7 @@ export function ApplyPage() {
         .filter((f: PublicFormField) => f.required)
         .every((f: PublicFormField) => !!(form[f.key] || '').trim())
     }
-    if (info.type === 'sig') return sigSaved
+    if (info.type === 'sig') return sigSaved && (!hasOwner2 || sigSaved2)
     return docs.length > 0
   }
 
@@ -980,7 +993,7 @@ export function ApplyPage() {
               </div>
             ) : isSig ? (
               /* ── Dual Signature step — side by side ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${sigSaved && (!hasOwner2 || sigSaved2) ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                   By signing, you certify that all information provided is accurate and complete.
@@ -1007,10 +1020,10 @@ export function ApplyPage() {
                           <Edit3 size={12} color="#0891b2" />
                         </div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Co-Applicant Signature</span>
-                        <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
+                        <span style={{ fontSize: 11, color: C.error }}>*</span>
                         {sigSaved2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                       </div>
-                      <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d) }} saved={sigSaved2} savedDataUrl={sig2} />
+                      <SigPad onSave={(d) => { setSig2(d); setSigSaved2(!!d); if (d) setSigErr('') }} saved={sigSaved2} savedDataUrl={sig2} />
                     </div>
                   )}
                 </div>

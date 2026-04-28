@@ -920,10 +920,18 @@ export function MerchantPage() {
         scrollToFirstError(Object.keys(errs), scrollRef.current)
         return    // HARD STOP — do NOT save, do NOT advance
       }
-      // Merge Owner 2 field values into save payload
-      const saveVals = isOwner1Step && hasOwner2 && owner2SecIdx >= 0 && sections[owner2SecIdx]
-        ? { ...vals, ...getVals(owner2SecIdx, sections[owner2SecIdx]) }
-        : vals
+      // Merge Owner 2 field values into save payload, or clear them when unchecked
+      let saveVals: Record<string, string> = vals
+      if (isOwner1Step && owner2SecIdx >= 0 && sections[owner2SecIdx]) {
+        if (hasOwner2) {
+          saveVals = { ...vals, ...getVals(owner2SecIdx, sections[owner2SecIdx]) }
+        } else {
+          // Send _clear_owner_2 flag + empty values so backend deletes Owner 2 data
+          const cleared: Record<string, string> = { _clear_owner_2: '1' }
+          sections[owner2SecIdx].fields.forEach((f: PublicFormField) => { cleared[f.key] = '' })
+          saveVals = { ...vals, ...cleared }
+        }
+      }
       setSaving(true)
       try {
         await publicAppService.updateMerchant(leadToken!, saveVals)
@@ -940,8 +948,13 @@ export function MerchantPage() {
         }
       } finally { setSaving(false) }
     } else if (curInfo.type === 'sig') {
-      if (!sigUrl || sigDrawing) {
-        setSigErr('Please save your signature before continuing.')
+      const needPrimary = !sigUrl || sigDrawing
+      const needCoApplicant = hasOwner2 && !sigUrl2
+      if (needPrimary || needCoApplicant) {
+        const parts: string[] = []
+        if (needPrimary) parts.push('applicant signature')
+        if (needCoApplicant) parts.push('co-applicant signature')
+        setSigErr(`Please save the ${parts.join(' and ')} before continuing.`)
         return
       }
       setSigErr('')
@@ -957,9 +970,16 @@ export function MerchantPage() {
   const handleStepNav = (target: number) => {
     if (target === step) return
     if (target > step) {
-      if (curInfo.type === 'sig' && (!sigUrl || sigDrawing)) {
-        setSigErr('Please save your signature before continuing.')
-        return
+      if (curInfo.type === 'sig') {
+        const needPrimary = !sigUrl || sigDrawing
+        const needCoApplicant = hasOwner2 && !sigUrl2
+        if (needPrimary || needCoApplicant) {
+          const parts: string[] = []
+          if (needPrimary) parts.push('applicant signature')
+          if (needCoApplicant) parts.push('co-applicant signature')
+          setSigErr(`Please save the ${parts.join(' and ')} before continuing.`)
+          return
+        }
       }
       if (curInfo.type === 'section' && curSec) {
         const vals = getVals(curSecIdx, curSec)
@@ -992,7 +1012,7 @@ export function MerchantPage() {
   }
   const isStepDone = (info: StepInfo): boolean => {
     if (info.type === 'section') return isSectionComplete(sections[info.secIdx], getVals(info.secIdx, sections[info.secIdx]))
-    if (info.type === 'sig')     return hasSig
+    if (info.type === 'sig')     return hasSig && (!hasOwner2 || !!sigUrl2)
     return (lead.documents?.length ?? 0) > 0
   }
 
@@ -1192,7 +1212,7 @@ export function MerchantPage() {
               </div>
             ) : curInfo.type === 'sig' ? (
               /* ── Dual Signature step — side by side ── */
-              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${hasSig ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div style={{ background: C.card, borderRadius: 16, border: `1.5px solid ${hasSig && (!hasOwner2 || !!sigUrl2) ? C.successBdr : C.border}`, height: '100%', padding: '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                   By signing, you certify that all information provided is accurate and complete.
@@ -1219,10 +1239,10 @@ export function MerchantPage() {
                           <Edit3 size={12} color="#0891b2" />
                         </div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Co-Applicant Signature</span>
-                        <span style={{ fontSize: 11, color: C.muted, marginLeft: 2 }}>(optional)</span>
+                        <span style={{ fontSize: 11, color: C.error }}>*</span>
                         {sigUrl2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                       </div>
-                      <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(`${url}?v=${Date.now()}`); refresh() }} field="owner_2_signature_image" />
+                      <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(`${url}?v=${Date.now()}`); setSigErr(''); refresh() }} field="owner_2_signature_image" />
                     </div>
                   )}
                 </div>
