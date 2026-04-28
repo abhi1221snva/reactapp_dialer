@@ -689,6 +689,7 @@ export function MerchantPage() {
   const [saving, setSaving]       = useState(false)
   const [sigErr, setSigErr]       = useState('')
   const [sigDrawing, setSigDrawing] = useState(false)
+  const [sig2Drawing, setSig2Drawing] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pendingDocCount, setPendingDocCount] = useState(0)
@@ -958,7 +959,7 @@ export function MerchantPage() {
       } finally { setSaving(false) }
     } else if (curInfo.type === 'sig') {
       const needPrimary = !sigUrl || sigDrawing
-      const needCoApplicant = hasOwner2 && !sigUrl2
+      const needCoApplicant = hasOwner2 && (!sigUrl2 || sig2Drawing)
       if (needPrimary || needCoApplicant) {
         const parts: string[] = []
         if (needPrimary) parts.push('applicant signature')
@@ -981,7 +982,7 @@ export function MerchantPage() {
     if (target > step) {
       if (curInfo.type === 'sig') {
         const needPrimary = !sigUrl || sigDrawing
-        const needCoApplicant = hasOwner2 && !sigUrl2
+        const needCoApplicant = hasOwner2 && (!sigUrl2 || sig2Drawing)
         if (needPrimary || needCoApplicant) {
           const parts: string[] = []
           if (needPrimary) parts.push('applicant signature')
@@ -1021,7 +1022,7 @@ export function MerchantPage() {
   }
   const isStepDone = (info: StepInfo): boolean => {
     if (info.type === 'section') return isSectionComplete(sections[info.secIdx], getVals(info.secIdx, sections[info.secIdx]))
-    if (info.type === 'sig')     return hasSig && (!hasOwner2 || !!sigUrl2)
+    if (info.type === 'sig')     return hasSig && !sigDrawing && (!hasOwner2 || (!!sigUrl2 && !sig2Drawing))
     return (lead.documents?.length ?? 0) > 0
   }
 
@@ -1238,7 +1239,7 @@ export function MerchantPage() {
               </div>
             ) : curInfo.type === 'sig' ? (
               /* ── Dual Signature step — side by side ── */
-              <div style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${hasSig && (!hasOwner2 || !!sigUrl2) ? C.successBdr : C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
+              <div style={{ background: C.card, borderRadius: isMobile ? 12 : 16, border: `1.5px solid ${hasSig && !sigDrawing && (!hasOwner2 || (!!sigUrl2 && !sig2Drawing)) ? C.successBdr : C.border}`, height: '100%', padding: isMobile ? '16px 14px' : '20px 24px', boxShadow: '0 2px 12px rgba(15,23,42,.05)', overflowY: 'auto' }}>
                 <div style={{ background: '#f8f9ff', border: `1px solid ${C.indigoLt}`, borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#4338ca', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                   By signing, you certify that all information provided is accurate and complete.
@@ -1268,7 +1269,7 @@ export function MerchantPage() {
                         <span style={{ fontSize: 11, color: C.error }}>*</span>
                         {sigUrl2 && <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, color: C.success, fontSize: 11, fontWeight: 700 }}><CheckCircle2 size={12} />Saved</span>}
                       </div>
-                      <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(`${url}?v=${Date.now()}`); setSigErr(''); refresh() }} field="owner_2_signature_image" />
+                      <SigPad token={leadToken!} existingUrl={sigUrl2} onSaved={url => { setSigUrl2(`${url}?v=${Date.now()}`); setSig2Drawing(false); setSigErr(''); refresh() }} onModeChange={m => setSig2Drawing(m === 'draw')} field="owner_2_signature_image" />
                     </div>
                   )}
                 </div>
