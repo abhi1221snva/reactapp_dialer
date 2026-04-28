@@ -21,7 +21,7 @@ import { LEVELS } from '../../utils/permissions'
 const schema = z.object({
   lead_status:    z.string().min(1, 'Status is required'),
   lead_source_id: z.string().min(1, 'Lead Source is required'),
-  lead_type:      z.string().optional(),
+  temperature:    z.string().optional(),
   assigned_to:    z.string().optional(),
   // Core lead fields — always editable regardless of crm_labels configuration
   first_name:     z.string().optional(),
@@ -113,7 +113,7 @@ export function CrmLeadCreate() {
 
   const leadStatus   = watch('lead_status')
   const leadSourceId = watch('lead_source_id')
-  const leadType     = watch('lead_type')
+  const leadType     = watch('temperature')
   const assignedTo   = watch('assigned_to')
 
   const { data: leadFields } = useQuery({
@@ -200,7 +200,7 @@ export function CrmLeadCreate() {
     const ex = existing as Record<string, unknown>
     setValue('lead_status',    String(existing.lead_status))
     setValue('lead_source_id', existing.lead_source_id ? String(existing.lead_source_id) : '')
-    setValue('lead_type',      existing.lead_type   ? String(existing.lead_type)   : '')
+    setValue('temperature',    (existing as Record<string, unknown>).temperature ? String((existing as Record<string, unknown>).temperature) : '')
     setValue('assigned_to',    existing.assigned_to ? String(existing.assigned_to) : '')
     // Core fields
     const coreKeys = ['first_name','last_name','email','phone_number','city','state'] as const
@@ -671,7 +671,7 @@ export function CrmLeadCreate() {
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setValue('lead_type', isSelected ? '' : value)}
+                        onClick={() => setValue('temperature', isSelected ? '' : value)}
                         className={[
                           'inline-flex items-center gap-1 px-3 py-1.5 rounded-full border-2 text-xs font-semibold transition-all',
                           isSelected ? active : idle,
