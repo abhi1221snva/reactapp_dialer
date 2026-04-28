@@ -237,12 +237,6 @@ export default function App() {
       {/* Protected routes */}
       <Route element={<ProtectedRoute><AppWithPusher /></ProtectedRoute>}>
 
-        {/* CRM (legacy routes kept for backward compat) */}
-        <Route path="/crm" element={<CrmLeads />} />
-        <Route path="/crm/create" element={<LeadForm />} />
-        <Route path="/crm/:id/edit" element={<LeadForm />} />
-        <Route path="/crm/:id" element={<LeadDetail />} />
-
         {/* CRM HubSpot-Style — all wrapped in CrmLayout for shared white card header */}
         <Route element={<CrmLayout />}>
           <Route path="/crm/dashboard" element={<CrmDashboard />} />
@@ -285,6 +279,12 @@ export default function App() {
           <Route path="/crm/balji/api-explorer" element={<BaljiApiExplorer />} />
           <Route path="/crm/bank-analysis-viewer" element={<BankAnalysisViewer />} />
         </Route>
+
+        {/* CRM legacy routes — MUST come after CrmLayout routes so /crm/:id doesn't shadow named paths */}
+        <Route path="/crm" element={<CrmLeads />} />
+        <Route path="/crm/create" element={<LeadForm />} />
+        <Route path="/crm/:id/edit" element={<LeadForm />} />
+        <Route path="/crm/:id" element={<LeadDetail />} />
 
         {/* All Dialer / Phone System routes — wrapped in DialerLayout */}
         <Route element={<DialerLayout />}>
