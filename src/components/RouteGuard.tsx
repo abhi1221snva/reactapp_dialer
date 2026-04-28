@@ -15,6 +15,7 @@ const ALWAYS_ALLOWED = new Set([
   '/onboarding',
   '/agents',
   '/crm/bank-analysis-viewer',
+  '/crm/company-settings',
 ])
 
 /** Route prefixes that are always accessible (matches any sub-path) */
