@@ -773,13 +773,9 @@ export function DocumentsPanel({ leadId }: { leadId: number }) {
                           <>
                             {bsSession.status === 'completed' && (
                               <>
-                                <button onClick={() => setAnalysisModalSession(bsSession)}
+                                <button onClick={() => navigate(`/crm/bank-statements/${bsSession.session_id}`)}
                                   className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors text-[11px] font-semibold" title="View Analysis">
                                   <BarChart3 size={12} /> Analysis
-                                </button>
-                                <button onClick={() => navigate(`/crm/bank-statements/${bsSession.session_id}`)}
-                                  className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors" title="Full Details">
-                                  <Eye size={13} />
                                 </button>
                               </>
                             )}
