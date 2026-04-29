@@ -21,7 +21,7 @@ import {
   Pencil, Trash2, Download, Copy, ExternalLink, Upload, Search,
   Hash, MessageSquare, Activity, MoreVertical, UserCheck,
   Tag, Calendar, Check, Eye, SlidersHorizontal, Sparkles,
-  Zap, MapPin, Globe, Thermometer,
+  Zap, MapPin, Globe, Thermometer, FileDown,
   ArrowUpRight, PhoneCall, Star, LayoutDashboard, ChevronDown, Plus,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -750,8 +750,8 @@ export function CrmLeadNew() {
           </p>
         </div>
 
-        {/* Lead Status */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Lead Status v2 */}
+        <div className="flex items-center gap-1.5 shrink-0" data-testid="lead-status-bar">
           <Zap size={13} className="text-emerald-500" />
           <select
             value={String(lead.lead_status ?? '')}
@@ -828,6 +828,33 @@ export function CrmLeadNew() {
           >
             {genPortal.isPending ? <Loader2 size={12} className="animate-spin" /> : merchantPortal?.url ? <Copy size={12} /> : <ExternalLink size={12} />}
             <span className="hidden xl:inline">{merchantPortal?.url ? 'Copy Link' : 'Merchant'}</span>
+          </button>
+          {/* Download PDF */}
+          <button
+            onClick={async () => {
+              try {
+                toast.loading('Generating PDF...', { id: 'download-pdf' })
+                const res = await crmService.downloadLeadPdf(leadId)
+                const blob = new Blob([res.data], { type: 'application/pdf' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `lead_${leadId}_application.pdf`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+                toast.success('PDF downloaded', { id: 'download-pdf' })
+              } catch {
+                toast.error('Failed to generate PDF', { id: 'download-pdf' })
+              }
+            }}
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[11px] font-semibold text-emerald-700 transition-all hover:shadow-sm"
+            style={{ background: '#dcfce7', border: '1px solid #bbf7d0' }}
+            title="Download lead application as PDF"
+          >
+            <FileDown size={13} />
+            <span className="hidden xl:inline">PDF</span>
           </button>
           <div className="w-px h-5 bg-slate-200" />
           {!overviewEditing ? (
