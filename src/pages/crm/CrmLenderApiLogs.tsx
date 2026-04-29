@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, X, CheckCircle2, AlertCircle, Clock,
   WifiOff, RefreshCw, Eye, SlidersHorizontal,
+  Wrench, RotateCcw, Loader2,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
 import { useCrmHeader } from '../../layouts/CrmLayout'
 import { TablePagination } from '../../components/ui/TablePagination'
+import { ApiLogDrawer } from '../../components/crm/ApiLogDrawer'
+import type { ApiLog as DrawerApiLog } from '../../components/crm/ApiLogDrawer'
+import { ErrorFixModal } from '../../components/crm/LenderApiFixModal'
+import type { FixSuggestion } from '../../types/crm.types'
 import { cn } from '../../utils/cn'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -31,6 +37,9 @@ interface ApiLog {
   created_at: string
   lender_name?: string
   api_name?: string
+  error_json?: FixSuggestion[] | null
+  fix_suggestions?: FixSuggestion[] | null
+  is_fixable?: boolean
 }
 
 const PER_PAGE = 15
@@ -47,6 +56,11 @@ const LENDER_API_TYPES = [
   { value: 'specialty',         label: 'Specialty' },
   { value: 'biz2credit',        label: 'Biz2Credit' },
 ]
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const getSuggestions = (log: ApiLog): FixSuggestion[] =>
+  log.fix_suggestions ?? log.error_json ?? []
 
 // ── Status badge ───────────────────────────────────────────────────────────────
 
@@ -82,109 +96,6 @@ function MethodPill({ method }: { method: string }) {
   )
 }
 
-// ── Detail Modal ───────────────────────────────────────────────────────────────
-
-function LogDetailModal({ log, onClose }: { log: ApiLog; onClose: () => void }) {
-  const prettyJson = (s: string | null) => {
-    if (!s) return '—'
-    try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,23,42,0.6)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Accent bar */}
-        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
-
-        {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between flex-shrink-0">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-sm font-bold text-slate-900">API Log #{log.id}</h2>
-              <StatusBadge status={log.status} />
-            </div>
-            <p className="text-xs text-slate-400">
-              <span className="font-medium text-slate-600">{log.lender_name ?? `Lender #${log.lender_id}`}</span>
-              {log.api_name && <> · <span>{log.api_name}</span></>}
-              {' · '}Lead <span className="font-mono text-indigo-600">#{log.lead_id}</span>
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex-shrink-0 ml-4">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-6 space-y-5">
-          {/* Meta grid */}
-          <div className="grid grid-cols-4 gap-3">
-            {[
-              { label: 'HTTP Code', value: log.response_code ?? '—', color: log.response_code && log.response_code < 300 ? 'text-emerald-600' : 'text-red-600' },
-              { label: 'Duration',  value: log.duration_ms != null ? `${log.duration_ms}ms` : '—', color: 'text-slate-700' },
-              { label: 'Attempt',   value: `#${log.attempt}`, color: log.attempt > 1 ? 'text-amber-600' : 'text-slate-700' },
-              { label: 'Method',    value: log.request_method, color: 'text-indigo-600' },
-            ].map(m => (
-              <div key={m.label} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{m.label}</p>
-                <p className={cn('text-sm font-bold', m.color)}>{m.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Error */}
-          {log.error_message && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200">
-              <p className="text-xs font-semibold text-red-700 mb-1">Error</p>
-              <p className="text-xs text-red-600 font-mono leading-relaxed">{log.error_message}</p>
-            </div>
-          )}
-
-          {/* Request */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Request</p>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-400 mb-1">URL</p>
-                <div className="flex items-start gap-2 font-mono bg-slate-900 px-3 py-2.5 rounded-lg">
-                  <MethodPill method={log.request_method} />
-                  <span className="text-xs text-green-400 break-all leading-relaxed">{log.request_url}</span>
-                </div>
-              </div>
-              {log.request_headers && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1">Headers</p>
-                  <pre className="text-xs font-mono bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg overflow-x-auto text-slate-600 max-h-32">
-                    {JSON.stringify(log.request_headers, null, 2)}
-                  </pre>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Payload</p>
-                <pre className="text-xs font-mono bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg overflow-x-auto text-slate-600 max-h-48">
-                  {prettyJson(log.request_payload)}
-                </pre>
-              </div>
-            </div>
-          </div>
-
-          {/* Response */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Response</p>
-            <pre className="text-xs font-mono bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg overflow-x-auto text-slate-600 max-h-64">
-              {prettyJson(log.response_body)}
-            </pre>
-          </div>
-
-          <p className="text-[11px] text-slate-400 text-right">{new Date(log.created_at).toLocaleString()}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Filter chip ────────────────────────────────────────────────────────────────
 
 function FilterChip({ label, value, onRemove }: { label: string; value: string; onRemove: () => void }) {
@@ -203,7 +114,29 @@ function FilterChip({ label, value, onRemove }: { label: string; value: string; 
 export function CrmLenderApiLogs() {
   const { setDescription } = useCrmHeader()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [selected, setSelected] = useState<ApiLog | null>(null)
+  const qc = useQueryClient()
+
+  // Drawer state
+  const [drawerLog, setDrawerLog] = useState<ApiLog | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Fix modal state
+  const [fixModal, setFixModal] = useState<{ log: ApiLog; error: FixSuggestion } | null>(null)
+
+  // Resubmit mutation
+  const resubmitMutation = useMutation({
+    mutationFn: ({ leadId, lenderId }: { leadId: number; lenderId: number }) =>
+      crmService.dispatchLenderApi(leadId, lenderId),
+    onSuccess: () => {
+      toast.success('Resubmission queued successfully')
+      qc.invalidateQueries({ queryKey: ['lender-api-logs'] })
+    },
+    onError: (err: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = (err as any)?.response?.data?.message || 'Failed to queue resubmission'
+      toast.error(msg)
+    },
+  })
 
   // Read all filter state from URL params
   const page        = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
@@ -213,6 +146,7 @@ export function CrmLenderApiLogs() {
   const status      = searchParams.get('status') || ''
   const dateFrom    = searchParams.get('date_from') || ''
   const dateTo      = searchParams.get('date_to') || ''
+  const fixable     = searchParams.get('fixable') || ''
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -244,6 +178,7 @@ export function CrmLenderApiLogs() {
     status     && { key: 'status',      label: 'Status',   value: status },
     dateFrom   && { key: 'date_from',   label: 'From',     value: dateFrom },
     dateTo     && { key: 'date_to',     label: 'To',       value: dateTo },
+    fixable    && { key: 'fixable',     label: 'Fixable',  value: 'Yes' },
   ].filter(Boolean) as { key: string; label: string; value: string }[]
 
   const hasFilters = activeFilters.length > 0
@@ -251,7 +186,7 @@ export function CrmLenderApiLogs() {
   // ── Query ──────────────────────────────────────────────────────────────────
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['lender-api-logs', page, search, lender, lenderType, status, dateFrom, dateTo],
+    queryKey: ['lender-api-logs', page, search, lender, lenderType, status, dateFrom, dateTo, fixable],
     queryFn: async () => {
       const params: Record<string, unknown> = { page, per_page: PER_PAGE }
       if (search)     params.search      = search
@@ -260,6 +195,7 @@ export function CrmLenderApiLogs() {
       if (status)     params.status      = status
       if (dateFrom)   params.date_from   = dateFrom
       if (dateTo)     params.date_to     = dateTo
+      if (fixable)    params.fixable     = fixable
       const res = await crmService.getLenderApiLogs(params)
       return res.data?.data as {
         data: ApiLog[]
@@ -372,10 +308,10 @@ export function CrmLenderApiLogs() {
                 onChange={e => setFilter('status', e.target.value)}
               >
                 <option value="">All statuses</option>
-                <option value="success">✓ Success</option>
-                <option value="http_error">✗ HTTP Error</option>
-                <option value="timeout">⏱ Timeout</option>
-                <option value="error">✗ Error</option>
+                <option value="success">Success</option>
+                <option value="http_error">HTTP Error</option>
+                <option value="timeout">Timeout</option>
+                <option value="error">Error</option>
               </select>
             </div>
 
@@ -397,6 +333,19 @@ export function CrmLenderApiLogs() {
                 value={dateTo}
                 onChange={e => setFilter('date_to', e.target.value)}
               />
+            </div>
+
+            {/* Fixable only toggle */}
+            <div className="flex items-end min-w-[100px]">
+              <label className="flex items-center gap-2 h-8 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fixable === '1'}
+                  onChange={e => setFilter('fixable', e.target.checked ? '1' : '')}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+                />
+                <span className="text-xs font-medium text-slate-600 whitespace-nowrap">Fixable only</span>
+              </label>
             </div>
           </div>
 
@@ -429,14 +378,14 @@ export function CrmLenderApiLogs() {
                 <th className="hidden xl:table-cell w-20 text-center">Duration</th>
                 <th>Status</th>
                 <th className="hidden sm:table-cell">Time</th>
-                <th className="w-12 !text-right">View</th>
+                <th className="w-28 !text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
-                    {[20, 40, 30, 10, 10, 15, 20, 5].map((w, j) => (
+                    {[20, 40, 30, 10, 10, 15, 20, 12].map((w, j) => (
                       <td key={j} className={j >= 2 && j <= 4 ? (j === 2 ? 'hidden md:table-cell' : j === 3 ? 'hidden lg:table-cell' : 'hidden xl:table-cell') : j === 6 ? 'hidden sm:table-cell' : ''}>
                         <div className="h-3.5 bg-slate-100 rounded animate-pulse" style={{ width: `${w * 3}px` }} />
                       </td>
@@ -462,90 +411,127 @@ export function CrmLenderApiLogs() {
                     </div>
                   </td>
                 </tr>
-              ) : logs.map(log => (
-                <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
-                  {/* Lead */}
-                  <td>
-                    <span className="text-sm font-mono font-semibold text-indigo-600">#{log.lead_id}</span>
-                  </td>
+              ) : logs.map(log => {
+                const suggestions = getSuggestions(log)
+                const isFixable = log.is_fixable && suggestions.length > 0
 
-                  {/* Lender / API */}
-                  <td>
-                    <p className="text-sm font-medium text-slate-800 leading-tight">
-                      {log.lender_name ?? `Lender #${log.lender_id}`}
-                    </p>
-                    {log.api_name && (
-                      <p className="text-xs text-slate-400 mt-0.5">{log.api_name}</p>
-                    )}
-                  </td>
+                return (
+                  <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                    {/* Lead */}
+                    <td>
+                      <span className="text-sm font-mono font-semibold text-indigo-600">#{log.lead_id}</span>
+                    </td>
 
-                  {/* Endpoint */}
-                  <td className="hidden md:table-cell">
-                    <div className="flex items-center gap-1.5 max-w-[200px]">
-                      <MethodPill method={log.request_method} />
-                      <span className="text-xs font-mono text-slate-500 truncate" title={log.request_url}>
-                        {log.request_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* HTTP code */}
-                  <td className="hidden lg:table-cell text-center">
-                    <span className={cn(
-                      'text-sm font-bold tabular-nums',
-                      log.response_code && log.response_code < 300 ? 'text-emerald-600' :
-                      log.response_code && log.response_code < 500 ? 'text-amber-600' :
-                      log.response_code ? 'text-red-600' : 'text-slate-300',
-                    )}>
-                      {log.response_code ?? '—'}
-                    </span>
-                  </td>
-
-                  {/* Duration */}
-                  <td className="hidden xl:table-cell text-center">
-                    <span className={cn(
-                      'text-xs tabular-nums',
-                      log.duration_ms != null && log.duration_ms > 5000 ? 'text-red-500 font-medium' :
-                      log.duration_ms != null && log.duration_ms > 2000 ? 'text-amber-600' : 'text-slate-500',
-                    )}>
-                      {log.duration_ms != null ? `${log.duration_ms}ms` : '—'}
-                    </span>
-                  </td>
-
-                  {/* Status */}
-                  <td>
-                    <StatusBadge status={log.status} />
-                    {log.error_message && (
-                      <p className="text-[11px] text-red-500 mt-0.5 max-w-[160px] truncate leading-tight" title={log.error_message}>
-                        {log.error_message}
+                    {/* Lender / API */}
+                    <td>
+                      <p className="text-sm font-medium text-slate-800 leading-tight">
+                        {log.lender_name ?? `Lender #${log.lender_id}`}
                       </p>
-                    )}
-                  </td>
+                      {log.api_name && (
+                        <p className="text-xs text-slate-400 mt-0.5">{log.api_name}</p>
+                      )}
+                    </td>
 
-                  {/* Time */}
-                  <td className="hidden sm:table-cell">
-                    <span className="text-xs text-slate-400 whitespace-nowrap">
-                      {new Date(log.created_at).toLocaleString()}
-                    </span>
-                    {log.attempt > 1 && (
-                      <span className="block text-[11px] text-amber-500 font-medium">
-                        Attempt {log.attempt}
+                    {/* Endpoint */}
+                    <td className="hidden md:table-cell">
+                      <div className="flex items-center gap-1.5 max-w-[200px]">
+                        <MethodPill method={log.request_method} />
+                        <span className="text-xs font-mono text-slate-500 truncate" title={log.request_url}>
+                          {log.request_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* HTTP code */}
+                    <td className="hidden lg:table-cell text-center">
+                      <span className={cn(
+                        'text-sm font-bold tabular-nums',
+                        log.response_code && log.response_code < 300 ? 'text-emerald-600' :
+                        log.response_code && log.response_code < 500 ? 'text-amber-600' :
+                        log.response_code ? 'text-red-600' : 'text-slate-300',
+                      )}>
+                        {log.response_code ?? '—'}
                       </span>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* View */}
-                  <td className="text-right">
-                    <button
-                      onClick={() => setSelected(log)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                      title="View full detail"
-                    >
-                      <Eye size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    {/* Duration */}
+                    <td className="hidden xl:table-cell text-center">
+                      <span className={cn(
+                        'text-xs tabular-nums',
+                        log.duration_ms != null && log.duration_ms > 5000 ? 'text-red-500 font-medium' :
+                        log.duration_ms != null && log.duration_ms > 2000 ? 'text-amber-600' : 'text-slate-500',
+                      )}>
+                        {log.duration_ms != null ? `${log.duration_ms}ms` : '—'}
+                      </span>
+                    </td>
+
+                    {/* Status */}
+                    <td>
+                      <StatusBadge status={log.status} />
+                      {log.error_message && (
+                        <p className="text-[11px] text-red-500 mt-0.5 max-w-[160px] truncate leading-tight" title={log.error_message}>
+                          {log.error_message}
+                        </p>
+                      )}
+                      {isFixable && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 mt-0.5">
+                          <Wrench size={9} /> {suggestions.length} fixable
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Time */}
+                    <td className="hidden sm:table-cell">
+                      <span className="text-xs text-slate-400 whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleString()}
+                      </span>
+                      {log.attempt > 1 && (
+                        <span className="block text-[11px] text-amber-500 font-medium">
+                          Attempt {log.attempt}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {/* Fix button — only for fixable failed logs */}
+                        {isFixable && (
+                          <button
+                            onClick={() => { setDrawerLog(log); setDrawerOpen(true) }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                            title="View errors & fix"
+                          >
+                            <Wrench size={10} /> Fix
+                          </button>
+                        )}
+                        {/* Resubmit button — for any failed log */}
+                        {log.status !== 'success' && (
+                          <button
+                            onClick={() => resubmitMutation.mutate({ leadId: log.lead_id, lenderId: log.lender_id })}
+                            disabled={resubmitMutation.isPending}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                            title="Resubmit to lender"
+                          >
+                            {resubmitMutation.isPending
+                              ? <Loader2 size={10} className="animate-spin" />
+                              : <RotateCcw size={10} />
+                            }
+                          </button>
+                        )}
+                        {/* View detail button */}
+                        <button
+                          onClick={() => { setDrawerLog(log); setDrawerOpen(true) }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          title="View full detail"
+                        >
+                          <Eye size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -562,7 +548,35 @@ export function CrmLenderApiLogs() {
         )}
       </div>
 
-      {selected && <LogDetailModal log={selected} onClose={() => setSelected(null)} />}
+      {/* ── API Log Drawer ─────────────────────────────────────────────────── */}
+      <ApiLogDrawer
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerLog(null) }}
+        log={drawerLog as DrawerApiLog | null}
+        lenderName={drawerLog?.lender_name ?? (drawerLog ? `Lender #${drawerLog.lender_id}` : '')}
+        onFixError={(error) => {
+          setDrawerOpen(false)
+          if (drawerLog) setFixModal({ log: drawerLog, error })
+        }}
+        onResubmit={drawerLog && drawerLog.status !== 'success' ? () => {
+          resubmitMutation.mutate({ leadId: drawerLog.lead_id, lenderId: drawerLog.lender_id })
+        } : undefined}
+        isResubmitting={resubmitMutation.isPending}
+      />
+
+      {/* ── Error Fix Modal ────────────────────────────────────────────────── */}
+      {fixModal && (
+        <ErrorFixModal
+          leadId={fixModal.log.lead_id}
+          lenderId={fixModal.log.lender_id}
+          error={fixModal.error}
+          onClose={() => setFixModal(null)}
+          onFixed={() => {
+            setFixModal(null)
+            qc.invalidateQueries({ queryKey: ['lender-api-logs'] })
+          }}
+        />
+      )}
     </div>
   )
 }

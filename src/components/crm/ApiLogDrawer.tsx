@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   X, CheckCircle2, AlertCircle, WifiOff, ChevronDown, ChevronUp,
-  Clock, Wrench, FileText,
+  Clock, Wrench, FileText, RefreshCw as ResubmitIcon, Loader2,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { FixSuggestion } from '../../types/crm.types'
@@ -38,6 +38,8 @@ interface ApiLogDrawerProps {
   log: ApiLog | null
   lenderName: string
   onFixError?: (error: FixSuggestion) => void
+  onResubmit?: () => void
+  isResubmitting?: boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ function accentGradient(status: ApiLog['status']) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export function ApiLogDrawer({ open, onClose, log, lenderName, onFixError }: ApiLogDrawerProps) {
+export function ApiLogDrawer({ open, onClose, log, lenderName, onFixError, onResubmit, isResubmitting }: ApiLogDrawerProps) {
   const [requestExpanded, setRequestExpanded] = useState(false)
 
   // Reset collapsed state when log changes
@@ -227,6 +229,20 @@ export function ApiLogDrawer({ open, onClose, log, lenderName, onFixError }: Api
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Resubmit button */}
+              {onResubmit && log.status !== 'success' && (
+                <button
+                  onClick={onResubmit}
+                  disabled={isResubmitting}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  {isResubmitting
+                    ? <><Loader2 size={12} className="animate-spin" /> Resubmitting…</>
+                    : <><ResubmitIcon size={12} /> Resubmit to Lender</>
+                  }
+                </button>
               )}
 
               {/* Response body */}
