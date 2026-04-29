@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, X, CheckCircle2, AlertCircle, Clock,
   WifiOff, RefreshCw, Eye, SlidersHorizontal,
-  Wrench, RotateCcw, Loader2,
+  Wrench, RotateCcw, Loader2, Pencil,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
@@ -13,6 +13,7 @@ import { TablePagination } from '../../components/ui/TablePagination'
 import { ApiLogDrawer } from '../../components/crm/ApiLogDrawer'
 import type { ApiLog as DrawerApiLog } from '../../components/crm/ApiLogDrawer'
 import { ErrorFixModal } from '../../components/crm/LenderApiFixModal'
+import { LenderPayloadFixModal } from '../../components/crm/LenderPayloadFixModal'
 import type { FixSuggestion } from '../../types/crm.types'
 import { cn } from '../../utils/cn'
 
@@ -120,8 +121,11 @@ export function CrmLenderApiLogs() {
   const [drawerLog, setDrawerLog] = useState<ApiLog | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  // Fix modal state
+  // Fix modal state (single-field auto-fix)
   const [fixModal, setFixModal] = useState<{ log: ApiLog; error: FixSuggestion } | null>(null)
+
+  // Payload fix modal state (edit all mapped fields)
+  const [payloadFixLog, setPayloadFixLog] = useState<ApiLog | null>(null)
 
   // Resubmit mutation
   const resubmitMutation = useMutation({
@@ -378,7 +382,7 @@ export function CrmLenderApiLogs() {
                 <th className="hidden xl:table-cell w-20 text-center">Duration</th>
                 <th>Status</th>
                 <th className="hidden sm:table-cell">Time</th>
-                <th className="w-28 !text-right">Actions</th>
+                <th className="w-36 !text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -505,6 +509,16 @@ export function CrmLenderApiLogs() {
                             <Wrench size={10} /> Fix
                           </button>
                         )}
+                        {/* Edit Fields button — for any failed log */}
+                        {log.status !== 'success' && (
+                          <button
+                            onClick={() => setPayloadFixLog(log)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                            title="Edit fields & resubmit"
+                          >
+                            <Pencil size={10} /> Edit
+                          </button>
+                        )}
                         {/* Resubmit button — for any failed log */}
                         {log.status !== 'success' && (
                           <button
@@ -562,9 +576,13 @@ export function CrmLenderApiLogs() {
           resubmitMutation.mutate({ leadId: drawerLog.lead_id, lenderId: drawerLog.lender_id })
         } : undefined}
         isResubmitting={resubmitMutation.isPending}
+        onEditFields={drawerLog && drawerLog.status !== 'success' ? () => {
+          setDrawerOpen(false)
+          setPayloadFixLog(drawerLog)
+        } : undefined}
       />
 
-      {/* ── Error Fix Modal ────────────────────────────────────────────────── */}
+      {/* ── Error Fix Modal (single-field auto-fix) ──────────────────────── */}
       {fixModal && (
         <ErrorFixModal
           leadId={fixModal.log.lead_id}
@@ -573,6 +591,22 @@ export function CrmLenderApiLogs() {
           onClose={() => setFixModal(null)}
           onFixed={() => {
             setFixModal(null)
+            qc.invalidateQueries({ queryKey: ['lender-api-logs'] })
+          }}
+        />
+      )}
+
+      {/* ── Payload Fix Modal (edit all mapped fields) ───────────────────── */}
+      {payloadFixLog && (
+        <LenderPayloadFixModal
+          leadId={payloadFixLog.lead_id}
+          lenderId={payloadFixLog.lender_id}
+          lenderName={payloadFixLog.lender_name ?? `Lender #${payloadFixLog.lender_id}`}
+          errorMessage={payloadFixLog.error_message}
+          requestPayload={payloadFixLog.request_payload}
+          onClose={() => setPayloadFixLog(null)}
+          onFixed={() => {
+            setPayloadFixLog(null)
             qc.invalidateQueries({ queryKey: ['lender-api-logs'] })
           }}
         />

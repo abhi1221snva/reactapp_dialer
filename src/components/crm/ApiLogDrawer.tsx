@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   X, CheckCircle2, AlertCircle, WifiOff, ChevronDown, ChevronUp,
-  Clock, Wrench, FileText, RefreshCw as ResubmitIcon, Loader2,
+  Clock, Wrench, FileText, RefreshCw as ResubmitIcon, Loader2, Pencil,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { FixSuggestion } from '../../types/crm.types'
@@ -40,6 +40,7 @@ interface ApiLogDrawerProps {
   onFixError?: (error: FixSuggestion) => void
   onResubmit?: () => void
   isResubmitting?: boolean
+  onEditFields?: () => void
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -93,7 +94,7 @@ function accentGradient(status: ApiLog['status']) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export function ApiLogDrawer({ open, onClose, log, lenderName, onFixError, onResubmit, isResubmitting }: ApiLogDrawerProps) {
+export function ApiLogDrawer({ open, onClose, log, lenderName, onFixError, onResubmit, isResubmitting, onEditFields }: ApiLogDrawerProps) {
   const [requestExpanded, setRequestExpanded] = useState(false)
 
   // Reset collapsed state when log changes
@@ -231,18 +232,33 @@ export function ApiLogDrawer({ open, onClose, log, lenderName, onFixError, onRes
                 </div>
               )}
 
-              {/* Resubmit button */}
-              {onResubmit && log.status !== 'success' && (
-                <button
-                  onClick={onResubmit}
-                  disabled={isResubmitting}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
-                >
-                  {isResubmitting
-                    ? <><Loader2 size={12} className="animate-spin" /> Resubmitting…</>
-                    : <><ResubmitIcon size={12} /> Resubmit to Lender</>
-                  }
-                </button>
+              {/* Action buttons */}
+              {log.status !== 'success' && (onEditFields || onResubmit) && (
+                <div className="flex items-center gap-2">
+                  {onEditFields && (
+                    <button
+                      onClick={onEditFields}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                    >
+                      <Pencil size={12} /> Edit Fields &amp; Resubmit
+                    </button>
+                  )}
+                  {onResubmit && (
+                    <button
+                      onClick={onResubmit}
+                      disabled={isResubmitting}
+                      className={cn(
+                        'flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50',
+                        onEditFields ? 'px-4' : 'w-full',
+                      )}
+                    >
+                      {isResubmitting
+                        ? <><Loader2 size={12} className="animate-spin" /> Resubmitting…</>
+                        : <><ResubmitIcon size={12} /> Resubmit</>
+                      }
+                    </button>
+                  )}
+                </div>
               )}
 
               {/* Response body */}
