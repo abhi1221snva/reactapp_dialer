@@ -361,6 +361,8 @@ export function CrmLeadsList() {
     industry_type: appliedFilters.industry_type || undefined,
     lower_limit:   (page - 1) * perPage,
     upper_limit:   perPage,
+    sort_by:       'updated_at',
+    sort_dir:      'desc',
   })
 
   const { data, isLoading, refetch } = useQuery({
@@ -691,7 +693,9 @@ export function CrmLeadsList() {
                 <th>Phone</th>
                 <th>Company</th>
                 <th>Status</th>
+                <th>Lead Source</th>
                 {showAssigned && <th>Assigned</th>}
+                <th>Updated</th>
                 <th>Created</th>
                 <th className="w-12" />
               </tr>
@@ -700,7 +704,7 @@ export function CrmLeadsList() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={showAssigned ? 10 : 9} className="py-16">
+                  <td colSpan={showAssigned ? 12 : 11} className="py-16">
                     <div className="flex flex-col items-center gap-2 text-slate-400">
                       <Loader2 size={22} className="animate-spin text-indigo-400" />
                       <span className="text-sm">Loading leads…</span>
@@ -709,7 +713,7 @@ export function CrmLeadsList() {
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={showAssigned ? 10 : 9} className="py-16">
+                  <td colSpan={showAssigned ? 12 : 11} className="py-16">
                     <div className="flex flex-col items-center gap-2 text-slate-400">
                       <Search size={28} className="opacity-30" />
                       <p className="text-sm font-medium">No leads found</p>
@@ -726,6 +730,9 @@ export function CrmLeadsList() {
                   const selected = selectedIds.includes(lead.id)
                   const createdDate = lead.created_at
                     ? new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : '—'
+                  const updatedDate = lead.updated_at
+                    ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : '—'
 
                   return (
@@ -793,12 +800,22 @@ export function CrmLeadsList() {
                         })()}
                       </td>
 
+                      {/* Lead Source */}
+                      <td className="text-slate-500 text-xs">
+                        {lead.lead_source_name ? String(lead.lead_source_name) : '—'}
+                      </td>
+
                       {/* Assigned */}
                       {showAssigned && (
                         <td className="text-slate-500 text-xs">
                           {(lead.assigned_name as string | undefined) ?? '—'}
                         </td>
                       )}
+
+                      {/* Updated date */}
+                      <td className="text-slate-400 text-xs whitespace-nowrap">
+                        {updatedDate}
+                      </td>
 
                       {/* Created date */}
                       <td className="text-slate-400 text-xs whitespace-nowrap">

@@ -16,6 +16,7 @@ export interface CrmLead {
   assigned_to?: number
   assigned_name?: string
   lead_source_id?: number
+  lead_source_name?: string
   lead_type?: string
   company_name?: string
   unique_url?: string

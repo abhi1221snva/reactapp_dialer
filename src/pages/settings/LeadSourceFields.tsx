@@ -105,18 +105,21 @@ function FieldModal({
     staleTime: 5 * 60 * 1000,
   })
 
-  const customCrmFields: CrmFieldOption[] = (() => {
+  // Build the CRM field list: API fields take priority, core fields fill gaps
+  const { apiFields, fallbackCoreFields } = (() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = crmFieldsData as any
     const list: { field_key: string; label_name: string }[] = r?.data?.data ?? r?.data ?? []
-    return list
+    const fromApi: CrmFieldOption[] = list
       .filter(f => f.field_key)
       .map(f => ({ value: f.field_key, label: f.label_name || f.field_key, group: 'custom' as const }))
+    const apiKeys = new Set(fromApi.map(f => f.value))
+    // Only add core fields whose keys are NOT already in the API response
+    const coreFallbacks = CORE_CRM_FIELDS
+      .filter(f => !apiKeys.has(f.value))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return { apiFields: fromApi.sort((a, b) => a.label.localeCompare(b.label)), fallbackCoreFields: coreFallbacks }
   })()
-
-  // Deduplicate: don't show custom fields that share a key with a core field
-  const coreKeys = new Set(CORE_CRM_FIELDS.map(f => f.value))
-  const filteredCustom = customCrmFields.filter(f => !coreKeys.has(f.value))
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -198,14 +201,16 @@ function FieldModal({
             onChange={e => setMappedFieldKey(e.target.value)}
           >
             <option value="">— No mapping (use field key as-is) —</option>
-            <optgroup label="Core Fields">
-              {CORE_CRM_FIELDS.map(f => (
-                <option key={f.value} value={f.value}>{f.label} ({f.value})</option>
-              ))}
-            </optgroup>
-            {filteredCustom.length > 0 && (
-              <optgroup label="Custom CRM Fields">
-                {filteredCustom.map(f => (
+            {apiFields.length > 0 && (
+              <optgroup label="CRM Fields">
+                {apiFields.map(f => (
+                  <option key={f.value} value={f.value}>{f.label} ({f.value})</option>
+                ))}
+              </optgroup>
+            )}
+            {fallbackCoreFields.length > 0 && (
+              <optgroup label="Standard Fields">
+                {fallbackCoreFields.map(f => (
                   <option key={f.value} value={f.value}>{f.label} ({f.value})</option>
                 ))}
               </optgroup>
@@ -331,7 +336,8 @@ export function LeadSourceFields() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = fieldsData as any
     const d = r?.data?.data ?? r?.data
-    return Array.isArray(d) ? d : []
+    const list: FieldItem[] = Array.isArray(d) ? d : []
+    return list.sort((a, b) => a.field_label.localeCompare(b.field_label))
   })()
 
   // Toolbar

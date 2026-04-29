@@ -4119,7 +4119,7 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
     <div className="flex items-start py-1.5 border-b border-slate-50 last:border-0 group" data-field-key={fieldKey} id={`field-${fieldKey}`}>
       <span className="text-xs text-slate-500 w-28 flex-shrink-0 pt-0.5 leading-tight">{label}</span>
       {readOnly ? (
-        <span className="text-sm font-medium text-slate-800 flex-1 truncate leading-tight">{renderDisplayValue()}</span>
+        <span className="text-sm font-medium text-slate-800 flex-1 leading-tight break-all">{renderDisplayValue()}</span>
       ) : editing ? (
         <div className="flex items-center gap-1 flex-1 min-w-0">
           {resolvedType === 'textarea' ? (
@@ -4139,7 +4139,7 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
         </div>
       ) : (
         <button onClick={startEdit} data-field-key={fieldKey} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">
-          <span className="text-sm font-medium text-slate-800 flex-1 truncate leading-tight">
+          <span className="text-sm font-medium text-slate-800 flex-1 leading-tight break-all">
             {renderDisplayValue()}
           </span>
           <Pencil size={10} className="text-slate-200 group-hover:text-emerald-400 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100" />
@@ -4211,7 +4211,7 @@ function LeadHeroCard({ lead, leadId, avatarBg, leadInits, statusColor, currentS
             </div>
 
             {/* Business info — single row */}
-            <p className="mt-2 text-[11px] text-slate-400 truncate">
+            <p className="mt-2 text-[11px] text-slate-400">
               {[
                 lead.company_name ? String(lead.company_name) : null,
                 lead.phone_number ? formatPhoneNumber(String(lead.phone_number)) : null,
@@ -4252,7 +4252,7 @@ function LeadHeroCard({ lead, leadId, avatarBg, leadInits, statusColor, currentS
               </div>
               <div className="min-w-0">
                 <p className="text-[9px] text-sky-300/60 font-semibold uppercase tracking-wide leading-none">Email</p>
-                <p className="text-[11px] text-white font-medium truncate mt-0.5">{String(lead.email)}</p>
+                <p className="text-[11px] text-white font-medium mt-0.5 break-all">{String(lead.email)}</p>
               </div>
             </a>
           )}
@@ -5063,7 +5063,7 @@ export function CrmLeadDetail() {
                   </a>
                 )}
                 {lead.email && (
-                  <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-lg text-[12.5px] font-medium hover:bg-sky-50 transition-all truncate max-w-[260px]" style={{ background: '#f1f5f9', color: '#334155' }}>
+                  <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-lg text-[12.5px] font-medium hover:bg-sky-50 transition-all" style={{ background: '#f1f5f9', color: '#334155' }}>
                     <Mail size={12} className="text-sky-500" />
                     {String(lead.email)}
                   </a>
