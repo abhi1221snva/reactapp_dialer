@@ -594,6 +594,16 @@ export function CrmLeadNew() {
     onError: () => toast.error('Failed to assign'),
   })
 
+  const statusMut = useMutation({
+    mutationFn: (status: string) => leadService.update(leadId, { lead_status: status }),
+    onSuccess: () => {
+      toast.success('Status updated')
+      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+    },
+    onError: () => toast.error('Failed to update status'),
+  })
+
   const tempMut = useMutation({
     mutationFn: (val: string) => leadService.update(leadId, { temperature: val || null }),
     onSuccess: () => {
@@ -738,6 +748,23 @@ export function CrmLeadNew() {
             {lead.email && lead.phone_number && <span className="mx-1.5 text-slate-300">·</span>}
             {lead.phone_number && <span>{formatPhoneNumber(String(lead.phone_number))}</span>}
           </p>
+        </div>
+
+        {/* Lead Status */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Zap size={13} className="text-emerald-500" />
+          <select
+            value={String(lead.lead_status ?? '')}
+            onChange={e => statusMut.mutate(e.target.value)}
+            disabled={statusMut.isPending}
+            className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-emerald-400 cursor-pointer disabled:opacity-50"
+            style={statusColor ? { borderColor: `${statusColor}40`, backgroundColor: `${statusColor}10`, color: statusColor } : undefined}
+          >
+            <option value="">Select Status</option>
+            {statuses.map((s: LeadStatus) => (
+              <option key={s.id} value={s.lead_title_url}>{s.lead_title}</option>
+            ))}
+          </select>
         </div>
 
         {/* Temperature */}
