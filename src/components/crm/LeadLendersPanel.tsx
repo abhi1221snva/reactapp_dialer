@@ -174,6 +174,10 @@ function QuickFixModal({
   onClose: () => void
 }) {
   const qc = useQueryClient()
+  // Errors auto-resolved by the backend (type casting, system-injected fields) — skip from UI
+  const BACKEND_AUTO_FIX_TYPES = new Set(['numeric'])
+  const SYSTEM_INJECTED_FIELDS = new Set(['externalCustomerId', '_system_lead_id'])
+
   // Include all errors that have a field key — don't require the field to exist in leadData
   // because EAV fields may not appear as keys when they have no stored value yet.
   // Deduplicate by field key (multiple API errors can map to the same CRM field)
@@ -182,10 +186,18 @@ function QuickFixModal({
     return errors.filter(e => {
       if (!e.field || e.field === '') return false
       if (seen.has(e.field)) return false
+      // Skip errors auto-handled by the backend (numeric casting, system-injected)
+      if (BACKEND_AUTO_FIX_TYPES.has(e.fix_type)) return false
+      if (SYSTEM_INJECTED_FIELDS.has(e.field)) return false
       seen.add(e.field)
       return true
     })
   })()
+
+  // Count how many errors were auto-resolved by backend
+  const autoFixedCount = errors.filter(e =>
+    BACKEND_AUTO_FIX_TYPES.has(e.fix_type) || SYSTEM_INJECTED_FIELDS.has(e.field ?? '')
+  ).length
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const err of fixable) {
@@ -207,8 +219,11 @@ function QuickFixModal({
     ein: 'EIN / Tax ID', tax_id: 'Tax ID', fein: 'Federal EIN',
     amount_requested: 'Amount Requested', monthly_revenue: 'Monthly Revenue',
     annual_revenue: 'Annual Revenue', credit_score: 'Credit Score',
-    business_start_date: 'Business Start Date', industry: 'Industry',
-    ownership_percentage: 'Ownership %', full_name: 'Full Name',
+    self_reported_revenue: 'Monthly Revenue', average_balance: 'Avg Bank Balance',
+    business_start_date: 'Business Start Date', business_inception_date: 'Business Start Date',
+    industry: 'Industry', ownership_percentage: 'Ownership %', full_name: 'Full Name',
+    business_name: 'Business Name', legal_name: 'Legal Business Name',
+    avg_monthly_sales: 'Avg. Monthly Sales', business_email: 'Business Email',
     option_34: 'Home State', option_37: 'Home Address', option_38: 'Business Phone',
     option_39: 'Amount Requested', option_44: 'SSN', option_45: 'Business ZIP',
     option_46: 'Home ZIP', option_724: 'Business Address', option_730: 'EIN / Tax ID',
@@ -224,6 +239,8 @@ function QuickFixModal({
     if (fixType === 'zip' && !/^\d{5}$/.test(v)) return 'Must be exactly 5 digits'
     if ((fixType === 'ein' || fixType === 'ssn') && !/^\d{9}$/.test(v.replace(/[-\s]/g, ''))) return 'Must be exactly 9 digits'
     if (fixType === 'phone' && !/^\d{10,11}$/.test(v.replace(/[-\s().+]/g, ''))) return 'Must be 10-11 digits'
+    if (fixType === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v) && !/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return 'Use YYYY-MM-DD format (e.g. 1985-06-15)'
+    if (fixType === 'state_code' && !/^[A-Z]{2}$/i.test(v)) return 'Must be 2-letter state code (e.g. NY, CA)'
     return null
   }
 
@@ -258,18 +275,24 @@ function QuickFixModal({
   const resubmitMutation = useMutation({
     mutationFn: async () => {
       const changed = getChangedFields()
-      if (Object.keys(changed).length === 0) throw new Error('No changes')
+      // Allow resubmit without changes when all errors are auto-fixed by backend
       return crmService.fixAndResubmit(leadId, {
         lender_id: lenderId,
         field_updates: changed,
       })
     },
     onSuccess: () => {
-      toast.success('Lead updated & resubmission dispatched')
+      toast.success('Resubmission dispatched — status will update shortly')
       qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
       qc.invalidateQueries({ queryKey: ['lead-detail', leadId] })
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+      // Poll for updated status after job completes (API calls take 5-30s)
+      const delays = [5000, 10000, 20000, 35000]
+      delays.forEach(d => setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+        qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+      }, d))
       onClose()
     },
     onError: (err: unknown) => {
@@ -307,7 +330,18 @@ function QuickFixModal({
 
         {/* Fields */}
         <div className="px-5 py-4 overflow-y-auto flex-1 space-y-3">
-          {fixable.length === 0 && errors.length > 0 && (
+          {/* Auto-fixed banner */}
+          {autoFixedCount > 0 && (
+            <div className="flex items-start gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <Check size={12} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-emerald-700">
+                <span className="font-semibold">{autoFixedCount} issue{autoFixedCount !== 1 ? 's' : ''} auto-resolved</span>
+                {' — numeric type casting and system fields are now handled automatically.'}
+                {fixable.length === 0 && ' Click "Save & Resubmit" to retry.'}
+              </p>
+            </div>
+          )}
+          {fixable.length === 0 && errors.length > 0 && autoFixedCount === 0 && (
             <div className="space-y-2">
               <p className="text-xs text-slate-500 italic">
                 The API returned errors that could not be mapped to specific fields.
@@ -572,6 +606,28 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting, onA
           >
             <Eye size={12} />
           </button>
+        )}
+        {/* Quick fix + retry buttons — always visible for failed API submissions */}
+        {isFailed && sub.submission_type === 'api' && (
+          <>
+            <button
+              onClick={() => setFixModalOpen(true)}
+              className="p-1 rounded flex-shrink-0 text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+              title="Fix Fields & Resubmit"
+            >
+              <Wrench size={12} />
+            </button>
+            {onResubmit && (
+              <button
+                onClick={() => onResubmit(sub.lender_id)}
+                disabled={isResubmitting}
+                className="p-1 rounded flex-shrink-0 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                title="Retry submission"
+              >
+                {isResubmitting ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              </button>
+            )}
+          </>
         )}
         <button
           onClick={() => setEditing(v => !v)}
@@ -1763,6 +1819,12 @@ export function LendersPanel({ leadId, onTabChange }: { leadId: number; onTabCha
       qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
       qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+      // Poll for final status after API jobs complete (5-30s)
+      const delays = [5000, 10000, 20000, 35000]
+      delays.forEach(d => setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+        qc.invalidateQueries({ queryKey: ['lead-api-logs', leadId] })
+      }, d))
 
       // Close email preview so submission history becomes visible
       setPreviewExpanded(false)
