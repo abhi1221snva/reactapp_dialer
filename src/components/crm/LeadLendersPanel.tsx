@@ -174,15 +174,14 @@ function QuickFixModal({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  // Only include errors that have a field key AND exist in lead data (skip computed/synthetic lender fields)
+  // Include all errors that have a field key — don't require the field to exist in leadData
+  // because EAV fields may not appear as keys when they have no stored value yet.
   // Deduplicate by field key (multiple API errors can map to the same CRM field)
   const fixable = (() => {
     const seen = new Set<string>()
     return errors.filter(e => {
       if (!e.field || e.field === '') return false
       if (seen.has(e.field)) return false
-      // Field must exist as a key in leadData (even if value is empty/null)
-      if (!(e.field in leadData)) return false
       seen.add(e.field)
       return true
     })
@@ -281,8 +280,6 @@ function QuickFixModal({
     },
   })
 
-  if (fixable.length === 0) return null
-
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -297,7 +294,10 @@ function QuickFixModal({
               Fix Fields — {lenderName}
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Update the values below and save to fix the API errors
+              {fixable.length > 0
+                ? 'Update the values below and save to fix the API errors'
+                : `${errors.length} error${errors.length !== 1 ? 's' : ''} reported — update the lead fields and resubmit`
+              }
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
@@ -308,10 +308,22 @@ function QuickFixModal({
         {/* Fields */}
         <div className="px-5 py-4 overflow-y-auto flex-1 space-y-3">
           {fixable.length === 0 && errors.length > 0 && (
-            <p className="text-xs text-slate-500 italic">
-              The API errors reference fields that cannot be edited here (computed by the lender).
-              Please update the lead data directly and resubmit.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500 italic">
+                The API returned errors that could not be mapped to specific fields.
+                Review the errors below and update the lead data directly.
+              </p>
+              {errors.map((err, i) => (
+                <div key={i} className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle size={12} className="text-red-400 mt-0.5 flex-shrink-0" />
+                  <div className="min-w-0">
+                    {err.label && <p className="text-xs font-semibold text-red-700">{err.label}</p>}
+                    <p className="text-xs text-red-600">{err.message}</p>
+                    {err.expected && <p className="text-[10px] text-slate-400 mt-0.5">{err.expected}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
           {fixable.map(err => {
             const val = values[err.field] ?? ''
