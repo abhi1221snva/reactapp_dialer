@@ -392,6 +392,7 @@ export function UserForm() {
           extension_id:Number(id),first_name:capFirst(form.first_name),last_name:capFirst(form.last_name),
           email:form.email,mobile:form.mobile.replace(/\D/g,''),country_code:form.country_code.replace(/\D/g,''),
           extension_type:form.extension_type,dialer_mode:form.dialer_mode,timezone:form.timezone,
+          user_level:Number(form.user_level),
           group_id:form.group_id,voicemail:Number(form.voicemail),voicemail_send_to_email:Number(form.voicemail_send_to_email),
           vm_pin:form.vm_pin?Number(form.vm_pin):undefined,follow_me:Number(form.follow_me),
           call_forward:Number(form.call_forward),twinning:String(form.twinning),no_answer_redirect:Number(form.no_answer_redirect),
