@@ -500,6 +500,9 @@ export const crmService = {
   renderLeadPdf: (leadId: number) =>
     api.get(`/crm/lead/${leadId}/render-pdf`),
 
+  downloadLeadPdf: (leadId: number) =>
+    api.get(`/crm/lead/${leadId}/download-pdf`, { responseType: 'blob' }),
+
   getPdfPlaceholders: () =>
     api.get('/crm/pdf/placeholders'),
 

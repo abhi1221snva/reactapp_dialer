@@ -5177,6 +5177,34 @@ export function CrmLeadDetail() {
                 <Copy size={13} />
                 <span className="hidden sm:inline">Copy Link</span>
               </button>
+              <button
+                onClick={async () => {
+                  try {
+                    toast.loading('Generating PDF...', { id: 'download-pdf' })
+                    const res = await crmService.downloadLeadPdf(leadId!)
+                    const blob = new Blob([res.data], { type: 'application/pdf' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `lead_${leadId}_application.pdf`
+                    document.body.appendChild(a)
+                    a.click()
+                    a.remove()
+                    URL.revokeObjectURL(url)
+                    toast.success('PDF downloaded', { id: 'download-pdf' })
+                  } catch {
+                    toast.error('Failed to generate PDF', { id: 'download-pdf' })
+                  }
+                }}
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12px] font-medium text-emerald-700 transition-all hover:shadow-sm"
+                style={{ background: '#dcfce7', border: '1px solid #bbf7d0' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#bbf7d0'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.transform = 'translateY(0)' }}
+                title="Download lead application as PDF"
+              >
+                <FileDown size={13} />
+                <span className="hidden sm:inline">Download PDF</span>
+              </button>
               <div className="w-px h-5 bg-slate-200 mx-0.5" />
               <button
                 onClick={handleDeleteLead}
