@@ -129,12 +129,13 @@ export const crmService = {
 
   // ── Advanced Search ─────────────────────────────────────────────────────────
   searchLeads: (params: CrmSearchParams) => {
-    const { search, lead_status, assigned_to, date_from, date_to, lead_type, company_name, phone_number, email, industry_type, lower_limit = 0, upper_limit = 25, sort_by, sort_dir } = params
+    const { search, lead_id, lead_status, assigned_to, date_from, date_to, lead_type, company_name, phone_number, email, industry_type, lower_limit = 0, upper_limit = 25, sort_by, sort_dir } = params
     const per_page = upper_limit
     const page = Math.floor(lower_limit / per_page) + 1
     return api.post('/crm/leads/search', {
       filters: {
         ...(search              ? { search }                     : {}),
+        ...(lead_id             ? { lead_id }                    : {}),
         ...(lead_status?.length ? { lead_status }               : {}),
         ...(assigned_to?.length ? { assigned_to }               : {}),
         ...(lead_type           ? { lead_type }                 : {}),
