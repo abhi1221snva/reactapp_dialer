@@ -761,19 +761,21 @@ function SubmissionRow({ sub, leadId, onViewLog, onResubmit, isResubmitting, onA
           />
           <div className="flex gap-2">
             <button
-              onClick={() => {
-                if (status === 'approved' && onApproval) {
-                  onApproval(sub, newNote)
-                  setEditing(false)
-                } else {
-                  mutation.mutate()
-                }
-              }}
+              onClick={() => mutation.mutate()}
               disabled={mutation.isPending}
               className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1"
             >
               {mutation.isPending ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : 'Save'}
             </button>
+            {status === 'approved' && onApproval && (
+              <button
+                onClick={() => { onApproval(sub, newNote); setEditing(false) }}
+                className="px-3 text-xs font-semibold text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-50 flex items-center justify-center gap-1"
+                title="Save note & create an offer"
+              >
+                <DollarSign size={11} /> Offer
+              </button>
+            )}
             <button onClick={() => setEditing(false)} className="px-3 text-xs text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300">
               Cancel
             </button>
@@ -857,6 +859,27 @@ function ApprovalOfferModal({ leadId, sub, note, onClose, onDone }: ApprovalOffe
   const termLabel = termType === 'daily' ? 'Daily' : termType === 'weekly' ? 'Weekly' : 'Monthly'
 
   const canSave = amt > 0 && fr > 0 && tl > 0
+
+  const handleSkip = async () => {
+    setSaving(true)
+    try {
+      const existingNotes = sub.response_note ?? ''
+      const combined = note.trim() ? buildAppendedNote(existingNotes, note) : existingNotes
+      await crmService.updateSubmissionResponse(leadId, sub.id, {
+        response_status: 'approved',
+        submission_status: sub.submission_status ?? 'submitted',
+        response_note: combined || undefined,
+      })
+      toast.success('Note saved — offer skipped')
+      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      onDone()
+    } catch {
+      toast.error('Failed to save note')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!canSave) return
@@ -1032,6 +1055,13 @@ function ApprovalOfferModal({ leadId, sub, note, onClose, onDone }: ApprovalOffe
             className="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
           >
             {saving ? <><Loader2 size={12} className="animate-spin" /> Saving…</> : <><DollarSign size={12} /> Save Offer</>}
+          </button>
+          <button
+            onClick={handleSkip}
+            disabled={saving}
+            className="px-4 py-2 text-xs font-semibold text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 disabled:opacity-50 transition-colors"
+          >
+            Skip
           </button>
           <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
             Cancel
