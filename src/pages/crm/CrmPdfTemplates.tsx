@@ -52,70 +52,109 @@ const STARTER_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <style>
-  body { font-family: Arial, sans-serif; font-size: 13px; color: #1e293b; margin: 0; padding: 40px; }
-  h1 { font-size: 22px; color: #1e293b; margin-bottom: 4px; }
-  .subtitle { color: #64748b; margin-bottom: 32px; font-size: 13px; }
-  .section { margin-bottom: 28px; }
-  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6366f1; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px; margin-bottom: 14px; }
-  .row { display: flex; gap: 24px; margin-bottom: 12px; }
-  .field { flex: 1; }
-  .field label { display: block; font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
-  .field .value { font-size: 13px; font-weight: 500; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; min-height: 20px; }
-  .signature-row { display: flex; align-items: flex-end; gap: 40px; margin-top: 40px; }
-  .sig-box { flex: 1; border-top: 1px solid #1e293b; padding-top: 8px; font-size: 11px; color: #64748b; }
+  body { width: 100%; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1e293b; }
+  table { width: 100%; border-collapse: collapse; }
+  .data-table { table-layout: fixed; }
+  .data-table th, .data-table td { border: 1px solid #d1d5db; padding: 5px 8px; text-align: left; vertical-align: top; word-wrap: break-word; }
+  .data-table th { background-color: #eef2ff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #4338ca; font-weight: 700; border-bottom: 2px solid #c7d2fe; }
+  .layout-table, .layout-table > tbody > tr > td { border: none; }
+  .layout-table > tbody > tr > td { vertical-align: top; }
+  .label { color: #64748b; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .value { font-size: 13px; font-weight: 500; }
+  h1 { font-size: 22px; color: #1e293b; margin: 0 0 4px 0; }
+  .subtitle { color: #64748b; margin-bottom: 20px; font-size: 12px; }
 </style>
 </head>
 <body>
 
 <h1>Merchant Cash Advance Application</h1>
-<p class="subtitle">Submitted via RocketDialer CRM · Date: [[lead_created_at]]</p>
+<p class="subtitle">Submitted via RocketDialer CRM &middot; Date: [[lead_created_at]]</p>
 
-<div class="section">
-  <div class="section-title">Business Information</div>
-  <div class="row">
-    <div class="field"><label>Business Name</label><div class="value">[[company_name]]</div></div>
-    <div class="field"><label>Industry</label><div class="value">[[industry_type]]</div></div>
-  </div>
-  <div class="row">
-    <div class="field"><label>Address</label><div class="value">[[address]]</div></div>
-    <div class="field"><label>City / State</label><div class="value">[[city]], [[state]]</div></div>
-  </div>
-</div>
+<!-- Business Information — full width -->
+<table class="data-table" style="width:100%; margin-bottom:12px;">
+<thead><tr><th colspan="4">Business Information</th></tr></thead>
+<tbody>
+<tr>
+<td colspan="2"><span class="label">Business Name:</span><br><span class="value">[[company_name]]</span></td>
+<td colspan="2"><span class="label">Industry:</span><br><span class="value">[[industry_type]]</span></td>
+</tr>
+<tr>
+<td colspan="2"><span class="label">Address:</span><br><span class="value">[[address]]</span></td>
+<td><span class="label">City:</span><br><span class="value">[[city]]</span></td>
+<td><span class="label">State:</span><br><span class="value">[[state]]</span></td>
+</tr>
+<tr>
+<td colspan="2"><span class="label">Amount Requested:</span><br><span class="value">[[funding_amount]]</span></td>
+<td colspan="2"><span class="label">Monthly Revenue:</span><br><span class="value">[[monthly_revenue]]</span></td>
+</tr>
+<tr>
+<td colspan="2"><span class="label">Time in Business:</span><br><span class="value">[[time_in_business]]</span></td>
+<td colspan="2"><span class="label">Use of Funds:</span><br><span class="value">[[use_of_funds]]</span></td>
+</tr>
+</tbody>
+</table>
 
-<div class="section">
-  <div class="section-title">Owner Information</div>
-  <div class="row">
-    <div class="field"><label>Owner Name</label><div class="value">[[first_name]] [[last_name]]</div></div>
-    <div class="field"><label>Email</label><div class="value">[[email]]</div></div>
-  </div>
-  <div class="row">
-    <div class="field"><label>Phone</label><div class="value">[[phone_number]]</div></div>
-    <div class="field"><label>Date of Birth</label><div class="value">[[dob]]</div></div>
-  </div>
-</div>
+<!-- Owner Section — side-by-side when both exist; full-width when single -->
+<table class="layout-table" style="width:100%; margin-bottom:12px;">
+<tbody><tr>
+<td class="owner-1-col" style="width:50%; padding-right:4px;">
+<table class="data-table" style="width:100%;">
+<thead><tr><th colspan="2">Owner Information</th></tr></thead>
+<tbody>
+<tr>
+<td><span class="label">First Name:</span><br><span class="value">[[first_name]]</span></td>
+<td><span class="label">Last Name:</span><br><span class="value">[[last_name]]</span></td>
+</tr>
+<tr>
+<td><span class="label">Email:</span><br><span class="value">[[email]]</span></td>
+<td><span class="label">Phone:</span><br><span class="value">[[phone_number]]</span></td>
+</tr>
+<tr>
+<td><span class="label">Date of Birth:</span><br><span class="value">[[dob]]</span></td>
+<td><span class="label">SSN:</span><br><span class="value">[[ssn]]</span></td>
+</tr>
+</tbody>
+</table>
+</td>
+<td class="owner-2-col" style="width:50%; padding-left:4px;">
+<table class="data-table" style="width:100%;">
+<thead><tr><th colspan="2">Second Owner Information</th></tr></thead>
+<tbody>
+<tr>
+<td><span class="label">First Name:</span><br><span class="value">[[owner_2_first_name]]</span></td>
+<td><span class="label">Last Name:</span><br><span class="value">[[owner_2_last_name]]</span></td>
+</tr>
+<tr>
+<td><span class="label">Email:</span><br><span class="value">[[owner_2_email]]</span></td>
+<td><span class="label">Phone:</span><br><span class="value">[[owner_2_mobile]]</span></td>
+</tr>
+<tr>
+<td><span class="label">Date of Birth:</span><br><span class="value">[[owner_2_dob]]</span></td>
+<td><span class="label">SSN:</span><br><span class="value">[[owner_2_ssn]]</span></td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr></tbody>
+</table>
 
-<div class="section">
-  <div class="section-title">Funding Request</div>
-  <div class="row">
-    <div class="field"><label>Amount Requested</label><div class="value">[[funding_amount]]</div></div>
-    <div class="field"><label>Monthly Revenue</label><div class="value">[[monthly_revenue]]</div></div>
-  </div>
-  <div class="row">
-    <div class="field"><label>Time in Business</label><div class="value">[[time_in_business]]</div></div>
-    <div class="field"><label>Use of Funds</label><div class="value">[[use_of_funds]]</div></div>
-  </div>
-</div>
-
-<div class="signature-row">
-  <div class="sig-box">
-    [[signature_image]]
-    <div style="margin-top:8px">Applicant Signature</div>
-  </div>
-  <div class="sig-box">
-    <div style="min-height:55px"></div>
-    Date: [[lead_created_at]]
-  </div>
-</div>
+<!-- Signatures -->
+<table class="layout-table" style="width:100%; margin-top:24px;">
+<tbody>
+<tr>
+<td style="width:25%; border-top:1px solid #1e293b; padding-top:8px;">[[signature_image]]</td>
+<td style="width:25%; border-top:1px solid #1e293b; padding-top:8px;">[[signature_date]]</td>
+<td style="width:25%; border-top:1px solid #1e293b; padding-top:8px;">[[owner_2_signature_image]]</td>
+<td style="width:25%; border-top:1px solid #1e293b; padding-top:8px;">[[owner_2_signature_date]]</td>
+</tr>
+<tr>
+<td style="width:25%; font-size:10px; color:#64748b;">Owner's Signature</td>
+<td style="width:25%; font-size:10px; color:#64748b;">Date</td>
+<td style="width:25%; font-size:10px; color:#64748b;">Second Owner's Signature</td>
+<td style="width:25%; font-size:10px; color:#64748b;">Date</td>
+</tr>
+</tbody>
+</table>
 
 </body>
 </html>`

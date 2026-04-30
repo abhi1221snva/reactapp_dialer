@@ -20,7 +20,7 @@ import { LEVELS } from '../../utils/permissions'
 
 const schema = z.object({
   lead_status:    z.string().min(1, 'Status is required'),
-  lead_source_id: z.string().min(1, 'Lead Source is required'),
+  lead_source_id: z.string().optional(),
   temperature:    z.string().optional(),
   assigned_to:    z.string().optional(),
   // Core lead fields — always editable regardless of crm_labels configuration
@@ -384,6 +384,9 @@ export function CrmLeadCreate() {
 
     setFormErrorCount(0)
 
+    // Don't send lead_source_id if none selected
+    if (!payload.lead_source_id) delete payload.lead_source_id
+
     if (isEdit) updateMutation.mutate(payload)
     else createMutation.mutate(payload)
   }
@@ -639,24 +642,18 @@ export function CrmLeadCreate() {
                   </div>
                 </div>
 
-                {/* Lead Source */}
+                {/* Lead Source (optional — only webhook-imported leads need one) */}
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <Zap size={10} className="text-slate-400" />
                     <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Lead Source</span>
-                    <span className="text-red-400 text-[10px]">*</span>
                   </div>
-                  {errors.lead_source_id && (
-                    <p className="flex items-center gap-1 text-[11px] text-red-500 mb-1">
-                      <AlertCircle size={9} /> {errors.lead_source_id.message}
-                    </p>
-                  )}
                   <select
                     value={leadSourceId}
-                    onChange={e => setValue('lead_source_id', e.target.value, { shouldValidate: true })}
+                    onChange={e => setValue('lead_source_id', e.target.value)}
                     className="input w-full text-xs"
                   >
-                    <option value="">— Select source —</option>
+                    <option value="">— None (manual entry) —</option>
                     {(leadSources ?? []).map(s => (
                       <option key={s.id} value={String(s.id)}>{s.source_title}</option>
                     ))}

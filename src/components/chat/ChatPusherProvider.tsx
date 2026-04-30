@@ -10,6 +10,7 @@ import type {
   PusherNewMessageEvent, PusherPresenceEvent,
   CallData, CallSignalData, CallAcceptedData, CallEndedData,
 } from '../../types/chat.types'
+import { playBing } from '../../utils/notificationSound'
 
 // ─── Call types (exported for use by MiniChatWindow) ─────────────────────────
 
@@ -305,6 +306,7 @@ export function ChatPusherProvider({ children }: { children: ReactNode }) {
     const userChannel = pusher.subscribe(`private-team-user.${user.parent_id}.${user.id}`)
 
     userChannel.bind('new.message', (data: PusherNewMessageEvent) => {
+      playBing()
       setTotalUnread(v => v + 1)
       setConversations(prev => {
         const idx = prev.findIndex(c => c.uuid === data.conversation_uuid)

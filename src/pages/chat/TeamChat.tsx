@@ -13,6 +13,7 @@ import {
 import { chatService } from '../../services/chat.service'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
+import { playBing } from '../../utils/notificationSound'
 import { initials } from '../../utils/format'
 import toast from 'react-hot-toast'
 import type {
@@ -1255,6 +1256,7 @@ export function TeamChat() {
     const userChannel = pusher.subscribe(`private-team-user.${parentId}.${userId}`)
 
     userChannel.bind('new.message', (data: PusherNewMessageEvent) => {
+      playBing()
       const isActiveConv = data.conversation_uuid === selectedUuidRef.current
 
       // If this message is for the currently active conversation, mark it read immediately
