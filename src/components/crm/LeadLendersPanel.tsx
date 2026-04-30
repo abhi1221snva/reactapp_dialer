@@ -860,27 +860,6 @@ function ApprovalOfferModal({ leadId, sub, note, onClose, onDone }: ApprovalOffe
 
   const canSave = amt > 0 && fr > 0 && tl > 0
 
-  const handleSkip = async () => {
-    setSaving(true)
-    try {
-      const existingNotes = sub.response_note ?? ''
-      const combined = note.trim() ? buildAppendedNote(existingNotes, note) : existingNotes
-      await crmService.updateSubmissionResponse(leadId, sub.id, {
-        response_status: 'approved',
-        submission_status: sub.submission_status ?? 'submitted',
-        response_note: combined || undefined,
-      })
-      toast.success('Note saved — offer skipped')
-      qc.invalidateQueries({ queryKey: ['lender-submissions', leadId] })
-      qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
-      onDone()
-    } catch {
-      toast.error('Failed to save note')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleSave = async () => {
     if (!canSave) return
     setSaving(true)
@@ -1056,14 +1035,7 @@ function ApprovalOfferModal({ leadId, sub, note, onClose, onDone }: ApprovalOffe
           >
             {saving ? <><Loader2 size={12} className="animate-spin" /> Saving…</> : <><DollarSign size={12} /> Save Offer</>}
           </button>
-          <button
-            onClick={handleSkip}
-            disabled={saving}
-            className="px-4 py-2 text-xs font-semibold text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 disabled:opacity-50 transition-colors"
-          >
-            Skip
-          </button>
-          <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
+<button onClick={onClose} className="px-4 py-2 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
             Cancel
           </button>
         </div>
