@@ -1,32 +1,16 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   User as UserIcon, Mail, Lock, Phone, Building2, Eye, EyeOff,
   CheckCircle2, ArrowLeft, RefreshCw, Shield, ArrowRight,
 } from 'lucide-react'
-
-
-function LinkedInIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="#0A66C2">
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-    </svg>
-  )
-}
-
-function MicrosoftIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 23 23" fill="none">
-      <rect width="11" height="11" fill="#f25022" />
-      <rect x="12" width="11" height="11" fill="#7fba00" />
-      <rect y="12" width="11" height="11" fill="#00a4ef" />
-      <rect x="12" y="12" width="11" height="11" fill="#ffb900" />
-    </svg>
-  )
-}
 import toast from 'react-hot-toast'
+import Swal from 'sweetalert2'
+import { registerService } from '../../services/register.service'
+import { useAuthStore } from '../../stores/auth.store'
+import type { User } from '../../types'
 
-// ─── Password policy helpers ���────────────────────────────────────────────────
+// ─── Password policy helpers ────────────────────────────────────────────────
 const PASSWORD_RULES = [
   { label: '10+ characters', test: (pw: string) => pw.length >= 10 },
   { label: 'Uppercase',      test: (pw: string) => /[A-Z]/.test(pw) },
@@ -63,10 +47,6 @@ function PasswordStrength({ password }: { password: string }) {
     </div>
   )
 }
-import Swal from 'sweetalert2'
-import { registerService } from '../../services/register.service'
-import { useAuthStore } from '../../stores/auth.store'
-import type { User } from '../../types'
 
 // ─── Google Identity Services type declaration ────────────────────────────────
 declare global {
@@ -107,6 +87,51 @@ interface FormData {
   phone: string
 }
 
+// ─── Country codes ───────────────────────────────────────────────────────────
+const COUNTRY_CODES = [
+  { value: '+1',   label: '+1 US/CA' },
+  { value: '+44',  label: '+44 UK' },
+  { value: '+91',  label: '+91 IN' },
+  { value: '+61',  label: '+61 AU' },
+  { value: '+49',  label: '+49 DE' },
+  { value: '+33',  label: '+33 FR' },
+  { value: '+34',  label: '+34 ES' },
+  { value: '+39',  label: '+39 IT' },
+  { value: '+81',  label: '+81 JP' },
+  { value: '+82',  label: '+82 KR' },
+  { value: '+86',  label: '+86 CN' },
+  { value: '+52',  label: '+52 MX' },
+  { value: '+55',  label: '+55 BR' },
+  { value: '+54',  label: '+54 AR' },
+  { value: '+57',  label: '+57 CO' },
+  { value: '+56',  label: '+56 CL' },
+  { value: '+63',  label: '+63 PH' },
+  { value: '+65',  label: '+65 SG' },
+  { value: '+60',  label: '+60 MY' },
+  { value: '+62',  label: '+62 ID' },
+  { value: '+66',  label: '+66 TH' },
+  { value: '+84',  label: '+84 VN' },
+  { value: '+971', label: '+971 AE' },
+  { value: '+966', label: '+966 SA' },
+  { value: '+972', label: '+972 IL' },
+  { value: '+92',  label: '+92 PK' },
+  { value: '+880', label: '+880 BD' },
+  { value: '+27',  label: '+27 ZA' },
+  { value: '+234', label: '+234 NG' },
+  { value: '+254', label: '+254 KE' },
+  { value: '+20',  label: '+20 EG' },
+  { value: '+7',   label: '+7 RU' },
+  { value: '+48',  label: '+48 PL' },
+  { value: '+31',  label: '+31 NL' },
+  { value: '+46',  label: '+46 SE' },
+  { value: '+47',  label: '+47 NO' },
+  { value: '+45',  label: '+45 DK' },
+  { value: '+41',  label: '+41 CH' },
+  { value: '+43',  label: '+43 AT' },
+  { value: '+353', label: '+353 IE' },
+  { value: '+64',  label: '+64 NZ' },
+]
+
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 function Spinner() {
   return (
@@ -117,11 +142,72 @@ function Spinner() {
   )
 }
 
+// ─── Step progress indicator ─────────────────────────────────────────────────
+function StepIndicator({ current, isGoogleFlow }: { current: Step; isGoogleFlow: boolean }) {
+  const steps = isGoogleFlow
+    ? [
+        { key: 'google-business', label: 'Business' },
+        { key: 'phone-verify',    label: 'Phone' },
+      ]
+    : [
+        { key: 'details',       label: 'Account' },
+        { key: 'email-verify',  label: 'Email' },
+        { key: 'phone-verify',  label: 'Phone' },
+      ]
+
+  const currentIdx = steps.findIndex(s => s.key === current)
+
+  return (
+    <div className="flex items-center gap-1 mb-5">
+      {steps.map((s, i) => {
+        const isDone = i < currentIdx
+        const isActive = i === currentIdx
+        return (
+          <div key={s.key} className="flex items-center flex-1">
+            <div className="flex flex-col items-center flex-1">
+              <div className="flex items-center w-full gap-1">
+                {i > 0 && (
+                  <div
+                    className="flex-1 h-0.5 rounded-full transition-colors"
+                    style={{ background: isDone || isActive ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
+                  />
+                )}
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-all"
+                  style={{
+                    background: isDone ? '#6366f1' : isActive ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)',
+                    border: isActive ? '2px solid #6366f1' : '2px solid transparent',
+                    color: isDone ? '#fff' : isActive ? '#a5b4fc' : '#475569',
+                  }}
+                >
+                  {isDone ? '\u2713' : i + 1}
+                </div>
+                {i < steps.length - 1 && (
+                  <div
+                    className="flex-1 h-0.5 rounded-full transition-colors"
+                    style={{ background: isDone ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
+                  />
+                )}
+              </div>
+              <span
+                className="text-[10px] mt-1 font-medium transition-colors"
+                style={{ color: isDone ? '#818cf8' : isActive ? '#a5b4fc' : '#475569' }}
+              >
+                {s.label}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── OTP digit input ──────────────────────────────────────────────────────────
 function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const refs = Array.from({ length: 6 }, () => useRef<HTMLInputElement>(null))
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  useEffect(() => { refs[0].current?.focus() }, [])
+  useEffect(() => { inputRefs.current[0]?.focus() }, [])
 
   const digits = value.padEnd(6, ' ').split('')
 
@@ -129,7 +215,7 @@ function OtpInput({ value, onChange }: { value: string; onChange: (v: string) =>
     if (e.key === 'Backspace') {
       const next = value.slice(0, i) + value.slice(i + 1)
       onChange(next)
-      if (i > 0) refs[i - 1].current?.focus()
+      if (i > 0) inputRefs.current[i - 1]?.focus()
     }
   }
 
@@ -139,22 +225,25 @@ function OtpInput({ value, onChange }: { value: string; onChange: (v: string) =>
     const arr = value.padEnd(6, '').split('')
     arr[i] = d
     onChange(arr.join('').slice(0, 6))
-    if (i < 5) refs[i + 1].current?.focus()
+    if (i < 5) inputRefs.current[i + 1]?.focus()
   }
 
   function handlePaste(e: React.ClipboardEvent) {
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
-    if (text.length) { onChange(text); refs[Math.min(text.length, 5)].current?.focus() }
+    if (text.length) { onChange(text); inputRefs.current[Math.min(text.length, 5)]?.focus() }
     e.preventDefault()
   }
 
   return (
     <div className="flex gap-2 justify-center" onPaste={handlePaste}>
-      {refs.map((ref, i) => (
+      {Array.from({ length: 6 }, (_, i) => (
         <input
           key={i}
-          ref={ref}
+          ref={el => { inputRefs.current[i] = el }}
           maxLength={1}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          aria-label={`Digit ${i + 1} of 6`}
           value={digits[i]?.trim() || ''}
           onChange={e => handleChange(i, e.target.value)}
           onKeyDown={e => handleKey(i, e)}
@@ -227,6 +316,7 @@ export function Register() {
   const [loading, setLoading] = useState(false)
 
   const [showPass, setShowPass] = useState(false)
+  const [showConfirmPass, setShowConfirmPass] = useState(false)
 
   const [googleFlow, setGoogleFlow] = useState(false)
   const [pendingCredential, setPendingCredential] = useState('')
@@ -257,54 +347,54 @@ export function Register() {
     setForm(f => ({ ...f, [k]: e.target.value }))
 
   // ── GSI init ─────────────────────────────────────────────────────────────
+  const initGoogle = useCallback(() => {
+    if (!window.google?.accounts?.id || !googleBtnRef.current) return
+    window.google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID as string,
+      callback: async (response: { credential: string }) => {
+        setPendingCredential(response.credential)
+        let decodedEmail = ''
+        let decodedName = ''
+        try {
+          const parts = response.credential.split('.')
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+          decodedName = payload.name ?? payload.given_name ?? ''
+          decodedEmail = payload.email ?? ''
+        } catch { /* ignore decode errors */ }
+
+        // FAIL-SAFE: If email couldn't be decoded, stop immediately
+        if (!decodedEmail) {
+          toast.error('Could not read email from Google account. Please try again.')
+          return
+        }
+
+        // Check email existence BEFORE proceeding. On ANY failure, STOP.
+        try {
+          await registerService.checkEmail(decodedEmail)
+        } catch (err: unknown) {
+          const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
+          if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
+            await showEmailBlockedAlert(code, navigate)
+          } else {
+            toast.error('Unable to verify your email. Please try again.')
+          }
+          return // Always stop on any error — never proceed to form
+        }
+
+        setForm(f => ({ ...f, name: decodedName, email: decodedEmail }))
+        setGoogleFlow(true)
+        setStep('google-business')
+      },
+    })
+    window.google.accounts.id.renderButton(googleBtnRef.current, {
+      theme: 'outline',
+      size: 'medium',
+      type: 'icon',
+      shape: 'circle',
+    })
+  }, [navigate])
+
   useEffect(() => {
-    const initGoogle = () => {
-      if (!window.google?.accounts?.id || !googleBtnRef.current) return
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID as string,
-        callback: async (response: { credential: string }) => {
-          setPendingCredential(response.credential)
-          let decodedEmail = ''
-          let decodedName = ''
-          try {
-            const parts = response.credential.split('.')
-            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-            decodedName = payload.name ?? payload.given_name ?? ''
-            decodedEmail = payload.email ?? ''
-          } catch { /* ignore decode errors */ }
-
-          // FAIL-SAFE: If email couldn't be decoded, stop immediately
-          if (!decodedEmail) {
-            toast.error('Could not read email from Google account. Please try again.')
-            return
-          }
-
-          // Check email existence BEFORE proceeding. On ANY failure, STOP.
-          try {
-            await registerService.checkEmail(decodedEmail)
-          } catch (err: unknown) {
-            const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
-            if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
-              await showEmailBlockedAlert(code, navigate)
-            } else {
-              toast.error('Unable to verify your email. Please try again.')
-            }
-            return // Always stop on any error — never proceed to form
-          }
-
-          setForm(f => ({ ...f, name: decodedName, email: decodedEmail }))
-          setGoogleFlow(true)
-          setStep('google-business')
-        },
-      })
-      window.google.accounts.id.renderButton(googleBtnRef.current, {
-        theme: 'outline',
-        size: 'medium',
-        type: 'icon',
-        shape: 'circle',
-      })
-    }
-
     if (window.google?.accounts?.id) {
       initGoogle()
     } else {
@@ -312,8 +402,7 @@ export function Register() {
       gsiScript?.addEventListener('load', initGoogle)
       return () => gsiScript?.removeEventListener('load', initGoogle)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [initGoogle])
 
   // ── Step 1 — Account details ──────────────────────────────────────────────
   const handleDetails = async (e: React.FormEvent) => {
@@ -422,7 +511,7 @@ export function Register() {
   const handleSendPhoneOtp = async () => {
     if (!form.phone.trim()) { toast.error('Phone number is required'); return }
     if (!/^\d{7,15}$/.test(form.phone.trim())) {
-      toast.error('Phone number must be 7–15 digits (numbers only)')
+      toast.error('Phone number must be 7\u201315 digits (numbers only)')
       return
     }
     setLoading(true)
@@ -626,6 +715,11 @@ export function Register() {
 
   return (
     <div className="animate-fadeIn">
+      {/* Step progress indicator */}
+      {step !== 'details' && (
+        <StepIndicator current={step} isGoogleFlow={googleFlow} />
+      )}
+
       {/* Header */}
       <div className="mb-4">
         <h2 className="text-xl font-bold text-white leading-tight">
@@ -635,7 +729,7 @@ export function Register() {
                                          'Verify your phone'}
         </h2>
         <p className="text-sm text-slate-400 mt-1">
-          {step === 'details'         && 'Start analyzing in minutes — no credit card required'}
+          {step === 'details'         && 'Get started in minutes \u2014 no credit card required'}
           {step === 'google-business' && "Just one more detail and you're all set"}
           {step === 'email-verify'    && 'Enter your email and verify with a 6-digit code'}
           {step === 'phone-verify'    && 'Enter your phone number and verify with a 6-digit code'}
@@ -646,31 +740,35 @@ export function Register() {
       {step === 'details' && (
         <form onSubmit={handleDetails} className="space-y-3">
           <div>
-            <label className="auth-label">Full Name <span className="text-red-500">*</span></label>
+            <label className="auth-label" htmlFor="reg-name">Full Name <span className="text-red-500">*</span></label>
             <div className="relative">
               <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input type="text" className="auth-input pl-10" placeholder="John Smith"
+              <input id="reg-name" type="text" className="auth-input pl-10" placeholder="John Smith"
+                autoComplete="name"
                 value={form.name} onChange={set('name')} required maxLength={100} />
             </div>
           </div>
 
           <div>
-            <label className="auth-label">Business Name <span className="text-red-500">*</span></label>
+            <label className="auth-label" htmlFor="reg-business">Business Name <span className="text-red-500">*</span></label>
             <div className="relative">
               <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input type="text" className="auth-input pl-10" placeholder="Acme Corp"
+              <input id="reg-business" type="text" className="auth-input pl-10" placeholder="Acme Corp"
+                autoComplete="organization"
                 value={form.business_name} onChange={set('business_name')} required maxLength={100} />
             </div>
           </div>
 
           <div>
-            <label className="auth-label">Password <span className="text-red-500">*</span></label>
+            <label className="auth-label" htmlFor="reg-password">Password <span className="text-red-500">*</span></label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input type={showPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
+              <input id="reg-password" type={showPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
                 placeholder="Min 10 characters"
+                autoComplete="new-password"
                 value={form.password} onChange={set('password')} required minLength={10} maxLength={64} />
               <button type="button" onClick={() => setShowPass(s => !s)}
+                aria-label={showPass ? 'Hide password' : 'Show password'}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                 {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -679,12 +777,18 @@ export function Register() {
           </div>
 
           <div>
-            <label className="auth-label">Confirm Password <span className="text-red-500">*</span></label>
+            <label className="auth-label" htmlFor="reg-confirm-password">Confirm Password <span className="text-red-500">*</span></label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input type="password" className="auth-input pl-10"
+              <input id="reg-confirm-password" type={showConfirmPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
                 placeholder="Re-enter password"
+                autoComplete="new-password"
                 value={form.confirm_password} onChange={set('confirm_password')} required />
+              <button type="button" onClick={() => setShowConfirmPass(s => !s)}
+                aria-label={showConfirmPass ? 'Hide password confirmation' : 'Show password confirmation'}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                {showConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
           </div>
 
@@ -700,31 +804,14 @@ export function Register() {
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
           </div>
 
-          {/* Social sign-up — icon only, centered row (matches login page) */}
-          <div className="flex justify-center gap-3">
-            {/* Google — native rendered button inside a styled container */}
+          {/* Google sign-up only — functional provider */}
+          <div className="flex justify-center">
             <div
               ref={googleBtnRef}
               className="auth-social-icon-btn"
               style={{ overflow: 'hidden', padding: 0, position: 'relative' }}
               title="Sign up with Google"
             />
-            <button
-              type="button"
-              onClick={() => toast('LinkedIn sign-up coming soon')}
-              className="auth-social-icon-btn"
-              title="Sign up with LinkedIn"
-            >
-              <LinkedInIcon />
-            </button>
-            <button
-              type="button"
-              onClick={() => toast('Microsoft sign-up coming soon')}
-              className="auth-social-icon-btn"
-              title="Sign up with Microsoft"
-            >
-              <MicrosoftIcon />
-            </button>
           </div>
 
           <p className="text-center text-sm text-slate-500">
@@ -750,19 +837,20 @@ export function Register() {
           </div>
 
           <div>
-            <label className="auth-label">Full Name</label>
+            <label className="auth-label" htmlFor="reg-google-name">Full Name</label>
             <div className="relative">
               <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input type="text" className="auth-input pl-10 opacity-60 cursor-not-allowed"
+              <input id="reg-google-name" type="text" className="auth-input pl-10 opacity-60 cursor-not-allowed"
                 value={form.name} readOnly />
             </div>
           </div>
 
           <div>
-            <label className="auth-label">Business Name <span className="text-red-500">*</span></label>
+            <label className="auth-label" htmlFor="reg-google-business">Business Name <span className="text-red-500">*</span></label>
             <div className="relative">
               <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input type="text" className="auth-input pl-10" placeholder="Acme Corp"
+              <input id="reg-google-business" type="text" className="auth-input pl-10" placeholder="Acme Corp"
+                autoComplete="organization"
                 value={form.business_name} onChange={set('business_name')} required maxLength={100} autoFocus />
             </div>
           </div>
@@ -786,10 +874,11 @@ export function Register() {
           {!emailOtpSent ? (
             <div className="space-y-4">
               <div>
-                <label className="auth-label">Email Address <span className="text-red-500">*</span></label>
+                <label className="auth-label" htmlFor="reg-email">Email Address <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-                  <input type="email" className="auth-input pl-10" placeholder="you@company.com"
+                  <input id="reg-email" type="email" className="auth-input pl-10" placeholder="you@company.com"
+                    autoComplete="email"
                     value={form.email} onChange={set('email')} required />
                 </div>
               </div>
@@ -855,27 +944,23 @@ export function Register() {
           {!phoneOtpSent ? (
             <div className="space-y-4">
               <div>
-                <label className="auth-label">Phone Number <span className="text-red-500">*</span></label>
+                <label className="auth-label" htmlFor="reg-phone">Phone Number <span className="text-red-500">*</span></label>
                 <div className="flex gap-2">
                   <select
-                    className="auth-input w-24 flex-shrink-0 px-2"
+                    className="auth-input w-28 flex-shrink-0 px-2"
                     value={form.country_code}
                     onChange={set('country_code')}
+                    aria-label="Country code"
                   >
-                    <option value="+1">+1 🇺🇸</option>
-                    <option value="+44">+44 🇬🇧</option>
-                    <option value="+91">+91 🇮🇳</option>
-                    <option value="+61">+61 🇦🇺</option>
-                    <option value="+49">+49 🇩🇪</option>
-                    <option value="+33">+33 🇫🇷</option>
-                    <option value="+52">+52 🇲🇽</option>
-                    <option value="+55">+55 🇧🇷</option>
-                    <option value="+971">+971 🇦🇪</option>
-                    <option value="+92">+92 🇵🇰</option>
+                    {COUNTRY_CODES.map(cc => (
+                      <option key={cc.value} value={cc.value}>{cc.label}</option>
+                    ))}
                   </select>
                   <div className="relative flex-1">
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-                    <input type="tel" className="auth-input pl-10" placeholder="5551234567"
+                    <input id="reg-phone" type="tel" className="auth-input pl-10" placeholder="5551234567"
+                      autoComplete="tel-national"
+                      inputMode="numeric"
                       value={form.phone} onChange={set('phone')} required maxLength={15} />
                   </div>
                 </div>
