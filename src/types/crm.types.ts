@@ -617,6 +617,7 @@ export interface PipelineView {
 
 export interface CrmSearchParams {
   search?: string
+  lead_id?: string
   lead_status?: string[]
   assigned_to?: number[]
   date_from?: string

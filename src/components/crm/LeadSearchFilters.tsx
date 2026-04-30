@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   X, RotateCcw, Check, User, Calendar, Building2,
-  Phone, Mail, Tag, ChevronDown, Search, SlidersHorizontal,
+  Phone, Mail, Tag, ChevronDown, Search, SlidersHorizontal, Hash,
 } from 'lucide-react'
 import type { LeadStatus } from '../../types/crm.types'
 import { cn } from '../../utils/cn'
@@ -9,6 +9,7 @@ import { cn } from '../../utils/cn'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Filters {
+  lead_id:       string
   lead_status:   string[]
   assigned_to:   string
   date_from:     string
@@ -21,7 +22,7 @@ export interface Filters {
 }
 
 export const EMPTY_FILTERS: Filters = {
-  lead_status: [], assigned_to: '', date_from: '', date_to: '',
+  lead_id: '', lead_status: [], assigned_to: '', date_from: '', date_to: '',
   lead_type: '', company_name: '', phone_number: '', email: '', industry_type: '',
 }
 
@@ -52,6 +53,7 @@ function hexBadge(hex: string): { bg: string; text: string; border: string } {
 
 function countActive(f: Filters): number {
   return [
+    !!f.lead_id,
     f.lead_status.length > 0,
     !!f.assigned_to,
     !!f.date_from || !!f.date_to,
@@ -404,9 +406,30 @@ export function LeadSearchFilters({ open, filters, onApply, onClose, statuses, a
         </div>
 
         {/* ── Scrollable body ─────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
-          {/* ── 1. Status ──────────────────────────────────────────────────────── */}
+          {/* ── 1. Lead ID ─────────────────────────────────────────────────────── */}
+          <div>
+            <SectionHeader
+              icon={<Hash size={12} className="text-indigo-500" />}
+              title="Lead ID"
+              count={draft.lead_id ? 1 : 0}
+            />
+            <div className="relative">
+              <Hash size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={draft.lead_id}
+                onChange={e => set('lead_id', e.target.value.replace(/\D/g, ''))}
+                placeholder="Search by lead ID…"
+                className="w-full h-9 pl-9 pr-3 rounded-lg border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100" />
+
+          {/* ── 2. Status ──────────────────────────────────────────────────────── */}
           <div>
             <SectionHeader
               icon={<Tag size={12} className="text-indigo-500" />}
@@ -420,10 +443,9 @@ export function LeadSearchFilters({ open, filters, onApply, onClose, statuses, a
             />
           </div>
 
-          {/* ── Divider ──────────────────────────────────────────────────────── */}
           <div className="border-t border-slate-100" />
 
-          {/* ── 2. Assignment ────────────────────────────────────────────────── */}
+          {/* ── 3. Assignment ────────────────────────────────────────────────── */}
           <div>
             <SectionHeader
               icon={<User size={12} className="text-indigo-500" />}

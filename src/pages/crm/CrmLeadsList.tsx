@@ -33,6 +33,7 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 function parseFiltersFromUrl(sp: URLSearchParams): Filters {
   return {
+    lead_id:       sp.get('lead_id')       || '',
     lead_status:   sp.getAll('status'),
     assigned_to:   sp.get('agent_id')      || '',
     date_from:     sp.get('date_from')     || '',
@@ -47,6 +48,7 @@ function parseFiltersFromUrl(sp: URLSearchParams): Filters {
 
 function filtersToSearchParams(f: Filters): URLSearchParams {
   const sp = new URLSearchParams()
+  if (f.lead_id)       sp.set('lead_id',        f.lead_id)
   f.lead_status.forEach(s => sp.append('status', s))
   if (f.assigned_to)   sp.set('agent_id',      f.assigned_to)
   if (f.date_from)     sp.set('date_from',      f.date_from)
@@ -350,6 +352,7 @@ export function CrmLeadsList() {
 
   const buildParams = (): CrmSearchParams => ({
     search:        search || undefined,
+    lead_id:       appliedFilters.lead_id || undefined,
     lead_status:   appliedFilters.lead_status.length ? appliedFilters.lead_status : undefined,
     assigned_to:   appliedFilters.assigned_to ? [Number(appliedFilters.assigned_to)] : undefined,
     date_from:     appliedFilters.date_from || undefined,
@@ -463,6 +466,7 @@ export function CrmLeadsList() {
   // ── Active filter count ───────────────────────────────────────────────────────
 
   const activeFilterCount = [
+    !!appliedFilters.lead_id,
     appliedFilters.lead_status.length > 0,
     !!appliedFilters.assigned_to,
     !!appliedFilters.date_from,
@@ -480,6 +484,14 @@ export function CrmLeadsList() {
 
   const filterChips = useMemo<Chip[]>(() => {
     const chips: Chip[] = []
+
+    if (appliedFilters.lead_id) {
+      chips.push({
+        key:      'lead_id',
+        label:    `Lead ID: ${appliedFilters.lead_id}`,
+        onRemove: () => removeChip({ lead_id: '' }),
+      })
+    }
 
     appliedFilters.lead_status.forEach(slug => {
       const s = statusMap[slug] as (typeof statuses[number] & Record<string, unknown>) | undefined
