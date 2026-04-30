@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   X, RotateCcw, Check, User, Calendar, Building2,
-  Phone, Mail, Tag, ChevronDown, ChevronRight, Search, SlidersHorizontal,
+  Phone, Mail, Tag, ChevronDown, Search, SlidersHorizontal,
 } from 'lucide-react'
 import type { LeadStatus } from '../../types/crm.types'
 import { cn } from '../../utils/cn'
@@ -63,26 +63,6 @@ function countActive(f: Filters): number {
   ].filter(Boolean).length
 }
 
-// ── Status grouping ──────────────────────────────────────────────────────────
-
-const STATUS_GROUPS: { key: string; label: string; slugs: string[] }[] = [
-  { key: 'new_initial',  label: 'New / Initial',  slugs: ['new_lead', 'application_acknowledgement', 'loc', 'app_out'] },
-  { key: 'documents',    label: 'Documents',       slugs: ['missing_docs/info', 'docs_in', 'docs-requested', 'docs-received', 'needs-more-docs', 'documents_acknowledgment'] },
-  { key: 'underwriting', label: 'Underwriting',    slugs: ['submitted', 'submitted-to-underwriting', 'in-underwriting', 'pre-qualified', 'conditionally-approved', 'submitted_to_non-mca', 'approved'] },
-  { key: 'contracts',    label: 'Contracts',       slugs: ['contract-sent', 'contract-signed', 'contract_in', 'contract_out'] },
-  { key: 'final',        label: 'Final Outcome',   slugs: ['funded', 'declined', 'not-interested', 'dead', 'merchant_declined_offer', 'in-default'] },
-  { key: 'followup',     label: 'Follow-Up',       slugs: ['contacted', 'callback-scheduled', 'revisit', 'renewal', 'renewal-eligible', 'renewal-in-progress'] },
-]
-
-const ALL_KNOWN_SLUGS = new Set(STATUS_GROUPS.flatMap(g => g.slugs))
-
-const QUICK_FILTERS: { label: string; slugs: string[] }[] = [
-  { label: 'New',       slugs: ['new_lead'] },
-  { label: 'Submitted', slugs: ['submitted', 'submitted-to-underwriting', 'submitted_to_non-mca'] },
-  { label: 'Approved',  slugs: ['approved', 'conditionally-approved', 'pre-qualified'] },
-  { label: 'Funded',    slugs: ['funded'] },
-]
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function SectionHeader({ icon, title, count }: {
@@ -111,116 +91,143 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Selected status chips
-function StatusChips({ selected, statuses, onRemove, onClearAll }: {
-  selected: string[]
+// Searchable multi-select status dropdown
+function StatusSelect({ statuses, value, onChange }: {
   statuses: LeadStatus[]
-  onRemove: (slug: string) => void
-  onClearAll: () => void
+  value: string[]
+  onChange: (v: string[]) => void
 }) {
-  if (selected.length === 0) return null
-  const map = new Map(statuses.map(s => [s.lead_title_url, s]))
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 mb-3">
-      {selected.map(slug => {
-        const s = map.get(slug)
-        const raw = s as unknown as Record<string, unknown> | undefined
-        const colorHex = raw ? (raw.color_code ?? raw.color) as string | undefined : undefined
-        const pal = colorHex ? hexBadge(colorHex) : null
-        return (
-          <span
-            key={slug}
-            className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2.5 py-1 border"
-            style={pal
-              ? { background: pal.bg, color: pal.text, borderColor: pal.border }
-              : { background: '#EEF2FF', color: '#4F46E5', borderColor: '#C7D2FE' }}
-          >
-            {s?.lead_title ?? slug}
-            <button
-              type="button"
-              onClick={() => onRemove(slug)}
-              className="ml-0.5 hover:opacity-70 transition-opacity"
-            >
-              <X size={10} />
-            </button>
-          </span>
-        )
-      })}
-      <button
-        type="button"
-        onClick={onClearAll}
-        className="text-[11px] font-medium text-slate-400 hover:text-red-500 transition-colors ml-1"
-      >
-        Clear all
-      </button>
-    </div>
-  )
-}
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
 
-// Collapsible status group accordion
-function StatusGroupAccordion({ label, statuses, selectedSlugs, expanded, onToggleExpand, onToggleStatus }: {
-  label: string
-  statuses: LeadStatus[]
-  selectedSlugs: Set<string>
-  expanded: boolean
-  onToggleExpand: () => void
-  onToggleStatus: (slug: string) => void
-}) {
-  const count = statuses.filter(s => selectedSlugs.has(s.lead_title_url)).length
+  const filtered = statuses.filter(s =>
+    s.lead_title.toLowerCase().includes(query.toLowerCase())
+  )
+
+  const toggle = (slug: string) => {
+    onChange(
+      value.includes(slug)
+        ? value.filter(s => s !== slug)
+        : [...value, slug]
+    )
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const selectedNames = value
+    .map(slug => statuses.find(s => s.lead_title_url === slug)?.lead_title)
+    .filter(Boolean)
+
   return (
-    <div className="border border-slate-100 rounded-lg overflow-hidden">
+    <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={onToggleExpand}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50/60 hover:bg-slate-100/60 transition-colors text-left"
+        onClick={() => { setOpen(o => !o); setQuery('') }}
+        className={cn(
+          'w-full flex items-center gap-2 min-h-[36px] px-3 py-1.5 rounded-lg border text-sm text-left transition-colors',
+          open
+            ? 'border-indigo-400 ring-2 ring-indigo-100 bg-white'
+            : 'border-slate-200 bg-white hover:border-slate-300',
+        )}
       >
-        <ChevronRight
-          size={12}
-          className={cn('text-slate-400 transition-transform duration-200', expanded && 'rotate-90')}
-        />
-        <span className="text-[11px] font-semibold text-slate-600 flex-1">{label}</span>
-        {count > 0 && (
-          <span className="w-4.5 h-4.5 min-w-[18px] rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-            {count}
+        <Tag size={13} className="text-slate-400 flex-shrink-0" />
+        <span className={cn('flex-1 truncate', value.length > 0 ? 'text-slate-800' : 'text-slate-400')}>
+          {value.length === 0
+            ? 'All statuses'
+            : value.length === 1
+              ? selectedNames[0]
+              : `${selectedNames[0]} +${value.length - 1} more`}
+        </span>
+        {value.length > 0 && (
+          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center leading-none flex-shrink-0">
+            {value.length}
           </span>
         )}
+        <ChevronDown size={13} className={cn('text-slate-400 transition-transform flex-shrink-0', open && 'rotate-180')} />
       </button>
-      {expanded && (
-        <div className="px-1 py-1">
-          {statuses.map(s => {
-            const active = selectedSlugs.has(s.lead_title_url)
-            const raw = s as unknown as Record<string, unknown>
-            const colorHex = (raw.color_code ?? raw.color) as string | undefined
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onToggleStatus(s.lead_title_url)}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-slate-50 transition-colors text-left group"
-              >
-                <div className={cn(
-                  'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all',
-                  active
-                    ? 'bg-indigo-600 border-indigo-600'
-                    : 'border-slate-300 group-hover:border-slate-400',
-                )}>
-                  {active && <Check size={10} className="text-white" />}
-                </div>
-                {colorHex && (
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: colorHex }}
-                  />
-                )}
-                <span className={cn(
-                  'text-xs flex-1 truncate',
-                  active ? 'text-slate-800 font-medium' : 'text-slate-600',
-                )}>
-                  {s.lead_title}
-                </span>
-              </button>
-            )
-          })}
+
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          {/* Search */}
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search statuses…"
+                className="w-full h-7 pl-7 pr-2 text-xs rounded-md border border-slate-200 focus:outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+          {/* Select All / Clear All */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100">
+            <button
+              type="button"
+              onClick={() => onChange(statuses.map(s => s.lead_title_url))}
+              className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-[11px] font-medium text-slate-400 hover:text-red-500"
+            >
+              Clear All
+            </button>
+          </div>
+          {/* Options */}
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filtered.map(s => {
+              const active = value.includes(s.lead_title_url)
+              const raw = s as unknown as Record<string, unknown>
+              const colorHex = (raw.color_code ?? raw.color) as string | undefined
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggle(s.lead_title_url)}
+                  className={cn(
+                    'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
+                    active ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                  )}
+                >
+                  <div className={cn(
+                    'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all',
+                    active
+                      ? 'bg-indigo-600 border-indigo-600'
+                      : 'border-slate-300',
+                  )}>
+                    {active && <Check size={10} className="text-white" />}
+                  </div>
+                  {colorHex && (
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: colorHex }}
+                    />
+                  )}
+                  <span className={cn(
+                    'text-xs flex-1 truncate',
+                    active ? 'text-indigo-700 font-medium' : 'text-slate-700',
+                  )}>
+                    {s.lead_title}
+                  </span>
+                </button>
+              )
+            })}
+            {filtered.length === 0 && (
+              <p className="text-xs text-slate-400 text-center py-3">No statuses match</p>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -331,76 +338,14 @@ function AgentSelect({ agents, value, onChange }: {
 export function LeadSearchFilters({ open, filters, onApply, onClose, statuses, agents }: Props) {
   const [draft, setDraft] = useState<Filters>({ ...filters })
 
-  const [statusSearch, setStatusSearch] = useState('')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['new_initial']))
-
   // Re-init draft whenever the drawer opens (so it reflects current applied state)
   useEffect(() => {
-    if (open) {
-      setDraft({ ...filters })
-      setStatusSearch('')
-    }
+    if (open) setDraft({ ...filters })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const set    = (key: keyof Filters, value: string) => setDraft(d => ({ ...d, [key]: value }))
   const setArr = (key: keyof Filters, value: string[]) => setDraft(d => ({ ...d, [key]: value }))
-
-  const toggleStatus = (slug: string) => {
-    const next = draft.lead_status.includes(slug)
-      ? draft.lead_status.filter(s => s !== slug)
-      : [...draft.lead_status, slug]
-    setArr('lead_status', next)
-  }
-
-  // Build status groups from available statuses
-  const statusMap = useMemo(() => new Map(statuses.map(s => [s.lead_title_url, s])), [statuses])
-
-  const filteredGroups = useMemo(() => {
-    const q = statusSearch.toLowerCase().trim()
-    const groups: { key: string; label: string; items: LeadStatus[] }[] = []
-
-    for (const g of STATUS_GROUPS) {
-      const items = g.slugs
-        .map(slug => statusMap.get(slug))
-        .filter((s): s is LeadStatus => !!s)
-        .filter(s => !q || s.lead_title.toLowerCase().includes(q))
-      if (items.length > 0) groups.push({ key: g.key, label: g.label, items })
-    }
-
-    // "Other" group: statuses not in any defined group
-    const otherItems = statuses
-      .filter(s => !ALL_KNOWN_SLUGS.has(s.lead_title_url))
-      .filter(s => !q || s.lead_title.toLowerCase().includes(q))
-    if (otherItems.length > 0) groups.push({ key: 'other', label: 'Other', items: otherItems })
-
-    return groups
-  }, [statuses, statusMap, statusSearch])
-
-  const selectedSet = useMemo(() => new Set(draft.lead_status), [draft.lead_status])
-
-  const handleQuickFilter = (slugs: string[]) => {
-    const allSelected = slugs.every(s => draft.lead_status.includes(s))
-    if (allSelected) {
-      // Deselect all slugs in this quick filter
-      setArr('lead_status', draft.lead_status.filter(s => !slugs.includes(s)))
-    } else {
-      // Select all slugs (add missing ones)
-      const combined = new Set([...draft.lead_status, ...slugs])
-      setArr('lead_status', Array.from(combined))
-    }
-  }
-
-  const toggleGroupExpanded = (key: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  const isGroupExpanded = (key: string) => !!statusSearch.trim() || expandedGroups.has(key)
 
   const apply = () => { onApply(draft); onClose() }
 
@@ -468,80 +413,11 @@ export function LeadSearchFilters({ open, filters, onApply, onClose, statuses, a
               title="Status"
               count={draft.lead_status.length}
             />
-
-            {/* Selected chips */}
-            <StatusChips
-              selected={draft.lead_status}
+            <StatusSelect
               statuses={statuses}
-              onRemove={slug => toggleStatus(slug)}
-              onClearAll={() => setArr('lead_status', [])}
+              value={draft.lead_status}
+              onChange={v => setArr('lead_status', v)}
             />
-
-            {/* Search input */}
-            <div className="relative mb-3">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                value={statusSearch}
-                onChange={e => setStatusSearch(e.target.value)}
-                placeholder="Search statuses…"
-                className="w-full h-8 pl-9 pr-8 rounded-lg border border-slate-200 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition"
-              />
-              {statusSearch && (
-                <button
-                  type="button"
-                  onClick={() => setStatusSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Quick filter buttons */}
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {QUICK_FILTERS.map(qf => {
-                const allSelected = qf.slugs.every(s => draft.lead_status.includes(s))
-                const someSelected = !allSelected && qf.slugs.some(s => draft.lead_status.includes(s))
-                return (
-                  <button
-                    key={qf.label}
-                    type="button"
-                    onClick={() => handleQuickFilter(qf.slugs)}
-                    className={cn(
-                      'text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-all',
-                      allSelected
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : someSelected
-                          ? 'bg-indigo-50 text-indigo-600 border-indigo-300'
-                          : 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600',
-                    )}
-                  >
-                    {qf.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Grouped accordions */}
-            <div className="space-y-1.5">
-              {filteredGroups.map(g => (
-                <StatusGroupAccordion
-                  key={g.key}
-                  label={g.label}
-                  statuses={g.items}
-                  selectedSlugs={selectedSet}
-                  expanded={isGroupExpanded(g.key)}
-                  onToggleExpand={() => toggleGroupExpanded(g.key)}
-                  onToggleStatus={toggleStatus}
-                />
-              ))}
-              {filteredGroups.length === 0 && (
-                <p className="text-xs text-slate-400 italic text-center py-4">
-                  No statuses match &ldquo;{statusSearch}&rdquo;
-                </p>
-              )}
-            </div>
           </div>
 
           {/* ── Divider ──────────────────────────────────────────────────────── */}
