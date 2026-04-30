@@ -792,7 +792,7 @@ export function CrmLeadsList() {
                       </td>
 
                       {/* Company */}
-                      <td className="text-slate-500 text-xs">
+                      <td className="text-slate-500 text-xs font-bold">
                         {lead.company_name ? String(lead.company_name) : '—'}
                       </td>
 
