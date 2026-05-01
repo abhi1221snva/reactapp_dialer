@@ -140,4 +140,74 @@ export const registerService = {
         retry_count?: number
       }
     }>(`/register/status/${progressId}`),
+
+  // ─── V3 Signup endpoints (streamlined modal flow) ────────────────────────
+
+  /** V3 Step 1 — Email + password + auto-sends email OTP */
+  signupInit: (data: { email: string; password: string; password_confirmation: string }) =>
+    api.post<{ status: boolean; message: string; data: { registration_id: string } }>(
+      '/signup/init', data
+    ),
+
+  /** V3 Step 2 — Verify email OTP */
+  signupVerifyEmail: (data: { registration_id: string; email: string; otp: string }) =>
+    api.post<{ status: boolean; message: string; data: { email_verified: boolean } }>(
+      '/signup/verify-email-otp', data
+    ),
+
+  /** V3 Step 3 — Profile completion + auto-sends phone OTP */
+  signupCompleteProfile: (data: {
+    registration_id: string
+    first_name: string
+    last_name: string
+    country_code: string
+    phone: string
+  }) => api.post<{ status: boolean; message: string; data: { registration_id: string } }>(
+    '/signup/complete-profile', data
+  ),
+
+  /** V3 Step 4 — Verify phone OTP + complete registration */
+  signupVerifyPhone: (data: { registration_id: string; phone: string; otp: string }) =>
+    api.post<{
+      status: boolean; message: string
+      data: {
+        path: 'fast' | 'slow'
+        user_id?: number
+        client_id?: number
+        token?: string
+        user?: Record<string, unknown>
+        progress_id?: number
+        ready: boolean
+      }
+    }>('/signup/verify-phone-otp', data),
+
+  /** V3 Unified resend OTP */
+  signupResendOtp: (data: { registration_id: string; type: 'email' | 'phone' }) =>
+    api.post<{ status: boolean; message: string }>('/signup/resend-otp', data),
+
+  /** V3 Google OAuth signup */
+  signupGoogle: (credential: string, business_name: string) =>
+    api.post<{ status: boolean; message: string; data: { registration_id: string; name: string; email: string } }>(
+      '/signup/google', { credential, business_name }
+    ),
+
+  /** V3 Email availability check */
+  signupCheckEmail: (email: string) =>
+    api.post<{ status: boolean; message: string }>('/signup/check-email', { email }),
+
+  /** V3 Provisioning status polling */
+  signupGetStatus: (progressId: number | string) =>
+    api.get<{
+      status: boolean
+      data: {
+        stage: string
+        progress_pct: number
+        path: string
+        ready: boolean
+        failed: boolean
+        stage_label: string
+        client_id?: number
+        user_id?: number
+      }
+    }>(`/signup/status/${progressId}`),
 }

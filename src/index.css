@@ -492,6 +492,32 @@
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
     background: rgba(99, 102, 241, 0.05);
   }
+  .auth-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.60);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: fadeIn 0.2s ease-out;
+  }
+  .auth-modal {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    border-radius: 22px;
+    padding: 2rem;
+    background: rgba(8, 10, 32, 0.95);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.65), 0 0 100px rgba(99, 102, 241, 0.08);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    animation: slideUp 0.3s ease-out;
+  }
 }
 
 /* =============================================================

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  User as UserIcon, Mail, Lock, Phone, Building2, Eye, EyeOff,
-  CheckCircle2, ArrowLeft, RefreshCw, Shield, ArrowRight,
+  User as UserIcon, Mail, Lock, Phone, Eye, EyeOff,
+  CheckCircle2, ArrowLeft, RefreshCw, Shield, ArrowRight, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Swal from 'sweetalert2'
@@ -10,7 +10,23 @@ import { registerService } from '../../services/register.service'
 import { useAuthStore } from '../../stores/auth.store'
 import type { User } from '../../types'
 
-// ─── Password policy helpers ────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+type SignupStep = 'credentials' | 'email-otp' | 'profile' | 'phone-otp' | 'provisioning' | 'success'
+
+interface CredentialForm {
+  email: string
+  password: string
+  confirm_password: string
+}
+
+interface ProfileForm {
+  first_name: string
+  last_name: string
+  country_code: string
+  phone: string
+}
+
+// ─── Password policy ──────────────────────────────────────────────────────────
 const PASSWORD_RULES = [
   { label: '10+ characters', test: (pw: string) => pw.length >= 10 },
   { label: 'Uppercase',      test: (pw: string) => /[A-Z]/.test(pw) },
@@ -48,46 +64,7 @@ function PasswordStrength({ password }: { password: string }) {
   )
 }
 
-// ─── Google Identity Services type declaration ────────────────────────────────
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string
-            callback: (response: { credential: string }) => void
-            auto_select?: boolean
-          }) => void
-          renderButton: (element: HTMLElement, config: {
-            theme?: string
-            size?: string
-            type?: string
-            width?: number
-            text?: string
-            shape?: string
-          }) => void
-          prompt: () => void
-        }
-      }
-    }
-  }
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-type Step = 'details' | 'google-business' | 'email-verify' | 'phone-verify' | 'provisioning' | 'success'
-
-interface FormData {
-  name: string
-  business_name: string
-  password: string
-  confirm_password: string
-  email: string
-  country_code: string
-  phone: string
-}
-
-// ─── Country codes ───────────────────────────────────────────────────────────
+// ─── Country codes ────────────────────────────────────────────────────────────
 const COUNTRY_CODES = [
   { value: '+1',   label: '+1 US/CA' },
   { value: '+44',  label: '+44 UK' },
@@ -132,7 +109,7 @@ const COUNTRY_CODES = [
   { value: '+64',  label: '+64 NZ' },
 ]
 
-// ─── Spinner ──────────────────────────────────────────────────────────────────
+// ─── Shared components ────────────────────────────────────────────────────────
 function Spinner() {
   return (
     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -142,68 +119,6 @@ function Spinner() {
   )
 }
 
-// ─── Step progress indicator ─────────────────────────────────────────────────
-function StepIndicator({ current, isGoogleFlow }: { current: Step; isGoogleFlow: boolean }) {
-  const steps = isGoogleFlow
-    ? [
-        { key: 'google-business', label: 'Business' },
-        { key: 'phone-verify',    label: 'Phone' },
-      ]
-    : [
-        { key: 'details',       label: 'Account' },
-        { key: 'email-verify',  label: 'Email' },
-        { key: 'phone-verify',  label: 'Phone' },
-      ]
-
-  const currentIdx = steps.findIndex(s => s.key === current)
-
-  return (
-    <div className="flex items-center gap-1 mb-5">
-      {steps.map((s, i) => {
-        const isDone = i < currentIdx
-        const isActive = i === currentIdx
-        return (
-          <div key={s.key} className="flex items-center flex-1">
-            <div className="flex flex-col items-center flex-1">
-              <div className="flex items-center w-full gap-1">
-                {i > 0 && (
-                  <div
-                    className="flex-1 h-0.5 rounded-full transition-colors"
-                    style={{ background: isDone || isActive ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
-                  />
-                )}
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-all"
-                  style={{
-                    background: isDone ? '#6366f1' : isActive ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)',
-                    border: isActive ? '2px solid #6366f1' : '2px solid transparent',
-                    color: isDone ? '#fff' : isActive ? '#a5b4fc' : '#475569',
-                  }}
-                >
-                  {isDone ? '\u2713' : i + 1}
-                </div>
-                {i < steps.length - 1 && (
-                  <div
-                    className="flex-1 h-0.5 rounded-full transition-colors"
-                    style={{ background: isDone ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
-                  />
-                )}
-              </div>
-              <span
-                className="text-[10px] mt-1 font-medium transition-colors"
-                style={{ color: isDone ? '#818cf8' : isActive ? '#a5b4fc' : '#475569' }}
-              >
-                {s.label}
-              </span>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─── OTP digit input ──────────────────────────────────────────────────────────
 function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
@@ -254,7 +169,6 @@ function OtpInput({ value, onChange }: { value: string; onChange: (v: string) =>
   )
 }
 
-// ─── Countdown ────────────────────────────────────────────────────────────────
 function useCountdown(initial = 60) {
   const [seconds, setSeconds] = useState(initial)
   const [active, setActive] = useState(false)
@@ -270,7 +184,89 @@ function useCountdown(initial = 60) {
   return { seconds, canResend: !active || seconds <= 0, start }
 }
 
-// ─── Email-blocked SweetAlert helper ──────────────────────────────────────────
+// ─── Step indicator ───────────────────────────────────────────────────────────
+function StepIndicator({ current, isGoogleFlow }: { current: SignupStep; isGoogleFlow: boolean }) {
+  const steps = isGoogleFlow
+    ? [
+        { key: 'profile',     label: 'Profile' },
+        { key: 'phone-otp',   label: 'Phone' },
+      ]
+    : [
+        { key: 'email-otp',   label: 'Email' },
+        { key: 'profile',     label: 'Profile' },
+        { key: 'phone-otp',   label: 'Phone' },
+      ]
+
+  const currentIdx = steps.findIndex(s => s.key === current)
+
+  return (
+    <div className="flex items-center gap-1 mb-5">
+      {steps.map((s, i) => {
+        const isDone = i < currentIdx
+        const isActive = i === currentIdx
+        return (
+          <div key={s.key} className="flex items-center flex-1">
+            <div className="flex flex-col items-center flex-1">
+              <div className="flex items-center w-full gap-1">
+                {i > 0 && (
+                  <div
+                    className="flex-1 h-0.5 rounded-full transition-colors"
+                    style={{ background: isDone || isActive ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
+                  />
+                )}
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-all"
+                  style={{
+                    background: isDone ? '#6366f1' : isActive ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)',
+                    border: isActive ? '2px solid #6366f1' : '2px solid transparent',
+                    color: isDone ? '#fff' : isActive ? '#a5b4fc' : '#475569',
+                  }}
+                >
+                  {isDone ? '\u2713' : i + 1}
+                </div>
+                {i < steps.length - 1 && (
+                  <div
+                    className="flex-1 h-0.5 rounded-full transition-colors"
+                    style={{ background: isDone ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
+                  />
+                )}
+              </div>
+              <span
+                className="text-[10px] mt-1 font-medium transition-colors"
+                style={{ color: isDone ? '#818cf8' : isActive ? '#a5b4fc' : '#475569' }}
+              >
+                {s.label}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Google Identity Services declaration ─────────────────────────────────────
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string
+            callback: (response: { credential: string }) => void
+            auto_select?: boolean
+          }) => void
+          renderButton: (element: HTMLElement, config: {
+            theme?: string; size?: string; type?: string; width?: number; text?: string; shape?: string
+          }) => void
+          prompt: () => void
+        }
+      }
+    }
+  }
+}
+
+// ─── Email-blocked alert helper ───────────────────────────────────────────────
 async function showEmailBlockedAlert(
   code: string,
   navigateFn: ReturnType<typeof useNavigate>,
@@ -309,44 +305,64 @@ async function showEmailBlockedAlert(
   }
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
 export function Register() {
   const navigate = useNavigate()
-  const [step, setStep] = useState<Step>('details')
+  const { setAuth } = useAuthStore()
+
+  // ── Step state machine ──────────────────────────────────────────────────
+  const [step, setStep] = useState<SignupStep>('credentials')
+  const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const [showPass, setShowPass] = useState(false)
-  const [showConfirmPass, setShowConfirmPass] = useState(false)
-
+  // ── Google OAuth ────────────────────────────────────────────────────────
   const [googleFlow, setGoogleFlow] = useState(false)
   const [pendingCredential, setPendingCredential] = useState('')
   const googleBtnRef = useRef<HTMLDivElement>(null)
 
+  // ── Registration tracking ──────────────────────────────────────────────
   const [registrationId, setRegistrationId] = useState('')
-  const [emailOtpSent, setEmailOtpSent] = useState(false)
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false)
+  const [progressId, setProgressId] = useState<string | null>(null)
+
+  // ── Credential form ─────────────────────────────────────────────────────
+  const [showPass, setShowPass] = useState(false)
+  const [showConfirmPass, setShowConfirmPass] = useState(false)
+  const [creds, setCreds] = useState<CredentialForm>({
+    email: '',
+    password: '',
+    confirm_password: '',
+  })
+
+  // ── OTP state ──────────────────────────────────────────────────────────
   const [emailOtp, setEmailOtp] = useState('')
   const [phoneOtp, setPhoneOtp] = useState('')
-  // Snapshot of the exact payload sent during Send OTP — reused verbatim in Verify OTP
-  const [sentOtpPayload, setSentOtpPayload] = useState<{ registration_id: string; country_code: string; phone: string } | null>(null)
-
   const emailTimer = useCountdown(60)
   const phoneTimer = useCountdown(60)
 
-  const [form, setForm] = useState<FormData>({
-    name: '',
-    business_name: '',
-    password: '',
-    confirm_password: '',
-    email: '',
+  // ── Profile form ───────────────────────────────────────────────────────
+  const [profile, setProfile] = useState<ProfileForm>({
+    first_name: '',
+    last_name: '',
     country_code: '+1',
     phone: '',
   })
 
-  const set = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(f => ({ ...f, [k]: e.target.value }))
+  // ── Provisioning state ─────────────────────────────────────────────────
+  const [provStage, setProvStage] = useState('queued')
+  const [provPct, setProvPct] = useState(5)
+  const [provLabel, setProvLabel] = useState('Waiting in queue...')
+  const [provFailed, setProvFailed] = useState(false)
 
-  // ── GSI init ─────────────────────────────────────────────────────────────
+  // ── Body scroll lock for modal ─────────────────────────────────────────
+  useEffect(() => {
+    if (showModal) document.body.style.overflow = 'hidden'
+    else document.body.style.overflow = ''
+    return () => { document.body.style.overflow = '' }
+  }, [showModal])
+
+  // ── GSI init ───────────────────────────────────────────────────────────
   const initGoogle = useCallback(() => {
     if (!window.google?.accounts?.id || !googleBtnRef.current) return
     window.google.accounts.id.initialize({
@@ -360,17 +376,15 @@ export function Register() {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
           decodedName = payload.name ?? payload.given_name ?? ''
           decodedEmail = payload.email ?? ''
-        } catch { /* ignore decode errors */ }
+        } catch { /* ignore */ }
 
-        // FAIL-SAFE: If email couldn't be decoded, stop immediately
         if (!decodedEmail) {
           toast.error('Could not read email from Google account. Please try again.')
           return
         }
 
-        // Check email existence BEFORE proceeding. On ANY failure, STOP.
         try {
-          await registerService.checkEmail(decodedEmail)
+          await registerService.signupCheckEmail(decodedEmail)
         } catch (err: unknown) {
           const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
           if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
@@ -378,12 +392,40 @@ export function Register() {
           } else {
             toast.error('Unable to verify your email. Please try again.')
           }
-          return // Always stop on any error — never proceed to form
+          return
         }
 
-        setForm(f => ({ ...f, name: decodedName, email: decodedEmail }))
-        setGoogleFlow(true)
-        setStep('google-business')
+        // Pre-fill profile name from Google
+        const nameParts = decodedName.split(' ')
+        setProfile(f => ({
+          ...f,
+          first_name: nameParts[0] || '',
+          last_name: nameParts.slice(1).join(' ') || '',
+        }))
+        setCreds(f => ({ ...f, email: decodedEmail }))
+
+        // Call Google signup endpoint
+        setLoading(true)
+        try {
+          const res = await registerService.signupGoogle(response.credential, decodedName + "'s Business")
+          const data = res.data?.data
+          setRegistrationId(data?.registration_id ?? '')
+          setCreds(f => ({ ...f, email: data?.email ?? decodedEmail }))
+          setGoogleFlow(true)
+          setStep('profile')
+          setShowModal(true)
+          toast.success('Google account verified!')
+        } catch (err: unknown) {
+          const axiosErr = err as { response?: { data?: { code?: string; message?: string } } }
+          const code = axiosErr?.response?.data?.code
+          if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
+            await showEmailBlockedAlert(code, navigate)
+          } else {
+            toast.error(axiosErr?.response?.data?.message || 'Google signup failed. Please try again.')
+          }
+        } finally {
+          setLoading(false)
+        }
       },
     })
     window.google.accounts.id.renderButton(googleBtnRef.current, {
@@ -404,72 +446,29 @@ export function Register() {
     }
   }, [initGoogle])
 
-  // ── Step 1 — Account details ──────────────────────────────────────────────
-  const handleDetails = async (e: React.FormEvent) => {
+  // ════════════════════════════════════════════════════════════════════════
+  // STEP HANDLERS
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── Step 1: Submit credentials ──────────────────────────────────────────
+  const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name.trim()) { toast.error('Full name is required'); return }
-    if (!form.business_name.trim()) { toast.error('Business name is required'); return }
-    const pwErrors = validatePassword(form.password)
+    if (!creds.email.trim()) { toast.error('Email is required'); return }
+    const pwErrors = validatePassword(creds.password)
     if (pwErrors.length > 0) { toast.error(`Password needs: ${pwErrors.join(', ')}`); return }
-    if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return }
+    if (creds.password !== creds.confirm_password) { toast.error('Passwords do not match'); return }
 
     setLoading(true)
     try {
-      const res = await registerService.registerInit({
-        name: form.name,
-        business_name: form.business_name,
-        password: form.password,
-        password_confirmation: form.confirm_password,
+      const res = await registerService.signupInit({
+        email: creds.email,
+        password: creds.password,
+        password_confirmation: creds.confirm_password,
       })
       setRegistrationId(res.data?.data?.registration_id ?? '')
-      toast.success('Account details saved!')
-      setStep('email-verify')
-    } catch {
-      // handled by interceptor
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ── Google business step ──────────────────────────────────────────────────
-  const handleGoogleBusiness = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.business_name.trim()) { toast.error('Business name is required'); return }
-
-    setLoading(true)
-    try {
-      const res = await registerService.googleRegister(pendingCredential, form.business_name)
-      const data = res.data?.data
-      setRegistrationId(data?.registration_id ?? '')
-      setForm(f => ({
-        ...f,
-        name:  data?.name  ?? f.name,
-        email: data?.email ?? f.email,
-      }))
-      toast.success('Account details saved!')
-      setStep('phone-verify')
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { code?: string; message?: string } } }
-      const code = axiosErr?.response?.data?.code
-      const msg = axiosErr?.response?.data?.message
-      if (code === 'EMAIL_ALREADY_REGISTERED' || code === 'ACCOUNT_DEACTIVATED' || code === 'ACCOUNT_INACTIVE') {
-        await showEmailBlockedAlert(code, navigate)
-      } else {
-        toast.error(msg || 'Google registration failed. Please try again.')
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ── Send email OTP ────────────────────────────────────────────────────────
-  const handleSendEmailOtp = async () => {
-    if (!form.email.trim()) { toast.error('Email address is required'); return }
-    setLoading(true)
-    try {
-      await registerService.sendEmailOtp(registrationId, form.email)
-      setEmailOtpSent(true)
       emailTimer.start()
+      setStep('email-otp')
+      setShowModal(true)
       toast.success('Verification code sent to your email!')
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
@@ -481,15 +480,19 @@ export function Register() {
     }
   }
 
-  // ── Verify email OTP ──────────────────────────────────────────────────────
+  // ── Step 2: Verify email OTP ────────────────────────────────────────────
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault()
     if (emailOtp.length < 6) { toast.error('Enter the 6-digit code'); return }
     setLoading(true)
     try {
-      await registerService.verifyEmailOtp(registrationId, form.email, emailOtp)
+      await registerService.signupVerifyEmail({
+        registration_id: registrationId,
+        email: creds.email,
+        otp: emailOtp,
+      })
       toast.success('Email verified!')
-      setStep('phone-verify')
+      setStep('profile')
     } catch {
       // handled by interceptor
     } finally {
@@ -500,64 +503,72 @@ export function Register() {
   const resendEmailOtp = async () => {
     if (!emailTimer.canResend) return
     try {
-      await registerService.sendEmailOtp(registrationId, form.email)
+      await registerService.signupResendOtp({
+        registration_id: registrationId,
+        type: 'email',
+      })
       setEmailOtp('')
       emailTimer.start()
       toast.success('Code resent!')
     } catch { /* handled */ }
   }
 
-  // ── Send phone OTP ────────────────────────────────────────────────────────
-  const handleSendPhoneOtp = async () => {
-    if (!form.phone.trim()) { toast.error('Phone number is required'); return }
-    if (!/^\d{7,15}$/.test(form.phone.trim())) {
+  // ── Step 3: Complete profile ────────────────────────────────────────────
+  const handleProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile.first_name.trim()) { toast.error('First name is required'); return }
+    if (!profile.last_name.trim()) { toast.error('Last name is required'); return }
+    if (!profile.phone.trim()) { toast.error('Phone number is required'); return }
+    if (!/^\d{7,15}$/.test(profile.phone.trim())) {
       toast.error('Phone number must be 7\u201315 digits (numbers only)')
       return
     }
+
     setLoading(true)
     try {
-      await registerService.sendPhoneOtp2(registrationId, form.country_code, form.phone)
-      setSentOtpPayload({ registration_id: registrationId, country_code: form.country_code, phone: form.phone })
-      setPhoneOtpSent(true)
+      await registerService.signupCompleteProfile({
+        registration_id: registrationId,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        country_code: profile.country_code,
+        phone: profile.phone,
+      })
       phoneTimer.start()
       toast.success('Verification SMS sent!')
+      setStep('phone-otp')
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
       if (code === 'PHONE_ALREADY_REGISTERED') {
         toast.error('An account with this phone number already exists.')
-        navigate('/login')
       }
     } finally {
       setLoading(false)
     }
   }
 
-  // ── Verify phone OTP ──────────────────────────────────────────────────────
-  const [progressId, setProgressId] = useState<string | null>(null)
-
-  const { setAuth } = useAuthStore()
-
+  // ── Step 4: Verify phone OTP ────────────────────────────────────────────
   const handleVerifyPhone = async (e: React.FormEvent) => {
     e.preventDefault()
     if (phoneOtp.length < 6) { toast.error('Enter the 6-digit code'); return }
     setLoading(true)
     try {
-      const snap = sentOtpPayload ?? { registration_id: registrationId, country_code: form.country_code, phone: form.phone }
-      const res = await registerService.verifyPhoneOtp(snap.registration_id, snap.country_code, snap.phone, phoneOtp)
+      const e164Phone = profile.country_code + profile.phone
+      const res = await registerService.signupVerifyPhone({
+        registration_id: registrationId,
+        phone: e164Phone,
+        otp: phoneOtp,
+      })
       const data = res.data?.data as Record<string, unknown> | undefined
 
       if (data?.path === 'slow' && data?.progress_id) {
-        // Slow path — show provisioning progress screen
         setProgressId(String(data.progress_id))
         setStep('provisioning')
       } else if (data?.token) {
-        // Fast path with auto-login token — log in immediately
         const userData = data.user as Record<string, unknown> | undefined
         const user: User = {
           ...(userData ?? {}),
-          name: form.name || String(userData?.first_name ?? '') + ' ' + String(userData?.last_name ?? ''),
+          name: profile.first_name + ' ' + profile.last_name,
           level: Number(userData?.level ?? 6),
-          companyName: form.business_name,
         } as User
         localStorage.setItem('auth_token', data.token as string)
         setAuth(data.token as string, user)
@@ -565,7 +576,6 @@ export function Register() {
         navigate('/dashboard')
         return
       } else {
-        // Fast path without token — show success screen
         setStep('success')
       }
     } catch {
@@ -578,26 +588,24 @@ export function Register() {
   const resendPhoneOtp = async () => {
     if (!phoneTimer.canResend) return
     try {
-      await registerService.sendPhoneOtp2(registrationId, form.country_code, form.phone)
+      await registerService.signupResendOtp({
+        registration_id: registrationId,
+        type: 'phone',
+      })
       setPhoneOtp('')
       phoneTimer.start()
       toast.success('Code resent!')
     } catch { /* handled */ }
   }
 
-  // ── Provisioning polling (slow path) ──────────────────────────────────────
-  const [provStage, setProvStage] = useState('queued')
-  const [provPct, setProvPct] = useState(5)
-  const [provLabel, setProvLabel] = useState('Waiting in queue...')
-  const [provFailed, setProvFailed] = useState(false)
-
+  // ── Provisioning polling ────────────────────────────────────────────────
   useEffect(() => {
     if (step !== 'provisioning' || !progressId) return
     let cancelled = false
 
     const poll = async () => {
       try {
-        const res = await registerService.getRegistrationStatus(progressId)
+        const res = await registerService.signupGetStatus(progressId)
         const d = res.data?.data
         if (cancelled) return
 
@@ -617,7 +625,7 @@ export function Register() {
         // Silently retry
       }
       if (!cancelled) {
-        setTimeout(poll, 2500) // Poll every 2.5 seconds
+        setTimeout(poll, 2500)
       }
     }
 
@@ -626,389 +634,347 @@ export function Register() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, progressId])
 
-  // ── Provisioning progress screen ───────────────────────────────────────
-  if (step === 'provisioning') {
-    return (
-      <div className="text-center space-y-5 animate-fadeIn">
-        {!provFailed ? (
-          <>
-            {/* Animated spinner */}
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
-              style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.22)' }}>
-              <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin" />
-            </div>
-
-            <h2 className="text-xl font-bold text-white">Setting up your account</h2>
-            <p className="text-sm text-slate-400">{provLabel}</p>
-
-            {/* Progress bar */}
-            <div className="w-full rounded-full h-2.5 overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <div
-                className="h-full rounded-full transition-all duration-700 ease-out"
-                style={{
-                  width: `${provPct}%`,
-                  background: 'linear-gradient(90deg, #6366f1, #818cf8)',
-                }}
-              />
-            </div>
-            <p className="text-xs text-slate-500">{provPct}% complete</p>
-
-            <p className="text-xs text-slate-500 leading-relaxed">
-              This usually takes about 30 seconds. Please don't close this page.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
-              style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.22)' }}>
-              <Shield className="w-7 h-7 text-red-400" />
-            </div>
-            <h2 className="text-xl font-bold text-white">Setup encountered an issue</h2>
-            <p className="text-sm text-slate-400 leading-relaxed">
-              We couldn't complete your account setup automatically. Our team has been notified
-              and will resolve this shortly. Please try logging in — if your account isn't ready yet,
-              contact support.
-            </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="auth-btn-primary mt-2"
-            >
-              Go to Login <ArrowRight size={16} />
-            </button>
-          </>
-        )}
-      </div>
-    )
+  // ── Modal close handler ─────────────────────────────────────────────────
+  const handleModalClose = () => {
+    if (step === 'provisioning') return // can't close during provisioning
+    if (step === 'success') {
+      navigate('/login')
+      return
+    }
+    // Reset to credentials
+    setShowModal(false)
+    setStep('credentials')
+    setEmailOtp('')
+    setPhoneOtp('')
+    setGoogleFlow(false)
+    setPendingCredential('')
   }
 
-  // ── Success screen ────────────────────────────────────────────────────────
-  if (step === 'success') {
-    return (
-      <div className="text-center space-y-4 animate-fadeIn">
-        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
-          style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.22)' }}>
-          <CheckCircle2 className="w-7 h-7 text-emerald-400" />
-        </div>
-        <h2 className="text-xl font-bold text-white">Account created!</h2>
-        <p className="text-sm text-slate-400 leading-relaxed">
-          Welcome to <span className="font-semibold text-slate-200">DialerCRM</span>.<br />
-          A welcome email has been sent to{' '}
-          <span className="font-semibold text-slate-200">{form.email}</span>.
-        </p>
-        <div className="rounded-xl p-3 text-left space-y-1.5"
-          style={{ background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.16)' }}>
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wide">Next steps</p>
-          <p className="text-sm text-slate-400">1. Log in with your email and password</p>
-          <p className="text-sm text-slate-400">2. Complete the onboarding wizard</p>
-          <p className="text-sm text-slate-400">3. Create your first agent</p>
-        </div>
-        <button
-          onClick={() => navigate('/login')}
-          className="auth-btn-primary mt-2"
-        >
-          Go to Login <ArrowRight size={16} />
-        </button>
-      </div>
-    )
-  }
+  // ════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ════════════════════════════════════════════════════════════════════════
 
   return (
     <div className="animate-fadeIn">
-      {/* Step progress indicator */}
-      {step !== 'details' && (
-        <StepIndicator current={step} isGoogleFlow={googleFlow} />
-      )}
-
-      {/* Header */}
+      {/* ── Step 1: Credentials form (full page inside AuthLayout) ──────── */}
       <div className="mb-4">
-        <h2 className="text-xl font-bold text-white leading-tight">
-          {step === 'details'          ? 'Create your account'  :
-           step === 'google-business'  ? 'Almost there!'         :
-           step === 'email-verify'     ? 'Verify your email'     :
-                                         'Verify your phone'}
-        </h2>
-        <p className="text-sm text-slate-400 mt-1">
-          {step === 'details'         && 'Get started in minutes \u2014 no credit card required'}
-          {step === 'google-business' && "Just one more detail and you're all set"}
-          {step === 'email-verify'    && 'Enter your email and verify with a 6-digit code'}
-          {step === 'phone-verify'    && 'Enter your phone number and verify with a 6-digit code'}
-        </p>
+        <h2 className="text-xl font-bold text-white leading-tight">Create your account</h2>
+        <p className="text-sm text-slate-400 mt-1">Get started in minutes — no credit card required</p>
       </div>
 
-      {/* ── Step 1: Account details ─────────────────────────────────────────── */}
-      {step === 'details' && (
-        <form onSubmit={handleDetails} className="space-y-3">
-          <div>
-            <label className="auth-label" htmlFor="reg-name">Full Name <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input id="reg-name" type="text" className="auth-input pl-10" placeholder="John Smith"
-                autoComplete="name"
-                value={form.name} onChange={set('name')} required maxLength={100} />
-            </div>
+      <form onSubmit={handleCredentials} className="space-y-3">
+        <div>
+          <label className="auth-label" htmlFor="reg-email">Email Address <span className="text-red-500">*</span></label>
+          <div className="relative">
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+            <input id="reg-email" type="email" className="auth-input pl-10" placeholder="you@company.com"
+              autoComplete="email"
+              value={creds.email} onChange={e => setCreds(f => ({ ...f, email: e.target.value }))} required />
           </div>
-
-          <div>
-            <label className="auth-label" htmlFor="reg-business">Business Name <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input id="reg-business" type="text" className="auth-input pl-10" placeholder="Acme Corp"
-                autoComplete="organization"
-                value={form.business_name} onChange={set('business_name')} required maxLength={100} />
-            </div>
-          </div>
-
-          <div>
-            <label className="auth-label" htmlFor="reg-password">Password <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input id="reg-password" type={showPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
-                placeholder="Min 10 characters"
-                autoComplete="new-password"
-                value={form.password} onChange={set('password')} required minLength={10} maxLength={64} />
-              <button type="button" onClick={() => setShowPass(s => !s)}
-                aria-label={showPass ? 'Hide password' : 'Show password'}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
-                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <PasswordStrength password={form.password} />
-          </div>
-
-          <div>
-            <label className="auth-label" htmlFor="reg-confirm-password">Confirm Password <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input id="reg-confirm-password" type={showConfirmPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
-                placeholder="Re-enter password"
-                autoComplete="new-password"
-                value={form.confirm_password} onChange={set('confirm_password')} required />
-              <button type="button" onClick={() => setShowConfirmPass(s => !s)}
-                aria-label={showConfirmPass ? 'Hide password confirmation' : 'Show password confirmation'}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
-                {showConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          <button type="submit" disabled={loading}
-            className="auth-btn-primary">
-            {loading ? <><Spinner /> Creating account...</> : <>Continue <ArrowRight size={16} /></>}
-          </button>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
-            <span className="text-xs text-slate-500 font-medium px-1">or sign up with</span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
-          </div>
-
-          {/* Google sign-up only — functional provider */}
-          <div className="flex justify-center">
-            <div
-              ref={googleBtnRef}
-              className="auth-social-icon-btn"
-              style={{ overflow: 'hidden', padding: 0, position: 'relative' }}
-              title="Sign up with Google"
-            />
-          </div>
-
-          <p className="text-center text-sm text-slate-500">
-            Already have an account?{' '}
-            <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors">
-              Sign in
-            </Link>
-          </p>
-        </form>
-      )}
-
-      {/* ── Google business step ─────────────────────────────────────────────── */}
-      {step === 'google-business' && (
-        <form onSubmit={handleGoogleBusiness} className="space-y-4">
-          {/* Google verified badge */}
-          <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-            style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.18)' }}>
-            <CheckCircle2 size={18} className="text-emerald-400 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-emerald-300">Google identity confirmed</p>
-              <p className="text-xs text-emerald-400/70 truncate">{form.email}</p>
-            </div>
-          </div>
-
-          <div>
-            <label className="auth-label" htmlFor="reg-google-name">Full Name</label>
-            <div className="relative">
-              <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input id="reg-google-name" type="text" className="auth-input pl-10 opacity-60 cursor-not-allowed"
-                value={form.name} readOnly />
-            </div>
-          </div>
-
-          <div>
-            <label className="auth-label" htmlFor="reg-google-business">Business Name <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-              <input id="reg-google-business" type="text" className="auth-input pl-10" placeholder="Acme Corp"
-                autoComplete="organization"
-                value={form.business_name} onChange={set('business_name')} required maxLength={100} autoFocus />
-            </div>
-          </div>
-
-          <button type="submit" disabled={loading}
-            className="auth-btn-primary mt-2">
-            {loading ? <><Spinner /> Setting up...</> : <>Continue to Phone Verification <ArrowRight size={16} /></>}
-          </button>
-
-          <button type="button"
-            onClick={() => { setGoogleFlow(false); setPendingCredential(''); setStep('details') }}
-            className="auth-btn-ghost-dark">
-            <ArrowLeft size={14} /> Back
-          </button>
-        </form>
-      )}
-
-      {/* ── Step 2: Email verification ──────────────────────────────────────── */}
-      {step === 'email-verify' && (
-        <div className="space-y-5">
-          {!emailOtpSent ? (
-            <div className="space-y-4">
-              <div>
-                <label className="auth-label" htmlFor="reg-email">Email Address <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-                  <input id="reg-email" type="email" className="auth-input pl-10" placeholder="you@company.com"
-                    autoComplete="email"
-                    value={form.email} onChange={set('email')} required />
-                </div>
-              </div>
-              <button type="button" onClick={handleSendEmailOtp}
-                disabled={loading || !form.email.trim()}
-                className="auth-btn-primary">
-                {loading ? <><Spinner /> Sending...</> : <><Mail size={16} /> Send Verification Code</>}
-              </button>
-              <button type="button" onClick={() => setStep('details')}
-                className="auth-btn-ghost-dark">
-                <ArrowLeft size={14} /> Back
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleVerifyEmail} className="space-y-6">
-              <div className="rounded-xl p-4 flex items-start gap-3"
-                style={{ background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.18)' }}>
-                <Mail size={18} className="text-indigo-400 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-indigo-300">
-                  Check your inbox at <strong className="text-indigo-200">{form.email}</strong> and enter the 6-digit code below.
-                </p>
-              </div>
-
-              <OtpInput value={emailOtp} onChange={setEmailOtp} />
-
-              <button type="submit" disabled={loading || emailOtp.length < 6}
-                className="auth-btn-primary">
-                {loading ? <><Spinner /> Verifying...</> : <>Verify Email <Shield size={16} /></>}
-              </button>
-
-              <div className="text-center space-y-2">
-                {emailTimer.canResend ? (
-                  <button type="button" onClick={resendEmailOtp}
-                    className="inline-flex items-center justify-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors mx-auto">
-                    <RefreshCw size={14} /> Resend code
-                  </button>
-                ) : (
-                  <p className="text-sm text-slate-500">Resend in <strong className="text-slate-300">{emailTimer.seconds}s</strong></p>
-                )}
-                <button type="button" onClick={() => { setEmailOtpSent(false); setEmailOtp('') }}
-                  className="auth-btn-ghost-dark text-sm">
-                  <ArrowLeft size={14} /> Change email
-                </button>
-              </div>
-            </form>
-          )}
         </div>
-      )}
 
-      {/* ── Step 3: Phone verification ──────────────────────────────────────── */}
-      {step === 'phone-verify' && (
-        <div className="space-y-5">
-          {googleFlow && (
-            <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-              style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.18)' }}>
-              <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
-              <p className="text-xs text-emerald-300">
-                Email pre-verified via Google: <strong className="text-emerald-200">{form.email}</strong>
-              </p>
-            </div>
-          )}
+        <div>
+          <label className="auth-label" htmlFor="reg-password">Password <span className="text-red-500">*</span></label>
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+            <input id="reg-password" type={showPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
+              placeholder="Min 10 characters"
+              autoComplete="new-password"
+              value={creds.password} onChange={e => setCreds(f => ({ ...f, password: e.target.value }))} required minLength={10} maxLength={64} />
+            <button type="button" onClick={() => setShowPass(s => !s)}
+              aria-label={showPass ? 'Hide password' : 'Show password'}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+              {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <PasswordStrength password={creds.password} />
+        </div>
 
-          {!phoneOtpSent ? (
-            <div className="space-y-4">
-              <div>
-                <label className="auth-label" htmlFor="reg-phone">Phone Number <span className="text-red-500">*</span></label>
-                <div className="flex gap-2">
-                  <select
-                    className="auth-input w-28 flex-shrink-0 px-2"
-                    value={form.country_code}
-                    onChange={set('country_code')}
-                    aria-label="Country code"
-                  >
-                    {COUNTRY_CODES.map(cc => (
-                      <option key={cc.value} value={cc.value}>{cc.label}</option>
-                    ))}
-                  </select>
-                  <div className="relative flex-1">
-                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
-                    <input id="reg-phone" type="tel" className="auth-input pl-10" placeholder="5551234567"
-                      autoComplete="tel-national"
-                      inputMode="numeric"
-                      value={form.phone} onChange={set('phone')} required maxLength={15} />
-                  </div>
+        <div>
+          <label className="auth-label" htmlFor="reg-confirm-password">Confirm Password <span className="text-red-500">*</span></label>
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+            <input id="reg-confirm-password" type={showConfirmPass ? 'text' : 'password'} className="auth-input pl-10 pr-10"
+              placeholder="Re-enter password"
+              autoComplete="new-password"
+              value={creds.confirm_password} onChange={e => setCreds(f => ({ ...f, confirm_password: e.target.value }))} required />
+            <button type="button" onClick={() => setShowConfirmPass(s => !s)}
+              aria-label={showConfirmPass ? 'Hide password confirmation' : 'Show password confirmation'}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+              {showConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" disabled={loading} className="auth-btn-primary">
+          {loading ? <><Spinner /> Creating account...</> : <>Continue <ArrowRight size={16} /></>}
+        </button>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
+          <span className="text-xs text-slate-500 font-medium px-1">or sign up with</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
+        </div>
+
+        {/* Google sign-up */}
+        <div className="flex justify-center">
+          <div
+            ref={googleBtnRef}
+            className="auth-social-icon-btn"
+            style={{ overflow: 'hidden', padding: 0, position: 'relative' }}
+            title="Sign up with Google"
+          />
+        </div>
+
+        <p className="text-center text-sm text-slate-500">
+          Already have an account?{' '}
+          <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors">
+            Sign in
+          </Link>
+        </p>
+      </form>
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* MODAL — Steps 2, 3, 4, Provisioning, Success                     */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {showModal && (
+        <div className="auth-modal-overlay" onClick={() => step !== 'provisioning' && handleModalClose()}>
+          <div className="auth-modal" onClick={e => e.stopPropagation()}>
+            {/* Close button (hidden during provisioning) */}
+            {step !== 'provisioning' && (
+              <button onClick={handleModalClose}
+                className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 transition-colors z-10">
+                <X size={18} />
+              </button>
+            )}
+
+            {/* Step indicator */}
+            {step !== 'provisioning' && step !== 'success' && (
+              <StepIndicator current={step} isGoogleFlow={googleFlow} />
+            )}
+
+            {/* ── Step 2: Email OTP ──────────────────────────────────────── */}
+            {step === 'email-otp' && (
+              <div className="space-y-5 animate-fadeIn">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Verify your email</h2>
+                  <p className="text-sm text-slate-400 mt-1">Enter the 6-digit code sent to your inbox</p>
                 </div>
-              </div>
-              <button type="button" onClick={handleSendPhoneOtp}
-                disabled={loading || !form.phone.trim()}
-                className="auth-btn-primary">
-                {loading ? <><Spinner /> Sending...</> : <><Phone size={16} /> Send SMS Code</>}
-              </button>
-              <button type="button"
-                onClick={() => setStep(googleFlow ? 'google-business' : 'email-verify')}
-                className="auth-btn-ghost-dark">
-                <ArrowLeft size={14} /> Back
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleVerifyPhone} className="space-y-6">
-              <div className="rounded-xl p-4 flex items-start gap-3"
-                style={{ background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.18)' }}>
-                <Phone size={18} className="text-indigo-400 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-indigo-300">
-                  We sent an SMS to <strong className="text-indigo-200">{form.country_code} {form.phone}</strong>. Enter the code to activate your account.
-                </p>
-              </div>
 
-              <OtpInput value={phoneOtp} onChange={setPhoneOtp} />
+                <div className="rounded-xl p-4 flex items-start gap-3"
+                  style={{ background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.18)' }}>
+                  <Mail size={18} className="text-indigo-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-indigo-300">
+                    Check your inbox at <strong className="text-indigo-200">{creds.email}</strong>
+                  </p>
+                </div>
 
-              <button type="submit" disabled={loading || phoneOtp.length < 6}
-                className="auth-btn-primary">
-                {loading ? <><Spinner /> Verifying...</> : <>Activate Account <CheckCircle2 size={16} /></>}
-              </button>
+                <form onSubmit={handleVerifyEmail} className="space-y-5">
+                  <OtpInput value={emailOtp} onChange={setEmailOtp} />
 
-              <div className="text-center space-y-2">
-                {phoneTimer.canResend ? (
-                  <button type="button" onClick={resendPhoneOtp}
-                    className="inline-flex items-center justify-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors mx-auto">
-                    <RefreshCw size={14} /> Resend SMS
+                  <button type="submit" disabled={loading || emailOtp.length < 6} className="auth-btn-primary">
+                    {loading ? <><Spinner /> Verifying...</> : <>Verify Email <Shield size={16} /></>}
                   </button>
+
+                  <div className="text-center space-y-2">
+                    {emailTimer.canResend ? (
+                      <button type="button" onClick={resendEmailOtp}
+                        className="inline-flex items-center justify-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors mx-auto">
+                        <RefreshCw size={14} /> Resend code
+                      </button>
+                    ) : (
+                      <p className="text-sm text-slate-500">Resend in <strong className="text-slate-300">{emailTimer.seconds}s</strong></p>
+                    )}
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── Step 3: Profile completion ──────────────────────────────── */}
+            {step === 'profile' && (
+              <div className="space-y-5 animate-fadeIn">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Complete your profile</h2>
+                  <p className="text-sm text-slate-400 mt-1">Just a few more details to set up your account</p>
+                </div>
+
+                {/* Email verified badge */}
+                <div className="flex items-center gap-3 rounded-xl px-4 py-3"
+                  style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                  <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
+                  <p className="text-xs text-emerald-300">
+                    Email verified: <strong className="text-emerald-200">{creds.email}</strong>
+                  </p>
+                </div>
+
+                <form onSubmit={handleProfile} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="auth-label" htmlFor="reg-first-name">First Name <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+                        <input id="reg-first-name" type="text" className="auth-input pl-10" placeholder="John"
+                          autoComplete="given-name"
+                          value={profile.first_name} onChange={e => setProfile(f => ({ ...f, first_name: e.target.value }))} required maxLength={100} autoFocus />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="auth-label" htmlFor="reg-last-name">Last Name <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+                        <input id="reg-last-name" type="text" className="auth-input pl-10" placeholder="Smith"
+                          autoComplete="family-name"
+                          value={profile.last_name} onChange={e => setProfile(f => ({ ...f, last_name: e.target.value }))} required maxLength={100} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="auth-label" htmlFor="reg-phone">Phone Number <span className="text-red-500">*</span></label>
+                    <div className="flex gap-2">
+                      <select
+                        className="auth-input w-28 flex-shrink-0 px-2"
+                        value={profile.country_code}
+                        onChange={e => setProfile(f => ({ ...f, country_code: e.target.value }))}
+                        aria-label="Country code"
+                      >
+                        {COUNTRY_CODES.map(cc => (
+                          <option key={cc.value} value={cc.value}>{cc.label}</option>
+                        ))}
+                      </select>
+                      <div className="relative flex-1">
+                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+                        <input id="reg-phone" type="tel" className="auth-input pl-10" placeholder="5551234567"
+                          autoComplete="tel-national"
+                          inputMode="numeric"
+                          value={profile.phone} onChange={e => setProfile(f => ({ ...f, phone: e.target.value }))} required maxLength={15} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={loading} className="auth-btn-primary mt-2">
+                    {loading ? <><Spinner /> Saving...</> : <>Continue <ArrowRight size={16} /></>}
+                  </button>
+
+                  {!googleFlow && (
+                    <button type="button" onClick={() => setStep('email-otp')} className="auth-btn-ghost-dark">
+                      <ArrowLeft size={14} /> Back
+                    </button>
+                  )}
+                </form>
+              </div>
+            )}
+
+            {/* ── Step 4: Phone OTP ──────────────────────────────────────── */}
+            {step === 'phone-otp' && (
+              <div className="space-y-5 animate-fadeIn">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Verify your phone</h2>
+                  <p className="text-sm text-slate-400 mt-1">Enter the 6-digit code sent via SMS</p>
+                </div>
+
+                <div className="rounded-xl p-4 flex items-start gap-3"
+                  style={{ background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.18)' }}>
+                  <Phone size={18} className="text-indigo-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-indigo-300">
+                    SMS sent to <strong className="text-indigo-200">{profile.country_code} {profile.phone}</strong>
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerifyPhone} className="space-y-5">
+                  <OtpInput value={phoneOtp} onChange={setPhoneOtp} />
+
+                  <button type="submit" disabled={loading || phoneOtp.length < 6} className="auth-btn-primary">
+                    {loading ? <><Spinner /> Verifying...</> : <>Activate Account <CheckCircle2 size={16} /></>}
+                  </button>
+
+                  <div className="text-center space-y-2">
+                    {phoneTimer.canResend ? (
+                      <button type="button" onClick={resendPhoneOtp}
+                        className="inline-flex items-center justify-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors mx-auto">
+                        <RefreshCw size={14} /> Resend SMS
+                      </button>
+                    ) : (
+                      <p className="text-sm text-slate-500">Resend in <strong className="text-slate-300">{phoneTimer.seconds}s</strong></p>
+                    )}
+                    <button type="button" onClick={() => { setPhoneOtp(''); setStep('profile') }}
+                      className="auth-btn-ghost-dark text-sm">
+                      <ArrowLeft size={14} /> Change phone number
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── Provisioning screen ────────────────────────────────────── */}
+            {step === 'provisioning' && (
+              <div className="text-center space-y-5 animate-fadeIn">
+                {!provFailed ? (
+                  <>
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
+                      style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.22)' }}>
+                      <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin" />
+                    </div>
+                    <h2 className="text-xl font-bold text-white">Setting up your account</h2>
+                    <p className="text-sm text-slate-400">{provLabel}</p>
+                    <div className="w-full rounded-full h-2.5 overflow-hidden"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-700 ease-out"
+                        style={{ width: `${provPct}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8)' }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500">{provPct}% complete</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      This usually takes about 30 seconds. Please don't close this page.
+                    </p>
+                  </>
                 ) : (
-                  <p className="text-sm text-slate-500">Resend in <strong className="text-slate-300">{phoneTimer.seconds}s</strong></p>
+                  <>
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
+                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.22)' }}>
+                      <Shield className="w-7 h-7 text-red-400" />
+                    </div>
+                    <h2 className="text-xl font-bold text-white">Setup encountered an issue</h2>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                      We couldn't complete your account setup automatically. Our team has been notified.
+                      Please try logging in — if your account isn't ready yet, contact support.
+                    </p>
+                    <button onClick={() => navigate('/login')} className="auth-btn-primary mt-2">
+                      Go to Login <ArrowRight size={16} />
+                    </button>
+                  </>
                 )}
-                <button type="button" onClick={() => { setPhoneOtpSent(false); setPhoneOtp('') }}
-                  className="auth-btn-ghost-dark text-sm">
-                  <ArrowLeft size={14} /> Change phone number
+              </div>
+            )}
+
+            {/* ── Success screen ──────────────────────────────────────────── */}
+            {step === 'success' && (
+              <div className="text-center space-y-4 animate-fadeIn">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
+                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.22)' }}>
+                  <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Account created!</h2>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Welcome to <span className="font-semibold text-slate-200">DialerCRM</span>.<br />
+                  A welcome email has been sent to{' '}
+                  <span className="font-semibold text-slate-200">{creds.email}</span>.
+                </p>
+                <div className="rounded-xl p-3 text-left space-y-1.5"
+                  style={{ background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.16)' }}>
+                  <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wide">Next steps</p>
+                  <p className="text-sm text-slate-400">1. Log in with your email and password</p>
+                  <p className="text-sm text-slate-400">2. Complete the onboarding wizard</p>
+                  <p className="text-sm text-slate-400">3. Create your first agent</p>
+                </div>
+                <button onClick={() => navigate('/login')} className="auth-btn-primary mt-2">
+                  Go to Login <ArrowRight size={16} />
                 </button>
               </div>
-            </form>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
