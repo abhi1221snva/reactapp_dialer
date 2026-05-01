@@ -208,6 +208,8 @@ export const registerService = {
         stage_label: string
         client_id?: number
         user_id?: number
+        token?: string
+        user?: Record<string, unknown>
       }
     }>(`/signup/status/${progressId}`),
 }

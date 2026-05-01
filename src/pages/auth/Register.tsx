@@ -614,6 +614,20 @@ export function Register() {
         setProvLabel(d.stage_label)
 
         if (d.ready) {
+          // Auto-login if token is available (same as fast-path)
+          if (d.token) {
+            const userData = d.user as Record<string, unknown> | undefined
+            const user: User = {
+              ...(userData ?? {}),
+              name: (userData?.first_name || '') + ' ' + (userData?.last_name || ''),
+              level: Number(userData?.level ?? 6),
+            } as User
+            localStorage.setItem('auth_token', d.token as string)
+            setAuth(d.token as string, user)
+            toast.success('Welcome! Your account is ready.')
+            navigate('/dashboard')
+            return
+          }
           setStep('success')
           return
         }
