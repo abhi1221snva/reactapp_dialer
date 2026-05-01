@@ -100,7 +100,7 @@ api.interceptors.response.use(
     const hasToken = !!localStorage.getItem('auth_token')
     const url = error.config?.url ?? ''
     // Login/auth endpoints — NEVER redirect or suppress errors
-    const isAuthRequest = ['/authentication', '/verify_google_otp', '/2fa/verify', '/auth/google', '/merchant-auth'].some(u => url.includes(u))
+    const isAuthRequest = ['/authentication', '/verify_google_otp', '/2fa/verify', '/auth/google', '/merchant-auth', '/signup/', '/register/'].some(u => url.includes(u))
 
     if (status === 401) {
       if (isAuthRequest || !hasToken) {
