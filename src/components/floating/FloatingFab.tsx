@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode, type CSSProperties } from 'react'
 import { MessageSquare, Phone, PhoneCall, Loader2, MessageCircle } from 'lucide-react'
 import { useFloatingStore } from '../../stores/floating.store'
+import { useAuth } from '../../hooks/useAuth'
 
 // ── Drag constants ─────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'fab_vpos'    // localStorage key for saved vertical position
@@ -125,6 +126,8 @@ export function FloatingFab() {
     chatUnread,
     smsUnread,
   } = useFloatingStore()
+  const { sipConfig } = useAuth()
+  const sipReady = !!sipConfig?.isConfigured
 
   // ── Vertical position state ────────────────────────────────────────────────
   // Initialise from localStorage synchronously to avoid a position flash.
@@ -382,15 +385,17 @@ export function FloatingFab() {
           badge={chatUnread > 0 ? <Badge count={chatUnread} /> : undefined}
         />
 
-        {/* Phone button */}
-        <DockBtn
-          icon={phoneIcon}
-          label="Web Phone"
-          onClick={handlePhoneClick}
-          isActive={phoneOpen}
-          btnStyle={{ background: phoneFabBg, boxShadow: phoneFabShadow }}
-          pulse={phoneHasIncoming}
-        />
+        {/* Phone button — hidden when SIP is not configured (new users) */}
+        {sipReady && (
+          <DockBtn
+            icon={phoneIcon}
+            label="Web Phone"
+            onClick={handlePhoneClick}
+            isActive={phoneOpen}
+            btnStyle={{ background: phoneFabBg, boxShadow: phoneFabShadow }}
+            pulse={phoneHasIncoming}
+          />
+        )}
       </div>
     </div>
   )
