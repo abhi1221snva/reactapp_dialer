@@ -48,6 +48,9 @@ const STEP_META: Record<string, { icon: typeof UserCheck; desc: string }> = {
   'Final Initialization':  { icon: Rocket,       desc: 'Finishing up — almost there!' },
 }
 
+const TOTAL_STEPS = 7
+const REVEAL_DELAY = 1200 // ms between revealing each completed step
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -63,6 +66,14 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
   const startRef = useRef(Date.now())
   const timerRef = useRef<ReturnType<typeof setInterval>>()
   const loginDoneRef = useRef(false)
+
+  // ── Staggered reveal state ──────────────────────────────────────────────
+  // Tracks how many steps the UI has "revealed" as completed.
+  // When backend reports N completed steps but we've only revealed M < N,
+  // we increment by 1 every REVEAL_DELAY ms so the user sees them one-by-one.
+  const [revealedCount, setRevealedCount] = useState(0)
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const targetCountRef = useRef(0)
 
   // ── Client-side timer ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -104,37 +115,75 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
     return () => clearTimeout(t)
   }, [redirectCountdown, navigate])
 
-  // ── Track step completions for flash animation ────────────────────────────
-  const prevStepsRef = useRef<SetupStep[]>([])
+  // ── Staggered reveal logic ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!data?.steps) return
 
-  // ── Polling (3s default, exponential backoff on 429) ──────────────────────
+    const actualCompleted = data.steps.filter(s => s.status === 'completed').length
+    targetCountRef.current = actualCompleted
+
+    // If we need to reveal more steps, start the reveal timer
+    if (actualCompleted > revealedCount && !revealTimerRef.current) {
+      const revealNext = () => {
+        setRevealedCount(prev => {
+          const next = prev + 1
+          // Flash animation for the just-revealed step
+          if (data?.steps) {
+            const revealedStep = data.steps[next - 1]
+            if (revealedStep) {
+              setJustCompleted(revealedStep.name)
+              setTimeout(() => setJustCompleted(null), 800)
+            }
+          }
+          // Schedule next reveal if needed
+          if (next < targetCountRef.current) {
+            revealTimerRef.current = setTimeout(revealNext, REVEAL_DELAY)
+          } else {
+            revealTimerRef.current = undefined
+          }
+          return next
+        })
+      }
+
+      revealTimerRef.current = setTimeout(revealNext, REVEAL_DELAY)
+    }
+
+    return () => {
+      // Don't clear the timer on data changes — let it run
+    }
+  }, [data?.steps, revealedCount])
+
+  // Cleanup reveal timer on unmount
+  useEffect(() => {
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
+    }
+  }, [])
+
+  // ── Handle auto-login after all steps are revealed ──────────────────────
+  useEffect(() => {
+    if (data?.completed && data?.ready && revealedCount >= TOTAL_STEPS) {
+      handleAutoLogin(data)
+    }
+  }, [revealedCount, data, handleAutoLogin])
+
+  // ── Polling (2s, exponential backoff on 429) ──────────────────────────────
   useEffect(() => {
     if (!progressId) return
     let cancelled = false
-    let delay = 3000
+    let delay = 2000
 
     const poll = async () => {
       try {
         const res = await registerService.signupGetSetupSteps(progressId)
         const d = res.data?.data as SetupProgressData
         if (cancelled) return
-        delay = 3000 // reset on success
+        delay = 2000 // reset on success
 
-        // Detect newly completed steps for flash animation
-        if (d.steps && prevStepsRef.current.length) {
-          for (const step of d.steps) {
-            const prev = prevStepsRef.current.find(s => s.name === step.name)
-            if (prev && prev.status === 'running' && step.status === 'completed') {
-              setJustCompleted(step.name)
-              setTimeout(() => setJustCompleted(null), 800)
-            }
-          }
-        }
-        prevStepsRef.current = d.steps ?? []
         setData(d)
 
         if (d.completed && d.ready) {
-          handleAutoLogin(d)
+          // Don't auto-login here — wait for staggered reveal to finish
           return
         }
         if (d.failed) {
@@ -143,17 +192,17 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
         }
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response?.status
-        if (status === 429) delay = Math.min(delay * 2, 15000) // backoff on rate limit
+        if (status === 429) delay = Math.min(delay * 2, 15000)
       }
       if (!cancelled) setTimeout(poll, delay)
     }
 
     poll()
     return () => { cancelled = true }
-  }, [progressId, handleAutoLogin])
+  }, [progressId])
 
-  // ── Derived state ─────────────────────────────────────────────────────────
-  const steps: SetupStep[] = data?.steps ?? [
+  // ── Derive display steps (cap completions at revealedCount) ─────────────
+  const rawSteps: SetupStep[] = data?.steps ?? [
     { name: 'Profile Setup', status: 'running' },
     { name: 'Campaign Menu Setup', status: 'pending' },
     { name: 'Lead Menu Setup', status: 'pending' },
@@ -163,14 +212,30 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
     { name: 'Final Initialization', status: 'pending' },
   ]
 
-  const completedSteps = steps.filter(s => s.status === 'completed')
-  const activeStep = steps.find(s => s.status === 'running')
-  const failedStep = steps.find(s => s.status === 'failed')
-  const totalSteps = steps.length
+  // Override steps for staggered reveal:
+  // - Steps up to revealedCount: show actual status (completed)
+  // - Step at revealedCount index: show as "running" (currently being revealed)
+  // - Steps beyond: show as "pending"
+  const displaySteps: SetupStep[] = rawSteps.map((s, i) => {
+    if (s.status === 'completed' || s.status === 'running') {
+      if (i < revealedCount) {
+        return { ...s, status: 'completed' as const }
+      }
+      if (i === revealedCount) {
+        return { ...s, status: 'running' as const }
+      }
+      return { ...s, status: 'pending' as const }
+    }
+    return s
+  })
+
+  const completedSteps = displaySteps.filter(s => s.status === 'completed')
+  const activeStep = displaySteps.find(s => s.status === 'running')
+  const failedStep = displaySteps.find(s => s.status === 'failed')
   const doneCount = completedSteps.length
-  const progressPct = Math.round((doneCount / totalSteps) * 100)
+  const progressPct = Math.round((doneCount / TOTAL_STEPS) * 100)
   const isFailed = data?.failed ?? false
-  const allDone = data?.completed ?? false
+  const allRevealed = revealedCount >= TOTAL_STEPS && (data?.completed ?? false)
 
   const fmt = (s: number) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
 
@@ -179,7 +244,7 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
   // ═════════════════════════════════════════════════════════════════════════
 
   // ── All done — celebration ────────────────────────────────────────────────
-  if (allDone && !isFailed) {
+  if (allRevealed && !isFailed) {
     return (
       <div className="w-full animate-fadeIn text-center" style={{ minHeight: 360 }}>
         <div
@@ -200,7 +265,7 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
 
         {/* Completed chips */}
         <div className="flex flex-wrap justify-center gap-1.5 mb-5">
-          {steps.map(s => (
+          {displaySteps.map(s => (
             <span
               key={s.name}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium"
@@ -239,7 +304,6 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
           Our team has been notified. Please try logging in or contact support.
         </p>
 
-        {/* Show which steps completed */}
         {completedSteps.length > 0 && (
           <div className="flex flex-wrap justify-center gap-1.5 mb-5">
             {completedSteps.map(s => (
@@ -308,7 +372,7 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
       <div className="mb-5">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[11px] font-medium text-slate-500">
-            Step {doneCount + (activeStep ? 1 : 0)} of {totalSteps}
+            Step {doneCount + (activeStep ? 1 : 0)} of {TOTAL_STEPS}
           </span>
           <span className="text-[11px] font-semibold text-indigo-300">{progressPct}%</span>
         </div>
@@ -342,11 +406,6 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
               }}
             >
               <CheckCircle2 size={10} /> {s.name}
-              {s.duration !== undefined && (
-                <span className="text-emerald-600 ml-0.5">
-                  {s.duration < 1 ? '<1s' : `${Math.round(s.duration)}s`}
-                </span>
-              )}
             </span>
           ))}
         </div>
@@ -371,8 +430,8 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
                 boxShadow: '0 0 20px rgba(99,102,241,0.3)',
               }}
             >
-              <CurrentIcon size={20} className="text-white animate-spin" style={{
-                animation: CurrentIcon === Loader2 ? undefined : 'none',
+              <CurrentIcon size={20} className="text-white" style={{
+                animation: CurrentIcon === Loader2 ? 'spin 1s linear infinite' : 'none',
               }} />
             </div>
             <div className="flex-1 min-w-0">
@@ -403,7 +462,7 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
 
       {/* ── Upcoming steps (dots only) ─────────────────────────────────────── */}
       {(() => {
-        const pending = steps.filter(s => s.status === 'pending')
+        const pending = displaySteps.filter(s => s.status === 'pending')
         if (pending.length === 0) return null
         return (
           <div className="flex items-center gap-2 ml-1">
