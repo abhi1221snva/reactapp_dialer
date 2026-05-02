@@ -568,9 +568,9 @@ export function Register() {
           name: profile.first_name + ' ' + profile.last_name,
           level: Number(userData?.level ?? 6),
         } as User
+        setEngine('dialer')
         localStorage.setItem('auth_token', data.token as string)
         setAuth(data.token as string, user)
-        setEngine('dialer')
         toast.success('Welcome! Your account is ready.')
         navigate('/dashboard')
         return

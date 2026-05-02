@@ -99,9 +99,9 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
       level: Number(ud?.level ?? 6),
     } as User
 
+    setEngine('dialer')
     localStorage.setItem('auth_token', d.token)
     setAuth(d.token, user)
-    setEngine('dialer')
     clearInterval(timerRef.current)
     setRedirectCountdown(3)
   }, [setAuth, setEngine])
