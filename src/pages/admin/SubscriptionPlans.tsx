@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Edit, RefreshCw, DollarSign, Users, PhoneCall,
+  Plus, Edit, RefreshCw, DollarSign, Users, PhoneCall, Upload, Loader2, CheckCircle2,
 } from 'lucide-react'
 import {
   subscriptionService,
@@ -214,6 +214,16 @@ export function SubscriptionPlans() {
     onError: () => { toast.error('Failed to update plan') },
   })
 
+  const syncMutation = useMutation({
+    mutationFn: () => subscriptionService.syncToStripe(),
+    onSuccess: (res) => {
+      const synced = res.data?.data?.synced ?? 0
+      toast.success(`Synced ${synced} plan(s) to Stripe`)
+      qc.invalidateQueries({ queryKey: ['subscription-plans'] })
+    },
+    onError: () => { toast.error('Failed to sync plans to Stripe') },
+  })
+
   const columns: Column<SubscriptionPlan>[] = [
     {
       key: 'id', header: 'ID',
@@ -281,6 +291,12 @@ export function SubscriptionPlans() {
         : <Badge variant="red">Inactive</Badge>,
     },
     {
+      key: 'stripe_product_id', header: 'Stripe',
+      render: (r) => r.stripe_product_id
+        ? <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle2 size={12} /> Synced</span>
+        : <span className="text-xs text-slate-400">Not synced</span>,
+    },
+    {
       key: 'actions', header: 'Actions',
       render: (r) => (
         <button
@@ -304,6 +320,15 @@ export function SubscriptionPlans() {
           title="Refresh"
         >
           <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
+        </button>
+        <button
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 disabled:opacity-50 transition-colors"
+          title="Sync all plans to Stripe Products & Prices"
+        >
+          {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+          Sync to Stripe
         </button>
         <button onClick={() => setShowForm(true)} className="btn-primary gap-2">
           <Plus size={15} /> Add Plan
@@ -331,13 +356,13 @@ export function SubscriptionPlans() {
           </div>
         </div>
         <div className="card flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-            <Users size={20} className="text-purple-600" />
+          <div className="w-11 h-11 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+            <Upload size={20} className="text-violet-600" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Max Tier Price</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Stripe Synced</p>
             <p className="text-2xl font-bold text-slate-900">
-              ${Math.max(...plans.map((p) => Number(p.price_monthly)), 0)}
+              {plans.filter((p) => p.stripe_product_id).length}/{plans.length}
             </p>
           </div>
         </div>
