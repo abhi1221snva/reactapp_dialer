@@ -212,4 +212,28 @@ export const registerService = {
         user?: Record<string, unknown>
       }
     }>(`/signup/status/${progressId}`),
+
+  /** Fine-grained setup step tracking (1s polling) */
+  signupGetSetupSteps: (progressId: number | string) =>
+    api.get<{
+      status: boolean
+      data: {
+        elapsed_time: number
+        current_step: string | null
+        completed: boolean
+        failed: boolean
+        steps: Array<{
+          name: string
+          status: 'pending' | 'running' | 'completed' | 'failed'
+          started_at?: number
+          completed_at?: number
+          duration?: number
+        }>
+        stage?: string
+        ready?: boolean
+        token?: string
+        user?: Record<string, unknown>
+        error_message?: string
+      }
+    }>(`/signup/setup-steps/${progressId}`),
 }

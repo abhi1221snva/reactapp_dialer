@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import Swal from 'sweetalert2'
 import { registerService } from '../../services/register.service'
 import { useAuthStore } from '../../stores/auth.store'
+import { SetupProgress } from './SetupProgress'
 import type { User } from '../../types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -349,11 +350,6 @@ export function Register() {
     phone: '',
   })
 
-  // ── Provisioning state ─────────────────────────────────────────────────
-  const [provStage, setProvStage] = useState('queued')
-  const [provPct, setProvPct] = useState(5)
-  const [provLabel, setProvLabel] = useState('Waiting in queue...')
-  const [provFailed, setProvFailed] = useState(false)
 
   // ── Body scroll lock for modal ─────────────────────────────────────────
   useEffect(() => {
@@ -598,55 +594,7 @@ export function Register() {
     } catch { /* handled */ }
   }
 
-  // ── Provisioning polling ────────────────────────────────────────────────
-  useEffect(() => {
-    if (step !== 'provisioning' || !progressId) return
-    let cancelled = false
-
-    const poll = async () => {
-      try {
-        const res = await registerService.signupGetStatus(progressId)
-        const d = res.data?.data
-        if (cancelled) return
-
-        setProvStage(d.stage)
-        setProvPct(d.progress_pct)
-        setProvLabel(d.stage_label)
-
-        if (d.ready) {
-          // Auto-login if token is available (same as fast-path)
-          if (d.token) {
-            const userData = d.user as Record<string, unknown> | undefined
-            const user: User = {
-              ...(userData ?? {}),
-              name: (userData?.first_name || '') + ' ' + (userData?.last_name || ''),
-              level: Number(userData?.level ?? 6),
-            } as User
-            localStorage.setItem('auth_token', d.token as string)
-            setAuth(d.token as string, user)
-            toast.success('Welcome! Your account is ready.')
-            navigate('/dashboard')
-            return
-          }
-          setStep('success')
-          return
-        }
-        if (d.failed) {
-          setProvFailed(true)
-          return
-        }
-      } catch {
-        // Silently retry
-      }
-      if (!cancelled) {
-        setTimeout(poll, 2500)
-      }
-    }
-
-    poll()
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, progressId])
+  // Provisioning polling is now handled internally by the SetupProgress component
 
   // ── Modal close handler ─────────────────────────────────────────────────
   const handleModalClose = () => {
@@ -921,46 +869,9 @@ export function Register() {
               </div>
             )}
 
-            {/* ── Provisioning screen ────────────────────────────────────── */}
-            {step === 'provisioning' && (
-              <div className="text-center space-y-5 animate-fadeIn">
-                {!provFailed ? (
-                  <>
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
-                      style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.22)' }}>
-                      <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin" />
-                    </div>
-                    <h2 className="text-xl font-bold text-white">Setting up your account</h2>
-                    <p className="text-sm text-slate-400">{provLabel}</p>
-                    <div className="w-full rounded-full h-2.5 overflow-hidden"
-                      style={{ background: 'rgba(255,255,255,0.08)' }}>
-                      <div
-                        className="h-full rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${provPct}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8)' }}
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500">{provPct}% complete</p>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      This usually takes about 30 seconds. Please don't close this page.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
-                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.22)' }}>
-                      <Shield className="w-7 h-7 text-red-400" />
-                    </div>
-                    <h2 className="text-xl font-bold text-white">Setup encountered an issue</h2>
-                    <p className="text-sm text-slate-400 leading-relaxed">
-                      We couldn't complete your account setup automatically. Our team has been notified.
-                      Please try logging in — if your account isn't ready yet, contact support.
-                    </p>
-                    <button onClick={() => navigate('/login')} className="auth-btn-primary mt-2">
-                      Go to Login <ArrowRight size={16} />
-                    </button>
-                  </>
-                )}
-              </div>
+            {/* ── Provisioning screen (Premium Setup Progress) ──────────── */}
+            {step === 'provisioning' && progressId && (
+              <SetupProgress progressId={progressId} />
             )}
 
             {/* ── Success screen ──────────────────────────────────────────── */}
