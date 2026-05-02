@@ -23,7 +23,7 @@ export interface PortalPackage {
   is_trial: number
   display_order: number
   show_on: string[]
-  modules: PackageModule[]
+  modules: PackageModule[] | Record<string, PackageModule>
   currency_code: string
   base_rate_monthly_billed: number
   base_rate_quarterly_billed: number

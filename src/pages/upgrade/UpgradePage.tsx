@@ -174,7 +174,7 @@ export function UpgradePage() {
 
                   {/* Module list */}
                   <div className="space-y-2 text-sm text-slate-600">
-                    {pkg.modules.map(mod => (
+                    {(Array.isArray(pkg.modules) ? pkg.modules : Object.values(pkg.modules ?? {})).map((mod: any) => (
                       <div key={mod.key} className="flex items-center gap-2">
                         <CheckCircle2
                           size={15}
