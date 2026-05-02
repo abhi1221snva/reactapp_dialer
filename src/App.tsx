@@ -338,7 +338,7 @@ export default function App() {
           <Route path="/monitoring" element={<AgentMonitoring />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/billing" element={<StripeProvider><Billing /></StripeProvider>} />
-          <Route path="/upgrade" element={<UpgradePage />} />
+          <Route path="/upgrade" element={<ErrorBoundary fallbackTitle="Upgrade Page Error"><UpgradePage /></ErrorBoundary>} />
 
           <Route path="/settings" element={<Settings />} />
           <Route path="/settings/labels" element={<Labels />} />

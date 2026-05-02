@@ -7,10 +7,21 @@ import {
   packageService,
   type PortalPackage,
   type ClientPackageInfo,
+  type PackageModule,
 } from '../../services/package.service'
 import { Badge } from '../../components/ui/Badge'
 import { cn } from '../../utils/cn'
 import { useTrialStatus } from '../../hooks/useTrialStatus'
+
+/** Safely normalise `modules` — can be an array, object, null, or undefined */
+function getModules(raw: unknown): PackageModule[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw
+  if (typeof raw === 'object') {
+    try { return Object.values(raw) } catch { return [] }
+  }
+  return []
+}
 
 export function UpgradePage() {
   const { isTrial, isExpired, daysRemaining } = useTrialStatus()
@@ -109,8 +120,8 @@ export function UpgradePage() {
             ))
           : upgradePlans.map(pkg => {
               const isCurrent = activeKeys.has(pkg.key)
-              const isPopular =
-                pkg.name.toLowerCase().includes('standard')
+              const isPopular = (pkg.name || '').toLowerCase().includes('standard')
+              const modules = getModules(pkg.modules)
 
               return (
                 <div
@@ -157,7 +168,7 @@ export function UpgradePage() {
                   )}
                   <div className="flex items-end gap-1 mt-3 mb-5">
                     <span className="text-4xl font-bold text-indigo-600">
-                      ${pkg.base_rate_monthly_billed}
+                      ${pkg.base_rate_monthly_billed ?? 0}
                     </span>
                     <span className="text-slate-500 text-sm mb-1">/mo</span>
                   </div>
@@ -165,36 +176,36 @@ export function UpgradePage() {
                   {/* Billing tiers */}
                   <div className="flex gap-2 mb-4 text-[11px] text-slate-500">
                     <span className="px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100">
-                      Quarterly ${pkg.base_rate_quarterly_billed}
+                      Quarterly ${pkg.base_rate_quarterly_billed ?? 0}
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100">
-                      Yearly ${pkg.base_rate_yearly_billed}
+                      Yearly ${pkg.base_rate_yearly_billed ?? 0}
                     </span>
                   </div>
 
                   {/* Module list */}
                   <div className="space-y-2 text-sm text-slate-600">
-                    {(Array.isArray(pkg.modules) ? pkg.modules : Object.values(pkg.modules ?? {})).map((mod: any) => (
-                      <div key={mod.key} className="flex items-center gap-2">
+                    {modules.map((mod, idx) => (
+                      <div key={mod?.key ?? idx} className="flex items-center gap-2">
                         <CheckCircle2
                           size={15}
                           className="text-emerald-500 flex-shrink-0"
                         />
-                        <span>{mod.name}</span>
+                        <span>{mod?.name ?? 'Module'}</span>
                       </div>
                     ))}
                   </div>
 
                   {/* Free allowances */}
-                  {(pkg.free_call_minute_monthly > 0 ||
-                    pkg.free_sms_monthly > 0) && (
+                  {((pkg.free_call_minute_monthly ?? 0) > 0 ||
+                    (pkg.free_sms_monthly ?? 0) > 0) && (
                     <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1">
-                      {pkg.free_call_minute_monthly > 0 && (
+                      {(pkg.free_call_minute_monthly ?? 0) > 0 && (
                         <p>
                           {pkg.free_call_minute_monthly} free call minutes/mo
                         </p>
                       )}
-                      {pkg.free_sms_monthly > 0 && (
+                      {(pkg.free_sms_monthly ?? 0) > 0 && (
                         <p>{pkg.free_sms_monthly} free SMS/mo</p>
                       )}
                     </div>
