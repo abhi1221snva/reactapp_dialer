@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, Loader2, Circle, AlertCircle, ArrowRight, Sparkles } from 'lucide-react'
+import {
+  CheckCircle2, Loader2, ArrowRight, AlertCircle, Sparkles,
+  UserCheck, LayoutGrid, FileText, Phone, Mail, MessageSquare, Rocket,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import { registerService } from '../../services/register.service'
 import { useAuthStore } from '../../stores/auth.store'
@@ -29,156 +32,62 @@ interface SetupProgressData {
   error_message?: string
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
 interface SetupProgressProps {
   progressId: string
-  onLoginSuccess?: () => void
 }
 
-// ─── Step icon component ──────────────────────────────────────────────────────
+// ─── Step metadata (icon + description for each step) ─────────────────────────
 
-function StepIcon({ status }: { status: SetupStep['status'] }) {
-  switch (status) {
-    case 'completed':
-      return (
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-500"
-          style={{
-            background: 'linear-gradient(135deg, #059669, #10b981)',
-            boxShadow: '0 0 12px rgba(16,185,129,0.35)',
-          }}
-        >
-          <CheckCircle2 size={14} className="text-white" />
-        </div>
-      )
-    case 'running':
-      return (
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse"
-          style={{
-            background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
-            boxShadow: '0 0 16px rgba(99,102,241,0.45)',
-          }}
-        >
-          <Loader2 size={14} className="text-white animate-spin" />
-        </div>
-      )
-    case 'failed':
-      return (
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{
-            background: 'linear-gradient(135deg, #dc2626, #ef4444)',
-            boxShadow: '0 0 12px rgba(239,68,68,0.35)',
-          }}
-        >
-          <AlertCircle size={14} className="text-white" />
-        </div>
-      )
-    default:
-      return (
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1.5px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <Circle size={10} style={{ color: 'rgba(255,255,255,0.15)' }} />
-        </div>
-      )
-  }
-}
-
-// ─── Connector line between steps ─────────────────────────────────────────────
-
-function StepConnector({ fromStatus, toStatus }: { fromStatus: string; toStatus: string }) {
-  const isActive = fromStatus === 'completed'
-  const isRunning = fromStatus === 'completed' && toStatus === 'running'
-
-  return (
-    <div className="flex justify-center" style={{ height: 20, marginLeft: 13, width: 1 }}>
-      <div
-        className="w-0.5 h-full rounded-full transition-all duration-700"
-        style={{
-          background: isActive
-            ? isRunning
-              ? 'linear-gradient(180deg, #10b981, #6366f1)'
-              : '#10b981'
-            : 'rgba(255,255,255,0.06)',
-        }}
-      />
-    </div>
-  )
-}
-
-// ─── Completion celebration ───────────────────────────────────────────────────
-
-function CompletionOverlay({ elapsed }: { elapsed: number }) {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-      <div
-        className="animate-fadeIn text-center pointer-events-auto"
-      >
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"
-          style={{
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(52,211,153,0.1))',
-            border: '2px solid rgba(16,185,129,0.3)',
-            boxShadow: '0 0 40px rgba(16,185,129,0.15), 0 0 80px rgba(16,185,129,0.05)',
-          }}
-        >
-          <Sparkles size={32} className="text-emerald-400" />
-        </div>
-      </div>
-    </div>
-  )
+const STEP_META: Record<string, { icon: typeof UserCheck; desc: string }> = {
+  'Profile Setup':         { icon: UserCheck,    desc: 'Creating your account profile...' },
+  'Campaign Menu Setup':   { icon: LayoutGrid,   desc: 'Building your campaign workspace...' },
+  'Lead Menu Setup':       { icon: FileText,     desc: 'Setting up lead management...' },
+  'DID Setup':             { icon: Phone,        desc: 'Configuring phone extensions...' },
+  'Email Template Setup':  { icon: Mail,         desc: 'Preparing email templates...' },
+  'SMS Template Setup':    { icon: MessageSquare, desc: 'Configuring SMS templates...' },
+  'Final Initialization':  { icon: Rocket,       desc: 'Finishing up — almost there!' },
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function SetupProgress({ progressId, onLoginSuccess }: SetupProgressProps) {
+export function SetupProgress({ progressId }: SetupProgressProps) {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
 
   const [data, setData] = useState<SetupProgressData | null>(null)
-  const [elapsedDisplay, setElapsedDisplay] = useState(0)
-  const [showCompletion, setShowCompletion] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
-  const startTimeRef = useRef(Date.now())
+  const [justCompleted, setJustCompleted] = useState<string | null>(null)
+  const startRef = useRef(Date.now())
   const timerRef = useRef<ReturnType<typeof setInterval>>()
   const loginDoneRef = useRef(false)
 
-  // ── Live elapsed timer (client-side for smoothness) ───────────────────────
+  // ── Client-side timer ─────────────────────────────────────────────────────
   useEffect(() => {
-    startTimeRef.current = Date.now()
+    startRef.current = Date.now()
     timerRef.current = setInterval(() => {
-      setElapsedDisplay(Math.floor((Date.now() - startTimeRef.current) / 1000))
-    }, 100)
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+    }, 200)
     return () => clearInterval(timerRef.current)
   }, [])
 
-  // ── Auto-login handler ────────────────────────────────────────────────────
+  // ── Auto-login ────────────────────────────────────────────────────────────
   const handleAutoLogin = useCallback((d: SetupProgressData) => {
     if (loginDoneRef.current) return
     if (!d.token) return
     loginDoneRef.current = true
 
-    const userData = d.user
+    const ud = d.user
     const user: User = {
-      ...(userData ?? {}),
-      name: (userData?.first_name || '') + ' ' + (userData?.last_name || ''),
-      level: Number(userData?.level ?? 6),
+      ...(ud ?? {}),
+      name: (ud?.first_name || '') + ' ' + (ud?.last_name || ''),
+      level: Number(ud?.level ?? 6),
     } as User
 
     localStorage.setItem('auth_token', d.token)
     setAuth(d.token, user)
-
-    // Show completion for 2.5 seconds then redirect
-    setShowCompletion(true)
     clearInterval(timerRef.current)
     setRedirectCountdown(3)
   }, [setAuth])
@@ -188,25 +97,40 @@ export function SetupProgress({ progressId, onLoginSuccess }: SetupProgressProps
     if (redirectCountdown === null) return
     if (redirectCountdown <= 0) {
       toast.success('Welcome! Your account is ready.')
-      if (onLoginSuccess) onLoginSuccess()
       navigate('/dashboard')
       return
     }
     const t = setTimeout(() => setRedirectCountdown(c => (c ?? 1) - 1), 1000)
     return () => clearTimeout(t)
-  }, [redirectCountdown, navigate, onLoginSuccess])
+  }, [redirectCountdown, navigate])
 
-  // ── Polling loop ──────────────────────────────────────────────────────────
+  // ── Track step completions for flash animation ────────────────────────────
+  const prevStepsRef = useRef<SetupStep[]>([])
+
+  // ── Polling (3s default, exponential backoff on 429) ──────────────────────
   useEffect(() => {
     if (!progressId) return
     let cancelled = false
+    let delay = 3000
 
     const poll = async () => {
       try {
         const res = await registerService.signupGetSetupSteps(progressId)
         const d = res.data?.data as SetupProgressData
         if (cancelled) return
+        delay = 3000 // reset on success
 
+        // Detect newly completed steps for flash animation
+        if (d.steps && prevStepsRef.current.length) {
+          for (const step of d.steps) {
+            const prev = prevStepsRef.current.find(s => s.name === step.name)
+            if (prev && prev.status === 'running' && step.status === 'completed') {
+              setJustCompleted(step.name)
+              setTimeout(() => setJustCompleted(null), 800)
+            }
+          }
+        }
+        prevStepsRef.current = d.steps ?? []
         setData(d)
 
         if (d.completed && d.ready) {
@@ -217,27 +141,20 @@ export function SetupProgress({ progressId, onLoginSuccess }: SetupProgressProps
           clearInterval(timerRef.current)
           return
         }
-      } catch {
-        // Silently retry on network errors
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status
+        if (status === 429) delay = Math.min(delay * 2, 15000) // backoff on rate limit
       }
-      if (!cancelled) {
-        setTimeout(poll, 1000)
-      }
+      if (!cancelled) setTimeout(poll, delay)
     }
 
     poll()
     return () => { cancelled = true }
   }, [progressId, handleAutoLogin])
 
-  // ── Format elapsed time ───────────────────────────────────────────────────
-  const formatElapsed = (s: number) => {
-    if (s < 60) return `${s}s`
-    return `${Math.floor(s / 60)}m ${s % 60}s`
-  }
-
-  // ── Fallback steps for initial render ─────────────────────────────────────
+  // ── Derived state ─────────────────────────────────────────────────────────
   const steps: SetupStep[] = data?.steps ?? [
-    { name: 'Profile Setup', status: 'pending' },
+    { name: 'Profile Setup', status: 'running' },
     { name: 'Campaign Menu Setup', status: 'pending' },
     { name: 'Lead Menu Setup', status: 'pending' },
     { name: 'DID Setup', status: 'pending' },
@@ -246,183 +163,270 @@ export function SetupProgress({ progressId, onLoginSuccess }: SetupProgressProps
     { name: 'Final Initialization', status: 'pending' },
   ]
 
-  const completedCount = steps.filter(s => s.status === 'completed').length
-  const progressPct = Math.round((completedCount / steps.length) * 100)
+  const completedSteps = steps.filter(s => s.status === 'completed')
+  const activeStep = steps.find(s => s.status === 'running')
+  const failedStep = steps.find(s => s.status === 'failed')
+  const totalSteps = steps.length
+  const doneCount = completedSteps.length
+  const progressPct = Math.round((doneCount / totalSteps) * 100)
   const isFailed = data?.failed ?? false
-  const isCompleted = showCompletion
+  const allDone = data?.completed ?? false
+
+  const fmt = (s: number) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
 
   // ═════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═════════════════════════════════════════════════════════════════════════
 
-  return (
-    <div className="relative w-full animate-fadeIn" style={{ minHeight: 460 }}>
-      {/* ── Completion overlay ─────────────────────────────────────────────── */}
-      {isCompleted && <CompletionOverlay elapsed={elapsedDisplay} />}
-
-      <div className={`transition-all duration-700 ${isCompleted ? 'opacity-0 scale-95' : 'opacity-100'}`}>
-        {/* ── Header ────────────────────────────────────────────────────────── */}
-        <div className="mb-5">
-          <h2 className="text-xl font-bold text-white leading-tight">
-            {isFailed ? 'Setup encountered an issue' : 'Setting up your workspace'}
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            {isFailed
-              ? 'Please try again or contact support.'
-              : 'Configuring everything for you. This will only take a moment.'}
-          </p>
+  // ── All done — celebration ────────────────────────────────────────────────
+  if (allDone && !isFailed) {
+    return (
+      <div className="w-full animate-fadeIn text-center" style={{ minHeight: 360 }}>
+        <div
+          className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
+          style={{
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(52,211,153,0.08))',
+            border: '2px solid rgba(16,185,129,0.25)',
+            boxShadow: '0 0 50px rgba(16,185,129,0.12)',
+          }}
+        >
+          <Sparkles size={34} className="text-emerald-400" />
         </div>
 
-        {/* ── Timer + Progress bar ──────────────────────────────────────────── */}
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{
-                  background: isFailed ? '#ef4444' : '#6366f1',
-                  boxShadow: isFailed
-                    ? '0 0 8px rgba(239,68,68,0.6)'
-                    : '0 0 8px rgba(99,102,241,0.6)',
-                  animation: isFailed ? 'none' : 'pulse 2s ease-in-out infinite',
-                }}
-              />
-              <span className="text-xs font-medium text-slate-400">
-                Setup Time: <span className="text-white font-semibold">{formatElapsed(elapsedDisplay)}</span>
-              </span>
-            </div>
-            <span className="text-xs font-semibold" style={{ color: isFailed ? '#ef4444' : '#818cf8' }}>
-              {progressPct}%
+        <h2 className="text-xl font-bold text-white mb-1">Setup Complete!</h2>
+        <p className="text-sm text-emerald-300 font-medium mb-4">
+          All done in {fmt(elapsed)}
+        </p>
+
+        {/* Completed chips */}
+        <div className="flex flex-wrap justify-center gap-1.5 mb-5">
+          {steps.map(s => (
+            <span
+              key={s.name}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium"
+              style={{ background: 'rgba(16,185,129,0.08)', color: '#6ee7b7' }}
+            >
+              <CheckCircle2 size={10} /> {s.name}
             </span>
-          </div>
-
-          {/* Progress bar */}
-          <div
-            className="w-full h-1.5 rounded-full overflow-hidden"
-            style={{ background: 'rgba(255,255,255,0.05)' }}
-          >
-            <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
-              style={{
-                width: `${progressPct}%`,
-                background: isFailed
-                  ? 'linear-gradient(90deg, #dc2626, #ef4444)'
-                  : 'linear-gradient(90deg, #4f46e5, #6366f1, #818cf8)',
-                boxShadow: isFailed
-                  ? '0 0 12px rgba(239,68,68,0.3)'
-                  : '0 0 12px rgba(99,102,241,0.3)',
-              }}
-            />
-          </div>
-        </div>
-
-        {/* ── Step list ─────────────────────────────────────────────────────── */}
-        <div className="space-y-0">
-          {steps.map((step, i) => (
-            <div key={step.name}>
-              <div
-                className="flex items-center gap-3 py-2.5 px-3 rounded-lg transition-all duration-300"
-                style={{
-                  background: step.status === 'running'
-                    ? 'rgba(99,102,241,0.06)'
-                    : step.status === 'failed'
-                      ? 'rgba(239,68,68,0.06)'
-                      : 'transparent',
-                }}
-              >
-                <StepIcon status={step.status} />
-
-                <div className="flex-1 min-w-0">
-                  <span
-                    className="text-sm font-medium transition-colors duration-300"
-                    style={{
-                      color: step.status === 'completed'
-                        ? '#a7f3d0'
-                        : step.status === 'running'
-                          ? '#c7d2fe'
-                          : step.status === 'failed'
-                            ? '#fca5a5'
-                            : '#475569',
-                    }}
-                  >
-                    {step.name}
-                  </span>
-                </div>
-
-                {/* Duration badge */}
-                {step.status === 'completed' && step.duration !== undefined && (
-                  <span
-                    className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-                    style={{
-                      color: '#6ee7b7',
-                      background: 'rgba(16,185,129,0.08)',
-                    }}
-                  >
-                    {step.duration < 1 ? '<1s' : `${Math.round(step.duration)}s`}
-                  </span>
-                )}
-
-                {step.status === 'running' && (
-                  <span className="text-[10px] font-medium text-indigo-300 animate-pulse">
-                    In progress...
-                  </span>
-                )}
-              </div>
-
-              {/* Connector line */}
-              {i < steps.length - 1 && (
-                <StepConnector fromStatus={step.status} toStatus={steps[i + 1].status} />
-              )}
-            </div>
           ))}
         </div>
 
-        {/* ── Failed state CTA ────────────────────────────────────────────── */}
-        {isFailed && (
-          <div className="mt-5">
-            <button
-              onClick={() => navigate('/login')}
-              className="w-full h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all duration-200 hover:brightness-110"
-              style={{
-                background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
-                boxShadow: '0 4px 12px rgba(99,102,241,0.25)',
-              }}
-            >
-              Go to Login <ArrowRight size={16} />
-            </button>
-          </div>
+        {redirectCountdown !== null && (
+          <p className="text-xs text-slate-400 animate-pulse">
+            Redirecting to dashboard in {redirectCountdown}s...
+          </p>
         )}
+      </div>
+    )
+  }
 
-        {/* ── Completion state ────────────────────────────────────────────── */}
-        {data?.completed && !isFailed && (
-          <div className="mt-5 text-center">
-            <div
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl"
-              style={{
-                background: 'rgba(16,185,129,0.08)',
-                border: '1px solid rgba(16,185,129,0.15)',
-              }}
-            >
-              <CheckCircle2 size={16} className="text-emerald-400" />
-              <span className="text-sm font-semibold text-emerald-300">
-                Setup Completed Successfully ({formatElapsed(elapsedDisplay)})
+  // ── Failed ────────────────────────────────────────────────────────────────
+  if (isFailed) {
+    return (
+      <div className="w-full animate-fadeIn text-center" style={{ minHeight: 360 }}>
+        <div
+          className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+          style={{
+            background: 'rgba(239,68,68,0.1)',
+            border: '1.5px solid rgba(239,68,68,0.2)',
+          }}
+        >
+          <AlertCircle size={28} className="text-red-400" />
+        </div>
+
+        <h2 className="text-xl font-bold text-white mb-1">Setup encountered an issue</h2>
+        <p className="text-sm text-slate-400 mb-5">
+          Our team has been notified. Please try logging in or contact support.
+        </p>
+
+        {/* Show which steps completed */}
+        {completedSteps.length > 0 && (
+          <div className="flex flex-wrap justify-center gap-1.5 mb-5">
+            {completedSteps.map(s => (
+              <span
+                key={s.name}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium"
+                style={{ background: 'rgba(16,185,129,0.08)', color: '#6ee7b7' }}
+              >
+                <CheckCircle2 size={10} /> {s.name}
               </span>
-            </div>
-            {redirectCountdown !== null && (
-              <p className="text-xs text-slate-500 mt-2">
-                Redirecting to dashboard in {redirectCountdown}s...
-              </p>
+            ))}
+            {failedStep && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium"
+                style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}
+              >
+                <AlertCircle size={10} /> {failedStep.name}
+              </span>
             )}
           </div>
         )}
 
-        {/* ── Subtle helper text ──────────────────────────────────────────── */}
-        {!isFailed && !data?.completed && (
-          <p className="text-[11px] text-slate-600 text-center mt-5 leading-relaxed">
-            Please don't close this page. This usually takes about 30 seconds.
-          </p>
-        )}
+        <button
+          onClick={() => navigate('/login')}
+          className="w-full h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all hover:brightness-110"
+          style={{
+            background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+            boxShadow: '0 4px 12px rgba(99,102,241,0.25)',
+          }}
+        >
+          Go to Login <ArrowRight size={16} />
+        </button>
       </div>
+    )
+  }
+
+  // ── In progress — sequential step view ────────────────────────────────────
+  const currentMeta = activeStep ? STEP_META[activeStep.name] : null
+  const CurrentIcon = currentMeta?.icon ?? Loader2
+
+  return (
+    <div className="w-full animate-fadeIn" style={{ minHeight: 360 }}>
+      {/* ── Header row: title + timer ──────────────────────────────────────── */}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-white leading-tight">Setting up your workspace</h2>
+          <p className="text-xs text-slate-500 mt-0.5">This will only take a moment</p>
+        </div>
+        <div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg flex-shrink-0"
+          style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.12)' }}
+        >
+          <div
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{
+              background: '#6366f1',
+              boxShadow: '0 0 6px rgba(99,102,241,0.8)',
+              animation: 'pulse 2s ease-in-out infinite',
+            }}
+          />
+          <span className="text-[11px] font-mono font-semibold text-indigo-300">{fmt(elapsed)}</span>
+        </div>
+      </div>
+
+      {/* ── Progress bar ───────────────────────────────────────────────────── */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-medium text-slate-500">
+            Step {doneCount + (activeStep ? 1 : 0)} of {totalSteps}
+          </span>
+          <span className="text-[11px] font-semibold text-indigo-300">{progressPct}%</span>
+        </div>
+        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+          <div
+            className="h-full rounded-full transition-all duration-1000 ease-out"
+            style={{
+              width: `${progressPct}%`,
+              background: 'linear-gradient(90deg, #4f46e5, #818cf8)',
+              boxShadow: '0 0 10px rgba(99,102,241,0.3)',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ── Completed steps (compact chips) ────────────────────────────────── */}
+      {completedSteps.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {completedSteps.map(s => (
+            <span
+              key={s.name}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-500"
+              style={{
+                background: s.name === justCompleted
+                  ? 'rgba(16,185,129,0.15)'
+                  : 'rgba(16,185,129,0.06)',
+                color: '#6ee7b7',
+                border: s.name === justCompleted
+                  ? '1px solid rgba(16,185,129,0.3)'
+                  : '1px solid transparent',
+              }}
+            >
+              <CheckCircle2 size={10} /> {s.name}
+              {s.duration !== undefined && (
+                <span className="text-emerald-600 ml-0.5">
+                  {s.duration < 1 ? '<1s' : `${Math.round(s.duration)}s`}
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* ── Active step card ───────────────────────────────────────────────── */}
+      {activeStep && (
+        <div
+          key={activeStep.name}
+          className="rounded-xl p-5 mb-4 animate-fadeIn"
+          style={{
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.04))',
+            border: '1px solid rgba(99,102,241,0.12)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.15), 0 0 0 1px rgba(99,102,241,0.05)',
+          }}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                boxShadow: '0 0 20px rgba(99,102,241,0.3)',
+              }}
+            >
+              <CurrentIcon size={20} className="text-white animate-spin" style={{
+                animation: CurrentIcon === Loader2 ? undefined : 'none',
+              }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">{activeStep.name}</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {currentMeta?.desc ?? 'Processing...'}
+              </p>
+            </div>
+          </div>
+
+          {/* Animated dots loader */}
+          <div className="flex items-center gap-1 ml-[52px]">
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full"
+                style={{
+                  background: '#6366f1',
+                  opacity: 0.4,
+                  animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                }}
+              />
+            ))}
+            <span className="text-[10px] text-indigo-400/60 font-medium ml-1.5">In progress</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Upcoming steps (dots only) ─────────────────────────────────────── */}
+      {(() => {
+        const pending = steps.filter(s => s.status === 'pending')
+        if (pending.length === 0) return null
+        return (
+          <div className="flex items-center gap-2 ml-1">
+            <div className="flex items-center gap-1">
+              {pending.map((_, i) => (
+                <div
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}
+                />
+              ))}
+            </div>
+            <span className="text-[10px] text-slate-600">
+              {pending.length} step{pending.length > 1 ? 's' : ''} remaining
+            </span>
+          </div>
+        )
+      })()}
+
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      <p className="text-[10px] text-slate-600 text-center mt-5">
+        Please don't close this page.
+      </p>
     </div>
   )
 }
