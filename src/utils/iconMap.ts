@@ -6,7 +6,7 @@ import {
   Headphones, Globe, Bot, Calendar, Mic, Inbox, BrainCircuit,
   Settings2, User, Wifi, DollarSign, BookMarked, Plug2,
   Target, Clock, CalendarDays, RefreshCw, FileSearch, Link2, Zap,
-  CheckCircle2,
+  CheckCircle2, Package,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,6 +57,7 @@ const ICON_MAP: Record<string, IconComponent> = {
   Link2,
   Zap,
   CheckCircle2,
+  Package,
 }
 
 /**

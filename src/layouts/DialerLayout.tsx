@@ -59,6 +59,7 @@ const DIALER_TITLES: Record<string, string> = {
   '/admin/system-monitor':          'System Monitor',
   '/system/swagger':                'API Docs',
   '/profile':                       'Profile',
+  '/upgrade':                       'Upgrade Plan',
   '/gmail-mailbox':                 'Gmail Mailbox',
   '/email-parser':                  'Email Parser',
   '/google-calendar':               'Google Calendar',

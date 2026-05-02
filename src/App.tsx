@@ -97,6 +97,7 @@ import { RinglessEditReview } from './modules/ringless/RinglessEditReview'
 import { AiSettings } from './pages/ai/AiSettings'
 import { AiCoach } from './pages/ai/AiCoach'
 import { SMSCenter } from './pages/sms/SMSCenter'
+import { UpgradePage } from './pages/upgrade/UpgradePage'
 import { SmsAiDemo } from './pages/smsai/SmsAiDemo'
 import { SmsAiCampaigns } from './pages/smsai/SmsAiCampaigns'
 import { SmsAiLists } from './pages/smsai/SmsAiLists'
@@ -137,6 +138,7 @@ import { GmailMailbox } from './pages/gmail/GmailMailbox'
 import EmailParser from './pages/email-parser/EmailParser'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
+import { SubscriptionPlans } from './pages/admin/SubscriptionPlans'
 import { AdminRvmCutover } from './pages/admin/AdminRvmCutover'
 import { AdminRvmCutoverDetail } from './pages/admin/AdminRvmCutoverDetail'
 import { AdminRvmDashboard } from './pages/admin/AdminRvmDashboard'
@@ -335,6 +337,7 @@ export default function App() {
           <Route path="/monitoring" element={<AgentMonitoring />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/billing" element={<Billing />} />
+          <Route path="/upgrade" element={<UpgradePage />} />
 
           <Route path="/settings" element={<Settings />} />
           <Route path="/settings/labels" element={<Labels />} />
@@ -436,6 +439,7 @@ export default function App() {
 
           {/* System Admin */}
           <Route path="/admin/clients" element={<AdminClients />} />
+          <Route path="/admin/subscription-plans" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><SubscriptionPlans /></RoleGuard>} />
           <Route path="/admin/rvm/dashboard" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmDashboard /></RoleGuard>} />
           <Route path="/admin/rvm/cutover" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutover /></RoleGuard>} />
           <Route path="/admin/rvm/cutover/:clientId" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutoverDetail /></RoleGuard>} />

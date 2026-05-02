@@ -12,6 +12,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid,
 } from 'recharts'
 import { dashboardService } from '../../services/dashboard.service'
+import { PlanUsageWidget } from '../../components/widgets/PlanUsageWidget'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { initials } from '../../utils/format'
@@ -510,6 +511,11 @@ export function Dashboard() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Plan Usage Widget ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <PlanUsageWidget />
       </div>
 
       {/* ── Agent leaderboard + Campaign table ───────────────────────────────── */}

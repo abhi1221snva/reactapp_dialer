@@ -6,6 +6,7 @@ import { WebPhone } from '../components/webphone/WebPhone'
 import { FloatingChatOrchestrator } from '../components/chat/FloatingChatOrchestrator'
 import { FloatingFab } from '../components/floating/FloatingFab'
 import { FloatingSms } from '../components/sms/FloatingSms'
+import { TrialBanner } from '../components/TrialBanner'
 import { useUIStore } from '../stores/ui.store'
 import { useAuthStore } from '../stores/auth.store'
 import { RouteGuard } from '../components/RouteGuard'
@@ -71,6 +72,7 @@ export function AppLayout() {
       {/* Right column: impersonation banner + TopHeader + scrollable page content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <ImpersonationBanner />
+        <TrialBanner />
         <TopHeader />
         <main className="flex-1 overflow-y-auto px-5 py-3">
           <RouteGuard><Outlet /></RouteGuard>

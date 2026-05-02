@@ -25,6 +25,12 @@ export interface AdminClient extends Record<string, unknown> {
     first_name: string
     last_name: string
   } | null
+  subscription_plan?: {
+    id: number
+    slug: string
+    name: string
+  } | null
+  subscription_status?: string
 }
 
 export interface ClientListResponse {

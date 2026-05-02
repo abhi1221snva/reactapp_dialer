@@ -279,6 +279,22 @@ export function AdminClients() {
       ),
     },
     {
+      key: 'subscription_plan', header: 'Plan',
+      render: (r) => {
+        const plan = r.subscription_plan as { id: number; slug: string; name: string } | null | undefined
+        const status = r.subscription_status as string | undefined
+        const statusColor: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
+          active: 'green', trial: 'blue', past_due: 'yellow', cancelled: 'red', expired: 'red',
+        }
+        return plan ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-slate-900">{plan.name}</span>
+            {status && <Badge variant={statusColor[status] ?? 'gray'}>{status}</Badge>}
+          </div>
+        ) : <span className="text-xs text-slate-300">-</span>
+      },
+    },
+    {
       key: 'is_deleted', header: 'Status', sortable: true,
       render: (r) => r.is_deleted
         ? <Badge variant="red">Inactive</Badge>
