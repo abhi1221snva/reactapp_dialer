@@ -268,9 +268,9 @@ export function Login() {
         return
       }
       const user = await buildUser(payload as Record<string, unknown>)
+      useEngineStore.getState().setEngine('dialer')
       setAuth(payload.token as string, user, payload.refresh_token as string | undefined)
-      const engine = useEngineStore.getState().engine
-      navigate(engine === 'crm' ? '/crm/dashboard' : '/dashboard')
+      navigate('/dashboard')
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number; data?: { code?: string; message?: string } } }
       const code = axiosErr?.response?.data?.code
@@ -376,10 +376,9 @@ export function Login() {
       localStorage.setItem('refresh_token', payload.refresh_token as string)
     }
     const user = await buildUser(payload)
+    useEngineStore.getState().setEngine('dialer')
     setAuth(payload.token as string, user, payload.refresh_token as string | undefined)
-    // Respect persisted engine preference — navigate to CRM or dialer dashboard
-    const engine = useEngineStore.getState().engine
-    navigate(engine === 'crm' ? '/crm/dashboard' : '/dashboard')
+    navigate('/dashboard')
   }
 
   const handleLogin = async (e: React.FormEvent) => {
