@@ -133,18 +133,7 @@ function Navbar() {
         <div className="flex items-center justify-between h-[72px]">
           {/* Logo */}
           <a href="#" className="flex items-center gap-2.5 group" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(99,102,241,0.5)]"
-              style={{
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
-                boxShadow: '0 0 20px rgba(99,102,241,0.35)',
-              }}
-            >
-              <Phone size={17} className="text-white" />
-            </div>
-            <span className="text-xl font-extrabold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent tracking-tight">
-              DialerCRM
-            </span>
+            <img src="/phonify-logo.svg" alt="Phonify" className="h-8 brightness-0 invert transition-all duration-300 group-hover:scale-105" />
           </a>
 
           {/* Desktop links */}
@@ -317,7 +306,7 @@ function Hero() {
               <div className="flex-1 mx-12">
                 <div className="bg-white/[0.05] rounded-lg px-4 py-1.5 text-[11px] text-slate-500 text-center max-w-sm mx-auto flex items-center justify-center gap-2">
                   <Shield size={10} className="text-emerald-400/70" />
-                  app.dialercrm.com/dashboard
+                  app.phonify.com/dashboard
                 </div>
               </div>
             </div>
@@ -332,7 +321,7 @@ function Hero() {
                     <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
                       <Phone size={9} className="text-white" />
                     </div>
-                    <span className="text-[10px] font-bold text-white/80">DialerCRM</span>
+                    <span className="text-[10px] font-bold text-white/80">Phonify</span>
                   </div>
                   {[
                     { l: 'Dashboard', active: true },
@@ -450,7 +439,7 @@ function StatsBar() {
           style={{ boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
             {[
-              { val: `${teams}+`, label: 'Sales Teams', sub: 'Trust DialerCRM', icon: Users, clr: 'text-indigo-400' },
+              { val: `${teams}+`, label: 'Sales Teams', sub: 'Trust Phonify', icon: Users, clr: 'text-indigo-400' },
               { val: `${calls}M+`, label: 'Calls Made', sub: 'Every month', icon: PhoneCall, clr: 'text-blue-400' },
               { val: `${uptime}.99%`, label: 'Uptime SLA', sub: 'Guaranteed', icon: Activity, clr: 'text-emerald-400' },
               { val: `${countries}+`, label: 'Countries', sub: 'Worldwide', icon: Globe, clr: 'text-purple-400' },
@@ -1064,12 +1053,12 @@ function FeatureComparison() {
 const testimonials = [
   {
     name: 'Sarah Mitchell', role: 'VP of Sales', company: 'TechFlow',
-    quote: 'DialerCRM transformed our outbound process. Our team went from 80 to 200+ calls per day with better conversion rates. The AI coaching feature is a game changer.',
+    quote: 'Phonify transformed our outbound process. Our team went from 80 to 200+ calls per day with better conversion rates. The AI coaching feature is a game changer.',
     avatar: 'SM', rating: 5,
   },
   {
     name: 'James Rodriguez', role: 'Director', company: 'CallHub Solutions',
-    quote: 'We evaluated 12 different platforms. DialerCRM was the only one that combined a real dialer with a CRM that our team actually wanted to use.',
+    quote: 'We evaluated 12 different platforms. Phonify was the only one that combined a real dialer with a CRM that our team actually wanted to use.',
     avatar: 'JR', rating: 5,
   },
   {
@@ -1093,7 +1082,7 @@ function Testimonials() {
             Loved by Sales Teams Everywhere
           </h2>
           <p className="text-slate-400 text-base sm:text-lg">
-            Don't take our word for it &mdash; hear from teams that use DialerCRM every day.
+            Don't take our word for it &mdash; hear from teams that use Phonify every day.
           </p>
         </div>
 
@@ -1168,7 +1157,7 @@ function CtaBanner() {
               Ready to Transform Your Sales?
             </h2>
             <p className="text-slate-400 text-base sm:text-lg max-w-xl mx-auto mb-8 leading-relaxed">
-              Join 500+ teams already using DialerCRM to close more deals, faster.
+              Join 500+ teams already using Phonify to close more deals, faster.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -1252,13 +1241,7 @@ function Footer() {
           {/* Brand column */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 0 16px rgba(99,102,241,0.25)' }}>
-                <Phone size={15} className="text-white" />
-              </div>
-              <span className="text-lg font-extrabold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent tracking-tight">
-                DialerCRM
-              </span>
+              <img src="/phonify-logo.svg" alt="Phonify" className="h-7 brightness-0 invert" />
             </div>
             <p className="text-[13px] text-slate-500 leading-relaxed max-w-[280px] mb-6">
               The all-in-one dialer and CRM platform built for modern sales teams that demand results.
@@ -1301,7 +1284,7 @@ function Footer() {
 
         <div className="border-t border-white/[0.04] pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-[11px] text-slate-600">
-            &copy; {new Date().getFullYear()} DialerCRM. All rights reserved.
+            &copy; {new Date().getFullYear()} Phonify. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-[11px] text-slate-600">
             <a href="#" className="hover:text-slate-400 transition-colors">Privacy</a>

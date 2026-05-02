@@ -185,8 +185,8 @@ export function TopHeader() {
         <Menu size={18} />
       </button>
 
-      {/* ── Engine segmented toggle ──────────────────────────────────────── */}
-      <div
+      {/* ── Engine segmented toggle (only shown for client 11) ── */}
+      {user?.parent_id === 11 && <div
         className="flex items-center p-[3px] rounded-full gap-[2px] flex-shrink-0"
         style={{ background: '#e9ecf1' }}
       >
@@ -226,7 +226,7 @@ export function TopHeader() {
             </button>
           )
         })}
-      </div>
+      </div>}
 
       {/* Spacer */}
       <div className="flex-1 min-w-0" />
