@@ -1,133 +1,149 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { CreditCard, DollarSign, TrendingUp, Package, Plus, Zap, CheckCircle2, ReceiptText } from 'lucide-react'
-import api from '../../api/axios'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  CreditCard, DollarSign, Wallet, Package, Plus, ArrowUp,
+  CheckCircle2, Minus, FileText, Trash2, ReceiptText, Loader2, ExternalLink,
+} from 'lucide-react'
+import toast from 'react-hot-toast'
+import { billingService, type PaymentMethod, type WalletTransaction, type InvoiceRecord } from '../../services/billing.service'
+import type { SubscriptionPlan } from '../../services/subscription.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
-import { formatDateTime } from '../../utils/format'
 import { cn } from '../../utils/cn'
+import { formatDateTime } from '../../utils/format'
+import { AddCardModal } from './AddCardModal'
+import { TopUpModal } from './TopUpModal'
+import { PlanUpgradeModal } from './PlanUpgradeModal'
 
-const TABS = ['Overview', 'Transactions', 'Packages']
+const TABS = ['Overview', 'Plans', 'Wallet', 'Payment Methods', 'Invoices'] as const
+type Tab = typeof TABS[number]
 
-const billingService = {
-  getWallet: () => api.get('/billing/wallet'),
-  getTransactions: (params?: Record<string, unknown>) => api.get('/billing/transactions', { params }),
-  getPackages: () => api.get('/billing/packages'),
+const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
+  active: 'green',
+  trial: 'blue',
+  past_due: 'yellow',
+  cancelled: 'red',
+  expired: 'red',
 }
 
-interface Transaction { id: number; type: string; amount: number; description: string; created_at: string; status: string; [key: string]: unknown }
-interface Package { id: number; name: string; price: number; minutes: number; sms_credits: number; features?: string[]; popular?: boolean; [key: string]: unknown }
-
 export function Billing() {
-  const [tab, setTab] = useState('Overview')
+  const qc = useQueryClient()
+  const [tab, setTab] = useState<Tab>('Overview')
+  const [showAddCard, setShowAddCard] = useState(false)
+  const [showTopUp, setShowTopUp] = useState(false)
+  const [upgradePlan, setUpgradePlan] = useState<SubscriptionPlan | null>(null)
 
-  const { data: walletData } = useQuery({
-    queryKey: ['wallet'],
-    queryFn: billingService.getWallet,
+  // ── Queries ──────────────────────────────────────────────────────────────
+  const { data: overviewRes } = useQuery({
+    queryKey: ['billing-overview'],
+    queryFn: billingService.getOverview,
+    staleTime: 60_000,
   })
 
-  const { data: txData, isLoading: txLoading } = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => billingService.getTransactions(),
-    enabled: tab === 'Transactions',
+  const { data: plansRes } = useQuery({
+    queryKey: ['billing-plans'],
+    queryFn: billingService.getAvailablePlans,
+    enabled: tab === 'Plans' || tab === 'Overview',
+    staleTime: 300_000,
   })
 
-  const { data: pkgData, isLoading: pkgLoading } = useQuery({
-    queryKey: ['packages'],
-    queryFn: billingService.getPackages,
-    enabled: tab === 'Packages',
+  const { data: walletTxRes, isLoading: txLoading } = useQuery({
+    queryKey: ['billing-wallet-tx'],
+    queryFn: () => billingService.getWalletTransactions(),
+    enabled: tab === 'Wallet',
   })
 
-  const wallet = walletData?.data?.data || {}
-  const transactions: Transaction[] = txData?.data?.data || []
-  const packages: Package[] = pkgData?.data?.data || []
+  const { data: pmRes, refetch: refetchPm } = useQuery({
+    queryKey: ['billing-pm'],
+    queryFn: billingService.getPaymentMethods,
+    enabled: tab === 'Payment Methods' || tab === 'Overview' || tab === 'Wallet' || tab === 'Plans',
+  })
 
-  const txColumns: Column<Transaction>[] = [
-    {
-      key: 'id', header: '#',
-      render: r => <span className="text-xs font-mono text-slate-500">#{r.id}</span>,
-    },
-    {
-      key: 'type', header: 'Type',
-      render: r => <Badge variant={r.type === 'credit' ? 'green' : 'red'}>{r.type}</Badge>,
-    },
-    {
-      key: 'description', header: 'Description',
-      render: r => <span className="text-sm text-slate-700">{r.description}</span>,
-    },
+  const { data: invRes, isLoading: invLoading } = useQuery({
+    queryKey: ['billing-invoices'],
+    queryFn: () => billingService.getInvoices(),
+    enabled: tab === 'Invoices',
+  })
+
+  const overview = overviewRes?.data?.data
+  const plans: SubscriptionPlan[] = plansRes?.data?.data?.plans || []
+  const currentPlanId = plansRes?.data?.data?.current_plan_id
+  const currentCycle = (overview?.billing_cycle || 'monthly') as 'monthly' | 'annual'
+  const currentPlan = plans.find(p => p.id === currentPlanId) || null
+  const paymentMethods: PaymentMethod[] = pmRes?.data?.data || []
+  const walletTxs: WalletTransaction[] = walletTxRes?.data?.data?.data || []
+  const invoices: InvoiceRecord[] = invRes?.data?.data?.data || []
+  const hasSubscription = !!overview?.subscription_status && !['trial', 'expired'].includes(overview.subscription_status)
+
+  const refreshAll = () => {
+    qc.invalidateQueries({ queryKey: ['billing-overview'] })
+    qc.invalidateQueries({ queryKey: ['billing-plans'] })
+    qc.invalidateQueries({ queryKey: ['billing-pm'] })
+    qc.invalidateQueries({ queryKey: ['billing-wallet-tx'] })
+    qc.invalidateQueries({ queryKey: ['billing-invoices'] })
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const fmtLimit = (v: number) => (v === 0 ? 'Unlimited' : v.toLocaleString())
+  const usagePct = (cur: number, max: number) => (max === 0 ? 0 : Math.min(100, Math.round((cur / max) * 100)))
+
+  const removeCard = async (id: string) => {
+    if (!confirm('Remove this card?')) return
+    try {
+      await billingService.removePaymentMethod(id)
+      toast.success('Card removed')
+      refetchPm()
+    } catch { /* interceptor */ }
+  }
+
+  // ── Column defs ─────────────────────────────────────────────────────────
+  const txCols: Column<WalletTransaction>[] = [
+    { key: 'id', header: '#', render: r => <span className="text-xs font-mono text-slate-400">#{r.id}</span> },
+    { key: 'transaction_type', header: 'Type', render: r => <Badge variant={r.transaction_type === 'credit' ? 'green' : 'red'}>{r.transaction_type}</Badge> },
+    { key: 'description', header: 'Description', render: r => <span className="text-sm text-slate-700">{r.description || '—'}</span> },
     {
       key: 'amount', header: 'Amount',
       render: r => (
-        <span className={cn('text-sm font-bold', r.type === 'credit' ? 'text-emerald-700' : 'text-red-600')}>
-          {r.type === 'credit' ? '+' : '-'}${Math.abs(Number(r.amount)).toFixed(2)}
+        <span className={cn('text-sm font-bold', r.transaction_type === 'credit' ? 'text-emerald-700' : 'text-red-600')}>
+          {r.transaction_type === 'credit' ? '+' : '-'}${Math.abs(Number(r.amount)).toFixed(2)}
         </span>
       ),
     },
+    { key: 'created_at', header: 'Date', render: r => <span className="text-xs text-slate-500">{formatDateTime(r.created_at)}</span> },
+  ]
+
+  const invCols: Column<InvoiceRecord>[] = [
+    { key: 'id', header: 'Invoice', render: r => <span className="text-xs font-mono text-slate-500">{String(r.id).slice(0, 20)}...</span> },
+    { key: 'status', header: 'Status', render: r => <Badge variant={r.status === 'paid' ? 'green' : r.status === 'open' ? 'yellow' : 'gray'}>{r.status}</Badge> },
+    { key: 'amount_paid', header: 'Amount', render: r => <span className="font-bold text-sm">${(r.amount_paid / 100).toFixed(2)}</span> },
     {
-      key: 'status', header: 'Status',
-      render: r => <Badge variant={r.status === 'completed' ? 'green' : r.status === 'pending' ? 'yellow' : 'gray'}>{r.status}</Badge>,
+      key: 'period_start', header: 'Period',
+      render: r => <span className="text-xs text-slate-500">{r.period_start ? new Date(r.period_start * 1000).toLocaleDateString() : '—'} — {r.period_end ? new Date(r.period_end * 1000).toLocaleDateString() : '—'}</span>,
     },
     {
-      key: 'created_at', header: 'Date',
-      render: r => <span className="text-xs text-slate-500">{formatDateTime(r.created_at)}</span>,
+      key: 'hosted_invoice_url', header: '',
+      render: r => r.hosted_invoice_url ? (
+        <a href={r.hosted_invoice_url as string} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800">
+          <ExternalLink size={14} />
+        </a>
+      ) : null,
     },
   ]
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Render
+  // ══════════════════════════════════════════════════════════════════════════
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all">
-          <Plus size={15} /> Add Credits
+      {/* Quick actions */}
+      <div className="flex items-center justify-end gap-3">
+        <button onClick={() => setShowTopUp(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:border-indigo-300 hover:text-indigo-700 transition-all">
+          <Wallet size={15} /> Top Up Wallet
         </button>
-      </div>
-
-      {/* Wallet card */}
-      <div
-        className="rounded-2xl p-6 text-white overflow-hidden relative"
-        style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #0ea5e9 100%)' }}
-      >
-        {/* Decorative circle */}
-        <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10" />
-        <div className="absolute -bottom-8 -right-4 w-32 h-32 rounded-full bg-white/5" />
-
-        <div className="relative">
-          <p className="text-white/70 text-sm font-medium uppercase tracking-wide">Current Balance</p>
-          <p className="text-5xl font-bold mt-1 tabular-nums">${Number(wallet.balance ?? 0).toFixed(2)}</p>
-
-          <div className="flex items-center gap-8 mt-6 pt-5 border-t border-white/20">
-            <div>
-              <p className="text-white/60 text-xs uppercase tracking-wide font-medium">Minutes Used</p>
-              <p className="font-bold text-lg mt-0.5">{wallet.minutes_used ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-white/60 text-xs uppercase tracking-wide font-medium">SMS Sent</p>
-              <p className="font-bold text-lg mt-0.5">{wallet.sms_used ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-white/60 text-xs uppercase tracking-wide font-medium">Plan</p>
-              <p className="font-bold text-lg mt-0.5">{wallet.plan ?? 'Pay-as-you-go'}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'This Month', value: `$${Number(wallet.month_spent ?? 0).toFixed(2)}`, icon: DollarSign, gradient: 'from-indigo-500 to-violet-600' },
-          { label: 'Total Calls', value: wallet.total_calls ?? 0, icon: TrendingUp, gradient: 'from-sky-500 to-blue-600' },
-          { label: 'Active Plan', value: wallet.plan ?? 'None', icon: Package, gradient: 'from-emerald-500 to-teal-600' },
-        ].map(stat => (
-          <div key={stat.label} className="card flex items-center gap-4">
-            <div className={cn('w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0 shadow-sm', stat.gradient)}>
-              <stat.icon size={20} className="text-white" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{stat.label}</p>
-              <p className="font-bold text-slate-900 mt-0.5">{String(stat.value)}</p>
-            </div>
-          </div>
-        ))}
+        <button onClick={() => setTab('Plans')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all">
+          <ArrowUp size={15} /> Upgrade Plan
+        </button>
       </div>
 
       {/* Tabs */}
@@ -148,97 +164,273 @@ export function Billing() {
         ))}
       </div>
 
+      {/* ═══ Overview ═══ */}
       {tab === 'Overview' && (
-        <div className="card flex flex-col items-center justify-center py-16 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
-            <CreditCard size={32} className="text-indigo-500" />
+        <div className="space-y-5">
+          {/* Plan + Status card */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Current Plan</h3>
+              {overview?.subscription_status && (
+                <Badge variant={STATUS_VARIANT[overview.subscription_status] || 'gray'}>
+                  {overview.subscription_status}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-end gap-3">
+              <span className="text-3xl font-bold text-indigo-600">
+                {currentPlan?.name || 'No plan'}
+              </span>
+              {currentPlan && (
+                <span className="text-slate-500 text-sm mb-1">
+                  ${currentCycle === 'annual' ? currentPlan.price_annual : currentPlan.price_monthly}/{currentCycle === 'annual' ? 'yr' : 'mo'}
+                </span>
+              )}
+            </div>
+            {overview?.subscription_ends_at && (
+              <p className="text-xs text-slate-400 mt-2">
+                {overview.subscription_status === 'trial' ? 'Trial ends' : 'Renews'}: {new Date(overview.subscription_ends_at).toLocaleDateString()}
+              </p>
+            )}
           </div>
-          <div className="text-center">
-            <p className="font-semibold text-slate-700">No payment method added</p>
-            <p className="text-sm text-slate-400 mt-1">Add a payment method to manage billing easily</p>
-          </div>
-          <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors">
-            <CreditCard size={15} /> Add Payment Method
-          </button>
-        </div>
-      )}
 
-      {tab === 'Transactions' && (
-        <div className="card overflow-hidden p-0">
-          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-            <ReceiptText size={16} className="text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-900">Transaction History</h3>
+          {/* Stats row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { label: 'Wallet Balance', value: `$${Number(overview?.wallet_balance ?? 0).toFixed(2)}`, icon: DollarSign, gradient: 'from-emerald-500 to-teal-600' },
+              { label: 'Agent Seats', value: `${overview?.usage?.agents?.current ?? 0} / ${fmtLimit(overview?.usage?.agents?.max ?? 0)}`, icon: Package, gradient: 'from-indigo-500 to-violet-600' },
+              { label: 'Monthly Calls', value: `${(overview?.usage?.calls?.current ?? 0).toLocaleString()} / ${fmtLimit(overview?.usage?.calls?.max ?? 0)}`, icon: FileText, gradient: 'from-sky-500 to-blue-600' },
+            ].map(stat => (
+              <div key={stat.label} className="card flex items-center gap-4">
+                <div className={cn('w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0', stat.gradient)}>
+                  <stat.icon size={20} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{stat.label}</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{stat.value}</p>
+                </div>
+              </div>
+            ))}
           </div>
-          <DataTable columns={txColumns} data={transactions} loading={txLoading} emptyText="No transactions yet" />
-        </div>
-      )}
 
-      {tab === 'Packages' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {pkgLoading && Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="card animate-pulse space-y-4">
-              <div className="h-6 bg-slate-200 rounded w-2/3" />
-              <div className="h-12 bg-slate-200 rounded" />
-              <div className="space-y-2">
-                {[1,2,3].map(j => <div key={j} className="h-4 bg-slate-200 rounded" />)}
+          {/* Usage bars */}
+          <div className="card space-y-4">
+            <h3 className="font-bold text-slate-900 text-sm">Usage This Month</h3>
+            {(['agents', 'calls', 'sms'] as const).map(key => {
+              const m = overview?.usage?.[key]
+              const cur = m?.current ?? 0
+              const max = m?.max ?? 0
+              const pct = usagePct(cur, max)
+              return (
+                <div key={key}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-600 capitalize">{key}</span>
+                    <span className="text-slate-400">{cur.toLocaleString()} / {fmtLimit(max)}</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full rounded-full transition-all', pct >= 80 ? 'bg-red-500' : 'bg-indigo-500')}
+                      style={{ width: max === 0 ? '0%' : `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Upcoming invoice */}
+          {overview?.upcoming_invoice && (
+            <div className="card">
+              <h3 className="font-bold text-slate-900 text-sm mb-3">Next Invoice</h3>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 text-sm">Amount due</span>
+                <span className="font-bold text-lg text-indigo-600">${(overview.upcoming_invoice.amount_due / 100).toFixed(2)}</span>
               </div>
             </div>
-          ))}
-          {packages.map((pkg, i) => {
-            const isPopular = pkg.popular || i === 1
+          )}
+        </div>
+      )}
+
+      {/* ═══ Plans ═══ */}
+      {tab === 'Plans' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {plans.map(plan => {
+            const isCurrent = plan.id === currentPlanId
+            const canUpgrade = currentPlan ? plan.display_order > currentPlan.display_order : true
+            const price = currentCycle === 'annual' ? plan.price_annual : plan.price_monthly
             return (
               <div
-                key={pkg.id}
+                key={plan.id}
                 className={cn(
                   'card relative overflow-hidden transition-all hover:shadow-lg',
-                  isPopular && 'ring-2 ring-indigo-500 shadow-indigo-100 shadow-lg'
+                  isCurrent && 'ring-2 ring-indigo-500 shadow-indigo-100 shadow-lg'
                 )}
               >
-                {isPopular && (
+                {isCurrent && (
                   <div className="absolute top-4 right-4">
-                    <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-[11px] font-bold">
-                      <Zap size={10} /> Popular
-                    </span>
+                    <Badge variant="blue">Current</Badge>
                   </div>
                 )}
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-4">
-                  <Package size={20} className="text-white" />
+                <h3 className="font-bold text-slate-900 text-lg">{plan.name}</h3>
+                <div className="flex items-end gap-1 mt-2 mb-4">
+                  <span className="text-3xl font-bold text-indigo-600">{price > 0 ? `$${price}` : 'Custom'}</span>
+                  {price > 0 && <span className="text-slate-500 text-sm mb-1">/{currentCycle === 'annual' ? 'yr' : 'mo'}</span>}
                 </div>
-                <h3 className="font-bold text-slate-900 text-lg">{pkg.name}</h3>
-                <div className="flex items-end gap-1 mt-2 mb-5">
-                  <span className="text-4xl font-bold text-indigo-600">${pkg.price}</span>
-                  <span className="text-slate-500 text-sm mb-1">/mo</span>
+                <div className="text-xs text-slate-500 space-y-1 mb-4">
+                  <p>Up to {plan.max_agents === 0 ? 'Unlimited' : plan.max_agents} agents</p>
+                  <p>{plan.max_calls_monthly === 0 ? 'Unlimited' : plan.max_calls_monthly.toLocaleString()} calls/mo</p>
+                  <p>{plan.max_sms_monthly === 0 ? 'Unlimited' : plan.max_sms_monthly.toLocaleString()} SMS/mo</p>
                 </div>
-                <div className="space-y-2.5 text-sm text-slate-600">
-                  {[
-                    `${pkg.minutes} minutes`,
-                    `${pkg.sms_credits} SMS credits`,
-                    ...(pkg.features ?? []),
-                  ].map((f, j) => (
-                    <div key={j} className="flex items-center gap-2">
-                      <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" />
-                      {f}
-                    </div>
-                  ))}
+                <div className="space-y-1.5 text-sm border-t border-slate-100 pt-3">
+                  {Object.entries({
+                    has_predictive_dialer: 'Predictive Dialer',
+                    has_full_crm: 'Full CRM',
+                    has_api_access: 'API Access',
+                    has_ai_coaching: 'AI Coaching',
+                  }).map(([key, label]) => {
+                    const on = !!(plan as Record<string, unknown>)[key]
+                    return (
+                      <div key={key} className="flex items-center gap-2">
+                        {on ? <CheckCircle2 size={14} className="text-emerald-500" /> : <Minus size={14} className="text-slate-300" />}
+                        <span className={on ? 'text-slate-700' : 'text-slate-400'}>{label}</span>
+                      </div>
+                    )
+                  })}
                 </div>
-                <button className={cn(
-                  'w-full mt-6 py-2.5 rounded-xl font-semibold text-sm transition-all',
-                  isPopular
-                    ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-200 hover:shadow-indigo-300'
-                    : 'border-2 border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-700'
-                )}>
-                  Subscribe
+                <button
+                  onClick={() => canUpgrade && !isCurrent ? setUpgradePlan(plan) : undefined}
+                  disabled={isCurrent || !canUpgrade}
+                  className={cn(
+                    'w-full mt-5 py-2.5 rounded-xl font-semibold text-sm transition-all',
+                    isCurrent
+                      ? 'bg-slate-100 text-slate-400 cursor-default'
+                      : canUpgrade
+                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-200 hover:shadow-indigo-300'
+                        : 'border-2 border-slate-200 text-slate-400 cursor-not-allowed'
+                  )}
+                >
+                  {isCurrent ? 'Current Plan' : canUpgrade ? 'Upgrade' : 'Contact Support'}
                 </button>
               </div>
             )
           })}
-          {!pkgLoading && packages.length === 0 && (
-            <div className="col-span-3 flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
-              <Package size={36} className="text-slate-300" />
-              <p className="text-sm">No packages available</p>
+        </div>
+      )}
+
+      {/* ═══ Wallet ═══ */}
+      {tab === 'Wallet' && (
+        <div className="space-y-5">
+          <div
+            className="rounded-2xl p-6 text-white overflow-hidden relative"
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #0ea5e9 100%)' }}
+          >
+            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10" />
+            <div className="relative flex items-center justify-between">
+              <div>
+                <p className="text-white/70 text-sm font-medium uppercase tracking-wide">Wallet Balance</p>
+                <p className="text-5xl font-bold mt-1 tabular-nums">${Number(overview?.wallet_balance ?? 0).toFixed(2)}</p>
+              </div>
+              <button
+                onClick={() => setShowTopUp(true)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/20 text-white font-semibold text-sm hover:bg-white/30 backdrop-blur transition-all"
+              >
+                <Plus size={15} /> Top Up
+              </button>
+            </div>
+          </div>
+
+          <div className="card overflow-hidden p-0">
+            <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
+              <ReceiptText size={16} className="text-slate-500" />
+              <h3 className="text-sm font-bold text-slate-900">Transaction History</h3>
+            </div>
+            <DataTable columns={txCols} data={walletTxs} loading={txLoading} emptyText="No transactions yet" />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Payment Methods ═══ */}
+      {tab === 'Payment Methods' && (
+        <div className="space-y-5">
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowAddCard(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={15} /> Add Card
+            </button>
+          </div>
+
+          {paymentMethods.length === 0 ? (
+            <div className="card flex flex-col items-center justify-center py-16 gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                <CreditCard size={32} className="text-indigo-500" />
+              </div>
+              <p className="font-semibold text-slate-700">No payment methods</p>
+              <p className="text-sm text-slate-400">Add a card to subscribe or top up your wallet</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {paymentMethods.map(pm => (
+                <div key={pm.id} className="card flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+                      <CreditCard size={20} className="text-slate-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">
+                        {pm.brand.toUpperCase()} ****{pm.last4}
+                        {pm.is_default && <Badge variant="blue" className="ml-2">Default</Badge>}
+                      </p>
+                      <p className="text-xs text-slate-400">Expires {pm.exp_month}/{pm.exp_year}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => removeCard(pm.id)} className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
+      )}
+
+      {/* ═══ Invoices ═══ */}
+      {tab === 'Invoices' && (
+        <div className="card overflow-hidden p-0">
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
+            <FileText size={16} className="text-slate-500" />
+            <h3 className="text-sm font-bold text-slate-900">Invoice History</h3>
+          </div>
+          <DataTable columns={invCols} data={invoices} loading={invLoading} emptyText="No invoices yet" />
+        </div>
+      )}
+
+      {/* ═══ Modals ═══ */}
+      <AddCardModal
+        open={showAddCard}
+        onClose={() => setShowAddCard(false)}
+        onSuccess={() => { refetchPm(); refreshAll() }}
+      />
+      <TopUpModal
+        open={showTopUp}
+        onClose={() => setShowTopUp(false)}
+        onSuccess={refreshAll}
+        paymentMethods={paymentMethods}
+        onAddCard={() => { setShowTopUp(false); setShowAddCard(true) }}
+      />
+      {upgradePlan && (
+        <PlanUpgradeModal
+          open={!!upgradePlan}
+          onClose={() => setUpgradePlan(null)}
+          onSuccess={refreshAll}
+          plan={upgradePlan}
+          currentPlan={currentPlan}
+          currentCycle={currentCycle}
+          hasSubscription={hasSubscription}
+          paymentMethods={paymentMethods}
+          onAddCard={() => { setUpgradePlan(null); setShowAddCard(true) }}
+        />
       )}
     </div>
   )

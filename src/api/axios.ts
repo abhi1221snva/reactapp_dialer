@@ -184,6 +184,14 @@ api.interceptors.response.use(
       } else if (!error.config?._silent403) {
         toast.error(safeMsg(message, 'You do not have permission to perform this action'))
       }
+    } else if (status === 402) {
+      // Payment required — subscription inactive or usage limit reached
+      if (code === 'SUBSCRIPTION_INACTIVE') {
+        toast.error('Your subscription is inactive. Redirecting to billing…')
+        window.location.href = '/billing'
+      } else {
+        toast.error(safeMsg(message, 'Usage limit reached. Please upgrade your plan or top up your wallet.'))
+      }
     } else if (status === 429) {
       // Rate limited — always show regardless of auth state
       toast.error(safeMsg(message, 'Too many requests. Please wait a moment and try again.'))

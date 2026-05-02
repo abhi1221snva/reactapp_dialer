@@ -25,6 +25,9 @@ export interface SubscriptionPlan extends Record<string, unknown> {
   is_active: boolean
   display_order: number
   trial_days: number
+  stripe_product_id?: string | null
+  stripe_price_monthly_id?: string | null
+  stripe_price_annual_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -121,4 +124,8 @@ export const subscriptionService = {
   // Client-facing: my features
   getMyFeatures: () =>
     api.get<{ data: PlanFeatures }>('/subscription/features'),
+
+  // Admin: sync all plans to Stripe
+  syncToStripe: () =>
+    api.post<{ data: { synced: number } }>('/admin/subscription-plans/sync-stripe'),
 }

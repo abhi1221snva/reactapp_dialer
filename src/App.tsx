@@ -107,6 +107,7 @@ import { TeamChat } from './pages/chat/TeamChat'
 import { AgentMonitoring } from './pages/monitoring/AgentMonitoring'
 import { Attendance } from './pages/attendance/Attendance'
 import { Billing } from './pages/billing/Billing'
+import { StripeProvider } from './components/stripe/StripeProvider'
 import { TelecomPage } from './pages/telecom/TelecomPage'
 
 import { Labels } from './pages/settings/Labels'
@@ -336,7 +337,7 @@ export default function App() {
           <Route path="/chat" element={<TeamChat />} />
           <Route path="/monitoring" element={<AgentMonitoring />} />
           <Route path="/attendance" element={<Attendance />} />
-          <Route path="/billing" element={<Billing />} />
+          <Route path="/billing" element={<StripeProvider><Billing /></StripeProvider>} />
           <Route path="/upgrade" element={<UpgradePage />} />
 
           <Route path="/settings" element={<Settings />} />
