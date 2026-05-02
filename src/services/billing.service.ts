@@ -29,6 +29,7 @@ export interface BillingOverview {
     year_month: string
   }
   wallet_balance: number
+  wallet_low_threshold_cents: number
   upcoming_invoice: UpcomingInvoice | null
 }
 
@@ -69,6 +70,22 @@ export interface WalletTransaction extends Record<string, unknown> {
   description: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SubscriptionEvent extends Record<string, unknown> {
+  id: number
+  client_id: number
+  event_type: string
+  from_status: string | null
+  to_status: string | null
+  plan_id: number | null
+  metadata: Record<string, unknown> | null
+  triggered_by: string
+  created_at: string
+}
+
+export interface WalletThreshold {
+  wallet_low_threshold_cents: number
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -121,4 +138,14 @@ export const billingService = {
 
   removePaymentMethod: (id: string) =>
     api.delete(`/billing/payment-methods/${id}`),
+
+  // Subscription events / activity log
+  getEvents: (page = 1) =>
+    api.get<{ data: { data: SubscriptionEvent[]; total: number; page: number; per_page: number; last_page: number } }>(
+      '/billing/events', { params: { page } }
+    ),
+
+  // Wallet low-balance threshold
+  updateWalletThreshold: (thresholdCents: number) =>
+    api.put('/billing/wallet/threshold', { wallet_low_threshold_cents: thresholdCents }),
 }

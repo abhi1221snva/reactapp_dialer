@@ -160,7 +160,15 @@ function AgentModal({ open, onClose, editing, roles }: AgentModalProps) {
       qc.invalidateQueries({ queryKey: ['agents'] })
       qc.invalidateQueries({ queryKey: ['agent'] })
       onClose()
-    } catch { /* interceptor */ } finally { setSaving(false) }
+    } catch (err: unknown) {
+      // Seat limit errors are also handled by the axios interceptor toast,
+      // but we keep the modal open so the user sees the form state.
+      const axiosErr = err as { response?: { status?: number; data?: { code?: string; message?: string } } }
+      if (axiosErr?.response?.status === 402 && axiosErr?.response?.data?.code === 'SEAT_LIMIT_REACHED') {
+        // toast already shown by interceptor — nothing extra needed
+      }
+      // Other errors handled by interceptor
+    } finally { setSaving(false) }
   }
 
   if (!open) return null
@@ -358,6 +366,25 @@ const STATUS_FILTER = [
   ]},
 ]
 
+// ─── Seat limit badge ───────────────────────────────────────────────────────
+function SeatBadge({ current, max }: { current: number; max: number }) {
+  if (max === 0) return null // unlimited — don't show
+  const atLimit = current >= max
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${
+        atLimit
+          ? 'bg-red-50 text-red-700 border border-red-200'
+          : 'bg-slate-100 text-slate-600 border border-slate-200'
+      }`}
+      title={atLimit ? 'Agent seat limit reached. Upgrade your plan to add more.' : `${max - current} seat(s) remaining on your plan`}
+    >
+      <Users size={11} />
+      {current}/{max} agents
+    </span>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function Agents() {
   const qc = useQueryClient()
@@ -368,6 +395,7 @@ export function Agents() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
   const [resetAgent, setResetAgent] = useState<Agent | null>(null)
+  const [seatLimit, setSeatLimit] = useState<{ current: number; max: number; allowed: boolean } | null>(null)
 
   const { data: rolesData } = useQuery<RoleOption[]>({
     queryKey: ['agent-roles'],
@@ -400,6 +428,8 @@ export function Agents() {
   const openCreate = () => { setEditingAgent(null); setModalOpen(true) }
   const openEdit   = (a: Agent) => { setEditingAgent(a); setModalOpen(true) }
 
+  const seatAtLimit = seatLimit ? !seatLimit.allowed : false
+
   useEffect(() => {
     setToolbar(
       <>
@@ -413,8 +443,16 @@ export function Agents() {
           )}
         </div>
         <div className="lt-divider" />
-        <div className="lt-right">
-          <button onClick={openCreate} className="lt-b lt-p">
+        <div className="lt-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {seatLimit && seatLimit.max > 0 && (
+            <SeatBadge current={seatLimit.current} max={seatLimit.max} />
+          )}
+          <button
+            onClick={openCreate}
+            className={`lt-b lt-p ${seatAtLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={seatAtLimit}
+            title={seatAtLimit ? `Seat limit reached (${seatLimit?.current}/${seatLimit?.max}). Upgrade your plan.` : 'Add a new agent'}
+          >
             <Plus size={13} /> Add Agent
           </button>
         </div>
@@ -530,7 +568,9 @@ export function Agents() {
           limit: params.limit,
         })}
         dataExtractor={(res: unknown) => {
-          const r = res as { data?: { data?: Agent[] } }
+          const r = res as { data?: { data?: Agent[]; seat_limit?: { current: number; max: number; allowed: boolean } } }
+          // Capture seat limit from the list response
+          if (r?.data?.seat_limit) setSeatLimit(r.data.seat_limit)
           return r?.data?.data ?? []
         }}
         totalExtractor={(res: unknown) => {

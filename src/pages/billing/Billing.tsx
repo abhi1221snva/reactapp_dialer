@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CreditCard, DollarSign, Wallet, Package, Plus, ArrowUp,
   CheckCircle2, Minus, FileText, Trash2, ReceiptText, Loader2, ExternalLink,
+  Activity, Bell, Settings2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { billingService, type PaymentMethod, type WalletTransaction, type InvoiceRecord } from '../../services/billing.service'
+import { billingService, type PaymentMethod, type WalletTransaction, type InvoiceRecord, type SubscriptionEvent } from '../../services/billing.service'
 import type { SubscriptionPlan } from '../../services/subscription.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -15,7 +16,7 @@ import { AddCardModal } from './AddCardModal'
 import { TopUpModal } from './TopUpModal'
 import { PlanUpgradeModal } from './PlanUpgradeModal'
 
-const TABS = ['Overview', 'Plans', 'Wallet', 'Payment Methods', 'Invoices'] as const
+const TABS = ['Overview', 'Plans', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
 type Tab = typeof TABS[number]
 
 const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
@@ -65,6 +66,12 @@ export function Billing() {
     enabled: tab === 'Invoices',
   })
 
+  const { data: eventsRes, isLoading: eventsLoading } = useQuery({
+    queryKey: ['billing-events'],
+    queryFn: () => billingService.getEvents(),
+    enabled: tab === 'Activity',
+  })
+
   const overview = overviewRes?.data?.data
   const plans: SubscriptionPlan[] = plansRes?.data?.data?.plans || []
   const currentPlanId = plansRes?.data?.data?.current_plan_id
@@ -73,7 +80,31 @@ export function Billing() {
   const paymentMethods: PaymentMethod[] = pmRes?.data?.data || []
   const walletTxs: WalletTransaction[] = walletTxRes?.data?.data?.data || []
   const invoices: InvoiceRecord[] = invRes?.data?.data?.data || []
+  const events: SubscriptionEvent[] = eventsRes?.data?.data?.data || []
   const hasSubscription = !!overview?.subscription_status && !['trial', 'expired'].includes(overview.subscription_status)
+
+  // Wallet threshold state
+  const [thresholdInput, setThresholdInput] = useState('')
+  const [thresholdEditing, setThresholdEditing] = useState(false)
+
+  const thresholdMutation = useMutation({
+    mutationFn: (cents: number) => billingService.updateWalletThreshold(cents),
+    onSuccess: () => {
+      toast.success('Low balance threshold updated')
+      setThresholdEditing(false)
+      qc.invalidateQueries({ queryKey: ['billing-overview'] })
+    },
+    onError: () => { /* interceptor handles */ },
+  })
+
+  const saveThreshold = () => {
+    const dollars = parseFloat(thresholdInput)
+    if (isNaN(dollars) || dollars < 0) {
+      toast.error('Enter a valid dollar amount')
+      return
+    }
+    thresholdMutation.mutate(Math.round(dollars * 100))
+  }
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: ['billing-overview'] })
@@ -81,6 +112,7 @@ export function Billing() {
     qc.invalidateQueries({ queryKey: ['billing-pm'] })
     qc.invalidateQueries({ queryKey: ['billing-wallet-tx'] })
     qc.invalidateQueries({ queryKey: ['billing-invoices'] })
+    qc.invalidateQueries({ queryKey: ['billing-events'] })
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -127,6 +159,43 @@ export function Billing() {
           <ExternalLink size={14} />
         </a>
       ) : null,
+    },
+  ]
+
+  const EVENT_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
+    trial_started: 'blue',
+    subscribed: 'green',
+    upgraded: 'green',
+    cancelled: 'yellow',
+    trial_expired: 'red',
+    subscription_expired: 'red',
+    grace_ended: 'gray',
+  }
+
+  const eventCols: Column<SubscriptionEvent>[] = [
+    {
+      key: 'event_type', header: 'Event',
+      render: r => (
+        <Badge variant={EVENT_VARIANT[r.event_type] || 'gray'}>
+          {String(r.event_type).replace(/_/g, ' ')}
+        </Badge>
+      ),
+    },
+    {
+      key: 'from_status', header: 'From',
+      render: r => <span className="text-sm text-slate-500">{r.from_status || '—'}</span>,
+    },
+    {
+      key: 'to_status', header: 'To',
+      render: r => <span className="text-sm text-slate-700 font-medium">{r.to_status || '—'}</span>,
+    },
+    {
+      key: 'triggered_by', header: 'By',
+      render: r => <span className="text-xs text-slate-400">{r.triggered_by}</span>,
+    },
+    {
+      key: 'created_at', header: 'Date',
+      render: r => <span className="text-xs text-slate-500">{formatDateTime(r.created_at)}</span>,
     },
   ]
 
@@ -339,6 +408,62 @@ export function Billing() {
             </div>
           </div>
 
+          {/* Low balance alert threshold */}
+          <div className="card">
+            <div className="flex items-center gap-2.5 mb-3">
+              <Bell size={16} className="text-slate-500" />
+              <h3 className="text-sm font-bold text-slate-900">Low Balance Alert</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Get notified by email when your wallet balance drops below this amount.
+            </p>
+            {thresholdEditing ? (
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 max-w-[200px]">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.50"
+                    value={thresholdInput}
+                    onChange={e => setThresholdInput(e.target.value)}
+                    className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="2.00"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  onClick={saveThreshold}
+                  disabled={thresholdMutation.isPending}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  {thresholdMutation.isPending ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => setThresholdEditing(false)}
+                  className="px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-700">
+                  Alert threshold: <strong>${(overview?.wallet_low_threshold_cents ?? 200) / 100}</strong>
+                </span>
+                <button
+                  onClick={() => {
+                    setThresholdInput(String((overview?.wallet_low_threshold_cents ?? 200) / 100))
+                    setThresholdEditing(true)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <Settings2 size={13} /> Change
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="card overflow-hidden p-0">
             <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
               <ReceiptText size={16} className="text-slate-500" />
@@ -403,6 +528,17 @@ export function Billing() {
             <h3 className="text-sm font-bold text-slate-900">Invoice History</h3>
           </div>
           <DataTable columns={invCols} data={invoices} loading={invLoading} emptyText="No invoices yet" />
+        </div>
+      )}
+
+      {/* ═══ Activity ═══ */}
+      {tab === 'Activity' && (
+        <div className="card overflow-hidden p-0">
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
+            <Activity size={16} className="text-slate-500" />
+            <h3 className="text-sm font-bold text-slate-900">Subscription Activity</h3>
+          </div>
+          <DataTable columns={eventCols} data={events} loading={eventsLoading} emptyText="No activity yet" />
         </div>
       )}
 
