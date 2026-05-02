@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import Swal from 'sweetalert2'
 import { registerService } from '../../services/register.service'
 import { useAuthStore } from '../../stores/auth.store'
+import { useEngineStore } from '../../stores/engine.store'
 import { SetupProgress } from './SetupProgress'
 import type { User } from '../../types'
 
@@ -312,6 +313,7 @@ async function showEmailBlockedAlert(
 export function Register() {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
+  const { setEngine } = useEngineStore()
 
   // ── Step state machine ──────────────────────────────────────────────────
   const [step, setStep] = useState<SignupStep>('credentials')
@@ -568,6 +570,7 @@ export function Register() {
         } as User
         localStorage.setItem('auth_token', data.token as string)
         setAuth(data.token as string, user)
+        setEngine('dialer')
         toast.success('Welcome! Your account is ready.')
         navigate('/dashboard')
         return

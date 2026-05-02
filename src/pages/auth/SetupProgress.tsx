@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast'
 import { registerService } from '../../services/register.service'
 import { useAuthStore } from '../../stores/auth.store'
+import { useEngineStore } from '../../stores/engine.store'
 import type { User } from '../../types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ const REVEAL_DELAY = 1200 // ms between revealing each completed step
 export function SetupProgress({ progressId }: SetupProgressProps) {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
+  const { setEngine } = useEngineStore()
 
   const [data, setData] = useState<SetupProgressData | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -99,9 +101,10 @@ export function SetupProgress({ progressId }: SetupProgressProps) {
 
     localStorage.setItem('auth_token', d.token)
     setAuth(d.token, user)
+    setEngine('dialer')
     clearInterval(timerRef.current)
     setRedirectCountdown(3)
-  }, [setAuth])
+  }, [setAuth, setEngine])
 
   // ── Redirect countdown ────────────────────────────────────────────────────
   useEffect(() => {
