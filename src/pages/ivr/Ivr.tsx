@@ -4,7 +4,7 @@ import {
   Plus, Pencil, Trash2, PhoneCall, Music, X,
   Mic, Upload, Volume2, AlertCircle,
   Loader2, Square,
-  Search, ChevronRight,
+  Search, ChevronRight, Play, Pause,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ivrService } from '../../services/ivr.service'
@@ -373,6 +373,72 @@ function AudioPlayer({ annId }: { annId: string }) {
       className="h-9 rounded-lg"
       style={{ minWidth: 220 }}
     />
+  )
+}
+
+// ── Compact Play Button (for IVR list items) ──────────────────────────────────
+
+function PlayButton({ annId }: { annId: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+    }
+  }, [])
+
+  const toggle = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (playing && audioRef.current) {
+      audioRef.current.pause()
+      setPlaying(false)
+      return
+    }
+    if (blobUrl && audioRef.current) {
+      audioRef.current.currentTime = 0
+      audioRef.current.play()
+      setPlaying(true)
+      return
+    }
+    setLoading(true)
+    try {
+      const parts = annId.split('/')
+      const res = await ivrService.fetchAudioBlob(parts[0], parts.slice(1).join('/'))
+      const blob = new Blob([res.data as BlobPart], {
+        type: (res.headers as Record<string, string>)['content-type'] || 'audio/mpeg',
+      })
+      const url = URL.createObjectURL(blob)
+      blobUrlRef.current = url
+      setBlobUrl(url)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => setPlaying(false)
+      audio.play()
+      setPlaying(true)
+    } catch { /* silent */ }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      title={playing ? 'Pause' : 'Play greeting'}
+      className={cn(
+        'w-7 h-7 rounded-lg border flex items-center justify-center transition-colors flex-shrink-0',
+        playing
+          ? 'border-indigo-300 bg-indigo-50 text-indigo-600'
+          : 'border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
+      )}
+    >
+      {loading ? <Loader2 size={11} className="animate-spin" />
+        : playing ? <Pause size={11} />
+        : <Play size={11} />}
+    </button>
   )
 }
 
@@ -1207,28 +1273,42 @@ function IvrMenuPanel({
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       {/* Panel header */}
-      <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
-            <PhoneCall size={13} className="text-white" />
+      <div className="px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
+              <PhoneCall size={13} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">{capFirst(selectedIvr.ivr_desc)}</p>
+              <p className="text-[11px] text-slate-400 font-mono">{selectedIvr.ivr_id}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">{capFirst(selectedIvr.ivr_desc)}</p>
-            <p className="text-[11px] text-slate-400 font-mono">{selectedIvr.ivr_id}</p>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-slate-400">
+              {usedDtmf.length}/{KEYPAD_KEYS.length} keys used
+            </span>
+            <button
+              onClick={() => { setEditingItem(null); setShowModal(true) }}
+              disabled={usedDtmf.length >= KEYPAD_KEYS.length}
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-50"
+            >
+              <Plus size={12} /> Add Route
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] text-slate-400">
-            {usedDtmf.length}/{KEYPAD_KEYS.length} keys used
-          </span>
-          <button
-            onClick={() => { setEditingItem(null); setShowModal(true) }}
-            disabled={usedDtmf.length >= KEYPAD_KEYS.length}
-            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-50"
-          >
-            <Plus size={12} /> Add Route
-          </button>
-        </div>
+        {/* Greeting audio player */}
+        {selectedIvr.ann_id && String(selectedIvr.ann_id).includes('/') && (
+          <div className="mt-3 flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+              <Volume2 size={12} className="text-indigo-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">Greeting Audio</p>
+              <AudioPlayer annId={String(selectedIvr.ann_id)} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -1718,6 +1798,9 @@ function IvrListPanel({
                     'flex items-center gap-1 transition-opacity',
                     isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                   )}>
+                    {ivr.ann_id && String(ivr.ann_id).includes('/') && (
+                      <PlayButton annId={String(ivr.ann_id)} />
+                    )}
                     <button
                       onClick={e => { e.stopPropagation(); onEdit(ivr) }}
                       title="Edit IVR"

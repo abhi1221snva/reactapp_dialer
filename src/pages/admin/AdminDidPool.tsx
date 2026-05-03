@@ -16,6 +16,7 @@ import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
 import { cn } from '../../utils/cn'
 import { formatDateTime } from '../../utils/format'
+import { showConfirm } from '../../utils/confirmDelete'
 
 const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
   free: 'green',
@@ -437,7 +438,9 @@ export function AdminDidPool() {
           )}
           {/* Release (assigned) */}
           {r.status === 'assigned' && (
-            <button onClick={() => releaseMut.mutate(r.id)} title="Release DID"
+            <button onClick={async () => {
+              if (await showConfirm({ title: 'Release DID?', message: `Release ${r.phone_number} from client #${r.assigned_client_id}? It will enter a 24-hour cooldown.`, confirmText: 'Yes, release', danger: false, icon: 'warning' })) releaseMut.mutate(r.id)
+            }} title="Release DID"
               className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500"><UserMinus size={14} /></button>
           )}
           {/* Block (free/cooldown) */}
@@ -447,7 +450,9 @@ export function AdminDidPool() {
           )}
           {/* Unblock (blocked) */}
           {r.status === 'blocked' && (
-            <button onClick={() => unblockMut.mutate(r.id)} title="Unblock DID"
+            <button onClick={async () => {
+              if (await showConfirm({ title: 'Unblock DID?', message: `Unblock ${r.phone_number} and make it available for assignment?`, confirmText: 'Yes, unblock', danger: false, icon: 'question' })) unblockMut.mutate(r.id)
+            }} title="Unblock DID"
               className="p-1.5 rounded-lg hover:bg-green-50 text-green-500"><ShieldOff size={14} /></button>
           )}
           {/* Audit */}
