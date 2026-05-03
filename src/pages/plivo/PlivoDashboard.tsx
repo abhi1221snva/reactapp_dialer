@@ -9,6 +9,8 @@ import {
 import toast from 'react-hot-toast'
 import { plivoService } from '../../services/plivo.service'
 import type { PlivoAccount } from '../../types/plivo.types'
+import { useAuthStore } from '../../stores/auth.store'
+import { LEVELS } from '../../utils/permissions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function StatCard({
@@ -46,6 +48,8 @@ function StatCard({
 }
 
 function ConnectForm({ onConnected }: { onConnected: () => void }) {
+  const { user } = useAuthStore()
+  const isSystemAdmin = (user?.level ?? 0) >= LEVELS.SUPERADMIN
   const [mode, setMode] = useState<'own' | 'platform'>('own')
   const [form, setForm] = useState({ auth_id: '', auth_token: '' })
 
@@ -83,23 +87,26 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
         </div>
 
         <div className="p-6">
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden mb-6">
-            {(['own', 'platform'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-                  mode === m
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {m === 'own' ? 'My Plivo Account' : 'Platform Subaccount'}
-              </button>
-            ))}
-          </div>
+          {/* Mode toggle — Platform Subaccount only for system admins */}
+          {isSystemAdmin && (
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden mb-6">
+              {(['own', 'platform'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                    mode === m
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {m === 'own' ? 'My Plivo Account' : 'Platform Subaccount'}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {mode === 'own' ? (
+          {mode === 'own' || !isSystemAdmin ? (
             <form
               onSubmit={(e) => { e.preventDefault(); connectMutation.mutate() }}
               className="space-y-4"
