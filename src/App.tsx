@@ -86,6 +86,7 @@ import { CampaignPerformance } from './pages/reports/CampaignPerformance'
 import { DailyReport } from './pages/reports/DailyReport'
 import { LiveCalls } from './pages/reports/LiveCalls'
 import { CallRecordingReport } from './pages/reports/CallRecordingReport'
+import { LoginHistory } from './pages/reports/LoginHistory'
 import { Profile } from './pages/profile/Profile'
 import { RinglessVoicemail } from './pages/ringless/RinglessVoicemail'
 import { CreateRingless } from './modules/ringless/CreateRingless'
@@ -96,6 +97,7 @@ import { RinglessEditLists } from './modules/ringless/RinglessEditLists'
 import { RinglessEditReview } from './modules/ringless/RinglessEditReview'
 import { AiSettings } from './pages/ai/AiSettings'
 import { AiCoach } from './pages/ai/AiCoach'
+import { AiPrompts } from './pages/ai/AiPrompts'
 import { SMSCenter } from './pages/sms/SMSCenter'
 import { UpgradePage } from './pages/upgrade/UpgradePage'
 import { SmsAiDemo } from './pages/smsai/SmsAiDemo'
@@ -139,6 +141,7 @@ import { GmailMailbox } from './pages/gmail/GmailMailbox'
 import EmailParser from './pages/email-parser/EmailParser'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
+import { AuthEvents } from './pages/admin/AuthEvents'
 import { AdminDidPool } from './pages/admin/AdminDidPool'
 import { SubscriptionPlans } from './pages/admin/SubscriptionPlans'
 import { SystemEmailTemplates } from './pages/admin/SystemEmailTemplates'
@@ -331,6 +334,7 @@ export default function App() {
           <Route path="/reports/campaign-performance" element={<CampaignPerformance />} />
           <Route path="/reports/live" element={<RoleGuard minLevel={LEVELS.MANAGER}><LiveCalls /></RoleGuard>} />
           <Route path="/reports/recordings" element={<CallRecordingReport />} />
+          <Route path="/reports/login-history" element={<LoginHistory />} />
           <Route path="/sms" element={<SMSCenter />} />
           <Route path="/chat" element={<TeamChat />} />
           <Route path="/monitoring" element={<AgentMonitoring />} />
@@ -373,6 +377,7 @@ export default function App() {
           {/* AI Tools */}
           <Route path="/ai/settings" element={<AiSettings />} />
           <Route path="/ai/coach" element={<AiCoach />} />
+          <Route path="/ai/prompts" element={<AiPrompts />} />
 
           {/* SMS AI */}
           <Route path="/smsai/demo" element={<SmsAiDemo />} />
@@ -441,6 +446,7 @@ export default function App() {
           <Route path="/admin/did-pool" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminDidPool /></RoleGuard>} />
           <Route path="/admin/subscription-plans" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><SubscriptionPlans /></RoleGuard>} />
           <Route path="/admin/email-templates" element={<SystemEmailTemplates />} />
+          <Route path="/admin/auth-events" element={<RoleGuard minLevel={LEVELS.MANAGER}><AuthEvents /></RoleGuard>} />
           <Route path="/admin/system-monitor" element={<SystemMonitor />} />
           <Route path="/system/swagger" element={<SwaggerDocs />} />
         </Route>

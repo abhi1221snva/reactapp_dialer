@@ -10,7 +10,7 @@ import { cn } from '../../utils/cn'
 
 const TABS = ['Today', 'History']
 
-interface AttendanceRecord { id: number; date: string; clock_in: string; clock_out?: string; total_hours?: number; status: string; [key: string]: unknown }
+interface AttendanceRecord { id: number; date: string; clock_in_at: string; clock_out_at?: string; total_hours?: number; status: string; [key: string]: unknown }
 
 const BREAK_TYPES = [
   { type: 'Short Break', duration: '10 min', emoji: '☕' },
@@ -55,14 +55,14 @@ export function Attendance() {
   const today = todayData?.data?.data
   const history: AttendanceRecord[] = historyData?.data?.data || []
 
-  const isClockedIn = !!today?.clock_in && !today?.clock_out
-  const isOnBreak = !!today?.active_break
+  const isClockedIn = !!today?.is_clocked_in
+  const isOnBreak = !!today?.is_on_break
 
   const historyColumns: Column<AttendanceRecord>[] = [
     { key: 'date', header: 'Date', render: r => <span className="text-sm font-medium text-slate-700">{r.date as string}</span> },
-    { key: 'clock_in', header: 'Clock In', render: r => <span className="text-sm text-slate-600 font-mono">{formatDateTime(r.clock_in)}</span> },
-    { key: 'clock_out', header: 'Clock Out', render: r => r.clock_out
-      ? <span className="text-sm text-slate-600 font-mono">{formatDateTime(r.clock_out)}</span>
+    { key: 'clock_in_at', header: 'Clock In', render: r => <span className="text-sm text-slate-600 font-mono">{formatDateTime(r.clock_in_at)}</span> },
+    { key: 'clock_out_at', header: 'Clock Out', render: r => r.clock_out_at
+      ? <span className="text-sm text-slate-600 font-mono">{formatDateTime(r.clock_out_at)}</span>
       : <span className="text-xs text-emerald-600 font-semibold">Active</span>
     },
     { key: 'total_hours', header: 'Hours', render: r => (
@@ -125,9 +125,9 @@ export function Attendance() {
               <p className="text-lg font-bold text-slate-900">
                 {!isClockedIn ? 'Not Clocked In' : isOnBreak ? 'On Break' : 'Clocked In'}
               </p>
-              {today?.clock_in && (
+              {today?.clock_in_at && (
                 <p className="text-sm text-slate-500 mt-1">
-                  Since {formatDateTime(today.clock_in)}
+                  Since {formatDateTime(today.clock_in_at)}
                 </p>
               )}
             </div>
@@ -210,9 +210,9 @@ export function Attendance() {
             </div>
             <div className="space-y-4">
               {[
-                { label: 'Total Hours', value: today?.total_hours ? formatDuration(today.total_hours * 3600) : '—', color: 'text-indigo-700' },
-                { label: 'Break Time', value: today?.break_minutes ? `${today.break_minutes}m` : '0m', color: 'text-amber-700' },
-                { label: 'Status', value: today?.status || 'Absent', color: 'text-slate-900' },
+                { label: 'Total Hours', value: today?.attendance?.total_hours ? formatDuration(Number(today.attendance.total_hours) * 3600) : '—', color: 'text-indigo-700' },
+                { label: 'Break Time', value: today?.attendance?.break_hours ? `${Math.round(Number(today.attendance.break_hours) * 60)}m` : '0m', color: 'text-amber-700' },
+                { label: 'Status', value: today?.attendance?.status || 'Absent', color: 'text-slate-900' },
               ].map(stat => (
                 <div key={stat.label} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                   <span className="text-sm text-slate-500">{stat.label}</span>
