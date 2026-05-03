@@ -513,6 +513,16 @@ export function Billing() {
                 <h3 className="text-sm font-bold text-slate-900">Current Plan: {currentPlan.name}</h3>
                 <span className="text-sm text-slate-500">{currentSeats} seat{currentSeats !== 1 ? 's' : ''} x ${(pricePerSeat / 100).toFixed(0)}/mo = ${(currentSeats * pricePerSeat / 100).toFixed(0)}/mo</span>
               </div>
+              {overview?.subscription_ends_at && (
+                <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
+                  {overview.subscription_started_at && (
+                    <span>Started: {new Date(overview.subscription_started_at).toLocaleDateString()}</span>
+                  )}
+                  <span className={overview.subscription_status === 'trial' ? 'text-amber-600 font-semibold' : ''}>
+                    {overview.subscription_status === 'trial' ? 'Trial ends' : 'Renews'}: {new Date(overview.subscription_ends_at).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
               <p className="text-xs text-slate-400">
                 To change your seat count, go to the <button onClick={() => setTab('Seats')} className="text-indigo-600 underline">Seats</button> tab.
               </p>

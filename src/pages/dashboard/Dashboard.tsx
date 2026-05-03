@@ -1,14 +1,14 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Phone, Users, Radio, MessageSquare, Voicemail,
-  UserPlus, PhoneCall, PhoneOff, Activity, TrendingUp, TrendingDown,
-  DollarSign, ArrowRight, Clock, Target, Award,
+  UserPlus, PhoneOff, Activity, TrendingUp, TrendingDown,
+  DollarSign, ArrowRight, Target, Award,
   BarChart3,
 } from 'lucide-react'
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
+  AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid,
 } from 'recharts'
 import { dashboardService } from '../../services/dashboard.service'
@@ -17,82 +17,26 @@ import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
 import { initials } from '../../utils/format'
 import { useTimezone } from '../../hooks/useTimezone'
+import { LEVELS } from '../../utils/permissions'
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const PIE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899']
 
-// ─── Dummy / fallback data (shown when API returns empty) ─────────────────────
-function _makeDates(count: number) {
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (count - 1 - i))
-    return { date: d.toISOString().slice(0, 10), label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
-  })
+// ─── Empty defaults (shown when API returns no data) ──────────────────────────
+const EMPTY_STATS = {
+  totalCallbacks: 0,
+  totalLeads: 0,
+  totalUsers: 0,
+  totalCampaigns: 0,
+  incomingSms: 0,
+  outgoingSms: 0,
+  unreadVoicemail: 0,
+  receivedVoicemail: 0,
 }
-const _days = _makeDates(14)
-const _callSeed = [187,214,198,243,176,259,232,208,191,267,224,238,195,251]
-const _hourSeed = [4,8,14,22,31,45,58,72,86,94,89,76,63,54,48,41,37,31,24,18,13,9,6,3]
 
-const DUMMY = {
-  stats: {
-    totalCallbacks:   4_821,
-    totalLeads:       12_340,
-    totalUsers:       24,
-    totalCampaigns:   8,
-    incomingSms:      1_293,
-    outgoingSms:      3_874,
-    unreadVoicemail:  17,
-    receivedVoicemail:89,
-  },
-  dailyCalls: _days.map((d, i) => ({ date: d.date, total_calls: _callSeed[i] })),
-  dispositions: [
-    { disposition: 'Answered',     name: 'Answered',     title: 'Answered',     total: 1842, count: 1842 },
-    { disposition: 'No Answer',    name: 'No Answer',    title: 'No Answer',    total:  934, count:  934 },
-    { disposition: 'Voicemail',    name: 'Voicemail',    title: 'Voicemail',    total:  612, count:  612 },
-    { disposition: 'Busy',         name: 'Busy',         title: 'Busy',         total:  287, count:  287 },
-    { disposition: 'Callback',     name: 'Callback',     title: 'Callback',     total:  423, count:  423 },
-    { disposition: 'Do Not Call',  name: 'Do Not Call',  title: 'Do Not Call',  total:  198, count:  198 },
-    { disposition: 'Wrong Number', name: 'Wrong Number', title: 'Wrong Number', total:  144, count:  144 },
-    { disposition: 'Disconnected', name: 'Disconnected', title: 'Disconnected', total:  379, count:  379 },
-  ],
-  revenue: {
-    summary: {
-      totalRevenue:        48_720.50,
-      totalCalls:          4_821,
-      avgRevenuePerCall:   10.10,
-      totalBillableMinutes:38_560,
-    },
-    byCallType: {
-      inbound:         { revenue: 12_480.00, calls:  987 },
-      outbound_dialer: { revenue: 22_340.50, calls: 2_143 },
-      outbound_manual: { revenue:  9_860.00, calls:  1_241 },
-      outbound_c2c:    { revenue:  4_040.00, calls:   450 },
-    },
-    byAgent: [
-      { extension: '1001', agentName: 'Marcus Rivera',  revenue: 9_240.00, callCount: 521, avgRevenue: 17.74 },
-      { extension: '1002', agentName: 'Samantha Cole',  revenue: 8_180.50, callCount: 487, avgRevenue: 16.80 },
-      { extension: '1003', agentName: 'David Kim',      revenue: 7_320.00, callCount: 443, avgRevenue: 16.52 },
-      { extension: '1004', agentName: 'Priya Sharma',   revenue: 6_450.00, callCount: 398, avgRevenue: 16.21 },
-      { extension: '1005', agentName: 'Jason Torres',   revenue: 5_810.00, callCount: 362, avgRevenue: 16.05 },
-      { extension: '1006', agentName: 'Emily Nguyen',   revenue: 4_960.00, callCount: 318, avgRevenue: 15.60 },
-      { extension: '1007', agentName: 'Carlos Mendez',  revenue: 3_840.00, callCount: 271, avgRevenue: 14.17 },
-      { extension: '1008', agentName: 'Rachel Brooks',  revenue: 2_920.00, callCount: 221, avgRevenue: 13.21 },
-    ],
-    byCampaign: [
-      { campaignId: 1, campaignName: 'Q1 Outbound Blitz',     revenue: 14_200.00, callCount: 1_243, totalDurationFormatted: '87h 14m' },
-      { campaignId: 2, campaignName: 'Inbound Support Line',  revenue: 10_840.00, callCount:   987, totalDurationFormatted: '64h 22m' },
-      { campaignId: 3, campaignName: 'Renewal Follow-Up',     revenue:  9_120.00, callCount:   876, totalDurationFormatted: '58h 41m' },
-      { campaignId: 4, campaignName: 'Cold Outreach Mar',     revenue:  7_380.00, callCount:   712, totalDurationFormatted: '47h 09m' },
-      { campaignId: 5, campaignName: 'VIP Callbacks',         revenue:  4_960.00, callCount:   432, totalDurationFormatted: '31h 55m' },
-      { campaignId: 6, campaignName: 'Survey Campaign',       revenue:  2_220.50, callCount:   571, totalDurationFormatted: '28h 03m' },
-    ],
-    hourlyBreakdown: _hourSeed.map((calls, i) => ({
-      hour:      String(i).padStart(2, '0') + ':00',
-      callCount: calls,
-      revenue:   calls * 10.1,
-    })),
-    comparison: { change: { percentage: 12.4 } },
-  },
+const EMPTY_REVENUE = {
+  summary: { totalRevenue: 0, totalCalls: 0, avgRevenuePerCall: 0, totalBillableMinutes: 0 },
+  comparison: { change: { percentage: 0 } },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -241,6 +185,9 @@ export function Dashboard() {
   const [period, setPeriod] = useState<Period>('7D')
   const [revPeriod, setRevPeriod] = useState<Period>('30D')
 
+  const userLevel   = user?.level ?? 1
+  const isSystemAdmin = userLevel >= LEVELS.SUPERADMIN  // level 9+
+
   const days        = period === '7D' ? 7 : period === '30D' ? 30 : 90
   const revDays     = revPeriod === '7D' ? 7 : revPeriod === '30D' ? 30 : 90
   const dateRange   = buildDateRange(days, today, daysAgo)
@@ -266,38 +213,39 @@ export function Dashboard() {
   const { data: revData, isLoading: revLoading } = useQuery({
     queryKey: ['revenue-metrics', revPeriod],
     queryFn:  () => dashboardService.getRevenueMetrics({ period: 'custom', start_date: revRange.date_from, end_date: revRange.date_to }),
+    enabled: isSystemAdmin,
   })
 
-  // ── Parse stats (fallback to dummy) ───────────────────────────────────────
+  // ── Parse stats ──────────────────────────────────────────────────────────
   const rawStats = statsData?.data?.data || {}
   const stats = (rawStats.totalCallbacks != null || rawStats.totalLeads != null)
     ? rawStats
-    : DUMMY.stats
+    : EMPTY_STATS
 
-  // ── Parse CDR daily data (fallback to dummy) ───────────────────────────────
+  // ── Parse CDR daily data ───────────────────────────────────────────────────
   const rawDaily: { date?: string; day?: string; total_calls?: number; calls?: number }[] =
-    (() => { const d = cdrData?.data?.data?.daily_calls || cdrData?.data?.data; return Array.isArray(d) && d.length ? d : DUMMY.dailyCalls })()
+    (() => { const d = cdrData?.data?.data?.daily_calls || cdrData?.data?.data; return Array.isArray(d) && d.length ? d : [] })()
   const areaData = rawDaily.map(d => ({
     name:  d.date ? new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : (d.day || ''),
     calls: Number(d.total_calls ?? d.calls ?? 0),
   }))
 
-  // ── Parse disposition (fallback to dummy) ──────────────────────────────────
+  // ── Parse disposition ──────────────────────────────────────────────────────
   const rawDispApi: { disposition?: string; name?: string; title?: string; total?: number; count?: number }[] =
     dispData?.data?.data || []
-  const rawDisp = (Array.isArray(rawDispApi) && rawDispApi.length) ? rawDispApi : DUMMY.dispositions
+  const rawDisp = (Array.isArray(rawDispApi) && rawDispApi.length) ? rawDispApi : []
   const pieData = rawDisp.slice(0, 8).map(d => ({
     name:  String(d.disposition ?? d.name ?? d.title ?? 'Unknown'),
     value: Number(d.total ?? d.count ?? 0),
   })).filter(d => d.value > 0)
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0)
 
-  // ── Parse revenue (fallback to dummy) ─────────────────────────────────────
+  // ── Parse revenue (system admin only) ─────────────────────────────────────
   const rev         = revData?.data?.data
-  const revSummary  = rev?.summary?.totalRevenue != null ? rev.summary        : DUMMY.revenue.summary
-  const revAgents   = rev?.byAgent?.length    ? rev.byAgent    : DUMMY.revenue.byAgent
-  const revCampaign = rev?.byCampaign?.length ? rev.byCampaign : DUMMY.revenue.byCampaign
-  const revComp     = rev?.comparison ?? DUMMY.revenue.comparison
+  const revSummary  = rev?.summary?.totalRevenue != null ? rev.summary        : EMPTY_REVENUE.summary
+  const revAgents   = rev?.byAgent?.length    ? rev.byAgent    : []
+  const revCampaign = rev?.byCampaign?.length ? rev.byCampaign : []
+  const revComp     = rev?.comparison ?? EMPTY_REVENUE.comparison
 
   const greeting     = getGreeting()
   const displayName  = user?.first_name || user?.name?.split(' ')[0] || ''
@@ -346,14 +294,13 @@ export function Dashboard() {
       </div>
 
       {/* ── Primary KPI row ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={cn('grid grid-cols-2 gap-4', isSystemAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
         <KpiCard
           label="Total Calls"
           value={fmtNum(stats.totalCallbacks ?? 0)}
           icon={Phone}
           gradient="bg-gradient-to-br from-indigo-500 to-indigo-600"
           sub="All callbacks recorded"
-          trend={revComp?.change?.percentage}
           onClick={() => navigate('/reports')}
           loading={statsLoading}
         />
@@ -375,15 +322,17 @@ export function Dashboard() {
           onClick={() => navigate('/agents')}
           loading={statsLoading}
         />
-        <KpiCard
-          label="Total Revenue"
-          value={revLoading ? '—' : fmtMoney(revSummary.totalRevenue ?? 0)}
-          icon={DollarSign}
-          gradient="bg-gradient-to-br from-amber-500 to-orange-500"
-          sub={revLoading ? '' : `${revSummary.totalCalls ?? 0} billable calls`}
-          trend={revComp?.change?.percentage}
-          loading={statsLoading && revLoading}
-        />
+        {isSystemAdmin && (
+          <KpiCard
+            label="Total Revenue"
+            value={revLoading ? '—' : fmtMoney(revSummary.totalRevenue ?? 0)}
+            icon={DollarSign}
+            gradient="bg-gradient-to-br from-amber-500 to-orange-500"
+            sub={revLoading ? '' : `${revSummary.totalCalls ?? 0} billable calls`}
+            trend={revComp?.change?.percentage}
+            loading={statsLoading && revLoading}
+          />
+        )}
       </div>
 
       {/* ── Secondary KPI row ────────────────────────────────────────────────── */}
@@ -518,114 +467,116 @@ export function Dashboard() {
         <PlanUsageWidget />
       </div>
 
-      {/* ── Agent leaderboard + Campaign table ───────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ── Agent leaderboard + Campaign table (system admin only) ─────────── */}
+      {isSystemAdmin && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Agent leaderboard */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <SectionHeader
-            title="Agent Leaderboard"
-            sub="Top agents by revenue"
-            right={
-              <button onClick={() => navigate('/agents')}
-                className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
-                View all <ArrowRight size={12} />
-              </button>
-            }
-          />
-          {revLoading ? (
-            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
-          ) : revAgents.length > 0 ? (
-            <div className="space-y-2.5">
-              {revAgents.slice(0, 8).map((a: { extension?: string; agentName?: string; name?: string; revenue?: number; callCount?: number; avgRevenue?: number }, i: number) => {
-                const maxRev = revAgents[0]?.revenue ?? 1
-                const pct    = maxRev > 0 ? Math.round((a.revenue ?? 0) / maxRev * 100) : 0
-                const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
-                return (
-                  <div key={a.extension ?? i} className="flex items-center gap-3 group">
-                    {/* rank / avatar */}
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
-                      {medal ?? <span className="text-[10px]">{initials(a.agentName ?? a.name ?? '?')}</span>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-[13px] font-semibold text-slate-800 truncate">{a.agentName ?? a.name ?? `Ext. ${a.extension}`}</p>
-                        <p className="text-[13px] font-bold text-slate-900 tabular-nums">{fmtMoney(a.revenue ?? 0)}</p>
+          {/* Agent leaderboard */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <SectionHeader
+              title="Agent Leaderboard"
+              sub="Top agents by revenue"
+              right={
+                <button onClick={() => navigate('/agents')}
+                  className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
+                  View all <ArrowRight size={12} />
+                </button>
+              }
+            />
+            {revLoading ? (
+              <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+            ) : revAgents.length > 0 ? (
+              <div className="space-y-2.5">
+                {revAgents.slice(0, 8).map((a: { extension?: string; agentName?: string; name?: string; revenue?: number; callCount?: number; avgRevenue?: number }, i: number) => {
+                  const maxRev = revAgents[0]?.revenue ?? 1
+                  const pct    = maxRev > 0 ? Math.round((a.revenue ?? 0) / maxRev * 100) : 0
+                  const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+                  return (
+                    <div key={a.extension ?? i} className="flex items-center gap-3 group">
+                      {/* rank / avatar */}
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
+                        {medal ?? <span className="text-[10px]">{initials(a.agentName ?? a.name ?? '?')}</span>}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-[13px] font-semibold text-slate-800 truncate">{a.agentName ?? a.name ?? `Ext. ${a.extension}`}</p>
+                          <p className="text-[13px] font-bold text-slate-900 tabular-nums">{fmtMoney(a.revenue ?? 0)}</p>
                         </div>
-                        <span className="text-[10px] text-slate-400 tabular-nums w-12 text-right">{a.callCount ?? 0} calls</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-400 tabular-nums w-12 text-right">{a.callCount ?? 0} calls</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
-              <Award size={28} />
-              <p className="text-sm text-slate-400">No agent data available</p>
-            </div>
-          )}
-        </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
+                <Award size={28} />
+                <p className="text-sm text-slate-400">No agent data available</p>
+              </div>
+            )}
+          </div>
 
-        {/* Campaign performance */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <SectionHeader
-            title="Campaign Performance"
-            sub="Revenue by campaign"
-            right={
-              <button onClick={() => navigate('/campaigns')}
-                className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
-                View all <ArrowRight size={12} />
-              </button>
-            }
-          />
-          {revLoading ? (
-            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
-          ) : revCampaign.length > 0 ? (
-            <div className="space-y-2.5">
-              {revCampaign.slice(0, 8).map((c: { campaignId?: number; campaignName?: string; revenue?: number; callCount?: number; totalDurationFormatted?: string }, i: number) => {
-                const maxRev = revCampaign[0]?.revenue ?? 1
-                const pct    = maxRev > 0 ? Math.round((c.revenue ?? 0) / maxRev * 100) : 0
-                const colors = ['from-sky-500 to-cyan-500','from-emerald-500 to-teal-500','from-violet-500 to-purple-500','from-amber-500 to-orange-500','from-rose-500 to-pink-500']
-                return (
-                  <div key={c.campaignId ?? i} className="flex items-center gap-3">
-                    <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br text-white', colors[i % colors.length])}>
-                      <Radio size={14} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-[13px] font-semibold text-slate-800 truncate">{c.campaignName ?? `Campaign #${c.campaignId}`}</p>
-                        <p className="text-[13px] font-bold text-slate-900 tabular-nums">{fmtMoney(c.revenue ?? 0)}</p>
+          {/* Campaign performance */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <SectionHeader
+              title="Campaign Performance"
+              sub="Revenue by campaign"
+              right={
+                <button onClick={() => navigate('/campaigns')}
+                  className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-700">
+                  View all <ArrowRight size={12} />
+                </button>
+              }
+            />
+            {revLoading ? (
+              <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+            ) : revCampaign.length > 0 ? (
+              <div className="space-y-2.5">
+                {revCampaign.slice(0, 8).map((c: { campaignId?: number; campaignName?: string; revenue?: number; callCount?: number; totalDurationFormatted?: string }, i: number) => {
+                  const maxRev = revCampaign[0]?.revenue ?? 1
+                  const pct    = maxRev > 0 ? Math.round((c.revenue ?? 0) / maxRev * 100) : 0
+                  const colors = ['from-sky-500 to-cyan-500','from-emerald-500 to-teal-500','from-violet-500 to-purple-500','from-amber-500 to-orange-500','from-rose-500 to-pink-500']
+                  return (
+                    <div key={c.campaignId ?? i} className="flex items-center gap-3">
+                      <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br text-white', colors[i % colors.length])}>
+                        <Radio size={14} />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className={cn('h-full rounded-full bg-gradient-to-r transition-all', colors[i % colors.length])}
-                            style={{ width: `${pct}%` }}
-                          />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-[13px] font-semibold text-slate-800 truncate">{c.campaignName ?? `Campaign #${c.campaignId}`}</p>
+                          <p className="text-[13px] font-bold text-slate-900 tabular-nums">{fmtMoney(c.revenue ?? 0)}</p>
                         </div>
-                        <span className="text-[10px] text-slate-400 tabular-nums w-12 text-right">{c.callCount ?? 0} calls</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={cn('h-full rounded-full bg-gradient-to-r transition-all', colors[i % colors.length])}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-400 tabular-nums w-12 text-right">{c.callCount ?? 0} calls</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
-              <Radio size={28} />
-              <p className="text-sm text-slate-400">No campaign data available</p>
-            </div>
-          )}
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-300">
+                <Radio size={28} />
+                <p className="text-sm text-slate-400">No campaign data available</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
 
     </div>
