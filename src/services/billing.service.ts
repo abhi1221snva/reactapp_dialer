@@ -37,11 +37,22 @@ export interface BillingOverview {
   upcoming_invoice: UpcomingInvoice | null
 }
 
-export interface PlanInfoResponse {
-  plan: SubscriptionPlan
-  price_per_seat: number
+export interface PlansResponse {
+  plans: SubscriptionPlan[]
+  current_plan: SubscriptionPlan | null
   seat_quantity: number
   has_subscription: boolean
+}
+
+export interface PlanChangePreview {
+  amount_due: number
+  currency: string
+  period_start: number
+  period_end: number
+  new_plan: SubscriptionPlan
+  seat_quantity: number
+  new_monthly: number
+  lines: { description: string; amount: number }[]
 }
 
 export interface SeatsPreviewResponse {
@@ -113,13 +124,21 @@ export const billingService = {
   getOverview: () =>
     api.get<{ data: BillingOverview }>('/billing/overview'),
 
-  // Plan info (single per-seat plan)
-  getPlanInfo: () =>
-    api.get<{ data: PlanInfoResponse }>('/billing/plan'),
+  // Plans (all tiered per-seat plans)
+  getPlans: () =>
+    api.get<{ data: PlansResponse }>('/billing/plans'),
 
-  // Subscribe (trial → paid) — per-seat
-  subscribe: (payload: { seat_count: number; payment_method: string }) =>
+  // Subscribe (trial → paid)
+  subscribe: (payload: { plan_id: number; seat_count: number; payment_method: string }) =>
     api.post('/billing/subscribe', payload),
+
+  // Change plan (upgrade/downgrade)
+  changePlan: (planId: number) =>
+    api.post('/billing/change-plan', { plan_id: planId }),
+
+  // Plan change preview (proration)
+  changePlanPreview: (planId: number) =>
+    api.get<{ data: { preview: PlanChangePreview | null } }>('/billing/change-plan/preview', { params: { plan_id: planId } }),
 
   // Update seats
   updateSeats: (seatCount: number) =>
