@@ -80,15 +80,6 @@ export function Billing() {
     enabled: tab === 'Activity',
   })
 
-  // Seat preview query
-  const targetSeats = seatInput ?? (overview?.seat_quantity ?? 1)
-  const { data: previewRes, isLoading: previewLoading } = useQuery({
-    queryKey: ['billing-seats-preview', targetSeats],
-    queryFn: () => billingService.seatsPreview(targetSeats),
-    enabled: tab === 'Seats' && seatInput !== null && seatInput !== (overview?.seat_quantity ?? 1) && hasSubscription,
-    staleTime: 30_000,
-  })
-
   const overview = overviewRes?.data?.data
   const planInfo = planInfoRes?.data?.data
   const paymentMethods: PaymentMethod[] = pmRes?.data?.data || []
@@ -98,6 +89,15 @@ export function Billing() {
   const hasSubscription = !!overview?.subscription_status && !['trial', 'expired'].includes(overview.subscription_status)
   const pricePerSeat = overview?.price_per_seat ?? 2900
   const currentSeats = overview?.seat_quantity ?? 1
+
+  // Seat preview query (must be after overview/hasSubscription are declared)
+  const targetSeats = seatInput ?? (overview?.seat_quantity ?? 1)
+  const { data: previewRes, isLoading: previewLoading } = useQuery({
+    queryKey: ['billing-seats-preview', targetSeats],
+    queryFn: () => billingService.seatsPreview(targetSeats),
+    enabled: tab === 'Seats' && seatInput !== null && seatInput !== (overview?.seat_quantity ?? 1) && hasSubscription,
+    staleTime: 30_000,
+  })
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const updateSeatsMutation = useMutation({

@@ -177,10 +177,7 @@ export function AdminClients() {
   })
 
   const listData = data?.data?.data
-  const VISIBLE_CLIENT_IDS = [3, 11]
-  const clients: AdminClient[] = (listData?.clients ?? []).filter(
-    (c: AdminClient) => VISIBLE_CLIENT_IDS.includes(c.id),
-  )
+  const clients: AdminClient[] = listData?.clients ?? []
   const total = clients.length
 
   // ── Mutations ──────────────────────────────────────────────────────────────
