@@ -20,7 +20,7 @@ export function TrialBanner() {
     setDismissed(true)
   }
 
-  const handleUpgrade = () => navigate('/upgrade')
+  const handleUpgrade = () => navigate('/billing?tab=Plans')
 
   if (isExpired) {
     return (

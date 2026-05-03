@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Building2, Clock, Trash2 } from 'lucide-react'
+import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Building2, Clock, Trash2, Wallet } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../hooks/useAuth'
 import { useAuthStore } from '../stores/auth.store'
 import { useNotificationStore } from '../stores/notification.store'
 import { useUIStore } from '../stores/ui.store'
 import { useEngineStore, type Engine } from '../stores/engine.store'
+import { billingService } from '../services/billing.service'
 import { initials } from '../utils/format'
 import { cn } from '../utils/cn'
 import api from '../api/axios'
@@ -103,6 +105,46 @@ function LiveClock({ timezone }: { timezone?: string }) {
         </span>
       )}
     </div>
+  )
+}
+
+// ─── Wallet balance badge ────────────────────────────────────────────────────
+function WalletBadge() {
+  const navigate = useNavigate()
+  const { data, isLoading } = useQuery({
+    queryKey: ['wallet-balance-header'],
+    queryFn: () => billingService.getWalletBalance(),
+    refetchInterval: 60_000, // refresh every 60s
+    staleTime: 30_000,
+  })
+
+  const balance = (data?.data as Record<string, unknown>)?.data
+    ? ((data?.data as Record<string, unknown>).data as { balance: number }).balance
+    : null
+
+  if (isLoading || balance === null || balance === undefined) return null
+
+  const dollars = balance.toFixed(2)
+  const isLow = balance < 5 // below $5
+
+  return (
+    <button
+      onClick={() => navigate('/billing')}
+      title="Wallet Balance — Click to manage billing"
+      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer select-none transition-all duration-200 hover:scale-[1.03]"
+      style={{
+        background: isLow ? '#fef2f2' : '#f0fdf4',
+        border: `1px solid ${isLow ? '#fecaca' : '#bbf7d0'}`,
+      }}
+    >
+      <Wallet size={13} className="flex-shrink-0" style={{ color: isLow ? '#ef4444' : '#16a34a' }} />
+      <span
+        className="text-[12px] font-semibold tabular-nums"
+        style={{ color: isLow ? '#dc2626' : '#15803d' }}
+      >
+        ${dollars}
+      </span>
+    </button>
   )
 }
 
@@ -244,6 +286,9 @@ export function TopHeader() {
             <div className="hidden md:block w-px h-5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />
           </>
         )}
+
+        {/* Wallet Balance */}
+        <WalletBadge />
 
         {/* Live Clock */}
         <LiveClock timezone={user?.timezone} />

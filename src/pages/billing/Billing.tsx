@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CreditCard, DollarSign, Wallet, Package, Plus, ArrowUp,
@@ -29,7 +30,11 @@ const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray
 
 export function Billing() {
   const qc = useQueryClient()
-  const [tab, setTab] = useState<Tab>('Overview')
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => {
+    const qTab = searchParams.get('tab')
+    return TABS.includes(qTab as Tab) ? (qTab as Tab) : 'Overview'
+  })
   const [showAddCard, setShowAddCard] = useState(false)
   const [showTopUp, setShowTopUp] = useState(false)
   const [upgradePlan, setUpgradePlan] = useState<SubscriptionPlan | null>(null)

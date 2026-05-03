@@ -139,6 +139,7 @@ import { GmailMailbox } from './pages/gmail/GmailMailbox'
 import EmailParser from './pages/email-parser/EmailParser'
 import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
+import { AdminDidPool } from './pages/admin/AdminDidPool'
 import { SubscriptionPlans } from './pages/admin/SubscriptionPlans'
 import { AdminRvmCutover } from './pages/admin/AdminRvmCutover'
 import { AdminRvmCutoverDetail } from './pages/admin/AdminRvmCutoverDetail'
@@ -440,6 +441,7 @@ export default function App() {
 
           {/* System Admin */}
           <Route path="/admin/clients" element={<AdminClients />} />
+          <Route path="/admin/did-pool" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminDidPool /></RoleGuard>} />
           <Route path="/admin/subscription-plans" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><SubscriptionPlans /></RoleGuard>} />
           <Route path="/admin/rvm/dashboard" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmDashboard /></RoleGuard>} />
           <Route path="/admin/rvm/cutover" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutover /></RoleGuard>} />
