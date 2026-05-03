@@ -132,13 +132,15 @@ export const billingService = {
   subscribe: (payload: { plan_id: number; seat_count: number; payment_method: string }) =>
     api.post('/billing/subscribe', payload),
 
-  // Change plan (upgrade/downgrade)
-  changePlan: (planId: number) =>
-    api.post('/billing/change-plan', { plan_id: planId }),
+  // Change plan (upgrade/downgrade), optionally update seats at the same time
+  changePlan: (planId: number, seatCount?: number) =>
+    api.post('/billing/change-plan', { plan_id: planId, ...(seatCount != null ? { seat_count: seatCount } : {}) }),
 
   // Plan change preview (proration)
-  changePlanPreview: (planId: number) =>
-    api.get<{ data: { preview: PlanChangePreview | null } }>('/billing/change-plan/preview', { params: { plan_id: planId } }),
+  changePlanPreview: (planId: number, seatCount?: number) =>
+    api.get<{ data: { preview: PlanChangePreview | null } }>('/billing/change-plan/preview', {
+      params: { plan_id: planId, ...(seatCount != null ? { seat_count: seatCount } : {}) },
+    }),
 
   // Update seats
   updateSeats: (seatCount: number) =>

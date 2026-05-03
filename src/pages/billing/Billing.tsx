@@ -65,6 +65,7 @@ export function Billing() {
 
   // Plan change state
   const [changePlanId, setChangePlanId] = useState<number | null>(null)
+  const [changePlanSeats, setChangePlanSeats] = useState<number>(1)
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const { data: overviewRes } = useQuery({
@@ -127,8 +128,8 @@ export function Billing() {
 
   // Plan change preview query
   const { data: planPreviewRes, isLoading: planPreviewLoading } = useQuery({
-    queryKey: ['billing-plan-change-preview', changePlanId],
-    queryFn: () => billingService.changePlanPreview(changePlanId!),
+    queryKey: ['billing-plan-change-preview', changePlanId, changePlanSeats],
+    queryFn: () => billingService.changePlanPreview(changePlanId!, changePlanSeats),
     enabled: !!changePlanId && hasSubscription,
     staleTime: 30_000,
   })
@@ -158,9 +159,10 @@ export function Billing() {
   })
 
   const changePlanMutation = useMutation({
-    mutationFn: (planId: number) => billingService.changePlan(planId),
+    mutationFn: (payload: { planId: number; seatCount: number }) =>
+      billingService.changePlan(payload.planId, payload.seatCount),
     onSuccess: () => {
-      toast.success('Plan changed successfully')
+      toast.success('Plan updated successfully')
       setChangePlanId(null)
       refreshAll()
     },
@@ -239,11 +241,11 @@ export function Billing() {
   }
 
   const handlePlanSelect = (plan: SubscriptionPlan) => {
-    const planRec = plan as Record<string, unknown>
     if (hasSubscription) {
       // Change plan flow
       if (plan.id === currentPlan?.id) return
       setChangePlanId(plan.id)
+      setChangePlanSeats(currentSeats)
     } else {
       // Subscribe flow
       setSubscribePlanId(plan.id)
@@ -831,18 +833,52 @@ export function Billing() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSubscribe(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900">Confirm Subscription</h3>
+              <h3 className="font-bold text-slate-900">Subscribe to Plan</h3>
             </div>
             <div className="p-6 space-y-4">
               {/* Plan selection summary */}
               {subscribePlanId && (
-                <div className="bg-slate-50 rounded-xl p-3 text-sm">
-                  <span className="text-slate-500">Plan: </span>
-                  <span className="font-semibold text-slate-900">
-                    {allPlans.find(p => p.id === subscribePlanId)?.name ?? 'Selected Plan'}
+                <div className="bg-slate-50 rounded-xl p-3 text-sm flex items-center justify-between">
+                  <div>
+                    <span className="text-slate-500">Plan: </span>
+                    <span className="font-semibold text-slate-900">
+                      {allPlans.find(p => p.id === subscribePlanId)?.name ?? 'Selected Plan'}
+                    </span>
+                  </div>
+                  <span className="font-bold text-indigo-600">
+                    ${((( allPlans.find(p => p.id === subscribePlanId) as Record<string, unknown>)?.unit_price_cents as number ?? pricePerSeat) / 100).toFixed(0)}/seat/mo
                   </span>
                 </div>
               )}
+
+              {/* Seat selector */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Number of Seats</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSeatInput(Math.max(1, displaySeats - 1))}
+                    className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                  >
+                    <MinusIcon size={16} />
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    value={displaySeats}
+                    onChange={e => {
+                      const v = parseInt(e.target.value)
+                      setSeatInput(isNaN(v) ? 1 : Math.max(1, v))
+                    }}
+                    className="w-20 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                  <button
+                    onClick={() => setSeatInput(displaySeats + 1)}
+                    className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+              </div>
 
               <div className="bg-indigo-50 rounded-xl p-4 text-center">
                 <p className="text-sm text-slate-600">You will be charged</p>
@@ -884,7 +920,11 @@ export function Billing() {
                   className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md disabled:opacity-50 transition-all"
                 >
                   {subscribeMutation.isPending && <Loader2 size={15} className="animate-spin" />}
-                  Subscribe Now
+                  Subscribe — ${(() => {
+                    const selectedPlan = allPlans.find(p => p.id === subscribePlanId) as Record<string, unknown> | undefined
+                    const price = (selectedPlan?.unit_price_cents as number) ?? pricePerSeat
+                    return (displaySeats * price / 100).toFixed(0)
+                  })()}/mo
                 </button>
               </div>
             </div>
@@ -904,7 +944,7 @@ export function Billing() {
                 const newPlan = allPlans.find(p => p.id === changePlanId) as Record<string, unknown> | undefined
                 const newPrice = (newPlan?.unit_price_cents as number) ?? 0
                 const oldPrice = (currentPlan as Record<string, unknown>)?.unit_price_cents as number ?? 0
-                const isUpgrade = newPrice > oldPrice
+                const isUpgrade = newPrice > oldPrice || changePlanSeats > currentSeats
 
                 return (
                   <>
@@ -913,22 +953,52 @@ export function Billing() {
                         <p className="text-xs text-slate-400 uppercase">Current</p>
                         <p className="font-bold text-slate-900">{currentPlan?.name ?? 'None'}</p>
                         <p className="text-sm text-slate-500">${(oldPrice / 100).toFixed(0)}/seat/mo</p>
+                        <p className="text-xs text-slate-400">{currentSeats} seat{currentSeats !== 1 ? 's' : ''}</p>
                       </div>
                       <ArrowUpRight size={20} className="text-slate-400" />
                       <div className="text-center">
                         <p className="text-xs text-slate-400 uppercase">New</p>
                         <p className="font-bold text-indigo-600">{(newPlan?.name as string) ?? ''}</p>
                         <p className="text-sm text-indigo-500">${(newPrice / 100).toFixed(0)}/seat/mo</p>
+                        <p className="text-xs text-indigo-400">{changePlanSeats} seat{changePlanSeats !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
 
-                    <div className="bg-indigo-50 rounded-xl p-4 text-center">
-                      <p className="text-sm text-slate-600">New monthly total</p>
-                      <p className="text-3xl font-bold text-indigo-600 mt-1">
-                        ${(currentSeats * newPrice / 100).toFixed(0)}/mo
-                      </p>
+                    {/* Seat selector */}
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Number of Seats</label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setChangePlanSeats(Math.max(1, changePlanSeats - 1))}
+                          className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                        >
+                          <MinusIcon size={16} />
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={changePlanSeats}
+                          onChange={e => {
+                            const v = parseInt(e.target.value)
+                            setChangePlanSeats(isNaN(v) ? 1 : Math.max(1, v))
+                          }}
+                          className="w-20 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                        <button
+                          onClick={() => setChangePlanSeats(changePlanSeats + 1)}
+                          className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                        >
+                          <Plus size={16} />
+                        </button>
+                        <div className="flex-1 text-right">
+                          <span className="text-xs text-slate-400 block">Monthly total</span>
+                          <span className="text-xl font-bold text-indigo-600">
+                            ${(changePlanSeats * newPrice / 100).toFixed(0)}/mo
+                          </span>
+                        </div>
+                      </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        {currentSeats} seat{currentSeats !== 1 ? 's' : ''} x ${(newPrice / 100).toFixed(0)}/seat
+                        {changePlanSeats} seat{changePlanSeats !== 1 ? 's' : ''} x ${(newPrice / 100).toFixed(0)}/seat
                       </p>
                     </div>
 
@@ -953,12 +1023,12 @@ export function Billing() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => changePlanMutation.mutate(changePlanId)}
+                  onClick={() => changePlanMutation.mutate({ planId: changePlanId, seatCount: changePlanSeats })}
                   disabled={changePlanMutation.isPending}
                   className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md disabled:opacity-50 transition-all"
                 >
                   {changePlanMutation.isPending && <Loader2 size={15} className="animate-spin" />}
-                  Confirm Change
+                  Confirm — ${(changePlanSeats * ((allPlans.find(p => p.id === changePlanId) as Record<string, unknown>)?.unit_price_cents as number ?? 0) / 100).toFixed(0)}/mo
                 </button>
               </div>
             </div>
