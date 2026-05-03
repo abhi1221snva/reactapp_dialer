@@ -141,9 +141,6 @@ import { GoogleCalendar } from './pages/calendar/GoogleCalendar'
 import { AdminClients } from './pages/admin/AdminClients'
 import { AdminDidPool } from './pages/admin/AdminDidPool'
 import { SubscriptionPlans } from './pages/admin/SubscriptionPlans'
-import { AdminRvmCutover } from './pages/admin/AdminRvmCutover'
-import { AdminRvmCutoverDetail } from './pages/admin/AdminRvmCutoverDetail'
-import { AdminRvmDashboard } from './pages/admin/AdminRvmDashboard'
 import { SystemEmailTemplates } from './pages/admin/SystemEmailTemplates'
 import { SystemMonitor } from './pages/admin/SystemMonitor'
 import { SwaggerDocs } from './pages/admin/SwaggerDocs'
@@ -443,9 +440,6 @@ export default function App() {
           <Route path="/admin/clients" element={<AdminClients />} />
           <Route path="/admin/did-pool" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminDidPool /></RoleGuard>} />
           <Route path="/admin/subscription-plans" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><SubscriptionPlans /></RoleGuard>} />
-          <Route path="/admin/rvm/dashboard" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmDashboard /></RoleGuard>} />
-          <Route path="/admin/rvm/cutover" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutover /></RoleGuard>} />
-          <Route path="/admin/rvm/cutover/:clientId" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminRvmCutoverDetail /></RoleGuard>} />
           <Route path="/admin/email-templates" element={<SystemEmailTemplates />} />
           <Route path="/admin/system-monitor" element={<SystemMonitor />} />
           <Route path="/system/swagger" element={<SwaggerDocs />} />
