@@ -1,23 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  CreditCard, DollarSign, Wallet, Package, Plus, ArrowUp,
-  CheckCircle2, Minus, FileText, Trash2, ReceiptText, Loader2, ExternalLink,
+  CreditCard, DollarSign, Wallet, Users, Plus, Minus as MinusIcon,
+  CheckCircle2, FileText, Trash2, ReceiptText, Loader2, ExternalLink,
   Activity, Bell, Settings2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { billingService, type PaymentMethod, type WalletTransaction, type InvoiceRecord, type SubscriptionEvent } from '../../services/billing.service'
-import type { SubscriptionPlan } from '../../services/subscription.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
 import { cn } from '../../utils/cn'
 import { formatDateTime } from '../../utils/format'
 import { AddCardModal } from './AddCardModal'
 import { TopUpModal } from './TopUpModal'
-import { PlanUpgradeModal } from './PlanUpgradeModal'
 
-const TABS = ['Overview', 'Plans', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
+const TABS = ['Overview', 'Seats', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
 type Tab = typeof TABS[number]
 
 const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
@@ -33,11 +31,16 @@ export function Billing() {
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>(() => {
     const qTab = searchParams.get('tab')
+    // Support legacy ?tab=Plans redirect
+    if (qTab === 'Plans') return 'Seats'
     return TABS.includes(qTab as Tab) ? (qTab as Tab) : 'Overview'
   })
   const [showAddCard, setShowAddCard] = useState(false)
   const [showTopUp, setShowTopUp] = useState(false)
-  const [upgradePlan, setUpgradePlan] = useState<SubscriptionPlan | null>(null)
+
+  // Seat adjuster state
+  const [seatInput, setSeatInput] = useState<number | null>(null)
+  const [showSubscribe, setShowSubscribe] = useState(false)
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const { data: overviewRes } = useQuery({
@@ -46,10 +49,10 @@ export function Billing() {
     staleTime: 60_000,
   })
 
-  const { data: plansRes } = useQuery({
-    queryKey: ['billing-plans'],
-    queryFn: billingService.getAvailablePlans,
-    enabled: tab === 'Plans' || tab === 'Overview',
+  const { data: planInfoRes } = useQuery({
+    queryKey: ['billing-plan-info'],
+    queryFn: billingService.getPlanInfo,
+    enabled: tab === 'Seats' || tab === 'Overview',
     staleTime: 300_000,
   })
 
@@ -62,7 +65,7 @@ export function Billing() {
   const { data: pmRes, refetch: refetchPm } = useQuery({
     queryKey: ['billing-pm'],
     queryFn: billingService.getPaymentMethods,
-    enabled: tab === 'Payment Methods' || tab === 'Overview' || tab === 'Wallet' || tab === 'Plans',
+    enabled: tab === 'Payment Methods' || tab === 'Overview' || tab === 'Wallet' || tab === 'Seats',
   })
 
   const { data: invRes, isLoading: invLoading } = useQuery({
@@ -77,16 +80,47 @@ export function Billing() {
     enabled: tab === 'Activity',
   })
 
+  // Seat preview query
+  const targetSeats = seatInput ?? (overview?.seat_quantity ?? 1)
+  const { data: previewRes, isLoading: previewLoading } = useQuery({
+    queryKey: ['billing-seats-preview', targetSeats],
+    queryFn: () => billingService.seatsPreview(targetSeats),
+    enabled: tab === 'Seats' && seatInput !== null && seatInput !== (overview?.seat_quantity ?? 1) && hasSubscription,
+    staleTime: 30_000,
+  })
+
   const overview = overviewRes?.data?.data
-  const plans: SubscriptionPlan[] = plansRes?.data?.data?.plans || []
-  const currentPlanId = plansRes?.data?.data?.current_plan_id
-  const currentCycle = (overview?.billing_cycle || 'monthly') as 'monthly' | 'annual'
-  const currentPlan = plans.find(p => p.id === currentPlanId) || null
+  const planInfo = planInfoRes?.data?.data
   const paymentMethods: PaymentMethod[] = pmRes?.data?.data || []
   const walletTxs: WalletTransaction[] = walletTxRes?.data?.data?.data || []
   const invoices: InvoiceRecord[] = invRes?.data?.data?.data || []
   const events: SubscriptionEvent[] = eventsRes?.data?.data?.data || []
   const hasSubscription = !!overview?.subscription_status && !['trial', 'expired'].includes(overview.subscription_status)
+  const pricePerSeat = overview?.price_per_seat ?? 2900
+  const currentSeats = overview?.seat_quantity ?? 1
+
+  // ── Mutations ────────────────────────────────────────────────────────────
+  const updateSeatsMutation = useMutation({
+    mutationFn: (qty: number) => billingService.updateSeats(qty),
+    onSuccess: () => {
+      toast.success('Seats updated successfully')
+      setSeatInput(null)
+      refreshAll()
+    },
+    onError: () => { /* interceptor handles */ },
+  })
+
+  const subscribeMutation = useMutation({
+    mutationFn: (payload: { seat_count: number; payment_method: string }) =>
+      billingService.subscribe(payload),
+    onSuccess: () => {
+      toast.success('Subscription activated')
+      setShowSubscribe(false)
+      setSeatInput(null)
+      refreshAll()
+    },
+    onError: () => { /* interceptor handles */ },
+  })
 
   // Wallet threshold state
   const [thresholdInput, setThresholdInput] = useState('')
@@ -113,7 +147,7 @@ export function Billing() {
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: ['billing-overview'] })
-    qc.invalidateQueries({ queryKey: ['billing-plans'] })
+    qc.invalidateQueries({ queryKey: ['billing-plan-info'] })
     qc.invalidateQueries({ queryKey: ['billing-pm'] })
     qc.invalidateQueries({ queryKey: ['billing-wallet-tx'] })
     qc.invalidateQueries({ queryKey: ['billing-invoices'] })
@@ -122,7 +156,6 @@ export function Billing() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const fmtLimit = (v: number) => (v === 0 ? 'Unlimited' : v.toLocaleString())
-  const usagePct = (cur: number, max: number) => (max === 0 ? 0 : Math.min(100, Math.round((cur / max) * 100)))
 
   const removeCard = async (id: string) => {
     if (!confirm('Remove this card?')) return
@@ -131,6 +164,29 @@ export function Billing() {
       toast.success('Card removed')
       refetchPm()
     } catch { /* interceptor */ }
+  }
+
+  const handleSeatUpdate = () => {
+    if (seatInput === null || seatInput === currentSeats) return
+    if (seatInput < 1) {
+      toast.error('Minimum 1 seat required')
+      return
+    }
+    updateSeatsMutation.mutate(seatInput)
+  }
+
+  const handleSubscribe = () => {
+    const defaultPm = paymentMethods.find(m => m.is_default)
+    const pm = defaultPm?.id || paymentMethods[0]?.id
+    if (!pm) {
+      toast.error('Please add a payment method first')
+      setShowAddCard(true)
+      return
+    }
+    subscribeMutation.mutate({
+      seat_count: seatInput ?? currentSeats,
+      payment_method: pm,
+    })
   }
 
   // ── Column defs ─────────────────────────────────────────────────────────
@@ -171,6 +227,7 @@ export function Billing() {
     trial_started: 'blue',
     subscribed: 'green',
     upgraded: 'green',
+    seats_updated: 'green',
     cancelled: 'yellow',
     trial_expired: 'red',
     subscription_expired: 'red',
@@ -208,6 +265,10 @@ export function Billing() {
   //  Render
   // ══════════════════════════════════════════════════════════════════════════
 
+  const displaySeats = seatInput ?? currentSeats
+  const monthlyTotal = displaySeats * pricePerSeat
+  const preview = previewRes?.data?.data?.preview
+
   return (
     <div className="space-y-5">
       {/* Quick actions */}
@@ -215,8 +276,8 @@ export function Billing() {
         <button onClick={() => setShowTopUp(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:border-indigo-300 hover:text-indigo-700 transition-all">
           <Wallet size={15} /> Top Up Wallet
         </button>
-        <button onClick={() => setTab('Plans')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all">
-          <ArrowUp size={15} /> Upgrade Plan
+        <button onClick={() => setTab('Seats')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all">
+          <Users size={15} /> Manage Seats
         </button>
       </div>
 
@@ -244,7 +305,7 @@ export function Billing() {
           {/* Plan + Status card */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-900">Current Plan</h3>
+              <h3 className="font-bold text-slate-900">Per-Seat Plan</h3>
               {overview?.subscription_status && (
                 <Badge variant={STATUS_VARIANT[overview.subscription_status] || 'gray'}>
                   {overview.subscription_status}
@@ -253,13 +314,14 @@ export function Billing() {
             </div>
             <div className="flex items-end gap-3">
               <span className="text-3xl font-bold text-indigo-600">
-                {currentPlan?.name || 'No plan'}
+                ${(pricePerSeat / 100).toFixed(0)}
               </span>
-              {currentPlan && (
-                <span className="text-slate-500 text-sm mb-1">
-                  ${currentCycle === 'annual' ? currentPlan.price_annual : currentPlan.price_monthly}/{currentCycle === 'annual' ? 'yr' : 'mo'}
-                </span>
-              )}
+              <span className="text-slate-500 text-sm mb-1">
+                /seat/mo
+              </span>
+              <span className="text-slate-400 text-sm mb-1 ml-2">
+                {currentSeats} seat{currentSeats !== 1 ? 's' : ''} = ${(currentSeats * pricePerSeat / 100).toFixed(0)}/mo
+              </span>
             </div>
             {overview?.subscription_ends_at && (
               <p className="text-xs text-slate-400 mt-2">
@@ -272,8 +334,8 @@ export function Billing() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { label: 'Wallet Balance', value: `$${Number(overview?.wallet_balance ?? 0).toFixed(2)}`, icon: DollarSign, gradient: 'from-emerald-500 to-teal-600' },
-              { label: 'Agent Seats', value: `${overview?.usage?.agents?.current ?? 0} / ${fmtLimit(overview?.usage?.agents?.max ?? 0)}`, icon: Package, gradient: 'from-indigo-500 to-violet-600' },
-              { label: 'Monthly Calls', value: `${(overview?.usage?.calls?.current ?? 0).toLocaleString()} / ${fmtLimit(overview?.usage?.calls?.max ?? 0)}`, icon: FileText, gradient: 'from-sky-500 to-blue-600' },
+              { label: 'Active Seats', value: `${overview?.usage?.agents?.current ?? 0} / ${currentSeats}`, icon: Users, gradient: 'from-indigo-500 to-violet-600' },
+              { label: 'Monthly Cost', value: `$${(currentSeats * pricePerSeat / 100).toFixed(0)}`, icon: CreditCard, gradient: 'from-sky-500 to-blue-600' },
             ].map(stat => (
               <div key={stat.label} className="card flex items-center gap-4">
                 <div className={cn('w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0', stat.gradient)}>
@@ -285,31 +347,6 @@ export function Billing() {
                 </div>
               </div>
             ))}
-          </div>
-
-          {/* Usage bars */}
-          <div className="card space-y-4">
-            <h3 className="font-bold text-slate-900 text-sm">Usage This Month</h3>
-            {(['agents', 'calls', 'sms'] as const).map(key => {
-              const m = overview?.usage?.[key]
-              const cur = m?.current ?? 0
-              const max = m?.max ?? 0
-              const pct = usagePct(cur, max)
-              return (
-                <div key={key}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-semibold text-slate-600 capitalize">{key}</span>
-                    <span className="text-slate-400">{cur.toLocaleString()} / {fmtLimit(max)}</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={cn('h-full rounded-full transition-all', pct >= 80 ? 'bg-red-500' : 'bg-indigo-500')}
-                      style={{ width: max === 0 ? '0%' : `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
           </div>
 
           {/* Upcoming invoice */}
@@ -325,69 +362,154 @@ export function Billing() {
         </div>
       )}
 
-      {/* ═══ Plans ═══ */}
-      {tab === 'Plans' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {plans.map(plan => {
-            const isCurrent = plan.id === currentPlanId
-            const canUpgrade = currentPlan ? plan.display_order > currentPlan.display_order : true
-            const price = currentCycle === 'annual' ? plan.price_annual : plan.price_monthly
-            return (
-              <div
-                key={plan.id}
-                className={cn(
-                  'card relative overflow-hidden transition-all hover:shadow-lg',
-                  isCurrent && 'ring-2 ring-indigo-500 shadow-indigo-100 shadow-lg'
-                )}
-              >
-                {isCurrent && (
-                  <div className="absolute top-4 right-4">
-                    <Badge variant="blue">Current</Badge>
-                  </div>
-                )}
-                <h3 className="font-bold text-slate-900 text-lg">{plan.name}</h3>
-                <div className="flex items-end gap-1 mt-2 mb-4">
-                  <span className="text-3xl font-bold text-indigo-600">{price > 0 ? `$${price}` : 'Custom'}</span>
-                  {price > 0 && <span className="text-slate-500 text-sm mb-1">/{currentCycle === 'annual' ? 'yr' : 'mo'}</span>}
-                </div>
-                <div className="text-xs text-slate-500 space-y-1 mb-4">
-                  <p>Up to {plan.max_agents === 0 ? 'Unlimited' : plan.max_agents} agents</p>
-                  <p>{plan.max_calls_monthly === 0 ? 'Unlimited' : plan.max_calls_monthly.toLocaleString()} calls/mo</p>
-                  <p>{plan.max_sms_monthly === 0 ? 'Unlimited' : plan.max_sms_monthly.toLocaleString()} SMS/mo</p>
-                </div>
-                <div className="space-y-1.5 text-sm border-t border-slate-100 pt-3">
-                  {Object.entries({
-                    has_predictive_dialer: 'Predictive Dialer',
-                    has_full_crm: 'Full CRM',
-                    has_api_access: 'API Access',
-                    has_ai_coaching: 'AI Coaching',
-                  }).map(([key, label]) => {
-                    const on = !!(plan as Record<string, unknown>)[key]
-                    return (
-                      <div key={key} className="flex items-center gap-2">
-                        {on ? <CheckCircle2 size={14} className="text-emerald-500" /> : <Minus size={14} className="text-slate-300" />}
-                        <span className={on ? 'text-slate-700' : 'text-slate-400'}>{label}</span>
-                      </div>
-                    )
-                  })}
-                </div>
+      {/* ═══ Seats ═══ */}
+      {tab === 'Seats' && (
+        <div className="space-y-5">
+          {/* Per-seat pricing card */}
+          <div
+            className="rounded-2xl p-6 text-white overflow-hidden relative"
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #0ea5e9 100%)' }}
+          >
+            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10" />
+            <div className="relative">
+              <p className="text-white/70 text-sm font-medium uppercase tracking-wide">Per-Seat Pricing</p>
+              <div className="flex items-end gap-2 mt-1">
+                <span className="text-5xl font-bold tabular-nums">${(pricePerSeat / 100).toFixed(0)}</span>
+                <span className="text-white/60 text-lg mb-1">/seat/month</span>
+              </div>
+              <p className="text-white/50 text-sm mt-2">Full platform access for every seat. All features included.</p>
+            </div>
+          </div>
+
+          {/* Seat adjuster */}
+          <div className="card">
+            <h3 className="font-bold text-slate-900 mb-4">
+              {hasSubscription ? 'Adjust Seats' : 'Choose Seats'}
+            </h3>
+
+            <div className="flex items-center gap-6 mb-6">
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={() => canUpgrade && !isCurrent ? setUpgradePlan(plan) : undefined}
-                  disabled={isCurrent || !canUpgrade}
-                  className={cn(
-                    'w-full mt-5 py-2.5 rounded-xl font-semibold text-sm transition-all',
-                    isCurrent
-                      ? 'bg-slate-100 text-slate-400 cursor-default'
-                      : canUpgrade
-                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-200 hover:shadow-indigo-300'
-                        : 'border-2 border-slate-200 text-slate-400 cursor-not-allowed'
-                  )}
+                  onClick={() => setSeatInput(Math.max(1, displaySeats - 1))}
+                  className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
                 >
-                  {isCurrent ? 'Current Plan' : canUpgrade ? 'Upgrade' : 'Contact Support'}
+                  <MinusIcon size={16} />
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  value={displaySeats}
+                  onChange={e => {
+                    const v = parseInt(e.target.value)
+                    setSeatInput(isNaN(v) ? 1 : Math.max(1, v))
+                  }}
+                  className="w-20 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <button
+                  onClick={() => setSeatInput(displaySeats + 1)}
+                  className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                >
+                  <Plus size={16} />
                 </button>
               </div>
-            )
-          })}
+
+              <div className="flex-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Monthly total</span>
+                  <span className="text-2xl font-bold text-indigo-600">
+                    ${(monthlyTotal / 100).toFixed(0)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {displaySeats} seat{displaySeats !== 1 ? 's' : ''} x ${(pricePerSeat / 100).toFixed(0)}/mo
+                </p>
+              </div>
+            </div>
+
+            {/* Proration preview for seat increase */}
+            {hasSubscription && seatInput !== null && seatInput !== currentSeats && (
+              <div className="mb-4">
+                {previewLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-50 rounded-xl p-3">
+                    <Loader2 size={14} className="animate-spin" /> Calculating proration...
+                  </div>
+                ) : preview && seatInput > currentSeats ? (
+                  <div className="bg-slate-50 rounded-xl p-3 space-y-1 text-sm">
+                    {preview.lines.map((line, i) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-slate-600">{line.description}</span>
+                        <span className="font-semibold">${(line.amount / 100).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
+                      <span className="font-semibold text-slate-900">Prorated charge today</span>
+                      <span className="font-bold text-indigo-600">${(preview.amount_due / 100).toFixed(2)}</span>
+                    </div>
+                  </div>
+                ) : seatInput < currentSeats ? (
+                  <div className="bg-amber-50 rounded-xl p-3 text-sm text-amber-700">
+                    Seat reduction will take effect at the start of your next billing cycle. No refund for the current period.
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* Active users warning */}
+            {overview?.usage?.agents && seatInput !== null && seatInput < (overview.usage.agents.current || 0) && (
+              <div className="bg-red-50 rounded-xl p-3 text-sm text-red-700 mb-4">
+                You currently have {overview.usage.agents.current} active users. You cannot reduce seats below this number without deactivating users first.
+              </div>
+            )}
+
+            {/* Action button */}
+            {hasSubscription ? (
+              <button
+                onClick={handleSeatUpdate}
+                disabled={
+                  updateSeatsMutation.isPending ||
+                  seatInput === null ||
+                  seatInput === currentSeats ||
+                  (seatInput < (overview?.usage?.agents?.current ?? 0))
+                }
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 disabled:opacity-50 transition-all"
+              >
+                {updateSeatsMutation.isPending && <Loader2 size={15} className="animate-spin" />}
+                {seatInput !== null && seatInput !== currentSeats
+                  ? `Update to ${seatInput} seat${seatInput !== 1 ? 's' : ''}`
+                  : 'No changes'}
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  if (paymentMethods.length === 0) {
+                    setShowAddCard(true)
+                    return
+                  }
+                  setShowSubscribe(true)
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all"
+              >
+                Subscribe Now — ${(monthlyTotal / 100).toFixed(0)}/mo
+              </button>
+            )}
+          </div>
+
+          {/* Features included */}
+          <div className="card">
+            <h3 className="font-bold text-slate-900 text-sm mb-3">All Features Included</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                'Predictive Dialer', 'Full CRM', 'API Access', 'AI Coaching',
+                'Custom Integrations', 'SSO', 'Dedicated CSM', 'White Label',
+                'On-Premise Option', 'Compliance Packages',
+              ].map(feature => (
+                <div key={feature} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                  <span className="text-slate-700">{feature}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -454,7 +576,7 @@ export function Billing() {
             ) : (
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-700">
-                  Alert threshold: <strong>${(overview?.wallet_low_threshold_cents ?? 200) / 100}</strong>
+                  Alert threshold: <strong>${((overview?.wallet_low_threshold_cents ?? 200) / 100).toFixed(2)}</strong>
                 </span>
                 <button
                   onClick={() => {
@@ -560,18 +682,49 @@ export function Billing() {
         paymentMethods={paymentMethods}
         onAddCard={() => { setShowTopUp(false); setShowAddCard(true) }}
       />
-      {upgradePlan && (
-        <PlanUpgradeModal
-          open={!!upgradePlan}
-          onClose={() => setUpgradePlan(null)}
-          onSuccess={refreshAll}
-          plan={upgradePlan}
-          currentPlan={currentPlan}
-          currentCycle={currentCycle}
-          hasSubscription={hasSubscription}
-          paymentMethods={paymentMethods}
-          onAddCard={() => { setUpgradePlan(null); setShowAddCard(true) }}
-        />
+
+      {/* Subscribe confirmation modal */}
+      {showSubscribe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSubscribe(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900">Confirm Subscription</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-indigo-50 rounded-xl p-4 text-center">
+                <p className="text-sm text-slate-600">You will be charged</p>
+                <p className="text-3xl font-bold text-indigo-600 mt-1">${(monthlyTotal / 100).toFixed(0)}/mo</p>
+                <p className="text-xs text-slate-400 mt-1">{displaySeats} seat{displaySeats !== 1 ? 's' : ''} x ${(pricePerSeat / 100).toFixed(0)}/seat</p>
+              </div>
+
+              {paymentMethods.length > 0 && (
+                <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+                  <CreditCard size={16} className="text-slate-500" />
+                  <span className="text-sm text-slate-700">
+                    {paymentMethods.find(m => m.is_default)?.brand.toUpperCase() ?? paymentMethods[0]?.brand.toUpperCase()} ****{paymentMethods.find(m => m.is_default)?.last4 ?? paymentMethods[0]?.last4}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowSubscribe(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubscribe}
+                  disabled={subscribeMutation.isPending}
+                  className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md disabled:opacity-50 transition-all"
+                >
+                  {subscribeMutation.isPending && <Loader2 size={15} className="animate-spin" />}
+                  Subscribe Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

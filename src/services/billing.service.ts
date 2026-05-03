@@ -18,14 +18,18 @@ export interface UpcomingInvoice {
 
 export interface BillingOverview {
   plan: SubscriptionPlan | null
-  billing_cycle: 'monthly' | 'annual'
+  billing_cycle: 'monthly'
   subscription_status: string | null
   subscription_started_at: string | null
   subscription_ends_at: string | null
+  seat_quantity: number
+  price_per_seat: number
+  monthly_total: number
   usage: {
     agents: UsageMetric
     calls: UsageMetric
     sms: UsageMetric
+    seat_quantity: number
     year_month: string
   }
   wallet_balance: number
@@ -33,10 +37,24 @@ export interface BillingOverview {
   upcoming_invoice: UpcomingInvoice | null
 }
 
-export interface AvailablePlansResponse {
-  plans: SubscriptionPlan[]
-  current_plan_id: number | null
-  billing_cycle: string
+export interface PlanInfoResponse {
+  plan: SubscriptionPlan
+  price_per_seat: number
+  seat_quantity: number
+  has_subscription: boolean
+}
+
+export interface SeatsPreviewResponse {
+  preview: {
+    amount_due: number
+    currency: string
+    period_start: number
+    period_end: number
+    lines: { description: string; amount: number }[]
+  } | null
+  current_seats: number
+  new_seats: number
+  price_per_seat: number
 }
 
 export interface InvoiceRecord extends Record<string, unknown> {
@@ -95,21 +113,21 @@ export const billingService = {
   getOverview: () =>
     api.get<{ data: BillingOverview }>('/billing/overview'),
 
-  // Plans
-  getAvailablePlans: () =>
-    api.get<{ data: AvailablePlansResponse }>('/billing/plans'),
+  // Plan info (single per-seat plan)
+  getPlanInfo: () =>
+    api.get<{ data: PlanInfoResponse }>('/billing/plan'),
 
-  // Subscribe (trial → paid)
-  subscribe: (payload: { plan_id: number; payment_method: string; billing_cycle: 'monthly' | 'annual' }) =>
+  // Subscribe (trial → paid) — per-seat
+  subscribe: (payload: { seat_count: number; payment_method: string }) =>
     api.post('/billing/subscribe', payload),
 
-  // Upgrade
-  upgrade: (payload: { plan_id: number; billing_cycle?: 'monthly' | 'annual' }) =>
-    api.post('/billing/upgrade', payload),
+  // Update seats
+  updateSeats: (seatCount: number) =>
+    api.post('/billing/update-seats', { seat_count: seatCount }),
 
-  // Upgrade preview (proration)
-  upgradePreview: (planId: number, billingCycle?: string) =>
-    api.get('/billing/upgrade/preview', { params: { plan_id: planId, billing_cycle: billingCycle } }),
+  // Seat change preview (proration)
+  seatsPreview: (seatCount: number) =>
+    api.get<{ data: SeatsPreviewResponse }>('/billing/seats/preview', { params: { seat_count: seatCount } }),
 
   // Invoices
   getInvoices: (startingAfter?: string) =>
