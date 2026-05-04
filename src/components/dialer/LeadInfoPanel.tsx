@@ -48,7 +48,7 @@ function QuickSmsForm({ phone, leadId }: { phone: string; leadId?: number }) {
       if (leadId) {
         await crmService.sendLeadSms(leadId, { to: phone, body: message.trim() })
       } else {
-        await smsService.send({ did_id: 0, to: phone, message: message.trim() })
+        await smsService.send({ from: phone, to: phone, message: message.trim() })
       }
       toast.success('SMS sent')
       setMessage('')

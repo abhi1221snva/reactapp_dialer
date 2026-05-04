@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Send, MessageSquare, Phone } from 'lucide-react'
+import { Send, MessageSquare, Phone, Loader2 } from 'lucide-react'
 import { smsService } from '../../services/sms.service'
 import { formatPhoneNumber, timeAgo } from '../../utils/format'
 import { cn } from '../../utils/cn'
@@ -11,7 +11,7 @@ interface Conversation { id: number; contact_number: string; last_message: strin
 interface Message { id: number; message: string; type?: string; direction?: string; date?: string; created_at?: string; [key: string]: unknown }
 
 function getInitial(num: string): string {
-  const digits = num.replace(/\D/g, '')
+  const digits = (num || '').replace(/\D/g, '')
   return digits.slice(-2, -1) || '#'
 }
 
@@ -26,18 +26,18 @@ export function SMSCenter() {
 
   void user
 
-  const { data: didsData } = useQuery({
+  const { data: didsData, isLoading: didsLoading } = useQuery({
     queryKey: ['sms-dids'],
     queryFn: () => smsService.getDids(),
   })
 
-  const { data: conversationsData, refetch: refetchConversations } = useQuery({
+  const { data: conversationsData, isLoading: convsLoading, refetch: refetchConversations } = useQuery({
     queryKey: ['sms-conversations', selectedDid],
     queryFn: () => smsService.getConversations(selectedDid!),
     enabled: !!selectedDid,
   })
 
-  const { data: threadData, refetch: refetchThread } = useQuery({
+  const { data: threadData, isLoading: threadLoading, refetch: refetchThread } = useQuery({
     queryKey: ['sms-thread', selectedDid, selectedContact],
     queryFn: () => smsService.getThread(selectedDid!, selectedContact!),
     enabled: !!selectedDid && !!selectedContact,
@@ -60,7 +60,11 @@ export function SMSCenter() {
   }, [lastSmsAt])
 
   const dids = didsData?.data?.data || []
-  const conversations: Conversation[] = conversationsData?.data?.data || []
+  // contact_number comes from bigint column — ensure it's always a string
+  const conversations: Conversation[] = (conversationsData?.data?.data || []).map((c: Conversation) => ({
+    ...c,
+    contact_number: String(c.contact_number ?? ''),
+  }))
   const messages: Message[] = threadData?.data?.data || []
 
   useEffect(() => {
@@ -75,7 +79,7 @@ export function SMSCenter() {
   }
 
   return (
-    <div className="flex flex-col h-full -m-6">
+    <div className="flex flex-col h-full -mx-5 -my-3 overflow-hidden" style={{ minHeight: 0 }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white flex-shrink-0">
         <div>
@@ -93,7 +97,12 @@ export function SMSCenter() {
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Numbers</p>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {dids.length === 0 && (
+            {didsLoading && (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 size={16} className="animate-spin text-slate-400" />
+              </div>
+            )}
+            {!didsLoading && dids.length === 0 && (
               <p className="text-xs text-slate-400 px-2 py-2">No numbers available</p>
             )}
             {dids.map((d: Record<string, unknown>) => {
@@ -136,6 +145,17 @@ export function SMSCenter() {
               <div className="flex flex-col items-center justify-center h-40 px-4 text-center">
                 <MessageSquare size={28} className="text-slate-300 mb-2" />
                 <p className="text-xs text-slate-400">Select a number to view conversations</p>
+              </div>
+            )}
+            {selectedDid && convsLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-indigo-400" />
+              </div>
+            )}
+            {selectedDid && !convsLoading && conversations.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-40 px-4 text-center">
+                <MessageSquare size={24} className="text-slate-300 mb-2" />
+                <p className="text-xs text-slate-400">No conversations yet</p>
               </div>
             )}
             {conversations.map((conv) => (
@@ -200,6 +220,11 @@ export function SMSCenter() {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-5 py-5 space-y-3" style={{ background: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)' }}>
+                {threadLoading && (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={24} className="animate-spin text-indigo-400" />
+                  </div>
+                )}
                 {messages.map((msg) => {
                   const isOutbound = msg.type === 'outgoing' || msg.direction === 'outbound'
                   const timestamp = msg.date || msg.created_at || ''
