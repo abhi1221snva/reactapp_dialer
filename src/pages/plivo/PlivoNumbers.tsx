@@ -136,10 +136,17 @@ export function PlivoNumbers() {
   const [ownedSearch, setOwnedSearch] = useState('')
   const [confirmNumbers, setConfirmNumbers] = useState<AvailablePlivoNumber[]>([])
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
+  const [detailNumber, setDetailNumber] = useState<string | null>(null)
 
   const { data: ownedData, isLoading: ownedLoading } = useQuery({
     queryKey: ['plivo-numbers', { page: ownedPage, search: ownedSearch }],
     queryFn:  () => plivoService.listNumbers({ page: ownedPage, limit: 20, search: ownedSearch }),
+  })
+
+  const { data: detailData, isLoading: detailLoading } = useQuery({
+    queryKey: ['plivo-number-detail', detailNumber],
+    queryFn:  () => plivoService.getNumberDetail(detailNumber!),
+    enabled:  !!detailNumber,
   })
 
   const handleSearch = async () => {
@@ -358,7 +365,7 @@ export function PlivoNumbers() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {owned.map((n) => (
-                  <tr key={n.id} className="hover:bg-slate-50">
+                  <tr key={n.id} className={`hover:bg-slate-50 cursor-pointer ${detailNumber === n.number ? 'bg-indigo-50' : ''}`} onClick={() => setDetailNumber(detailNumber === n.number ? null : n.number)}>
                     <td className="px-4 py-3 font-mono font-semibold text-slate-900">{n.number}</td>
                     <td className="px-4 py-3 text-slate-600">{n.country_iso}</td>
                     <td className="px-4 py-3 text-slate-500">{n.alias ?? '—'}</td>
@@ -389,6 +396,44 @@ export function PlivoNumbers() {
           </>
         )}
       </div>
+
+      {/* Number detail panel */}
+      {detailNumber && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Number Details: <span className="font-mono">{detailNumber}</span></h3>
+            <button onClick={() => setDetailNumber(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X size={14} /></button>
+          </div>
+          <div className="px-5 py-4">
+            {detailLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500"><RefreshCw size={13} className="animate-spin" /> Loading...</div>
+            ) : detailData?.data?.data?.application ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Plivo Application</p>
+                  <p className="text-sm text-slate-800 font-medium">{detailData.data.data.application.app_name || 'Unnamed App'} <span className="text-xs text-slate-400">(ID: {detailData.data.data.application.app_id})</span></p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Message URL (SMS)</p>
+                    <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.message_url || '—'}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Answer URL (Voice)</p>
+                    <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.answer_url || '—'}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Hangup URL</p>
+                    <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.hangup_url || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No Plivo Application assigned to this number. Webhook URLs are not configured.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {confirmNumbers.length > 0 && (
         <PurchaseConfirmModal

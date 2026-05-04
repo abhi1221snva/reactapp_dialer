@@ -67,6 +67,11 @@ export const plivoService = {
   releaseNumber: (number: string) =>
     api.delete(`/plivo/numbers/${encodeURIComponent(number)}`),
 
+  getNumberDetail: (number: string) =>
+    api.get<{ success: boolean; data: { number: PlivoNumber; application: { app_id: string; app_name: string | null; answer_url: string | null; message_url: string | null; hangup_url: string | null } | null } }>(
+      `/plivo/numbers/detail/${encodeURIComponent(number)}`
+    ),
+
   listNumbers: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get<{ success: boolean; data: { numbers: PlivoNumber[]; total: number; current_page: number; per_page: number } }>(
       '/plivo/numbers',
