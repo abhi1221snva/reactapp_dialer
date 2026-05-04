@@ -397,41 +397,58 @@ export function PlivoNumbers() {
         )}
       </div>
 
-      {/* Number detail panel */}
+      {/* Number detail popup */}
       {detailNumber && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Number Details: <span className="font-mono">{detailNumber}</span></h3>
-            <button onClick={() => setDetailNumber(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X size={14} /></button>
-          </div>
-          <div className="px-5 py-4">
-            {detailLoading ? (
-              <div className="flex items-center gap-2 text-sm text-slate-500"><RefreshCw size={13} className="animate-spin" /> Loading...</div>
-            ) : detailData?.data?.data?.application ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Plivo Application</p>
-                  <p className="text-sm text-slate-800 font-medium">{detailData.data.data.application.app_name || 'Unnamed App'} <span className="text-xs text-slate-400">(ID: {detailData.data.data.application.app_id})</span></p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setDetailNumber(null) }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" style={{ animation: 'modalIn 0.18s ease-out' }}>
+            <div className="px-6 pt-6 pb-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <Phone size={16} className="text-indigo-600" />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="bg-slate-50 rounded-lg p-3">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Message URL (SMS)</p>
-                    <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.message_url || '—'}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-3">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Answer URL (Voice)</p>
-                    <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.answer_url || '—'}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-3">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Hangup URL</p>
-                    <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.hangup_url || '—'}</p>
-                  </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900 text-base">Number Details</h3>
+                  <p className="text-xs text-slate-500 font-mono">{detailNumber}</p>
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-slate-500">No Plivo Application assigned to this number. Webhook URLs are not configured.</p>
-            )}
+              <button onClick={() => setDetailNumber(null)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><X size={16} /></button>
+            </div>
+            <div className="px-6 py-5">
+              {detailLoading ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500"><RefreshCw size={14} className="animate-spin" /> Loading...</div>
+              ) : detailData?.data?.data?.application ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Plivo Application</p>
+                    <p className="text-sm text-slate-800 font-medium">{detailData.data.data.application.app_name || 'Unnamed App'} <span className="text-xs text-slate-400 ml-1">ID: {detailData.data.data.application.app_id}</span></p>
+                  </div>
+                  <div className="space-y-2.5">
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Message URL (SMS Webhook)</p>
+                      <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.message_url || '—'}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Answer URL (Voice Webhook)</p>
+                      <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.answer_url || '—'}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Hangup URL (Call Status)</p>
+                      <p className="text-xs font-mono text-indigo-600 break-all">{detailData.data.data.application.hangup_url || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-slate-500">No Plivo Application assigned to this number.</p>
+                  <p className="text-xs text-slate-400 mt-1">Webhook URLs are not configured.</p>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+              <button onClick={() => setDetailNumber(null)} className="w-full py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Close</button>
+            </div>
           </div>
+          <style>{`@keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(-8px); } to { opacity: 1; transform: scale(1) translateY(0); } }`}</style>
         </div>
       )}
 
