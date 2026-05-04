@@ -37,7 +37,10 @@ export function CreateDispositionModal({ onClose, onSaved }: Props) {
       toast.success('Disposition created')
       onSaved()
     },
-    onError: () => toast.error('Failed to create disposition'),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg || 'Failed to create disposition')
+    },
   })
 
   const isValid = title.trim().length > 0
