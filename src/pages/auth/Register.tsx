@@ -597,6 +597,21 @@ export function Register() {
     } catch { /* handled */ }
   }
 
+  // ── Auto-submit OTP when 6 digits entered ──────────────────────────────
+  useEffect(() => {
+    if (step === 'email-otp' && emailOtp.length === 6 && !loading) {
+      handleVerifyEmail({ preventDefault: () => {} } as React.FormEvent)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailOtp, step])
+
+  useEffect(() => {
+    if (step === 'phone-otp' && phoneOtp.length === 6 && !loading) {
+      handleVerifyPhone({ preventDefault: () => {} } as React.FormEvent)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phoneOtp, step])
+
   // Provisioning polling is now handled internally by the SetupProgress component
 
   // ── Modal close handler ─────────────────────────────────────────────────
