@@ -4,8 +4,8 @@ import {
   LogIn, Users, Activity, Search, RefreshCw, Monitor, Smartphone, Tablet,
 } from 'lucide-react'
 import { DataTable, type Column } from '../../components/ui/DataTable'
-import { Badge } from '../../components/ui/Badge'
 import { loginHistoryService, type LoginHistoryRecord, type ActiveUser } from '../../services/loginHistory.service'
+import { useAuthStore } from '../../stores/auth.store'
 import { useTimezone } from '../../hooks/useTimezone'
 import { cn } from '../../utils/cn'
 
@@ -77,6 +77,8 @@ function SummaryCard({ icon: Icon, label, value, color, loading }: {
 
 export function LoginHistory() {
   const { today, daysAgo, fmtDateTime } = useTimezone()
+  const user = useAuthStore(s => s.user)
+  const isSuperAdmin = (user?.level ?? 0) >= 9
   const initDates = useMemo(() => ({ from: today(), to: today() }), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [filters, setFilters] = useState<Filters>({
@@ -118,11 +120,13 @@ export function LoginHistory() {
   const records: LoginHistoryRecord[] = data?.data?.data || []
   const totalCount = data?.data?.record_count || 0
 
-  // Active users
+  // Active users (only for superadmin)
   const { data: activeData } = useQuery({
     queryKey: ['active-users'],
     queryFn: () => loginHistoryService.getActiveUsers(),
-    refetchInterval: 30_000,
+    enabled: isSuperAdmin,
+    retry: false,
+    refetchInterval: isSuperAdmin ? 30_000 : false,
   })
   const activeUsers: ActiveUser[] = activeData?.data?.data?.users || []
   const activeCount = activeData?.data?.data?.count || 0
