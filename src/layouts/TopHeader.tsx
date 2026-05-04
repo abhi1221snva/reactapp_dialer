@@ -287,8 +287,8 @@ export function TopHeader() {
           </>
         )}
 
-        {/* Wallet Balance */}
-        <WalletBadge />
+        {/* Wallet Balance — hidden for agents/associates (level < 7) */}
+        {user && user.level >= 7 && <WalletBadge />}
 
         {/* Live Clock */}
         <LiveClock timezone={user?.timezone} />
