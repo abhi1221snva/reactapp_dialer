@@ -8,7 +8,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useNotificationStore } from '../../stores/notification.store'
 
 interface Conversation { id: number; contact_number: string; last_message: string; unread_count: number; updated_at: string; [key: string]: unknown }
-interface Message { id: number; message: string; direction: 'inbound' | 'outbound'; created_at: string; [key: string]: unknown }
+interface Message { id: number; message: string; type?: string; direction?: string; date?: string; created_at?: string; [key: string]: unknown }
 
 function getInitial(num: string): string {
   const digits = num.replace(/\D/g, '')
@@ -19,6 +19,7 @@ export function SMSCenter() {
   const { user } = useAuth()
   const lastSmsAt = useNotificationStore((s) => s.lastSmsAt)
   const [selectedDid, setSelectedDid] = useState<number | null>(null)
+  const [selectedDidNumber, setSelectedDidNumber] = useState<string | null>(null)
   const [selectedContact, setSelectedContact] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -43,7 +44,7 @@ export function SMSCenter() {
   })
 
   const sendMutation = useMutation({
-    mutationFn: () => smsService.send({ did_id: selectedDid!, to: selectedContact!, message: newMessage }),
+    mutationFn: () => smsService.send({ from: selectedDidNumber!, to: selectedContact!, message: newMessage }),
     onSuccess: () => {
       setNewMessage('')
       refetchThread()
@@ -100,7 +101,7 @@ export function SMSCenter() {
               return (
                 <button
                   key={d.id as number}
-                  onClick={() => { setSelectedDid(d.id as number); setSelectedContact(null) }}
+                  onClick={() => { setSelectedDid(d.id as number); setSelectedDidNumber(String(d.did_number || d.number || d.cli || '')); setSelectedContact(null) }}
                   className={cn(
                     'w-full text-left px-2.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group',
                     isSelected
@@ -199,39 +200,43 @@ export function SMSCenter() {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-5 py-5 space-y-3" style={{ background: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)' }}>
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={cn('flex', msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}
-                  >
-                    <div className={cn(
-                      'max-w-[70%] group',
-                      msg.direction === 'outbound' ? 'items-end' : 'items-start',
-                    )}>
+                {messages.map((msg) => {
+                  const isOutbound = msg.type === 'outgoing' || msg.direction === 'outbound'
+                  const timestamp = msg.date || msg.created_at || ''
+                  return (
+                    <div
+                      key={msg.id}
+                      className={cn('flex', isOutbound ? 'justify-end' : 'justify-start')}
+                    >
                       <div className={cn(
-                        'px-4 py-2.5 text-sm leading-relaxed rounded-2xl',
-                        msg.direction === 'outbound'
-                          ? 'rounded-br-md text-white'
-                          : 'rounded-bl-md bg-white text-slate-900 border border-slate-200',
-                      )}
-                        style={msg.direction === 'outbound' ? {
-                          background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                          boxShadow: '0 2px 8px rgba(79,70,229,0.25)',
-                        } : {
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                        }}
-                      >
-                        {msg.message}
-                      </div>
-                      <p className={cn(
-                        'text-[10px] mt-1 px-1',
-                        msg.direction === 'outbound' ? 'text-right text-slate-400' : 'text-slate-400'
+                        'max-w-[70%] group',
+                        isOutbound ? 'items-end' : 'items-start',
                       )}>
-                        {timeAgo(msg.created_at)}
-                      </p>
+                        <div className={cn(
+                          'px-4 py-2.5 text-sm leading-relaxed rounded-2xl',
+                          isOutbound
+                            ? 'rounded-br-md text-white'
+                            : 'rounded-bl-md bg-white text-slate-900 border border-slate-200',
+                        )}
+                          style={isOutbound ? {
+                            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                            boxShadow: '0 2px 8px rgba(79,70,229,0.25)',
+                          } : {
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                          }}
+                        >
+                          {msg.message}
+                        </div>
+                        <p className={cn(
+                          'text-[10px] mt-1 px-1',
+                          isOutbound ? 'text-right text-slate-400' : 'text-slate-400'
+                        )}>
+                          {timeAgo(timestamp)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 <div ref={messagesEndRef} />
               </div>
 
