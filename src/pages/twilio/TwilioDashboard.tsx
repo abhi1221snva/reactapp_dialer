@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Phone, Wifi, MessageSquare, Clock, DollarSign,
   CheckCircle, AlertTriangle, Settings, Link2, Unlink,
-  Zap, Hash, BarChart3,
+  Hash, BarChart3,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { twilioService } from '../../services/twilio.service'
@@ -355,7 +355,6 @@ export function TwilioDashboard() {
               { label: 'Call Logs',              icon: Phone,        path: '/twilio/calls',   color: 'green'  },
               { label: 'SMS Logs',               icon: MessageSquare,path: '/twilio/sms',     color: 'purple' },
               { label: 'Usage & Billing',        icon: BarChart3,    path: '/twilio/usage',   color: 'orange' },
-              { label: 'AI Voice (Media Stream)',icon: Zap,          path: '/ai/coach',       color: 'rose'   },
             ].map(({ label, icon: Icon, path, color }) => (
               <button
                 key={path}

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Phone, Wifi, MessageSquare, Clock, DollarSign,
   CheckCircle, AlertTriangle, Settings, Unlink,
-  Zap, Hash, BarChart3,
+  Hash, BarChart3,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { plivoService } from '../../services/plivo.service'
@@ -355,7 +355,6 @@ export function PlivoDashboard() {
               { label: 'Call Logs',              icon: Phone,         path: '/plivo/calls',   color: 'green'  },
               { label: 'SMS Logs',               icon: MessageSquare, path: '/plivo/sms',     color: 'purple' },
               { label: 'Usage & Billing',        icon: BarChart3,     path: '/plivo/usage',   color: 'orange' },
-              { label: 'AI Voice (Streaming)',   icon: Zap,           path: '/ai/coach',      color: 'rose'   },
             ].map(({ label, icon: Icon, path, color }) => (
               <button
                 key={path}
