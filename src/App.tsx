@@ -130,6 +130,7 @@ import { DncList } from './modules/dnc/DncList'
 import { ExcludeList } from './modules/excludeList/ExcludeList'
 
 import { Settings } from './pages/settings/Settings'
+import { VoipProvider } from './pages/settings/VoipProvider'
 import { Ivr } from './pages/ivr/Ivr'
 import { RingGroups } from './pages/ringgroups/RingGroups'
 import { CallTimes }  from './pages/voice/CallTimes'
@@ -344,6 +345,7 @@ export default function App() {
           <Route path="/upgrade" element={<ErrorBoundary fallbackTitle="Upgrade Page Error"><UpgradePage /></ErrorBoundary>} />
 
           <Route path="/settings" element={<Settings />} />
+          <Route path="/voip-provider" element={<VoipProvider />} />
           <Route path="/settings/labels" element={<Labels />} />
           <Route path="/settings/dispositions" element={<DispositionList />} />
           <Route path="/settings/dnc" element={<DncList />} />

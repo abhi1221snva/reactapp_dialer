@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   User, Lock, Phone, Users, Plus, Shield, ChevronRight, Mail, MessageSquare,
@@ -32,16 +33,18 @@ const SECTIONS = [
 interface AgentRow { id: number; name: string; email: string; extension: string; level: number; status: number; [key: string]: unknown }
 interface GroupRow  { id: number; group_name: string; members_count?: number; [key: string]: unknown }
 interface SmtpForm  { from_name: string; from_email: string; host: string; port: number; encryption: string; username: string; password: string }
-interface SmsForm   { provider: string; api_key: string; api_secret: string; from_number: string }
+interface SmsForm   { provider: string; auth_id: string; api_key: string }
 interface ApiKey    { id: number; name: string; key: string; created_at: string; last_used?: string; [key: string]: unknown }
 
 const DEFAULT_SMTP: SmtpForm = { from_name: '', from_email: '', host: '', port: 587, encryption: 'tls', username: '', password: '' }
-const DEFAULT_SMS: SmsForm   = { provider: 'twilio', api_key: '', api_secret: '', from_number: '' }
+const DEFAULT_SMS: SmsForm   = { provider: 'twilio', auth_id: '', api_key: '' }
 
 export function Settings() {
   const { user } = useAuth()
   const qc = useQueryClient()
-  const [section, setSection] = useState('profile')
+  const location = useLocation()
+  const initialSection = new URLSearchParams(location.search).get('tab') || 'sms'
+  const [section, setSection] = useState(initialSection)
   const [showAddAgent, setShowAddAgent] = useState(false)
   const [showApiKeyModal, setShowApiKeyModal] = useState(false)
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
@@ -73,9 +76,9 @@ export function Settings() {
   })
 
   const { data: smsData } = useQuery({
-    queryKey: ['sms-settings'],
-    queryFn: () => api.get('/sms-setting'),
-    enabled: section === 'sms',
+    queryKey: ['sms-provider', user?.parent_id],
+    queryFn: () => api.get(`/sms-provider/${user?.parent_id}`),
+    enabled: section === 'sms' && !!user?.parent_id,
   })
 
   const { data: apiKeysData, isLoading: apiKeysLoading } = useQuery({
@@ -90,10 +93,13 @@ export function Settings() {
     if (d) setSmtpForm({ from_name: d.from_name || '', from_email: d.from_email || '', host: d.host || '', port: Number(d.port) || 587, encryption: d.encryption || 'tls', username: d.username || '', password: d.password || '' })
   }, [smtpData])
 
-  // Populate SMS form from API
+  // Populate SMS form from API — picks the first active provider record
   useEffect(() => {
-    const d = smsData?.data?.data
-    if (d) setSmsForm({ provider: d.provider || 'twilio', api_key: d.api_key || '', api_secret: d.api_secret || '', from_number: d.from_number || '' })
+    const list = smsData?.data?.data
+    if (Array.isArray(list) && list.length > 0) {
+      const d = list[0]
+      setSmsForm({ provider: d.provider || 'twilio', auth_id: d.auth_id || '', api_key: d.api_key || '' })
+    }
   }, [smsData])
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -127,8 +133,8 @@ export function Settings() {
   })
 
   const saveSmsMutation = useMutation({
-    mutationFn: () => api.post('/save-sms-setting', smsForm),
-    onSuccess: () => toast.success('SMS settings saved'),
+    mutationFn: () => api.put(`/sms-provider/${user?.parent_id}`, smsForm),
+    onSuccess: () => { toast.success('SMS provider saved'); qc.invalidateQueries({ queryKey: ['sms-provider'] }) },
   })
 
   const createApiKeyMutation = useMutation({
@@ -420,7 +426,7 @@ export function Settings() {
                 </div>
                 <div className="form-group">
                   <label className="label">API Key / Account SID</label>
-                  <input className="input font-mono" placeholder="Account SID or API key" value={smsForm.api_key} onChange={e => setSmsForm(f => ({ ...f, api_key: e.target.value }))} />
+                  <input className="input font-mono" placeholder="Account SID or API key" value={smsForm.auth_id} onChange={e => setSmsForm(f => ({ ...f, auth_id: e.target.value }))} />
                 </div>
                 <div className="form-group">
                   <label className="label">API Secret / Auth Token</label>
@@ -429,21 +435,16 @@ export function Settings() {
                       type={showPasswords.sms_secret ? 'text' : 'password'}
                       className="input font-mono pr-10"
                       placeholder="Auth token or API secret"
-                      value={smsForm.api_secret}
-                      onChange={e => setSmsForm(f => ({ ...f, api_secret: e.target.value }))}
+                      value={smsForm.api_key}
+                      onChange={e => setSmsForm(f => ({ ...f, api_key: e.target.value }))}
                     />
                     <button type="button" onClick={() => togglePassword('sms_secret')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                       {showPasswords.sms_secret ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
                 </div>
-                <div className="form-group col-span-2">
-                  <label className="label">Default From Number</label>
-                  <input className="input font-mono" placeholder="+15555555555" value={smsForm.from_number} onChange={e => setSmsForm(f => ({ ...f, from_number: e.target.value }))} />
-                  <p className="text-xs text-slate-400 mt-1">Phone number in E.164 format</p>
-                </div>
               </div>
-              <button onClick={() => saveSmsMutation.mutate()} disabled={saveSmsMutation.isPending} className="btn-primary gap-2">
+              <button onClick={() => saveSmsMutation.mutate()} disabled={saveSmsMutation.isPending || !smsForm.auth_id || !smsForm.api_key} className="btn-primary gap-2">
                 <Save size={15} />
                 {saveSmsMutation.isPending ? 'Saving…' : 'Save SMS Settings'}
               </button>

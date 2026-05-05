@@ -19,6 +19,7 @@ const DIALER_TITLES: Record<string, string> = {
   '/chat':                          'Team Chat',
   '/monitoring':                    'Agent Monitoring',
   '/billing':                       'Billing',
+  '/voip-provider':                 'VoIP Provider',
   '/attendance':                    'Attendance',
   '/settings/labels':               'Labels',
   '/settings/dispositions':         'Dispositions',
