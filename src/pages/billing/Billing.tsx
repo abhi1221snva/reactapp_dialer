@@ -1,800 +1,536 @@
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
-  CreditCard, DollarSign, Wallet, Users, Plus, Minus as MinusIcon,
-  CheckCircle2, FileText, Trash2, ReceiptText, Loader2, ExternalLink,
-  Activity, Bell, Settings2, XCircle, ArrowUpRight, Crown,
+  CreditCard, Wallet, Users, Plus, Minus as MinusIcon,
+  Activity, Coins, History,
+  FileText, Trash2, Star, ExternalLink,
+  Loader2, Search, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { billingService, type PaymentMethod, type WalletTransaction, type InvoiceRecord, type SubscriptionEvent } from '../../services/billing.service'
-import type { SubscriptionPlan } from '../../services/subscription.service'
+import {
+  billingService,
+  type CreditTransaction,
+  type Subscription,
+  type SubscriptionPlan,
+  type PaymentMethod,
+  type Invoice,
+} from '../../services/billing.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
-import { cn } from '../../utils/cn'
-import { formatDateTime } from '../../utils/format'
-import { AddCardModal } from './AddCardModal'
+import { formatDate, formatDateTime, timeAgo } from '../../utils/format'
 import { TopUpModal } from './TopUpModal'
+import { AddCardModal } from './AddCardModal'
 
-const TABS = ['Overview', 'Plans', 'Seats', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
+const TABS = ['Overview', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
 type Tab = typeof TABS[number]
 
 const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
   active: 'green',
-  trial: 'blue',
+  trialing: 'blue',
   past_due: 'yellow',
-  cancelled: 'red',
-  expired: 'red',
-}
-
-const PLAN_COLORS: Record<string, { gradient: string; ring: string; badge: string }> = {
-  starter:    { gradient: 'from-slate-500 to-slate-700', ring: 'ring-slate-400', badge: 'bg-slate-100 text-slate-700' },
-  growth:     { gradient: 'from-blue-500 to-indigo-600', ring: 'ring-blue-500', badge: 'bg-blue-100 text-blue-700' },
-  pro:        { gradient: 'from-violet-500 to-purple-600', ring: 'ring-violet-500', badge: 'bg-violet-100 text-violet-700' },
-  enterprise: { gradient: 'from-amber-500 to-orange-600', ring: 'ring-amber-500', badge: 'bg-amber-100 text-amber-700' },
-}
-
-const FEATURE_LABELS: Record<string, string> = {
-  has_full_crm: 'Full CRM',
-  has_predictive_dialer: 'Predictive Dialer',
-  has_api_access: 'API Access',
-  has_ai_coaching: 'AI Coaching',
-  has_custom_integrations: 'Custom Integrations',
-  has_sso: 'SSO',
-  has_dedicated_csm: 'Dedicated CSM',
-  has_white_label: 'White Label',
-  has_on_premise: 'On-Premise',
-  has_compliance_packages: 'Compliance Packages',
+  canceled: 'red',
+  incomplete: 'yellow',
+  incomplete_expired: 'red',
 }
 
 export function Billing() {
   const qc = useQueryClient()
-  const [searchParams] = useSearchParams()
-  const [tab, setTab] = useState<Tab>(() => {
-    const qTab = searchParams.get('tab')
-    if (qTab === 'Seats') return 'Seats'
-    return TABS.includes(qTab as Tab) ? (qTab as Tab) : 'Overview'
-  })
-  const [showAddCard, setShowAddCard] = useState(false)
+  const [tab, setTab] = useState<Tab>('Overview')
   const [showTopUp, setShowTopUp] = useState(false)
+  const [showAddCard, setShowAddCard] = useState(false)
+  const [seatDraft, setSeatDraft] = useState<number | null>(null)
 
-  // Seat adjuster state
-  const [seatInput, setSeatInput] = useState<number | null>(null)
-  const [showSubscribe, setShowSubscribe] = useState(false)
-  const [subscribePlanId, setSubscribePlanId] = useState<number | null>(null)
+  // Activity tab — search / filters / pagination
+  const [actSearch, setActSearch] = useState('')
+  const [actDebouncedSearch, setActDebouncedSearch] = useState('')
+  const [actDirection, setActDirection] = useState<'' | 'credit' | 'debit'>('')
+  const [actBucket, setActBucket] = useState<'' | 'bonus' | 'wallet'>('')
+  const [actPage, setActPage] = useState(1)
+  const [actPerPage, setActPerPage] = useState(25)
 
-  // Plan change state
-  const [changePlanId, setChangePlanId] = useState<number | null>(null)
-  const [changePlanSeats, setChangePlanSeats] = useState<number>(1)
+  useEffect(() => {
+    const t = setTimeout(() => setActDebouncedSearch(actSearch.trim()), 300)
+    return () => clearTimeout(t)
+  }, [actSearch])
 
-  // ── Queries ──────────────────────────────────────────────────────────────
-  const { data: overviewRes } = useQuery({
-    queryKey: ['billing-overview'],
-    queryFn: billingService.getOverview,
+  useEffect(() => { setActPage(1) }, [actDebouncedSearch, actDirection, actBucket, actPerPage])
+
+  const { data: subRes, isLoading: subLoading } = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: billingService.getSubscription,
     staleTime: 60_000,
+  })
+
+  const { data: walletRes } = useQuery({
+    queryKey: ['billing-wallet'],
+    queryFn: billingService.getWallet,
+    staleTime: 60_000,
+  })
+
+  const { data: creditsRes } = useQuery({
+    queryKey: ['billing-credits'],
+    queryFn: billingService.getCredits,
+    staleTime: 60_000,
+  })
+
+  const { data: ledgerRes, isFetching: ledgerFetching } = useQuery({
+    queryKey: ['billing-credits-ledger', actPage, actPerPage, actDebouncedSearch, actDirection, actBucket],
+    queryFn: () => billingService.getCreditLedger({
+      page: actPage,
+      per_page: actPerPage,
+      q: actDebouncedSearch || undefined,
+      direction: actDirection || undefined,
+      bucket: actBucket || undefined,
+    }),
+    enabled: tab === 'Activity',
+    placeholderData: keepPreviousData,
+  })
+
+  const { data: walletTxRes } = useQuery({
+    queryKey: ['billing-wallet-tx'],
+    queryFn: billingService.getWalletTransactions,
+    enabled: tab === 'Wallet',
+  })
+
+  const { data: pmRes, refetch: refetchPM } = useQuery({
+    queryKey: ['billing-payment-methods'],
+    queryFn: billingService.getPaymentMethods,
+    enabled: tab === 'Payment Methods',
+  })
+
+  const { data: invoicesRes } = useQuery({
+    queryKey: ['billing-invoices'],
+    queryFn: () => billingService.getInvoices(50),
+    enabled: tab === 'Invoices',
+  })
+
+  const setDefaultPmMut = useMutation({
+    mutationFn: (id: string) => billingService.setDefaultPaymentMethod(id),
+    onSuccess: () => { toast.success('Default card updated'); refetchPM() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to set default'),
+  })
+
+  const deletePmMut = useMutation({
+    mutationFn: (id: string) => billingService.deletePaymentMethod(id),
+    onSuccess: () => { toast.success('Card removed'); refetchPM() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to remove card'),
   })
 
   const { data: plansRes } = useQuery({
     queryKey: ['billing-plans'],
     queryFn: billingService.getPlans,
-    enabled: tab === 'Plans' || tab === 'Seats' || tab === 'Overview',
-    staleTime: 300_000,
+    staleTime: 5 * 60_000,
   })
 
-  const { data: walletTxRes, isLoading: txLoading } = useQuery({
-    queryKey: ['billing-wallet-tx'],
-    queryFn: () => billingService.getWalletTransactions(),
-    enabled: tab === 'Wallet',
-  })
-
-  const { data: pmRes, refetch: refetchPm } = useQuery({
-    queryKey: ['billing-pm'],
-    queryFn: billingService.getPaymentMethods,
-    enabled: tab === 'Payment Methods' || tab === 'Overview' || tab === 'Wallet' || tab === 'Seats' || tab === 'Plans',
-  })
-
-  const { data: invRes, isLoading: invLoading } = useQuery({
-    queryKey: ['billing-invoices'],
-    queryFn: () => billingService.getInvoices(),
-    enabled: tab === 'Invoices',
-  })
-
-  const { data: eventsRes, isLoading: eventsLoading } = useQuery({
-    queryKey: ['billing-events'],
-    queryFn: () => billingService.getEvents(),
-    enabled: tab === 'Activity',
-  })
-
-  const overview = overviewRes?.data?.data
-  const plansData = plansRes?.data?.data
-  const allPlans: SubscriptionPlan[] = (plansData?.plans ?? []) as SubscriptionPlan[]
-  const currentPlan = plansData?.current_plan as SubscriptionPlan | null
-  const paymentMethods: PaymentMethod[] = pmRes?.data?.data || []
-  const walletTxs: WalletTransaction[] = walletTxRes?.data?.data?.data || []
-  const invoices: InvoiceRecord[] = invRes?.data?.data?.data || []
-  const events: SubscriptionEvent[] = eventsRes?.data?.data?.data || []
-  const hasSubscription = !!overview?.subscription_status && !['trial', 'expired'].includes(overview.subscription_status)
-  const pricePerSeat = overview?.price_per_seat ?? (currentPlan as Record<string, unknown>)?.unit_price_cents as number ?? 2900
-  const currentSeats = overview?.seat_quantity ?? 1
-
-  // Seat preview query
-  const targetSeats = seatInput ?? currentSeats
-  const { data: previewRes, isLoading: previewLoading } = useQuery({
-    queryKey: ['billing-seats-preview', targetSeats],
-    queryFn: () => billingService.seatsPreview(targetSeats),
-    enabled: tab === 'Seats' && seatInput !== null && seatInput !== currentSeats && hasSubscription,
-    staleTime: 30_000,
-  })
-
-  // Plan change preview query
-  const { data: planPreviewRes, isLoading: planPreviewLoading } = useQuery({
-    queryKey: ['billing-plan-change-preview', changePlanId, changePlanSeats],
-    queryFn: () => billingService.changePlanPreview(changePlanId!, changePlanSeats),
-    enabled: !!changePlanId && hasSubscription,
-    staleTime: 30_000,
-  })
-
-  // ── Mutations ────────────────────────────────────────────────────────────
-  const updateSeatsMutation = useMutation({
-    mutationFn: (qty: number) => billingService.updateSeats(qty),
+  const subscribeMut = useMutation({
+    mutationFn: ({ seats, planId }: { seats: number; planId: number }) =>
+      billingService.subscribe(seats, planId),
     onSuccess: () => {
-      toast.success('Seats updated successfully')
-      setSeatInput(null)
-      refreshAll()
+      toast.success('Subscription created')
+      qc.invalidateQueries({ queryKey: ['billing-subscription'] })
     },
-    onError: () => { /* interceptor handles */ },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to subscribe'),
   })
 
-  const subscribeMutation = useMutation({
-    mutationFn: (payload: { plan_id: number; seat_count: number; payment_method: string }) =>
-      billingService.subscribe(payload),
+  const updateSeatsMut = useMutation({
+    mutationFn: (seats: number) => billingService.updateSeats(seats),
     onSuccess: () => {
-      toast.success('Subscription activated')
-      setShowSubscribe(false)
-      setSubscribePlanId(null)
-      setSeatInput(null)
-      refreshAll()
+      toast.success('Users updated')
+      setSeatDraft(null)
+      qc.invalidateQueries({ queryKey: ['billing-subscription'] })
     },
-    onError: () => { /* interceptor handles */ },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update users'),
   })
 
-  const changePlanMutation = useMutation({
-    mutationFn: (payload: { planId: number; seatCount: number }) =>
-      billingService.changePlan(payload.planId, payload.seatCount),
-    onSuccess: () => {
-      toast.success('Plan updated successfully')
-      setChangePlanId(null)
-      refreshAll()
-    },
-    onError: () => { /* interceptor handles */ },
-  })
+  const sub: Subscription | null = subRes?.data?.data?.subscription ?? null
+  const seats = subRes?.data?.data?.seats ?? { purchased: 0, used: 0, available: 0 }
+  const wallet = walletRes?.data?.data
+  const credits = creditsRes?.data?.data ?? { bonus: '0', wallet: '0', total: '0' }
+  const ledger: CreditTransaction[] = ledgerRes?.data?.data?.transactions ?? []
+  const ledgerPagination = ledgerRes?.data?.data?.pagination ?? { page: 1, per_page: actPerPage, total: 0, last_page: 1 }
+  const walletTx = walletTxRes?.data?.data?.transactions ?? []
+  const plans: SubscriptionPlan[] = plansRes?.data?.data?.plans ?? []
 
-  // Wallet threshold state
-  const [thresholdInput, setThresholdInput] = useState('')
-  const [thresholdEditing, setThresholdEditing] = useState(false)
-
-  const thresholdMutation = useMutation({
-    mutationFn: (cents: number) => billingService.updateWalletThreshold(cents),
-    onSuccess: () => {
-      toast.success('Low balance threshold updated')
-      setThresholdEditing(false)
-      qc.invalidateQueries({ queryKey: ['billing-overview'] })
-    },
-    onError: () => { /* interceptor handles */ },
-  })
-
-  const saveThreshold = () => {
-    const dollars = parseFloat(thresholdInput)
-    if (isNaN(dollars) || dollars < 0) {
-      toast.error('Enter a valid dollar amount')
-      return
-    }
-    thresholdMutation.mutate(Math.round(dollars * 100))
-  }
-
-  const refreshAll = () => {
-    qc.invalidateQueries({ queryKey: ['billing-overview'] })
-    qc.invalidateQueries({ queryKey: ['billing-plans'] })
-    qc.invalidateQueries({ queryKey: ['billing-pm'] })
-    qc.invalidateQueries({ queryKey: ['billing-wallet-tx'] })
-    qc.invalidateQueries({ queryKey: ['billing-invoices'] })
-    qc.invalidateQueries({ queryKey: ['billing-events'] })
-  }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  const removeCard = async (id: string) => {
-    if (!confirm('Remove this card?')) return
-    try {
-      await billingService.removePaymentMethod(id)
-      toast.success('Card removed')
-      refetchPm()
-    } catch { /* interceptor */ }
-  }
-
-  const handleSeatUpdate = () => {
-    if (seatInput === null || seatInput === currentSeats) return
-    if (seatInput < 1) {
-      toast.error('Minimum 1 seat required')
-      return
-    }
-    updateSeatsMutation.mutate(seatInput)
-  }
-
-  const handleSubscribe = () => {
-    const defaultPm = paymentMethods.find(m => m.is_default)
-    const pm = defaultPm?.id || paymentMethods[0]?.id
-    if (!pm) {
-      toast.error('Please add a payment method first')
-      setShowAddCard(true)
-      return
-    }
-    const planId = subscribePlanId ?? currentPlan?.id ?? allPlans[0]?.id
-    if (!planId) {
-      toast.error('No plan selected')
-      return
-    }
-    subscribeMutation.mutate({
-      plan_id: planId,
-      seat_count: seatInput ?? currentSeats,
-      payment_method: pm,
-    })
-  }
-
-  const handlePlanSelect = (plan: SubscriptionPlan) => {
-    if (hasSubscription) {
-      // Change plan flow
-      if (plan.id === currentPlan?.id) return
-      setChangePlanId(plan.id)
-      setChangePlanSeats(currentSeats)
-    } else {
-      // Subscribe flow
-      setSubscribePlanId(plan.id)
-      setSeatInput(seatInput ?? currentSeats)
-      setShowSubscribe(true)
-    }
-  }
-
-  // ── Column defs ─────────────────────────────────────────────────────────
-  const txCols: Column<WalletTransaction>[] = [
-    { key: 'id', header: '#', render: r => <span className="text-xs font-mono text-slate-400">#{r.id}</span> },
-    { key: 'transaction_type', header: 'Type', render: r => <Badge variant={r.transaction_type === 'credit' ? 'green' : 'red'}>{r.transaction_type}</Badge> },
-    { key: 'description', header: 'Description', render: r => <span className="text-sm text-slate-700">{r.description || '\u2014'}</span> },
-    {
-      key: 'amount', header: 'Amount',
-      render: r => (
-        <span className={cn('text-sm font-bold', r.transaction_type === 'credit' ? 'text-emerald-700' : 'text-red-600')}>
-          {r.transaction_type === 'credit' ? '+' : '-'}${Math.abs(Number(r.amount)).toFixed(2)}
-        </span>
-      ),
-    },
-    { key: 'created_at', header: 'Date', render: r => <span className="text-xs text-slate-500">{formatDateTime(r.created_at)}</span> },
-  ]
-
-  const invCols: Column<InvoiceRecord>[] = [
-    { key: 'id', header: 'Invoice', render: r => <span className="text-xs font-mono text-slate-500">{String(r.id).slice(0, 20)}...</span> },
-    { key: 'status', header: 'Status', render: r => <Badge variant={r.status === 'paid' ? 'green' : r.status === 'open' ? 'yellow' : 'gray'}>{r.status}</Badge> },
-    { key: 'amount_paid', header: 'Amount', render: r => <span className="font-bold text-sm">${(r.amount_paid / 100).toFixed(2)}</span> },
-    {
-      key: 'period_start', header: 'Period',
-      render: r => <span className="text-xs text-slate-500">{r.period_start ? new Date(r.period_start * 1000).toLocaleDateString() : '\u2014'} \u2014 {r.period_end ? new Date(r.period_end * 1000).toLocaleDateString() : '\u2014'}</span>,
-    },
-    {
-      key: 'hosted_invoice_url', header: '',
-      render: r => r.hosted_invoice_url ? (
-        <a href={r.hosted_invoice_url as string} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800">
-          <ExternalLink size={14} />
-        </a>
-      ) : null,
-    },
-  ]
-
-  const EVENT_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
-    trial_started: 'blue',
-    subscribed: 'green',
-    upgraded: 'green',
-    plan_changed: 'green',
-    seats_changed: 'green',
-    seats_updated: 'green',
-    cancelled: 'yellow',
-    trial_expired: 'red',
-    subscription_expired: 'red',
-    grace_ended: 'gray',
-  }
-
-  const eventCols: Column<SubscriptionEvent>[] = [
-    {
-      key: 'event_type', header: 'Event',
-      render: r => (
-        <Badge variant={EVENT_VARIANT[r.event_type] || 'gray'}>
-          {String(r.event_type).replace(/_/g, ' ')}
-        </Badge>
-      ),
-    },
-    { key: 'from_status', header: 'From', render: r => <span className="text-sm text-slate-500">{r.from_status || '\u2014'}</span> },
-    { key: 'to_status', header: 'To', render: r => <span className="text-sm text-slate-700 font-medium">{r.to_status || '\u2014'}</span> },
-    { key: 'triggered_by', header: 'By', render: r => <span className="text-xs text-slate-400">{r.triggered_by}</span> },
-    { key: 'created_at', header: 'Date', render: r => <span className="text-xs text-slate-500">{formatDateTime(r.created_at)}</span> },
-  ]
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  Render
-  // ══════════════════════════════════════════════════════════════════════════
-
-  const displaySeats = seatInput ?? currentSeats
-  const monthlyTotal = displaySeats * pricePerSeat
-  const preview = previewRes?.data?.data?.preview
-  const planChangePreview = planPreviewRes?.data?.data?.preview
+  const currentSeats = sub?.seat_count ?? 0
+  const draftSeats = seatDraft ?? currentSeats
 
   return (
-    <div className="space-y-5">
-      {/* Quick actions */}
-      <div className="flex items-center justify-end gap-3">
-        <button onClick={() => setShowTopUp(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:border-indigo-300 hover:text-indigo-700 transition-all">
-          <Wallet size={15} /> Top Up Wallet
-        </button>
-        <button onClick={() => setTab('Plans')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all">
-          <Crown size={15} /> {hasSubscription ? 'Change Plan' : 'Upgrade Plan'}
-        </button>
+    <div className="p-6 w-full">
+      <h1 className="text-2xl font-bold mb-1">Billing</h1>
+      <p className="text-gray-600 mb-6">Subscription, wallet, and credits.</p>
+
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex gap-6">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={
+                'whitespace-nowrap pb-3 px-1 border-b-2 text-sm font-medium ' +
+                (tab === t
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300')
+              }
+            >
+              {t}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
-        {TABS.map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn(
-              'px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap',
-              tab === t
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {/* ═══ Overview ═══ */}
       {tab === 'Overview' && (
-        <div className="space-y-5">
-          {/* Plan + Status card */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-900">
-                {currentPlan ? currentPlan.name : 'No Plan'} Plan
-              </h3>
-              {overview?.subscription_status && (
-                <Badge variant={STATUS_VARIANT[overview.subscription_status] || 'gray'}>
-                  {overview.subscription_status}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-end gap-3">
-              <span className="text-3xl font-bold text-indigo-600">
-                ${(pricePerSeat / 100).toFixed(0)}
-              </span>
-              <span className="text-slate-500 text-sm mb-1">
-                /seat/mo
-              </span>
-              <span className="text-slate-400 text-sm mb-1 ml-2">
-                {currentSeats} seat{currentSeats !== 1 ? 's' : ''} = ${(currentSeats * pricePerSeat / 100).toFixed(0)}/mo
-              </span>
-            </div>
-            {overview?.subscription_ends_at && (
-              <p className="text-xs text-slate-400 mt-2">
-                {overview.subscription_status === 'trial' ? 'Trial ends' : 'Renews'}: {new Date(overview.subscription_ends_at).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-
-          {/* Stats row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { label: 'Wallet Balance', value: `$${Number(overview?.wallet_balance ?? 0).toFixed(2)}`, icon: DollarSign, gradient: 'from-emerald-500 to-teal-600' },
-              { label: 'Active Seats', value: `${overview?.usage?.agents?.current ?? 0} / ${currentSeats}`, icon: Users, gradient: 'from-indigo-500 to-violet-600' },
-              { label: 'Monthly Cost', value: `$${(currentSeats * pricePerSeat / 100).toFixed(0)}`, icon: CreditCard, gradient: 'from-sky-500 to-blue-600' },
-            ].map(stat => (
-              <div key={stat.label} className="card flex items-center gap-4">
-                <div className={cn('w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0', stat.gradient)}>
-                  <stat.icon size={20} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{stat.label}</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{stat.value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Upcoming invoice */}
-          {overview?.upcoming_invoice && (
-            <div className="card">
-              <h3 className="font-bold text-slate-900 text-sm mb-3">Next Invoice</h3>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 text-sm">Amount due</span>
-                <span className="font-bold text-lg text-indigo-600">${(overview.upcoming_invoice.amount_due / 100).toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══ Plans ═══ */}
-      {tab === 'Plans' && (
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {allPlans.map(plan => {
-              const planRec = plan as Record<string, unknown>
-              const slug = (planRec.slug as string) || 'starter'
-              const colors = PLAN_COLORS[slug] || PLAN_COLORS.starter
-              const isCurrent = currentPlan?.id === plan.id
-              const unitPrice = (planRec.unit_price_cents as number) || 2900
-
-              return (
-                <div
-                  key={plan.id}
-                  className={cn(
-                    'card relative overflow-hidden transition-all',
-                    isCurrent ? `ring-2 ${colors.ring} shadow-lg` : 'hover:shadow-md'
-                  )}
-                >
-                  {isCurrent && (
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r" style={{ backgroundImage: `linear-gradient(to right, var(--tw-gradient-stops))` }}>
-                      <div className={cn('h-full bg-gradient-to-r w-full', colors.gradient)} />
-                    </div>
-                  )}
-
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full', colors.badge)}>
-                        {plan.name}
-                      </span>
-                      {isCurrent && <Badge variant="green">Current</Badge>}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">{planRec.description as string}</p>
-                  </div>
-
-                  <div className="mb-5">
-                    <div className="flex items-end gap-1">
-                      <span className="text-3xl font-bold text-slate-900">${(unitPrice / 100).toFixed(0)}</span>
-                      <span className="text-slate-400 text-sm mb-1">/seat/mo</span>
-                    </div>
-                  </div>
-
-                  {/* Feature list */}
-                  <div className="space-y-2 mb-5">
-                    {Object.entries(FEATURE_LABELS).map(([key, label]) => {
-                      const enabled = Boolean(planRec[key])
-                      return (
-                        <div key={key} className="flex items-center gap-2 text-sm">
-                          {enabled
-                            ? <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
-                            : <XCircle size={14} className="text-slate-300 flex-shrink-0" />}
-                          <span className={enabled ? 'text-slate-700' : 'text-slate-400'}>{label}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Action button */}
-                  {isCurrent ? (
-                    <div className="text-center text-sm text-slate-500 font-medium py-2.5">
-                      Your current plan
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handlePlanSelect(plan)}
-                      className={cn(
-                        'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
-                        'bg-gradient-to-r text-white shadow-md hover:shadow-lg',
-                        colors.gradient
-                      )}
-                    >
-                      {hasSubscription ? (
-                        <>
-                          <ArrowUpRight size={14} />
-                          {(planRec.plan_order as number) > ((currentPlan as Record<string, unknown>)?.plan_order as number ?? 0) ? 'Upgrade' : 'Switch'}
-                        </>
-                      ) : (
-                        <>Select Plan</>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Current plan details */}
-          {currentPlan && (
-            <div className="card">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-slate-900">Current Plan: {currentPlan.name}</h3>
-                <span className="text-sm text-slate-500">{currentSeats} seat{currentSeats !== 1 ? 's' : ''} x ${(pricePerSeat / 100).toFixed(0)}/mo = ${(currentSeats * pricePerSeat / 100).toFixed(0)}/mo</span>
-              </div>
-              {overview?.subscription_ends_at && (
-                <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
-                  {overview.subscription_started_at && (
-                    <span>Started: {new Date(overview.subscription_started_at).toLocaleDateString()}</span>
-                  )}
-                  <span className={overview.subscription_status === 'trial' ? 'text-amber-600 font-semibold' : ''}>
-                    {overview.subscription_status === 'trial' ? 'Trial ends' : 'Renews'}: {new Date(overview.subscription_ends_at).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              <p className="text-xs text-slate-400">
-                To change your seat count, go to the <button onClick={() => setTab('Seats')} className="text-indigo-600 underline">Seats</button> tab.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══ Seats ═══ */}
-      {tab === 'Seats' && (
-        <div className="space-y-5">
-          {/* Per-seat pricing card */}
-          <div
-            className="rounded-2xl p-6 text-white overflow-hidden relative"
-            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #0ea5e9 100%)' }}
-          >
-            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10" />
-            <div className="relative">
-              <p className="text-white/70 text-sm font-medium uppercase tracking-wide">
-                {currentPlan ? `${currentPlan.name} Plan` : 'Per-Seat Pricing'}
-              </p>
-              <div className="flex items-end gap-2 mt-1">
-                <span className="text-5xl font-bold tabular-nums">${(pricePerSeat / 100).toFixed(0)}</span>
-                <span className="text-white/60 text-lg mb-1">/seat/month</span>
-              </div>
-              <p className="text-white/50 text-sm mt-2">Adjust your seat count below. Increases are prorated immediately.</p>
-            </div>
-          </div>
-
-          {/* Seat adjuster */}
-          <div className="card">
-            <h3 className="font-bold text-slate-900 mb-4">
-              {hasSubscription ? 'Adjust Seats' : 'Choose Seats'}
-            </h3>
-
-            <div className="flex items-center gap-6 mb-6">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSeatInput(Math.max(1, displaySeats - 1))}
-                  className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                >
-                  <MinusIcon size={16} />
-                </button>
-                <input
-                  type="number"
-                  min={1}
-                  value={displaySeats}
-                  onChange={e => {
-                    const v = parseInt(e.target.value)
-                    setSeatInput(isNaN(v) ? 1 : Math.max(1, v))
-                  }}
-                  className="w-20 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-                <button
-                  onClick={() => setSeatInput(displaySeats + 1)}
-                  className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-
-              <div className="flex-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Monthly total</span>
-                  <span className="text-2xl font-bold text-indigo-600">
-                    ${(monthlyTotal / 100).toFixed(0)}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {displaySeats} seat{displaySeats !== 1 ? 's' : ''} x ${(pricePerSeat / 100).toFixed(0)}/mo
-                </p>
-              </div>
-            </div>
-
-            {/* Proration preview for seat increase */}
-            {hasSubscription && seatInput !== null && seatInput !== currentSeats && (
-              <div className="mb-4">
-                {previewLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-50 rounded-xl p-3">
-                    <Loader2 size={14} className="animate-spin" /> Calculating proration...
-                  </div>
-                ) : preview && seatInput > currentSeats ? (
-                  <div className="bg-slate-50 rounded-xl p-3 space-y-1 text-sm">
-                    {preview.lines.map((line: { description: string; amount: number }, i: number) => (
-                      <div key={i} className="flex justify-between">
-                        <span className="text-slate-600">{line.description}</span>
-                        <span className="font-semibold">${(line.amount / 100).toFixed(2)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
-                      <span className="font-semibold text-slate-900">Prorated charge today</span>
-                      <span className="font-bold text-indigo-600">${(preview.amount_due / 100).toFixed(2)}</span>
-                    </div>
-                  </div>
-                ) : seatInput < currentSeats ? (
-                  <div className="bg-amber-50 rounded-xl p-3 text-sm text-amber-700">
-                    Seat reduction will take effect at the start of your next billing cycle. No refund for the current period.
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {/* Active users warning */}
-            {overview?.usage?.agents && seatInput !== null && seatInput < (overview.usage.agents.current || 0) && (
-              <div className="bg-red-50 rounded-xl p-3 text-sm text-red-700 mb-4">
-                You currently have {overview.usage.agents.current} active users. You cannot reduce seats below this number without deactivating users first.
-              </div>
-            )}
-
-            {/* Action button */}
-            {hasSubscription ? (
-              <button
-                onClick={handleSeatUpdate}
-                disabled={
-                  updateSeatsMutation.isPending ||
-                  seatInput === null ||
-                  seatInput === currentSeats ||
-                  (seatInput < (overview?.usage?.agents?.current ?? 0))
-                }
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 disabled:opacity-50 transition-all"
-              >
-                {updateSeatsMutation.isPending && <Loader2 size={15} className="animate-spin" />}
-                {seatInput !== null && seatInput !== currentSeats
-                  ? `Update to ${seatInput} seat${seatInput !== 1 ? 's' : ''}`
-                  : 'No changes'}
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  if (paymentMethods.length === 0) {
-                    setShowAddCard(true)
-                    return
-                  }
-                  setSubscribePlanId(currentPlan?.id ?? allPlans[0]?.id ?? null)
-                  setShowSubscribe(true)
-                }}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all"
-              >
-                Subscribe Now — ${(monthlyTotal / 100).toFixed(0)}/mo
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Wallet ═══ */}
-      {tab === 'Wallet' && (
-        <div className="space-y-5">
-          <div
-            className="rounded-2xl p-6 text-white overflow-hidden relative"
-            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #0ea5e9 100%)' }}
-          >
-            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10" />
-            <div className="relative flex items-center justify-between">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Subscription */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow p-5 border border-gray-200">
+            <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-white/70 text-sm font-medium uppercase tracking-wide">Wallet Balance</p>
-                <p className="text-5xl font-bold mt-1 tabular-nums">${Number(overview?.wallet_balance ?? 0).toFixed(2)}</p>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-indigo-600" />
+                  <h2 className="text-lg font-semibold">Subscription</h2>
+                </div>
+                {sub ? (
+                  <Badge variant={STATUS_VARIANT[sub.status] ?? 'gray'} className="mt-2">
+                    {sub.status}
+                  </Badge>
+                ) : (
+                  <p className="text-sm text-gray-500 mt-2">No subscription yet.</p>
+                )}
               </div>
+            </div>
+
+            {subLoading ? (
+              <Loader2 className="animate-spin w-5 h-5 text-gray-400" />
+            ) : !sub || sub.status === 'incomplete' || sub.status === 'incomplete_expired' || sub.status === 'canceled' ? (
+              <SubscribeForm
+                plans={plans}
+                onSubscribe={(seats, planId) => subscribeMut.mutate({ seats, planId })}
+                pending={subscribeMut.isPending}
+              />
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                  <Metric label="Users" value={`${seats.used}/${seats.purchased}`} icon={Users} />
+                  <Metric
+                    label="Period ends"
+                    value={sub.current_period_end ? formatDateTime(sub.current_period_end) : '—'}
+                  />
+                  {sub.cancel_at_period_end && (
+                    <Metric label="Will cancel" value="At period end" />
+                  )}
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <h3 className="text-sm font-semibold mb-2">Adjust users</h3>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSeatDraft(Math.max(seats.used, draftSeats - 1))}
+                      className="p-2 rounded border border-gray-300 hover:bg-gray-50"
+                    >
+                      <MinusIcon className="w-4 h-4" />
+                    </button>
+                    <span className="text-2xl font-bold w-12 text-center">{draftSeats}</span>
+                    <button
+                      onClick={() => setSeatDraft(draftSeats + 1)}
+                      className="p-2 rounded border border-gray-300 hover:bg-gray-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    {seatDraft !== null && seatDraft !== currentSeats && (
+                      <>
+                        <button
+                          onClick={() => updateSeatsMut.mutate(seatDraft)}
+                          disabled={updateSeatsMut.isPending}
+                          className="ml-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-60"
+                        >
+                          {updateSeatsMut.isPending ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => setSeatDraft(null)} className="text-sm text-gray-500 hover:text-gray-700">
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {seats.used > 0 && (
+                    <p className="text-xs text-gray-500 mt-2">Cannot go below {seats.used} (currently assigned agents).</p>
+                  )}
+                </div>
+
+                {sub.status === 'trialing' && !sub.stripe_subscription_id && (
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <h3 className="text-sm font-semibold mb-1">Upgrade to a paid plan</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Pick a plan to convert your trial. Stripe handles billing — your trial credits stay yours.
+                    </p>
+                    <SubscribeForm
+                      plans={plans.filter((p) => p.code !== 'TRIAL' && Number(p.price_per_seat) > 0)}
+                      onSubscribe={(s, planId) => subscribeMut.mutate({ seats: s, planId })}
+                      pending={subscribeMut.isPending}
+                      fixedSeats={draftSeats}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Wallet + credits cards */}
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
+              <div className="flex items-center gap-2 mb-3">
+                <Wallet className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-lg font-semibold">Wallet</h2>
+              </div>
+              <p className="text-3xl font-bold text-gray-900">
+                ${Number(wallet?.balance ?? 0).toFixed(2)}
+              </p>
+              <p className="text-xs text-gray-500 mb-3">Recharge to add credits.</p>
               <button
                 onClick={() => setShowTopUp(true)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/20 text-white font-semibold text-sm hover:bg-white/30 backdrop-blur transition-all"
+                className="w-full bg-emerald-600 text-white text-sm py-2 rounded hover:bg-emerald-700"
               >
-                <Plus size={15} /> Top Up
+                Recharge
               </button>
             </div>
-          </div>
 
-          {/* Low balance alert threshold */}
-          <div className="card">
-            <div className="flex items-center gap-2.5 mb-3">
-              <Bell size={16} className="text-slate-500" />
-              <h3 className="text-sm font-bold text-slate-900">Low Balance Alert</h3>
-            </div>
-            <p className="text-xs text-slate-400 mb-3">
-              Get notified by email when your wallet balance drops below this amount.
-            </p>
-            {thresholdEditing ? (
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 max-w-[200px]">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.50"
-                    value={thresholdInput}
-                    onChange={e => setThresholdInput(e.target.value)}
-                    className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="2.00"
-                    autoFocus
-                  />
-                </div>
-                <button
-                  onClick={saveThreshold}
-                  disabled={thresholdMutation.isPending}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                >
-                  {thresholdMutation.isPending ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  onClick={() => setThresholdEditing(false)}
-                  className="px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                >
-                  Cancel
-                </button>
+            <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
+              <div className="flex items-center gap-2 mb-3">
+                <Coins className="w-5 h-5 text-amber-600" />
+                <h2 className="text-lg font-semibold">Credits</h2>
               </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-slate-700">
-                  Alert threshold: <strong>${((overview?.wallet_low_threshold_cents ?? 200) / 100).toFixed(2)}</strong>
-                </span>
-                <button
-                  onClick={() => {
-                    setThresholdInput(String((overview?.wallet_low_threshold_cents ?? 200) / 100))
-                    setThresholdEditing(true)
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
-                >
-                  <Settings2 size={13} /> Change
-                </button>
+              <p className="text-3xl font-bold text-gray-900">{Number(credits.total).toFixed(2)}</p>
+              <div className="text-xs text-gray-600 mt-1 space-y-0.5">
+                <div>Bonus: <span className="font-medium">{Number(credits.bonus).toFixed(2)}</span></div>
+                <div>Wallet: <span className="font-medium">{Number(credits.wallet).toFixed(2)}</span></div>
               </div>
-            )}
-          </div>
-
-          <div className="card overflow-hidden p-0">
-            <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-              <ReceiptText size={16} className="text-slate-500" />
-              <h3 className="text-sm font-bold text-slate-900">Transaction History</h3>
             </div>
-            <DataTable columns={txCols} data={walletTxs} loading={txLoading} emptyText="No transactions yet" />
           </div>
         </div>
       )}
 
-      {/* ═══ Payment Methods ═══ */}
-      {tab === 'Payment Methods' && (
-        <div className="space-y-5">
-          <div className="flex justify-end">
+      {tab === 'Wallet' && (
+        <div className="bg-white rounded-lg shadow border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <History className="w-5 h-5 text-emerald-600" /> Wallet transactions
+              </h2>
+              <p className="text-sm text-gray-500">Recharges, refunds, manual adjustments.</p>
+            </div>
             <button
-              onClick={() => setShowAddCard(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors"
+              onClick={() => setShowTopUp(true)}
+              className="bg-emerald-600 text-white text-sm px-4 py-2 rounded hover:bg-emerald-700"
             >
-              <Plus size={15} /> Add Card
+              Recharge
             </button>
           </div>
+          <DataTable<typeof walletTx[number]>
+            columns={[
+              { key: 'created_at', header: 'When', render: (r) => formatDateTime(r.created_at) },
+              { key: 'type', header: 'Type', render: (r) => <Badge>{r.type}</Badge> },
+              { key: 'amount', header: 'Amount (USD)', className: 'text-right', render: (r) => `$${Number(r.amount).toFixed(2)}` },
+              { key: 'stripe_payment_intent_id', header: 'Stripe ref', render: (r) => r.stripe_payment_intent_id ?? '—' },
+            ] as Column<typeof walletTx[number]>[]}
+            data={walletTx}
+          />
+        </div>
+      )}
 
-          {paymentMethods.length === 0 ? (
-            <div className="card flex flex-col items-center justify-center py-16 gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
-                <CreditCard size={32} className="text-indigo-500" />
-              </div>
-              <p className="font-semibold text-slate-700">No payment methods</p>
-              <p className="text-sm text-slate-400">Add a card to subscribe or top up your wallet</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {paymentMethods.map(pm => (
-                <div key={pm.id} className="card flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                      <CreditCard size={20} className="text-slate-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-900 text-sm">
-                        {pm.brand.toUpperCase()} ****{pm.last4}
-                        {pm.is_default && <Badge variant="blue" className="ml-2">Default</Badge>}
-                      </p>
-                      <p className="text-xs text-slate-400">Expires {pm.exp_month}/{pm.exp_year}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => removeCard(pm.id)} className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors">
-                    <Trash2 size={16} />
+      {tab === 'Activity' && (
+        <div className="bg-white rounded-lg shadow border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Activity className="w-5 h-5 text-amber-600" /> Credit activity
+              {ledgerPagination.total > 0 && (
+                <span className="text-xs font-normal text-slate-400">
+                  · {ledgerPagination.total.toLocaleString()} total
+                </span>
+              )}
+            </h2>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={actSearch}
+                  onChange={(e) => setActSearch(e.target.value)}
+                  placeholder="Search reason, ref, idempotency key…"
+                  className="pl-8 pr-7 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-72 transition"
+                />
+                {actSearch && (
+                  <button
+                    onClick={() => setActSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
                   </button>
+                )}
+              </div>
+
+              {/* Direction filter */}
+              <select
+                value={actDirection}
+                onChange={(e) => setActDirection(e.target.value as '' | 'credit' | 'debit')}
+                className="text-sm py-1.5 px-2.5 rounded-lg border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+              >
+                <option value="">All directions</option>
+                <option value="credit">Credit</option>
+                <option value="debit">Debit</option>
+              </select>
+
+              {/* Bucket filter */}
+              <select
+                value={actBucket}
+                onChange={(e) => setActBucket(e.target.value as '' | 'bonus' | 'wallet')}
+                className="text-sm py-1.5 px-2.5 rounded-lg border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+              >
+                <option value="">All buckets</option>
+                <option value="bonus">Bonus</option>
+                <option value="wallet">Wallet</option>
+              </select>
+
+              {/* Per page */}
+              <select
+                value={actPerPage}
+                onChange={(e) => setActPerPage(Number(e.target.value))}
+                className="text-sm py-1.5 px-2.5 rounded-lg border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+                title="Rows per page"
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
+
+            </div>
+          </div>
+
+          {/* Active filter chips */}
+          {(actDebouncedSearch || actDirection || actBucket) && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap text-xs">
+              <span className="text-slate-400">Filters:</span>
+              {actDebouncedSearch && (
+                <FilterChip label={`"${actDebouncedSearch}"`} onClear={() => setActSearch('')} />
+              )}
+              {actDirection && <FilterChip label={`dir: ${actDirection}`} onClear={() => setActDirection('')} />}
+              {actBucket && <FilterChip label={`bucket: ${actBucket}`} onClear={() => setActBucket('')} />}
+              <button
+                onClick={() => { setActSearch(''); setActDirection(''); setActBucket('') }}
+                className="text-indigo-600 hover:text-indigo-800 underline ml-1"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
+          <DataTable<CreditTransaction>
+            loading={ledgerFetching && !ledgerRes}
+            columns={[
+              { key: 'created_at', header: 'When', render: (r) => (
+                <span className="whitespace-nowrap text-sm text-slate-700" title={`${formatDateTime(r.created_at)}\n${timeAgo(r.created_at)}`}>
+                  {fmtShortDateTime(r.created_at)}
+                </span>
+              )},
+              { key: 'direction', header: 'Dir', render: (r) => (
+                <Badge variant={r.direction === 'credit' ? 'green' : 'red'}>{r.direction}</Badge>
+              )},
+              { key: 'bucket', header: 'Bucket' },
+              { key: 'amount', header: 'Amount', className: 'text-right tabular-nums',
+                render: (r) => fmtCredits(r.amount) },
+              { key: 'reason', header: 'Reason' },
+              { key: 'reference_id', header: 'Ref', render: (r) => {
+                const full = r.reference_type
+                  ? `${r.reference_type}:${r.reference_id ?? ''}`
+                  : (r.reference_id ?? '—')
+                return (
+                  <span
+                    title={full}
+                    className="block max-w-[14rem] truncate text-xs text-slate-600 font-mono"
+                  >
+                    {full}
+                  </span>
+                )
+              }},
+              { key: 'balance_after_bonus', header: 'After-bonus', className: 'text-right tabular-nums',
+                render: (r) => fmtCredits(r.balance_after_bonus) },
+              { key: 'balance_after_wallet', header: 'After-wallet', className: 'text-right tabular-nums',
+                render: (r) => fmtCredits(r.balance_after_wallet) },
+              { key: 'credits_total', header: 'Credits', className: 'text-right tabular-nums',
+                headerClassName: 'text-right tabular-nums bg-indigo-50',
+                render: (r) => (
+                  <span className="font-bold text-indigo-700" title="Bonus + Wallet">
+                    {fmtCredits(Number(r.balance_after_bonus ?? 0) + Number(r.balance_after_wallet ?? 0))}
+                  </span>
+                ),
+              },
+            ]}
+            data={ledger}
+            emptyText={actDebouncedSearch || actDirection || actBucket
+              ? 'No transactions match your filters.'
+              : 'No credit activity yet.'}
+            pagination={{
+              page: ledgerPagination.page,
+              total: ledgerPagination.total,
+              perPage: ledgerPagination.per_page,
+              onChange: setActPage,
+            }}
+          />
+        </div>
+      )}
+
+      {tab === 'Payment Methods' && (
+        <div className="bg-white rounded-lg shadow border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-indigo-600" /> Payment methods
+            </h2>
+            <button
+              onClick={() => setShowAddCard(true)}
+              className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm font-semibold hover:bg-indigo-700 flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Add card
+            </button>
+          </div>
+          {(pmRes?.data?.data?.payment_methods ?? []).length === 0 ? (
+            <p className="text-sm text-gray-500">No saved cards. Click "Add card" to add one.</p>
+          ) : (
+            <div className="space-y-2">
+              {(pmRes?.data?.data?.payment_methods ?? []).map((pm: PaymentMethod) => (
+                <div key={pm.id} className="flex items-center justify-between border border-gray-200 rounded p-3">
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <div className="font-medium capitalize">{pm.brand ?? 'card'} •••• {pm.last4 ?? '----'}</div>
+                      <div className="text-xs text-gray-500">
+                        Expires {String(pm.exp_month ?? '').padStart(2, '0')}/{pm.exp_year ?? '----'}
+                      </div>
+                    </div>
+                    {pm.is_default && (
+                      <Badge variant="green" className="ml-1">Default</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!pm.is_default && (
+                      <button
+                        onClick={() => setDefaultPmMut.mutate(pm.id)}
+                        disabled={setDefaultPmMut.isPending}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                      >
+                        <Star className="w-3.5 h-3.5" /> Set default
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { if (confirm('Remove this card?')) deletePmMut.mutate(pm.id) }}
+                      disabled={deletePmMut.isPending || pm.is_default}
+                      title={pm.is_default ? 'Set another card as default before removing this one' : 'Remove this card'}
+                      className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -802,249 +538,191 @@ export function Billing() {
         </div>
       )}
 
-      {/* ═══ Invoices ═══ */}
       {tab === 'Invoices' && (
-        <div className="card overflow-hidden p-0">
-          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-            <FileText size={16} className="text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-900">Invoice History</h3>
-          </div>
-          <DataTable columns={invCols} data={invoices} loading={invLoading} emptyText="No invoices yet" />
+        <div className="bg-white rounded-lg shadow border border-gray-200 p-5">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" /> Invoices
+          </h2>
+          <DataTable<Invoice>
+            columns={[
+              { key: 'created', header: 'Date', render: (r) => formatDateTime(new Date(r.created * 1000).toISOString()) },
+              { key: 'number', header: 'Number', render: (r) => r.number ?? r.id },
+              { key: 'amount_due', header: 'Amount', className: 'text-right',
+                render: (r) => `${r.currency} ${r.amount_due.toFixed(2)}` },
+              { key: 'status', header: 'Status', render: (r) => (
+                <Badge variant={r.status === 'paid' ? 'green' : r.status === 'open' ? 'yellow' : r.status === 'void' || r.status === 'uncollectible' ? 'red' : 'gray'}>
+                  {r.status}
+                </Badge>
+              )},
+              { key: 'pdf_url', header: '', render: (r) => (
+                <div className="flex gap-2 justify-end">
+                  {r.hosted_url && (
+                    <a href={r.hosted_url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      <ExternalLink className="w-3.5 h-3.5" /> View
+                    </a>
+                  )}
+                  {r.pdf_url && (
+                    <a href={r.pdf_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5" /> PDF
+                    </a>
+                  )}
+                </div>
+              )},
+            ]}
+            data={invoicesRes?.data?.data?.invoices ?? []}
+          />
         </div>
       )}
 
-      {/* ═══ Activity ═══ */}
-      {tab === 'Activity' && (
-        <div className="card overflow-hidden p-0">
-          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-            <Activity size={16} className="text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-900">Subscription Activity</h3>
-          </div>
-          <DataTable columns={eventCols} data={events} loading={eventsLoading} emptyText="No activity yet" />
-        </div>
-      )}
+      <TopUpModal open={showTopUp} onClose={() => setShowTopUp(false)} onSuccess={() => {
+        qc.invalidateQueries({ queryKey: ['billing-wallet'] })
+        qc.invalidateQueries({ queryKey: ['billing-credits'] })
+        qc.invalidateQueries({ queryKey: ['billing-wallet-tx'] })
+      }} />
 
-      {/* ═══ Modals ═══ */}
       <AddCardModal
         open={showAddCard}
         onClose={() => setShowAddCard(false)}
-        onSuccess={() => { refetchPm(); refreshAll() }}
+        onSuccess={() => refetchPM()}
       />
-      <TopUpModal
-        open={showTopUp}
-        onClose={() => setShowTopUp(false)}
-        onSuccess={refreshAll}
-        paymentMethods={paymentMethods}
-        onAddCard={() => { setShowTopUp(false); setShowAddCard(true) }}
-      />
+    </div>
+  )
+}
 
-      {/* Subscribe confirmation modal */}
-      {showSubscribe && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSubscribe(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900">Subscribe to Plan</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              {/* Plan selection summary */}
-              {subscribePlanId && (
-                <div className="bg-slate-50 rounded-xl p-3 text-sm flex items-center justify-between">
-                  <div>
-                    <span className="text-slate-500">Plan: </span>
-                    <span className="font-semibold text-slate-900">
-                      {allPlans.find(p => p.id === subscribePlanId)?.name ?? 'Selected Plan'}
-                    </span>
-                  </div>
-                  <span className="font-bold text-indigo-600">
-                    ${((( allPlans.find(p => p.id === subscribePlanId) as Record<string, unknown>)?.unit_price_cents as number ?? pricePerSeat) / 100).toFixed(0)}/seat/mo
-                  </span>
-                </div>
-              )}
+// Compact "M/D h:mm AM/PM" — fits on one line in narrow columns.
+// e.g. "2026-05-05 17:50:22" → "5/5 5:50 PM".
+function fmtShortDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'))
+  if (isNaN(d.getTime())) return String(iso)
+  const m = d.getMonth() + 1
+  const day = d.getDate()
+  let h = d.getHours()
+  const min = String(d.getMinutes()).padStart(2, '0')
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return `${m}/${day} ${h}:${min} ${ampm}`
+}
 
-              {/* Seat selector */}
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Number of Seats</label>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSeatInput(Math.max(1, displaySeats - 1))}
-                    className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                  >
-                    <MinusIcon size={16} />
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    value={displaySeats}
-                    onChange={e => {
-                      const v = parseInt(e.target.value)
-                      setSeatInput(isNaN(v) ? 1 : Math.max(1, v))
-                    }}
-                    className="w-20 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                  <button
-                    onClick={() => setSeatInput(displaySeats + 1)}
-                    className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
+// Format credit amounts with at least 2 decimals, trimming trailing
+// zeros beyond that. e.g. 59.0000 → "59.00", 0.1500 → "0.15", 1.2345 → "1.2345".
+function fmtCredits(v: string | number | null | undefined): string {
+  if (v === null || v === undefined || v === '') return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  let s = n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+  if (!s.includes('.')) return s + '.00'
+  const [int, dec] = s.split('.')
+  return dec.length < 2 ? `${int}.${dec.padEnd(2, '0')}` : s
+}
 
-              <div className="bg-indigo-50 rounded-xl p-4 text-center">
-                <p className="text-sm text-slate-600">You will be charged</p>
-                <p className="text-3xl font-bold text-indigo-600 mt-1">
-                  ${(() => {
-                    const selectedPlan = allPlans.find(p => p.id === subscribePlanId) as Record<string, unknown> | undefined
-                    const price = (selectedPlan?.unit_price_cents as number) ?? pricePerSeat
-                    return (displaySeats * price / 100).toFixed(0)
-                  })()}/mo
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {displaySeats} seat{displaySeats !== 1 ? 's' : ''} x ${(() => {
-                    const selectedPlan = allPlans.find(p => p.id === subscribePlanId) as Record<string, unknown> | undefined
-                    const price = (selectedPlan?.unit_price_cents as number) ?? pricePerSeat
-                    return (price / 100).toFixed(0)
-                  })()}/seat
-                </p>
-              </div>
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+      {label}
+      <button onClick={onClear} className="hover:text-indigo-900" aria-label="Remove filter">
+        <X className="w-3 h-3" />
+      </button>
+    </span>
+  )
+}
 
-              {paymentMethods.length > 0 && (
-                <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
-                  <CreditCard size={16} className="text-slate-500" />
-                  <span className="text-sm text-slate-700">
-                    {paymentMethods.find(m => m.is_default)?.brand.toUpperCase() ?? paymentMethods[0]?.brand.toUpperCase()} ****{paymentMethods.find(m => m.is_default)?.last4 ?? paymentMethods[0]?.last4}
-                  </span>
-                </div>
-              )}
+function Metric({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: React.ComponentType<{ className?: string }> }) {
+  return (
+    <div>
+      <div className="text-xs text-gray-500 flex items-center gap-1.5">
+        {Icon && <Icon className="w-3.5 h-3.5" />} {label}
+      </div>
+      <div className="text-base font-semibold text-gray-900 mt-1">{value}</div>
+    </div>
+  )
+}
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowSubscribe(false)}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubscribe}
-                  disabled={subscribeMutation.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md disabled:opacity-50 transition-all"
-                >
-                  {subscribeMutation.isPending && <Loader2 size={15} className="animate-spin" />}
-                  Subscribe — ${(() => {
-                    const selectedPlan = allPlans.find(p => p.id === subscribePlanId) as Record<string, unknown> | undefined
-                    const price = (selectedPlan?.unit_price_cents as number) ?? pricePerSeat
-                    return (displaySeats * price / 100).toFixed(0)
-                  })()}/mo
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+function SubscribeForm({
+  plans, onSubscribe, pending,
+  fixedSeats,
+}: {
+  plans: SubscriptionPlan[]
+  onSubscribe: (seats: number, planId: number) => void
+  pending: boolean
+  /** When provided, hide the stepper and use this seat count (e.g. trial→paid upgrade reuses the user's existing seat count). */
+  fixedSeats?: number
+}) {
+  const [seats, setSeats] = useState(fixedSeats ?? 1)
+  const [selected, setSelected] = useState<number | null>(null)
+  const seatsLocked = fixedSeats !== undefined
+  const effectiveSeats = seatsLocked ? fixedSeats : seats
+
+  const sorted = [...plans].sort((a, b) => Number(a.price_per_seat) - Number(b.price_per_seat))
+  const activePlan = selected ?? sorted[0]?.id ?? null
+
+  return (
+    <div className="text-sm">
+      {!seatsLocked && (
+        <p className="text-gray-700 mb-4">
+          Pick a tier and user count. You can change either anytime — Stripe handles proration.
+        </p>
       )}
 
-      {/* Plan change confirmation modal */}
-      {changePlanId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setChangePlanId(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900">Change Plan</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              {(() => {
-                const newPlan = allPlans.find(p => p.id === changePlanId) as Record<string, unknown> | undefined
-                const newPrice = (newPlan?.unit_price_cents as number) ?? 0
-                const oldPrice = (currentPlan as Record<string, unknown>)?.unit_price_cents as number ?? 0
-                const isUpgrade = newPrice > oldPrice || changePlanSeats > currentSeats
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {sorted.map((p) => {
+          const isActive = activePlan === p.id
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setSelected(p.id)}
+              className={
+                'text-left rounded-lg border-2 p-3 transition ' +
+                (isActive ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300')
+              }
+            >
+              <div className="text-xs uppercase tracking-wide text-slate-500 font-semibold">{p.code}</div>
+              <div className="text-base font-bold text-slate-900">{p.name}</div>
+              <div className="text-2xl font-bold text-indigo-600 mt-1">${Number(p.price_per_seat).toFixed(0)}</div>
+              <div className="text-xs text-slate-500">per user / month</div>
+              {Number(p.monthly_bonus_credits) > 0 && (
+                <div className="text-xs text-emerald-700 mt-2">
+                  +{Number(p.monthly_bonus_credits).toFixed(0)} bonus credits
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
 
-                return (
-                  <>
-                    <div className="flex items-center justify-between bg-slate-50 rounded-xl p-4">
-                      <div className="text-center">
-                        <p className="text-xs text-slate-400 uppercase">Current</p>
-                        <p className="font-bold text-slate-900">{currentPlan?.name ?? 'None'}</p>
-                        <p className="text-sm text-slate-500">${(oldPrice / 100).toFixed(0)}/seat/mo</p>
-                        <p className="text-xs text-slate-400">{currentSeats} seat{currentSeats !== 1 ? 's' : ''}</p>
-                      </div>
-                      <ArrowUpRight size={20} className="text-slate-400" />
-                      <div className="text-center">
-                        <p className="text-xs text-slate-400 uppercase">New</p>
-                        <p className="font-bold text-indigo-600">{(newPlan?.name as string) ?? ''}</p>
-                        <p className="text-sm text-indigo-500">${(newPrice / 100).toFixed(0)}/seat/mo</p>
-                        <p className="text-xs text-indigo-400">{changePlanSeats} seat{changePlanSeats !== 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
+      <div className="flex items-center gap-3 mb-4">
+        {seatsLocked ? (
+          <span className="text-sm text-slate-600">
+            Users: <strong className="text-slate-900">{effectiveSeats}</strong>
+            <span className="text-slate-400"> (use the stepper above to change)</span>
+          </span>
+        ) : (
+          <>
+            <span className="text-gray-700">Users:</span>
+            <button onClick={() => setSeats(Math.max(1, seats - 1))} className="p-2 rounded border border-gray-300 hover:bg-gray-50">
+              <MinusIcon className="w-4 h-4" />
+            </button>
+            <span className="text-2xl font-bold w-12 text-center">{seats}</span>
+            <button onClick={() => setSeats(seats + 1)} className="p-2 rounded border border-gray-300 hover:bg-gray-50">
+              <Plus className="w-4 h-4" />
+            </button>
+          </>
+        )}
+        {activePlan && (
+          <span className="text-sm text-slate-500 ml-2">
+            = ${(Number(sorted.find((p) => p.id === activePlan)?.price_per_seat ?? 0) * effectiveSeats).toFixed(2)} / mo
+          </span>
+        )}
+      </div>
 
-                    {/* Seat selector */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Number of Seats</label>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setChangePlanSeats(Math.max(1, changePlanSeats - 1))}
-                          className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                        >
-                          <MinusIcon size={16} />
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={changePlanSeats}
-                          onChange={e => {
-                            const v = parseInt(e.target.value)
-                            setChangePlanSeats(isNaN(v) ? 1 : Math.max(1, v))
-                          }}
-                          className="w-20 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                        <button
-                          onClick={() => setChangePlanSeats(changePlanSeats + 1)}
-                          className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                        >
-                          <Plus size={16} />
-                        </button>
-                        <div className="flex-1 text-right">
-                          <span className="text-xs text-slate-400 block">Monthly total</span>
-                          <span className="text-xl font-bold text-indigo-600">
-                            ${(changePlanSeats * newPrice / 100).toFixed(0)}/mo
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {changePlanSeats} seat{changePlanSeats !== 1 ? 's' : ''} x ${(newPrice / 100).toFixed(0)}/seat
-                      </p>
-                    </div>
-
-                    {isUpgrade ? (
-                      <p className="text-xs text-slate-500 bg-slate-50 rounded-xl p-3">
-                        Upgrading will be prorated immediately. You'll be charged the difference for the remaining billing period.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-amber-700 bg-amber-50 rounded-xl p-3">
-                        Downgrading takes effect at the start of your next billing cycle.
-                      </p>
-                    )}
-                  </>
-                )
-              })()}
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setChangePlanId(null)}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => changePlanMutation.mutate({ planId: changePlanId, seatCount: changePlanSeats })}
-                  disabled={changePlanMutation.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm shadow-md disabled:opacity-50 transition-all"
-                >
-                  {changePlanMutation.isPending && <Loader2 size={15} className="animate-spin" />}
-                  Confirm — ${(changePlanSeats * ((allPlans.find(p => p.id === changePlanId) as Record<string, unknown>)?.unit_price_cents as number ?? 0) / 100).toFixed(0)}/mo
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <button
+        onClick={() => activePlan && onSubscribe(effectiveSeats, activePlan)}
+        disabled={pending || !activePlan}
+        className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-60"
+      >
+        {pending ? 'Subscribing…' : 'Subscribe'}
+      </button>
     </div>
   )
 }

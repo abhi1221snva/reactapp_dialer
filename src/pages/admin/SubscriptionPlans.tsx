@@ -1,232 +1,389 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  RefreshCw, DollarSign, Users, Upload, Loader2, CheckCircle2, XCircle, Crown,
-} from 'lucide-react'
-import {
-  subscriptionService,
-  type SubscriptionPlan,
-} from '../../services/subscription.service'
-import { Badge } from '../../components/ui/Badge'
+import { Loader2, Save, Plus, RefreshCw, Power } from 'lucide-react'
 import toast from 'react-hot-toast'
+import {
+  adminBillingService,
+  type BillingSettings,
+  type UsageRate,
+  type SubscriptionPlan,
+} from '../../services/billing.service'
 
-const FEATURE_LABELS: Record<string, string> = {
-  has_predictive_dialer: 'Predictive Dialer',
-  has_full_crm: 'Full CRM',
-  has_api_access: 'API Access',
-  has_ai_coaching: 'AI Coaching',
-  has_custom_integrations: 'Custom Integrations',
-  has_sso: 'SSO',
-  has_dedicated_csm: 'Dedicated CSM',
-  has_white_label: 'White Label',
-  has_on_premise: 'On-Premise',
-  has_compliance_packages: 'Compliance Packages',
+const RATE_LABELS: Record<UsageRate['rate_key'], string> = {
+  call_outgoing_per_min: 'Outgoing call (credits/min)',
+  call_incoming_per_min: 'Incoming call (credits/min)',
+  sms: 'SMS (credits each)',
 }
 
-const PLAN_COLORS: Record<string, string> = {
-  starter: 'from-slate-500 to-slate-700',
-  growth: 'from-blue-500 to-indigo-600',
-  pro: 'from-violet-500 to-purple-600',
-  enterprise: 'from-amber-500 to-orange-600',
-}
-
+/**
+ * Admin: full billing engine configuration.
+ *
+ *   Tab 1 — Plan tiers   (price + bonus credits + Stripe sync per plan)
+ *   Tab 2 — Global       (trial, conversion rate, low-balance, default plan)
+ *   Tab 3 — Usage rates  (versioned: each save creates a new effective row)
+ */
 export function SubscriptionPlans() {
-  const qc = useQueryClient()
-
-  const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['subscription-plans'],
-    queryFn: () => subscriptionService.listPlans(),
-  })
-
-  const plans: SubscriptionPlan[] = (data?.data?.data ?? []) as SubscriptionPlan[]
-  const activePlans = plans.filter(p => p.is_active && (p as Record<string, unknown>).billing_model === 'per_seat')
-  const legacyPlans = plans.filter(p => !p.is_active || (p as Record<string, unknown>).billing_model !== 'per_seat')
-
-  const syncMutation = useMutation({
-    mutationFn: () => subscriptionService.syncToStripe(),
-    onSuccess: () => {
-      toast.success('All plans synced to Stripe')
-      qc.invalidateQueries({ queryKey: ['subscription-plans'] })
-    },
-    onError: () => { toast.error('Failed to sync plans to Stripe') },
-  })
+  const [tab, setTab] = useState<'Plans' | 'Global' | 'Rates'>('Plans')
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-end gap-2">
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="btn-ghost btn-sm p-2 rounded-lg"
-          title="Refresh"
-        >
-          <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
-        </button>
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 disabled:opacity-50 transition-colors"
-          title="Sync all plans to Stripe"
-        >
-          {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-          Sync All to Stripe
-        </button>
+    <div className="p-6 w-full">
+      <h1 className="text-2xl font-bold mb-1">Billing settings</h1>
+      <p className="text-slate-600 mb-6">Plans, pricing, trial defaults, conversion, and usage rates.</p>
+
+      <div className="border-b border-slate-200 mb-6">
+        <nav className="-mb-px flex gap-6">
+          {(['Plans', 'Global', 'Rates'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={
+                'whitespace-nowrap pb-3 px-1 border-b-2 text-sm font-medium ' +
+                (tab === t
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300')
+              }
+            >
+              {t}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={24} className="animate-spin text-slate-400" />
+      {tab === 'Plans' && <PlansSection />}
+      {tab === 'Global' && <GlobalSection />}
+      {tab === 'Rates' && <RatesSection />}
+    </div>
+  )
+}
+
+// ── Plans tab ─────────────────────────────────────────────────────────────────
+
+function PlansSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-plans'],
+    queryFn: adminBillingService.listPlans,
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Parameters<typeof adminBillingService.updatePlan>[1] }) =>
+      adminBillingService.updatePlan(id, patch),
+    onSuccess: () => {
+      toast.success('Plan saved')
+      qc.invalidateQueries({ queryKey: ['admin-plans'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Save failed'),
+  })
+
+  const deactMut = useMutation({
+    mutationFn: (id: number) => adminBillingService.deactivatePlan(id),
+    onSuccess: () => {
+      toast.success('Plan deactivated')
+      qc.invalidateQueries({ queryKey: ['admin-plans'] })
+    },
+  })
+
+  const plans = (data?.data?.data?.plans ?? []).filter((p) => p.is_active)
+
+  const syncAllMut = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.allSettled(
+        plans.map((p) => adminBillingService.syncPlanStripe(p.id))
+      )
+      const ok = results.filter((r) => r.status === 'fulfilled').length
+      const failed = results.length - ok
+      return { ok, failed, total: results.length }
+    },
+    onSuccess: ({ ok, failed, total }) => {
+      qc.invalidateQueries({ queryKey: ['admin-plans'] })
+      if (failed === 0) toast.success(`Synced ${ok}/${total} plans with Stripe`)
+      else if (ok === 0) toast.error(`Failed to sync any plan (${failed}/${total})`)
+      else toast(`Synced ${ok}/${total} (${failed} failed)`, { icon: '⚠️' })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Sync failed'),
+  })
+
+  if (isLoading) return <Spinner />
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm text-slate-500">{plans.length} active plan{plans.length === 1 ? '' : 's'}</p>
+        <button
+          onClick={() => syncAllMut.mutate()}
+          disabled={syncAllMut.isPending || plans.length === 0}
+          className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+        >
+          {syncAllMut.isPending ? <Loader2 className="animate-spin w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+          {syncAllMut.isPending ? 'Syncing all…' : 'Sync All Stripe Prices'}
+        </button>
+      </div>
+      {plans.map((p) => (
+        <PlanCard
+          key={p.id}
+          plan={p}
+          onSave={(patch) => updateMut.mutate({ id: p.id, patch })}
+          onDeactivate={() => {
+            if (confirm(`Deactivate ${p.name}?`)) deactMut.mutate(p.id)
+          }}
+          saving={updateMut.isPending}
+        />
+      ))}
+    </div>
+  )
+}
+
+function PlanCard({
+  plan, onSave, onDeactivate, saving,
+}: {
+  plan: SubscriptionPlan
+  onSave: (patch: Parameters<typeof adminBillingService.updatePlan>[1]) => void
+  onDeactivate: () => void
+  saving: boolean
+}) {
+  const [draft, setDraft] = useState({
+    name: plan.name,
+    price_per_seat: plan.price_per_seat,
+    monthly_bonus_credits: plan.monthly_bonus_credits,
+    trial_days: plan.trial_days ?? 0,
+    is_active: plan.is_active,
+  })
+
+  const dirty =
+    draft.name !== plan.name ||
+    String(draft.price_per_seat) !== String(plan.price_per_seat) ||
+    String(draft.monthly_bonus_credits) !== String(plan.monthly_bonus_credits) ||
+    Number(draft.trial_days) !== Number(plan.trial_days ?? 0) ||
+    draft.is_active !== plan.is_active
+
+  return (
+    <div className={'rounded-lg border bg-white p-4 ' + (plan.is_active ? 'border-slate-200' : 'border-slate-200 opacity-60')}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-400 font-semibold">{plan.code}</div>
+          <input
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            className="text-lg font-bold bg-transparent focus:bg-white border border-transparent focus:border-slate-300 rounded px-1 -ml-1"
+          />
+          <div className="text-xs text-slate-500 mt-1 font-mono">
+            {plan.stripe_price_id ?? <span className="text-amber-600">no Stripe price</span>}
+          </div>
         </div>
-      ) : (
-        <>
-          {/* Active tiered plans */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {activePlans.map(plan => {
-              const pr = plan as Record<string, unknown>
-              const slug = (pr.slug as string) || 'starter'
-              const unitPrice = (pr.unit_price_cents as number) || 0
-              const gradient = PLAN_COLORS[slug] || PLAN_COLORS.starter
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onDeactivate}
+            disabled={!plan.is_active}
+            className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 flex items-center gap-1 disabled:opacity-30"
+          >
+            <Power className="w-3 h-3" />
+            Deactivate
+          </button>
+        </div>
+      </div>
 
-              return (
-                <div key={plan.id} className="card">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-                        <Crown size={20} className="text-white" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-900">{plan.name}</h3>
-                        <p className="text-xs text-slate-400 font-mono">{pr.slug as string}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {plan.is_active ? (
-                        <Badge variant="green">Active</Badge>
-                      ) : (
-                        <Badge variant="gray">Inactive</Badge>
-                      )}
-                      {plan.stripe_product_id ? (
-                        <Badge variant="blue">Synced</Badge>
-                      ) : (
-                        <Badge variant="red">Not Synced</Badge>
-                      )}
-                    </div>
-                  </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Field
+          label="Price / user / month (USD)"
+          value={String(draft.price_per_seat)}
+          onChange={(v) => setDraft({ ...draft, price_per_seat: v })}
+        />
+        <Field
+          label="Bonus credits"
+          value={String(draft.monthly_bonus_credits)}
+          onChange={(v) => setDraft({ ...draft, monthly_bonus_credits: v })}
+        />
+        <Field
+          label="Trial days (0 = no trial)"
+          value={String(draft.trial_days)}
+          onChange={(v) => setDraft({ ...draft, trial_days: Number(v.replace(/\D/g, '')) || 0 })}
+        />
+        <label className="block">
+          <span className="block text-sm font-medium text-slate-700 mb-1">Active</span>
+          <input
+            type="checkbox"
+            checked={draft.is_active}
+            onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
+            className="mt-2"
+          />
+        </label>
+      </div>
 
-                  <div className="bg-slate-50 rounded-xl p-3 text-center mb-4">
-                    <p className="text-xs text-slate-500 font-semibold uppercase">Price per Seat</p>
-                    <p className="text-2xl font-bold text-indigo-600 mt-1">${(unitPrice / 100).toFixed(0)}/mo</p>
-                  </div>
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          disabled={!dirty || saving}
+          onClick={() =>
+            onSave({
+              name: draft.name,
+              price_per_seat: draft.price_per_seat,
+              monthly_bonus_credits: draft.monthly_bonus_credits,
+              trial_days: Number(draft.trial_days) || 0,
+              is_active: draft.is_active,
+            })
+          }
+          className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
+        >
+          {saving ? <Loader2 className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
+          Save
+        </button>
+        {dirty && String(draft.price_per_seat) !== String(plan.price_per_seat) && (
+          <span className="text-xs text-amber-600">Saving will create a new Stripe price.</span>
+        )}
+      </div>
+    </div>
+  )
+}
 
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="bg-slate-50 rounded-lg p-2 text-center">
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Plan Order</p>
-                      <p className="text-sm font-bold text-slate-900">{pr.plan_order as number}</p>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-2 text-center">
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Trial Days</p>
-                      <p className="text-sm font-bold text-slate-900">{plan.trial_days}</p>
-                    </div>
-                  </div>
+// ── Global tab ────────────────────────────────────────────────────────────────
 
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Features</h4>
-                    <div className="space-y-1">
-                      {Object.entries(FEATURE_LABELS).map(([key, label]) => {
-                        const on = Boolean(pr[key])
-                        return (
-                          <div key={key} className="flex items-center gap-1.5 text-xs">
-                            {on
-                              ? <CheckCircle2 size={12} className="text-emerald-500" />
-                              : <XCircle size={12} className="text-slate-300" />}
-                            <span className={on ? 'text-slate-700' : 'text-slate-400'}>{label}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+function GlobalSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-billing-settings'],
+    queryFn: adminBillingService.getSettings,
+  })
 
-          {/* Summary stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="card flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                <DollarSign size={20} className="text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Active Plans</p>
-                <p className="text-2xl font-bold text-slate-900">{activePlans.length}</p>
-              </div>
-            </div>
-            <div className="card flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0">
-                <Users size={20} className="text-slate-600" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Legacy Plans</p>
-                <p className="text-2xl font-bold text-slate-900">{legacyPlans.length}</p>
-              </div>
-            </div>
-            <div className="card flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 size={20} className="text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Stripe Synced</p>
-                <p className="text-2xl font-bold text-slate-900">{plans.filter(p => p.stripe_product_id).length}/{plans.length}</p>
-              </div>
-            </div>
-            <div className="card flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
-                <DollarSign size={20} className="text-violet-600" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Price Range</p>
-                <p className="text-2xl font-bold text-slate-900">
-                  ${activePlans.length > 0 ? Math.min(...activePlans.map(p => ((p as Record<string, unknown>).unit_price_cents as number || 0) / 100)).toFixed(0) : '0'}-${activePlans.length > 0 ? Math.max(...activePlans.map(p => ((p as Record<string, unknown>).unit_price_cents as number || 0) / 100)).toFixed(0) : '0'}
-                </p>
-              </div>
-            </div>
-          </div>
+  const [draft, setDraft] = useState<Partial<BillingSettings>>({})
+  useEffect(() => { if (data?.data?.data?.settings) setDraft({}) }, [data])
 
-          {/* Legacy plans (collapsed) */}
-          {legacyPlans.length > 0 && (
-            <div className="card">
-              <h3 className="font-bold text-slate-900 text-sm mb-3">Legacy / Inactive Plans</h3>
-              <div className="divide-y divide-slate-100">
-                {legacyPlans.map(plan => {
-                  const pr = plan as Record<string, unknown>
-                  return (
-                    <div key={plan.id} className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono text-slate-400">#{plan.id}</span>
-                        <div>
-                          <span className="font-medium text-sm text-slate-700">{plan.name}</span>
-                          <span className="ml-2 text-xs text-slate-400 font-mono">{pr.slug as string}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-slate-500">
-                          ${plan.price_monthly}/mo
-                        </span>
-                        <span className="text-xs text-slate-400 font-mono">{pr.billing_model as string}</span>
-                        {plan.is_active ? (
-                          <Badge variant="green">Active</Badge>
-                        ) : (
-                          <Badge variant="gray">Inactive</Badge>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </>
-      )}
+  const settings = data?.data?.data?.settings
+  const merged = { ...(settings ?? {}), ...draft } as BillingSettings
+
+  const saveMut = useMutation({
+    mutationFn: (patch: Partial<BillingSettings>) => adminBillingService.updateSettings(patch),
+    onSuccess: () => {
+      toast.success('Settings saved')
+      setDraft({})
+      qc.invalidateQueries({ queryKey: ['admin-billing-settings'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Save failed'),
+  })
+
+  if (isLoading) return <Spinner />
+
+  const setField = <K extends keyof BillingSettings>(key: K, val: BillingSettings[K]) =>
+    setDraft((d) => ({ ...d, [key]: val }))
+  const dirty = Object.keys(draft).length > 0
+
+  return (
+    <div className="bg-white rounded-lg shadow border border-slate-200 p-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Default plan code" value={merged.default_plan_code ?? ''} onChange={(v) => setField('default_plan_code', v)} />
+        <Field label="Trial users" value={String(merged.trial_seats ?? '')} onChange={(v) => setField('trial_seats', Number(v) as never)} />
+        <Field label="Trial credits" value={merged.trial_credits ?? ''} onChange={(v) => setField('trial_credits', v)} />
+        <Field label="Wallet → credit rate (per $1)" value={merged.wallet_to_credit_rate ?? ''} onChange={(v) => setField('wallet_to_credit_rate', v)} />
+        <Field label="Low-balance threshold (credits)" value={merged.low_balance_threshold ?? ''} onChange={(v) => setField('low_balance_threshold', v)} />
+        <CheckboxField label="Block calls when balance hits 0" checked={Boolean(merged.block_calls_on_zero_balance)} onChange={(c) => setField('block_calls_on_zero_balance', c as never)} />
+      </div>
+      <div className="mt-4">
+        <button
+          disabled={!dirty || saveMut.isPending}
+          onClick={() => saveMut.mutate(draft)}
+          className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+        >
+          {saveMut.isPending ? <Loader2 className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
+          Save
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Rates tab ─────────────────────────────────────────────────────────────────
+
+function RatesSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-billing-rates'],
+    queryFn: adminBillingService.getUsageRates,
+  })
+
+  const addMut = useMutation({
+    mutationFn: (payload: { rate_key: string; credits_per_unit: string }) => adminBillingService.addUsageRate(payload),
+    onSuccess: () => {
+      toast.success('Rate updated')
+      qc.invalidateQueries({ queryKey: ['admin-billing-rates'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  })
+
+  if (isLoading) return <Spinner />
+
+  return (
+    <div className="bg-white rounded-lg shadow border border-slate-200 p-5">
+      <p className="text-slate-500 text-sm mb-4">
+        Saving creates a new versioned row. Past charges keep their original rate.
+      </p>
+      <div className="space-y-3">
+        {(['call_outgoing_per_min', 'call_incoming_per_min', 'sms'] as const).map((rk) => {
+          const cur = data?.data?.data?.current?.[rk]
+          return <RateRow key={rk} label={RATE_LABELS[rk]} current={cur} onSave={(v) => addMut.mutate({ rate_key: rk, credits_per_unit: v })} />
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Shared bits ───────────────────────────────────────────────────────────────
+
+function Spinner() {
+  return <div className="p-8 flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin w-4 h-4" /> Loading…</div>
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="block">
+      <span className="block text-sm font-medium text-slate-700 mb-1">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500"
+      />
+    </label>
+  )
+}
+
+function CheckboxField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="inline-flex items-center gap-2 mt-6">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="text-sm text-slate-700">{label}</span>
+    </label>
+  )
+}
+
+function RateRow({
+  label, current, onSave,
+}: {
+  label: string
+  current?: UsageRate
+  onSave: (v: string) => void
+}) {
+  const [draft, setDraft] = useState<string>('')
+  return (
+    <div className="flex items-end gap-3">
+      <div className="flex-1">
+        <span className="block text-sm font-medium text-slate-700 mb-1">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500">Current:</span>
+          <span className="font-mono text-sm">{current?.credits_per_unit ?? '—'}</span>
+        </div>
+      </div>
+      <input
+        type="text"
+        value={draft}
+        placeholder="New rate"
+        onChange={(e) => setDraft(e.target.value)}
+        className="w-32 px-3 py-2 border border-slate-300 rounded text-sm"
+      />
+      <button
+        onClick={() => { if (!draft) return; onSave(draft); setDraft('') }}
+        disabled={!draft}
+        className="px-3 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+      >
+        <Plus className="w-4 h-4" /> Add
+      </button>
     </div>
   )
 }
