@@ -62,6 +62,7 @@ import { CrmEmailSettings } from './pages/crm/CrmEmailSettings'
 import { Campaigns } from './pages/campaigns/Campaigns'
 import { CampaignDetail } from './pages/campaigns/CampaignDetail'
 import { CreateCampaign } from './modules/campaigns/CreateCampaign'
+import { CreateCampaign1 } from './modules/campaigns/CreateCampaign1'
 import { EditCampaign } from './modules/campaigns/EditCampaign'
 import { AttachLeads } from './modules/campaigns/AttachLeads'
 import { AgentStatus } from './pages/campaigns/AgentStatus'
@@ -96,7 +97,6 @@ import { RinglessAddReview } from './modules/ringless/RinglessAddReview'
 import { RinglessEditLists } from './modules/ringless/RinglessEditLists'
 import { RinglessEditReview } from './modules/ringless/RinglessEditReview'
 import { AiSettings } from './pages/ai/AiSettings'
-import { AiCoach } from './pages/ai/AiCoach'
 import { AiPrompts } from './pages/ai/AiPrompts'
 import { SMSCenter } from './pages/sms/SMSCenter'
 import { UpgradePage } from './pages/upgrade/UpgradePage'
@@ -169,6 +169,7 @@ import { MerchantPortalLayout } from './layouts/MerchantPortalLayout'
 import { MerchantLogin } from './pages/merchant/MerchantLogin'
 import { MerchantApplications } from './pages/merchant/MerchantApplications'
 import { LandingPage } from './pages/public/LandingPage'
+import { LandingPageBalji } from './pages/public/LandingPageBalji'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -219,6 +220,7 @@ export default function App() {
       {/* Fully public routes — no auth, no layout wrapper */}
       <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
       <Route path="/website" element={<LandingPage />} />
+      <Route path="/website_balji" element={<LandingPageBalji />} />
 
       {/* ── Merchant Portal (account-based) ─────────────────────────────── */}
       {/* Static paths must come BEFORE the dynamic :leadToken catch-all */}
@@ -301,7 +303,8 @@ export default function App() {
 
           {/* Campaigns */}
           <Route path="/campaigns" element={<Campaigns />} />
-          <Route path="/campaigns/create" element={<ErrorBoundary fallbackTitle="Campaign Error"><CreateCampaign /></ErrorBoundary>} />
+          <Route path="/campaigns/create" element={<ErrorBoundary fallbackTitle="Campaign Error"><CreateCampaign1 /></ErrorBoundary>} />
+          <Route path="/campaigns/create1" element={<ErrorBoundary fallbackTitle="Campaign Error"><CreateCampaign /></ErrorBoundary>} />
           <Route path="/campaigns/:id/edit" element={<ErrorBoundary fallbackTitle="Campaign Error"><EditCampaign /></ErrorBoundary>} />
           <Route path="/campaigns/:id/attach-leads" element={<AttachLeads />} />
           <Route path="/campaigns/:id/add-review" element={<ErrorBoundary fallbackTitle="Campaign Error"><AddCampaignReview /></ErrorBoundary>} />
@@ -380,7 +383,6 @@ export default function App() {
 
           {/* AI Tools */}
           <Route path="/ai/settings" element={<AiSettings />} />
-          <Route path="/ai/coach" element={<AiCoach />} />
           <Route path="/ai/prompts" element={<AiPrompts />} />
 
           {/* SMS AI */}

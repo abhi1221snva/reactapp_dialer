@@ -30,7 +30,7 @@ export const campaignService = {
     api.post('/bulk-delete-campaigns', { campaign_ids: ids }),
 
   toggle: (id: number, status: string) =>
-    api.post('/status-update-campaign', { campaign_id: id, status }),
+    api.post('/status-update-campaign', { listId: id, status: status === 'active' ? '1' : '0' }),
 
   copy: (id: number) =>
     api.post('/copy-campaign', { campaign_id: id }),

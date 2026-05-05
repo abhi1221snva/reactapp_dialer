@@ -36,8 +36,6 @@ const DIALER_TITLES: Record<string, string> = {
   '/settings/sms-templates':        'SMS Templates',
   '/ivr':                           'IVR Menus',
   '/ringless':                      'Ringless Campaigns',
-  '/ai/settings':                   'AI Settings',
-  '/ai/coach':                      'AI Coach',
   '/smsai/demo':                    'SMS AI Demo',
   '/smsai/campaigns':               'SMS AI Campaigns',
   '/smsai/lists':                   'SMS AI Lists',
@@ -45,6 +43,8 @@ const DIALER_TITLES: Record<string, string> = {
   '/smsai/templates':               'SMS AI Templates',
   '/voicemail':                     'Voicemail Drops',
   '/voicemail/mailbox':             'Mailbox',
+  '/call-timers':                   'Call Timers',
+  '/call-times':                    'Call Times',
   '/ring-groups':                   'Ring Groups',
   '/holidays':                      'Holidays',
   '/extension-groups':              'Extension Groups',
@@ -72,6 +72,7 @@ const DIALER_TITLES: Record<string, string> = {
 function titleFromPath(pathname: string): string {
   if (DIALER_TITLES[pathname]) return DIALER_TITLES[pathname]
   if (/^\/campaigns\/create$/.test(pathname))     return 'Create Campaign'
+  if (/^\/campaigns\/create1$/.test(pathname))    return 'Create Campaign'
   if (/^\/campaigns\/\d+\/edit$/.test(pathname))  return 'Edit Campaign'
   if (/^\/campaigns\/\d+$/.test(pathname))        return 'Campaign Detail'
   if (/^\/campaigns\/\d+\/attach-leads$/.test(pathname)) return 'Attach Leads'
@@ -133,6 +134,7 @@ export function DialerLayout() {
 
   const showHeader = !OWN_HEADER.has(pathname)
     && pathname !== '/campaigns/create'
+    && pathname !== '/campaigns/create1'
     && !/^\/campaigns\/\d+$/.test(pathname)
     && !/^\/campaigns\/\d+\/edit$/.test(pathname)
     && !/^\/lists\/\d+\/edit$/.test(pathname)
