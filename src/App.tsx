@@ -125,6 +125,7 @@ import { DispositionList } from './modules/dispositions/DispositionList'
 import { EmailTemplates } from './pages/settings/EmailTemplates'
 import { SmsTemplates } from './pages/settings/SmsTemplates'
 import { DialerEmailSettings } from './pages/settings/DialerEmailSettings'
+import CampaignTypes from './pages/settings/CampaignTypes'
 import { DncList } from './modules/dnc/DncList'
 import { ExcludeList } from './modules/excludeList/ExcludeList'
 
@@ -361,6 +362,7 @@ export default function App() {
           <Route path="/settings/email-templates" element={<EmailTemplates />} />
           <Route path="/settings/sms-templates" element={<SmsTemplates />} />
           <Route path="/settings/email-settings" element={<DialerEmailSettings />} />
+          <Route path="/settings/campaign-types" element={<CampaignTypes />} />
 
           {/* Profile */}
           <Route path="/profile" element={<Profile />} />

@@ -38,6 +38,15 @@ export const campaignService = {
   getTypes: () =>
     api.get('/campaign-type'),
 
+  getTypesAll: () =>
+    api.get('/campaign-type/all'),
+
+  toggleTypeStatus: (id: number) =>
+    api.post(`/campaign-type/${id}/toggle-status`),
+
+  createType: (data: { title: string; title_url: string; status: string }) =>
+    api.put('/campaign-type', data),
+
   assignLists: (campaignId: number, listIds: number[]) =>
     api.post('/campaign/assign-lists', { campaign_id: campaignId, lead_list_ids: listIds }),
 
