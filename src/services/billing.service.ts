@@ -222,7 +222,7 @@ export interface BillingSettings {
 
 export interface UsageRate {
   id: number
-  rate_key: 'call_outgoing_per_min' | 'call_incoming_per_min' | 'sms'
+  rate_key: 'call_outgoing_per_min' | 'call_incoming_per_min' | 'sms' | 'sms_outbound' | 'sms_inbound'
   credits_per_unit: string
   effective_from: string
 }

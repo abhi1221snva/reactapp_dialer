@@ -9,10 +9,11 @@ import {
   type SubscriptionPlan,
 } from '../../services/billing.service'
 
-const RATE_LABELS: Record<UsageRate['rate_key'], string> = {
+const RATE_LABELS: Record<string, string> = {
   call_outgoing_per_min: 'Outgoing call (credits/min)',
   call_incoming_per_min: 'Incoming call (credits/min)',
-  sms: 'SMS (credits each)',
+  sms_outbound: 'SMS Outbound (credits each)',
+  sms_inbound: 'SMS Inbound (credits each)',
 }
 
 /**
@@ -315,7 +316,7 @@ function RatesSection() {
         Saving creates a new versioned row. Past charges keep their original rate.
       </p>
       <div className="space-y-3">
-        {(['call_outgoing_per_min', 'call_incoming_per_min', 'sms'] as const).map((rk) => {
+        {(['call_outgoing_per_min', 'call_incoming_per_min', 'sms_outbound', 'sms_inbound'] as const).map((rk) => {
           const cur = data?.data?.data?.current?.[rk]
           return <RateRow key={rk} label={RATE_LABELS[rk]} current={cur} onSave={(v) => addMut.mutate({ rate_key: rk, credits_per_unit: v })} />
         })}
