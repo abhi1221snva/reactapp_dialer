@@ -377,7 +377,7 @@ function SeatBadge({ current, max }: { current: number; max: number }) {
           ? 'bg-red-50 text-red-700 border border-red-200'
           : 'bg-slate-100 text-slate-600 border border-slate-200'
       }`}
-      title={atLimit ? 'Agent seat limit reached. Upgrade your plan to add more.' : `${max - current} seat(s) remaining on your plan`}
+      title={atLimit ? 'Agent user limit reached. Upgrade your plan to add more.' : `${max - current} user(s) remaining on your plan`}
     >
       <Users size={11} />
       {current}/{max} agents
@@ -451,7 +451,7 @@ export function Agents() {
             onClick={openCreate}
             className={`lt-b lt-p ${seatAtLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
             disabled={seatAtLimit}
-            title={seatAtLimit ? `Seat limit reached (${seatLimit?.current}/${seatLimit?.max}). Upgrade your plan.` : 'Add a new agent'}
+            title={seatAtLimit ? `User limit reached (${seatLimit?.current}/${seatLimit?.max}). Upgrade your plan.` : 'Add a new agent'}
           >
             <Plus size={13} /> Add Agent
           </button>

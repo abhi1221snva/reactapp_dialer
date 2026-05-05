@@ -19,6 +19,7 @@ import { formatPartialPhoneUS } from '../../utils/format'
 type FormState = {
   cli: string
   cnam: string
+  country_code_cli: string      // country phone code for the CLI/main number
   // Main routing
   dest_type: string
   extension: string
@@ -26,18 +27,24 @@ type FormState = {
   voicemail_id: string
   ingroup: string
   forward_number: string
+  country_code: string          // country code for forward_number (external)
+  voice_ai: string              // voice AI prompt id (dest_type=12)
+  conf_id: string               // conferencing id (dest_type=5)
+  fax_did: string[]             // fax extensions multi-select (dest_type=6)
   // Provider & features
   operator: string
   sms: number
+  sms_type: number              // SMS AI toggle (separate from regular SMS)
   sms_user_id: string           // stored in sms_email — user ID assigned to receive SMS
   default_did: number
+  set_exclusive_for_user: number
   // Call times
   call_time_enabled: number     // UI toggle: 1 = call times active
   call_time_department_id: string
   call_time_holiday: number     // 1 = respect holiday calendar
   // Call screening
   call_screening_status: number
-  call_screening_mode: string       // 'ivr' | 'upload' | 'speech'
+  call_screening_mode: string       // 'ivr' | 'upload' | 'speech' | 'record'
   call_screening_ivr_id: string
   speech_text: string
   language: string
@@ -51,19 +58,29 @@ type FormState = {
   voicemail_id_ooh: string
   ingroup_ooh: string
   forward_number_ooh: string
+  country_code_ooh: string
+  voice_ai_ooh: string
+  conf_id_ooh: string
+  fax_did_ooh: string[]
 }
 
-type DeptItem = { id: number; name: string; description?: string }
+type DeptItem      = { id: number; name: string; description?: string }
+type CountryItem   = { phone_code: string; country_name: string; country_code?: string }
+type PromptItem    = { id: number; title: string }
+type ConfItem      = { id: number; title?: string; conference_id?: string | number }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 // Fallback dest types in case API fails
 const DEST_TYPES_FALLBACK = [
-  { value: 'extension', label: 'Extension' },
-  { value: 'ivr',       label: 'IVR' },
-  { value: 'queue',     label: 'Ring Group / Queue' },
-  { value: 'voicemail', label: 'Voicemail' },
-  { value: 'external',  label: 'External Number' },
+  { value: 'extension',  label: 'Extension' },
+  { value: 'ivr',        label: 'IVR' },
+  { value: 'queue',      label: 'Ring Group / Queue' },
+  { value: 'voicemail',  label: 'Voicemail' },
+  { value: 'external',   label: 'External Number' },
+  { value: 'conference', label: 'Conferencing' },
+  { value: 'fax',        label: 'Fax' },
+  { value: 'voice_ai',   label: 'Voice AI' },
 ]
 
 // Map dest_type_list.dest_type name to internal key
@@ -74,32 +91,36 @@ const DEST_NAME_TO_KEY: Record<string, string> = {
 }
 
 const OPERATORS = [
-  { value: 'twilio',  label: 'Twilio' },
-  { value: 'telnyx',  label: 'Telnyx' },
-  { value: 'plivo',   label: 'Plivo' },
-  { value: 'vonage',  label: 'Vonage' },
-  { value: 'other',   label: 'Other' },
+  { value: 'didforsale', label: 'DidForSale' },
+  { value: 'plivo',      label: 'Plivo' },
+  { value: 'telnyx',     label: 'Telnyx' },
+  { value: 'twilio',     label: 'Twilio' },
+  { value: 'vonage',     label: 'Vonage' },
+  { value: 'other',      label: 'Other' },
 ]
 
 const DEFAULT_FORM: FormState = {
-  cli: '', cnam: '', dest_type: 'extension',
+  cli: '', cnam: '', country_code_cli: '1', dest_type: 'extension',
   extension: '', ivr_id: '', voicemail_id: '', ingroup: '',
-  forward_number: '', operator: '',
-  sms: 0, sms_user_id: '', default_did: 0,
+  forward_number: '', country_code: '1',
+  voice_ai: '', conf_id: '', fax_did: [],
+  operator: '',
+  sms: 0, sms_type: 0, sms_user_id: '', default_did: 0, set_exclusive_for_user: 0,
   call_time_enabled: 0, call_time_department_id: '', call_time_holiday: 0,
   call_screening_status: 0, call_screening_mode: 'ivr', call_screening_ivr_id: '',
   speech_text: '', language: 'en-US', voice_name: 'Joanna',
   redirect_last_agent: 0,
   dest_type_ooh: 'extension',
   extension_ooh: '', ivr_id_ooh: '', voicemail_id_ooh: '',
-  ingroup_ooh: '', forward_number_ooh: '',
+  ingroup_ooh: '', forward_number_ooh: '', country_code_ooh: '1',
+  voice_ai_ooh: '', conf_id_ooh: '', fax_did_ooh: [],
 }
 
 const DEST_TYPE_TO_NUM: Record<string, number> = {
-  ivr: 0, extension: 1, voicemail: 2, external: 4, conference: 5, queue: 8, voice_ai: 12,
+  ivr: 0, extension: 1, voicemail: 2, external: 4, conference: 5, fax: 6, queue: 8, voice_ai: 12,
 }
 const DEST_TYPE_FROM_NUM: Record<number, string> = {
-  0: 'ivr', 1: 'extension', 2: 'voicemail', 4: 'external', 5: 'conference', 8: 'queue', 12: 'voice_ai',
+  0: 'ivr', 1: 'extension', 2: 'voicemail', 4: 'external', 5: 'conference', 6: 'fax', 8: 'queue', 12: 'voice_ai',
 }
 
 const LBL: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }
@@ -127,18 +148,26 @@ type RingItem = { id: number; title?: string; name?: string; extension_name?: st
 
 function RoutingTarget({
   destType, extension, ivr_id, voicemail_id, ingroup, forward_number,
-  extensions, ivrs, ringGroups, loadingIvrs, loadingRingGroups,
+  voice_ai, conf_id, fax_did, country_code,
+  extensions, ivrs, ringGroups, voiceAiList, conferencing, phoneCountries,
+  loadingIvrs, loadingRingGroups, loadingVoiceAi, loadingConf,
   onChange,
 }: {
   destType: string
   extension: string; ivr_id: string; voicemail_id: string
   ingroup: string; forward_number: string
+  voice_ai: string; conf_id: string; fax_did: string[]; country_code: string
   extensions: ExtItem[]
   ivrs: IvrItem[]
   ringGroups: RingItem[]
+  voiceAiList: PromptItem[]
+  conferencing: ConfItem[]
+  phoneCountries: CountryItem[]
   loadingIvrs: boolean
   loadingRingGroups: boolean
-  onChange: (key: string, value: string) => void
+  loadingVoiceAi: boolean
+  loadingConf: boolean
+  onChange: (key: string, value: string | string[]) => void
 }) {
   const extLabel = (ext: ExtItem) => {
     const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ')
@@ -232,19 +261,95 @@ function RoutingTarget({
   if (destType === 'external') {
     const digits = forward_number.replace(/\D/g, '')
     return (
+      <>
+        <div style={{ flex: '0 0 160px' }}>
+          <label style={LBL}>Country Code</label>
+          <select className="cpn-fi" value={country_code} onChange={e => onChange('country_code', e.target.value)}>
+            {phoneCountries.length === 0 && <option value="1">United States (+1)</option>}
+            {phoneCountries.map(c => (
+              <option key={c.country_name + c.phone_code} value={c.phone_code}>
+                {c.country_name} (+{c.phone_code})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: '1 1 0' }}>
+          <label style={LBL}>Forward To Number <span className="text-red-400">*</span></label>
+          <input
+            className="cpn-fi font-mono"
+            value={forward_number}
+            onChange={e => onChange('forward_number', formatPartialPhoneUS(e.target.value))}
+            placeholder="(XXX) XXX-XXXX"
+            maxLength={14}
+            inputMode="numeric"
+          />
+          <span style={{ fontSize: 11, color: digits.length === 10 ? '#059669' : '#94a3b8', marginTop: 2, display: 'block' }}>
+            {digits.length}/10 digits{digits.length === 10 ? ' ✓' : ' · US format (XXX) XXX-XXXX'}
+          </span>
+        </div>
+      </>
+    )
+  }
+
+  if (destType === 'conference') return (
+    <div style={{ flex: '1 1 0' }}>
+      <label style={LBL}>Conference Bridge <span className="text-red-400">*</span></label>
+      <SearchableSelect
+        className="cpn-fi"
+        options={conferencing.map(c => ({
+          value: String(c.id),
+          label: c.title ? `${c.title}${c.conference_id ? ` — ${c.conference_id}` : ''}` : `Conf #${c.id}`,
+        }))}
+        value={conf_id}
+        onChange={v => onChange('conf_id', v)}
+        placeholder={loadingConf ? 'Loading conferences…' : '— Select a conference —'}
+        emptyLabel="— Select a conference —"
+        disabled={loadingConf}
+      />
+      {!loadingConf && conferencing.length === 0 && <EmptyHint message="No conferences found. Create one under Conferencing first." />}
+    </div>
+  )
+
+  if (destType === 'voice_ai') return (
+    <div style={{ flex: '1 1 0' }}>
+      <label style={LBL}>Voice AI Prompt <span className="text-red-400">*</span></label>
+      <SearchableSelect
+        className="cpn-fi"
+        options={voiceAiList.map(p => ({ value: String(p.id), label: p.title || `Prompt #${p.id}` }))}
+        value={voice_ai}
+        onChange={v => onChange('voice_ai', v)}
+        placeholder={loadingVoiceAi ? 'Loading prompts…' : '— Select a prompt —'}
+        emptyLabel="— Select a prompt —"
+        disabled={loadingVoiceAi}
+      />
+      {!loadingVoiceAi && voiceAiList.length === 0 && <EmptyHint message="No Voice AI prompts found. Create one under AI Settings first." />}
+    </div>
+  )
+
+  if (destType === 'fax') {
+    const extLabelLong = (ext: ExtItem) => {
+      const name = [ext.first_name, ext.last_name].filter(Boolean).join(' ').trim()
+      return name ? `${name} — Ext ${ext.extension}` : `Ext ${ext.extension}`
+    }
+    return (
       <div style={{ flex: '1 1 0' }}>
-        <label style={LBL}>Forward To Number <span className="text-red-400">*</span></label>
-        <input
-          className="cpn-fi font-mono"
-          value={forward_number}
-          onChange={e => onChange('forward_number', formatPartialPhoneUS(e.target.value))}
-          placeholder="(XXX) XXX-XXXX"
-          maxLength={14}
-          inputMode="numeric"
-        />
-        <span style={{ fontSize: 11, color: digits.length === 10 ? '#059669' : '#94a3b8', marginTop: 2, display: 'block' }}>
-          {digits.length}/10 digits{digits.length === 10 ? ' ✓' : ' · US format (XXX) XXX-XXXX'}
+        <label style={LBL}>Fax Recipients <span className="text-red-400">*</span></label>
+        <select
+          className="cpn-fi"
+          multiple
+          size={Math.min(6, Math.max(3, extensions.length))}
+          value={fax_did}
+          onChange={e => onChange('fax_did', Array.from(e.target.selectedOptions).map(o => o.value))}
+          style={{ height: 'auto', padding: '6px 10px' }}
+        >
+          {extensions.map(ext => (
+            <option key={ext.id} value={String(ext.id)}>{extLabelLong(ext)}</option>
+          ))}
+        </select>
+        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>
+          Hold Ctrl (or Cmd on Mac) to select multiple{fax_did.length > 0 ? ` · ${fax_did.length} selected` : ''}
         </span>
+        {extensions.length === 0 && <EmptyHint message="No extensions available." />}
       </div>
     )
   }
@@ -265,6 +370,10 @@ export function DidForm() {
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [formPopulated, setFormPopulated] = useState(!isEdit)
   const didPopulateForId = useRef<string | undefined>(undefined)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordChunksRef  = useRef<Blob[]>([])
 
   // ── Data queries ────────────────────────────────────────────────────────────
   const { data: existing, isLoading: loadingExisting } = useQuery({
@@ -295,6 +404,19 @@ export function DidForm() {
   const { data: destTypeData } = useQuery({
     queryKey: ['dest-types'],
     queryFn:  () => ivrService.getDestTypes(),
+  })
+  const { data: phoneCountryData } = useQuery({
+    queryKey: ['phone-countries'],
+    queryFn:  () => didService.getPhoneCountries(),
+    staleTime: 60 * 60 * 1000,
+  })
+  const { data: voiceAiData, isLoading: loadingVoiceAi } = useQuery({
+    queryKey: ['voice-ai-prompts', clientId],
+    queryFn:  () => didService.getVoiceAiPrompts(),
+  })
+  const { data: confData, isLoading: loadingConf } = useQuery({
+    queryKey: ['conferencing-list', clientId],
+    queryFn:  () => didService.getConferencing(),
   })
 
   // Build dest types from API data
@@ -328,6 +450,21 @@ export function DidForm() {
   const departments: DeptItem[] = Array.isArray(deptRaw)
     ? (deptRaw as DeptItem[])
     : ((deptRaw as { data?: DeptItem[] })?.data ?? [])
+
+  const pcRaw = (phoneCountryData as { data?: unknown })?.data
+  const phoneCountries: CountryItem[] = Array.isArray(pcRaw)
+    ? (pcRaw as CountryItem[])
+    : ((pcRaw as { data?: CountryItem[] })?.data ?? [])
+
+  const vaRaw = (voiceAiData as { data?: unknown })?.data
+  const voiceAiList: PromptItem[] = Array.isArray(vaRaw)
+    ? (vaRaw as PromptItem[])
+    : ((vaRaw as { data?: PromptItem[] })?.data ?? [])
+
+  const cfRaw = (confData as { data?: unknown })?.data
+  const conferencing: ConfItem[] = Array.isArray(cfRaw)
+    ? (cfRaw as ConfItem[])
+    : ((cfRaw as { data?: ConfItem[] })?.data ?? [])
 
   // ── Populate form on edit ────────────────────────────────────────────────────
   useEffect(() => {
@@ -408,38 +545,59 @@ export function DidForm() {
     const resolvedSmsUserId = String(d.assigned_user_id ?? d.sms_email ?? '')
 
     const deptId = String(d.call_time_department_id ?? '')
-    const rawAudioOpt = String(d.ivr_audio_option ?? '')
-    const screeningMode = ['upload', 'speech'].includes(rawAudioOpt) ? rawAudioOpt : 'ivr'
+
+    const toFaxArr = (v: unknown): string[] => {
+      if (Array.isArray(v)) return v.map(String).filter(Boolean)
+      if (typeof v === 'string' && v.length > 0) return v.split(',').map(s => s.trim()).filter(Boolean)
+      return []
+    }
+
+    const rawScreening = String(d.ivr_audio_option ?? '')
+    const rawPromptOpt = Number(d.prompt_option ?? 0)
+    const screeningModeFinal: string = ['upload','speech','ivr','record'].includes(rawScreening)
+      ? rawScreening
+      : (rawPromptOpt === 2 ? 'record' : rawPromptOpt === 1 ? 'speech' : 'ivr')
 
     setForm({
-      cli:            String(d.cli            ?? ''),
-      cnam:           String(d.cnam           ?? ''),
-      dest_type:      mainDestType,
-      extension:      resolveExtension(rawExt),
-      ivr_id:         resolvedIvrId,
-      voicemail_id:   resolveExtension(rawVm),
-      ingroup:        resolvedIngroup,
-      forward_number: resolvedForward,
-      operator:       String(d.operator       ?? d.voip_provider ?? ''),
-      sms:            toBool(d.sms ?? d.is_sms ?? d.sms_enabled),
-      sms_user_id:    resolvedSmsUserId,
-      default_did:    toBool(d.default_did ?? d.is_default ?? d.default),
+      cli:              String(d.cli              ?? ''),
+      cnam:             String(d.cnam             ?? ''),
+      country_code_cli: String(d.country_code_cli ?? d.country_code ?? '1'),
+      dest_type:        mainDestType,
+      extension:        resolveExtension(rawExt),
+      ivr_id:           resolvedIvrId,
+      voicemail_id:     resolveExtension(rawVm),
+      ingroup:          resolvedIngroup,
+      forward_number:   resolvedForward,
+      country_code:     String(d.country_code ?? '1'),
+      voice_ai:         String(d.voice_ai ?? (mainDestType === 'voice_ai'   ? dest : '') ?? ''),
+      conf_id:          String(d.conf_id  ?? (mainDestType === 'conference' ? dest : '') ?? ''),
+      fax_did:          toFaxArr(d.fax_did ?? (mainDestType === 'fax' ? dest : null)),
+      operator:         String(d.operator       ?? d.voip_provider ?? ''),
+      sms:              toBool(d.sms ?? d.is_sms ?? d.sms_enabled),
+      sms_type:         toBool(d.sms_type),
+      sms_user_id:      resolvedSmsUserId,
+      default_did:      toBool(d.default_did ?? d.is_default ?? d.default),
+      set_exclusive_for_user: toBool(d.set_exclusive_for_user),
       call_time_enabled:       deptId && deptId !== '0' ? 1 : 0,
       call_time_department_id: deptId === '0' ? '' : deptId,
       call_time_holiday:       toBool(d.call_time_holiday),
       call_screening_status:   toBool(d.call_screening_status),
-      call_screening_mode:     screeningMode,
+      call_screening_mode:     screeningModeFinal,
       call_screening_ivr_id:   String(d.call_screening_ivr_id ?? ''),
       speech_text:             String(d.speech_text   ?? ''),
       language:                String(d.language      ?? 'en-US'),
       voice_name:              String(d.voice_name    ?? 'Joanna'),
       redirect_last_agent:     toBool(d.redirect_last_agent),
-      dest_type_ooh:      oohDestType,
-      extension_ooh:      resolveExtension(rawExtOoh),
-      ivr_id_ooh:         String(d.ivr_id_ooh         ?? ''),
-      voicemail_id_ooh:   resolveExtension(rawVmOoh),
-      ingroup_ooh:        resolveRg(d.ingroup_ooh),
-      forward_number_ooh: String(d.forward_number_ooh ?? ''),
+      dest_type_ooh:        oohDestType,
+      extension_ooh:        resolveExtension(rawExtOoh),
+      ivr_id_ooh:           String(d.ivr_id_ooh         ?? ''),
+      voicemail_id_ooh:     resolveExtension(rawVmOoh),
+      ingroup_ooh:          resolveRg(d.ingroup_ooh),
+      forward_number_ooh:   String(d.forward_number_ooh ?? ''),
+      country_code_ooh:     String(d.country_code_ooh ?? '1'),
+      voice_ai_ooh:         String(d.voice_ai_ooh ?? ''),
+      conf_id_ooh:          String(d.conf_id_ooh  ?? ''),
+      fax_did_ooh:          toFaxArr(d.fax_did_ooh),
     })
     didPopulateForId.current = id
     setFormPopulated(true)
@@ -465,15 +623,19 @@ export function DidForm() {
 
       const payload: Record<string, unknown> = {
         cli: cliValue, cnam: form.cnam,
-        area_code: '', country_code: '',
+        area_code: '',
+        country_code_cli: form.country_code_cli,
 
         dest_type:      destNum,
-        ivr_id:         destNum === 0 ? form.ivr_id             : '',
-        extension:      destNum === 1 ? toExtNum(form.extension)      : '',
-        voicemail_id:   destNum === 2 ? toExtNum(form.voicemail_id)   : '',
-        forward_number: destNum === 4 ? form.forward_number : '',
-        conf_id:        '',
-        ingroup:        destNum === 8 ? form.ingroup         : '',
+        ivr_id:         destNum === 0  ? form.ivr_id                   : '',
+        extension:      destNum === 1  ? toExtNum(form.extension)      : '',
+        voicemail_id:   destNum === 2  ? toExtNum(form.voicemail_id)   : '',
+        forward_number: destNum === 4  ? form.forward_number           : '',
+        country_code:   destNum === 4  ? form.country_code             : '',
+        conf_id:        destNum === 5  ? form.conf_id                  : '',
+        fax_did:        destNum === 6  ? form.fax_did                  : [],
+        ingroup:        destNum === 8  ? form.ingroup                  : '',
+        voice_ai:       destNum === 12 ? form.voice_ai                 : '',
 
         operator:         form.operator,
         operator_check:   form.operator,
@@ -483,8 +645,9 @@ export function DidForm() {
         sms: form.sms, is_sms: form.sms,
         sms_phone: '',
         sms_email: form.sms ? form.sms_user_id : '',
-        sms_type: 0,
+        sms_type: form.sms_type,
         default_did: form.default_did,
+        set_exclusive_for_user: form.set_exclusive_for_user,
 
         call_screening_status: form.call_screening_status,
         call_screening_ivr_id: form.call_screening_status && oohEnabled && form.call_screening_mode === 'ivr'
@@ -493,26 +656,38 @@ export function DidForm() {
         speech_text:  form.call_screening_status && oohEnabled && form.call_screening_mode === 'speech' ? form.speech_text  : '',
         language:     form.call_screening_status && oohEnabled && form.call_screening_mode === 'speech' ? form.language     : '',
         voice_name:   form.call_screening_status && oohEnabled && form.call_screening_mode === 'speech' ? form.voice_name   : '',
-        prompt_option: 0,
+        prompt_option: form.call_screening_status && oohEnabled && form.call_screening_mode === 'record' ? 2
+                       : form.call_screening_status && oohEnabled && form.call_screening_mode === 'speech' ? 1
+                       : 0,
 
         redirect_last_agent: form.redirect_last_agent,
 
         dest_type_ooh:      oohEnabled ? destNumOoh : 1,
-        ivr_id_ooh:         oohEnabled && destNumOoh === 0 ? form.ivr_id_ooh         : '',
-        extension_ooh:      oohEnabled && destNumOoh === 1 ? toExtNum(form.extension_ooh)    : '',
-        voicemail_id_ooh:   oohEnabled && destNumOoh === 2 ? toExtNum(form.voicemail_id_ooh) : '',
-        forward_number_ooh: oohEnabled && destNumOoh === 4 ? form.forward_number_ooh : '',
-        conf_id_ooh:        '',
-        ingroup_ooh:        oohEnabled && destNumOoh === 8 ? form.ingroup_ooh : '',
+        ivr_id_ooh:         oohEnabled && destNumOoh === 0  ? form.ivr_id_ooh                   : '',
+        extension_ooh:      oohEnabled && destNumOoh === 1  ? toExtNum(form.extension_ooh)      : '',
+        voicemail_id_ooh:   oohEnabled && destNumOoh === 2  ? toExtNum(form.voicemail_id_ooh)   : '',
+        forward_number_ooh: oohEnabled && destNumOoh === 4  ? form.forward_number_ooh           : '',
+        country_code_ooh:   oohEnabled && destNumOoh === 4  ? form.country_code_ooh             : '',
+        conf_id_ooh:        oohEnabled && destNumOoh === 5  ? form.conf_id_ooh                  : '',
+        fax_did_ooh:        oohEnabled && destNumOoh === 6  ? form.fax_did_ooh                  : [],
+        ingroup_ooh:        oohEnabled && destNumOoh === 8  ? form.ingroup_ooh                  : '',
+        voice_ai_ooh:       oohEnabled && destNumOoh === 12 ? form.voice_ai_ooh                 : '',
 
         call_time_department_id: form.call_time_enabled ? form.call_time_department_id : 0,
         call_time_holiday:       form.call_time_enabled ? form.call_time_holiday        : 0,
       }
       if (isEdit) payload.did_id = Number(id)
 
-      if (form.call_screening_status && oohEnabled && form.call_screening_mode === 'upload' && audioFile) {
+      const sendingAudio = form.call_screening_status && oohEnabled
+        && (form.call_screening_mode === 'upload' || form.call_screening_mode === 'record')
+        && audioFile
+
+      if (sendingAudio) {
         const fd = new FormData()
-        Object.entries(payload).forEach(([k, v]) => fd.append(k, String(v ?? '')))
+        Object.entries(payload).forEach(([k, v]) => {
+          if (Array.isArray(v)) v.forEach(item => fd.append(`${k}[]`, String(item)))
+          else fd.append(k, String(v ?? ''))
+        })
         fd.append('audio_file', audioFile)
         return isEdit ? didService.update(fd) : didService.create(fd)
       }
@@ -549,10 +724,18 @@ export function DidForm() {
   const set = (key: keyof FormState, value: unknown) => setForm(f => ({ ...f, [key]: value }))
 
   const switchDestType = (val: string) =>
-    setForm(f => ({ ...f, dest_type: val, extension: '', ivr_id: '', voicemail_id: '', ingroup: '', forward_number: '' }))
+    setForm(f => ({
+      ...f, dest_type: val,
+      extension: '', ivr_id: '', voicemail_id: '', ingroup: '', forward_number: '',
+      voice_ai: '', conf_id: '', fax_did: [],
+    }))
 
   const switchDestTypeOoh = (val: string) =>
-    setForm(f => ({ ...f, dest_type_ooh: val, extension_ooh: '', ivr_id_ooh: '', voicemail_id_ooh: '', ingroup_ooh: '', forward_number_ooh: '' }))
+    setForm(f => ({
+      ...f, dest_type_ooh: val,
+      extension_ooh: '', ivr_id_ooh: '', voicemail_id_ooh: '', ingroup_ooh: '', forward_number_ooh: '',
+      voice_ai_ooh: '', conf_id_ooh: '', fax_did_ooh: [],
+    }))
 
   function handleSave() {
     if (!isEdit) {
@@ -564,10 +747,13 @@ export function DidForm() {
     }
     if (!form.operator)    { toast.error('Please select a VoIP provider.'); return }
     if (!form.redirect_last_agent) {
-      if (form.dest_type === 'extension' && !form.extension)            { toast.error('Please select a target extension.'); return }
-      if (form.dest_type === 'ivr'       && !form.ivr_id)               { toast.error('Please select an IVR.'); return }
-      if (form.dest_type === 'queue'     && !form.ingroup)              { toast.error('Please select a ring group / queue.'); return }
-      if (form.dest_type === 'voicemail' && !form.voicemail_id)         { toast.error('Please select an extension for voicemail.'); return }
+      if (form.dest_type === 'extension'  && !form.extension)            { toast.error('Please select a target extension.'); return }
+      if (form.dest_type === 'ivr'        && !form.ivr_id)               { toast.error('Please select an IVR.'); return }
+      if (form.dest_type === 'queue'      && !form.ingroup)              { toast.error('Please select a ring group / queue.'); return }
+      if (form.dest_type === 'voicemail'  && !form.voicemail_id)         { toast.error('Please select an extension for voicemail.'); return }
+      if (form.dest_type === 'conference' && !form.conf_id)              { toast.error('Please select a conference bridge.'); return }
+      if (form.dest_type === 'voice_ai'   && !form.voice_ai)             { toast.error('Please select a Voice AI prompt.'); return }
+      if (form.dest_type === 'fax'        && form.fax_did.length === 0)  { toast.error('Please select at least one fax recipient.'); return }
       if (form.dest_type === 'external') {
         if (!form.forward_number.trim()) { toast.error('Please enter the external forward number.'); return }
         if (form.forward_number.replace(/\D/g, '').length !== 10) { toast.error('External number must be exactly 10 digits.'); return }
@@ -584,6 +770,9 @@ export function DidForm() {
       }
       if (form.call_screening_mode === 'upload' && !audioFile && !isEdit) {
         toast.error('Please upload an audio file for call screening.'); return
+      }
+      if (form.call_screening_mode === 'record' && !audioFile && !isEdit) {
+        toast.error('Please record an audio clip for call screening.'); return
       }
       if (form.call_screening_mode === 'speech' && !form.speech_text.trim()) {
         toast.error('Please enter the screening message text.'); return
@@ -651,6 +840,22 @@ export function DidForm() {
                 <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
               </div>
               <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div style={{ flex: '0 0 160px' }}>
+                  <label style={LBL}>Country Code</label>
+                  <select
+                    className={cn('cpn-fi', isEdit && '!opacity-45 !cursor-not-allowed')}
+                    value={form.country_code_cli}
+                    onChange={e => set('country_code_cli', e.target.value)}
+                    disabled={isEdit}
+                  >
+                    {phoneCountries.length === 0 && <option value="1">United States (+1)</option>}
+                    {phoneCountries.map(c => (
+                      <option key={c.country_name + c.phone_code} value={c.phone_code}>
+                        {c.country_name} (+{c.phone_code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div style={{ flex: '1 1 0' }}>
                   <label style={LBL}>Phone Number (CLI) <span className="text-red-400">*</span></label>
                   <input
@@ -721,8 +926,12 @@ export function DidForm() {
                     extension={form.extension} ivr_id={form.ivr_id}
                     voicemail_id={form.voicemail_id} ingroup={form.ingroup}
                     forward_number={form.forward_number}
+                    voice_ai={form.voice_ai} conf_id={form.conf_id}
+                    fax_did={form.fax_did} country_code={form.country_code}
                     extensions={extensions} ivrs={ivrs} ringGroups={ringGroups}
+                    voiceAiList={voiceAiList} conferencing={conferencing} phoneCountries={phoneCountries}
                     loadingIvrs={loadingIvrs} loadingRingGroups={loadingRingGroups}
+                    loadingVoiceAi={loadingVoiceAi} loadingConf={loadingConf}
                     onChange={(key, val) => set(key as keyof FormState, val)}
                   />
                 </div>
@@ -798,6 +1007,7 @@ export function DidForm() {
                       { value: 'ivr',    label: 'Use IVR',      Icon: GitBranch },
                       { value: 'upload', label: 'Upload Audio',  Icon: Upload },
                       { value: 'speech', label: 'Text-to-Audio', Icon: Mic },
+                      { value: 'record', label: 'Record Mic',    Icon: Mic },
                     ] as const).map(m => (
                       <button
                         key={m.value}
@@ -854,6 +1064,74 @@ export function DidForm() {
                     </label>
                     <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'block' }}>
                       {isEdit ? 'Leave empty to keep existing audio. Upload to replace.' : 'Audio played when call connects to this number.'}
+                    </span>
+                  </div>
+                )}
+
+                {form.call_screening_mode === 'record' && (
+                  <div className="cpn-reveal space-y-2" style={{ maxWidth: 480 }}>
+                    <label style={LBL}>Record Audio {!isEdit && !audioFile && <span className="text-red-400">*</span>}</label>
+                    <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white">
+                      {!isRecording ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                              const mr = new MediaRecorder(stream)
+                              recordChunksRef.current = []
+                              mr.ondataavailable = e => { if (e.data.size > 0) recordChunksRef.current.push(e.data) }
+                              mr.onstop = () => {
+                                const blob = new Blob(recordChunksRef.current, { type: 'audio/webm' })
+                                if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+                                setRecordedUrl(URL.createObjectURL(blob))
+                                const file = new File([blob], `screening-${Date.now()}.webm`, { type: 'audio/webm' })
+                                setAudioFile(file)
+                                stream.getTracks().forEach(t => t.stop())
+                              }
+                              mediaRecorderRef.current = mr
+                              mr.start()
+                              setIsRecording(true)
+                            } catch {
+                              toast.error('Microphone permission denied or unavailable.')
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-red-600 transition-colors"
+                        >
+                          <Mic size={12} /> Start Recording
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            mediaRecorderRef.current?.stop()
+                            mediaRecorderRef.current = null
+                            setIsRecording(false)
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-slate-800 transition-colors"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" /> Stop
+                        </button>
+                      )}
+                      {recordedUrl && !isRecording && (
+                        <>
+                          <audio src={recordedUrl} controls style={{ height: 32, flex: 1 }} />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+                              setRecordedUrl(null)
+                              setAudioFile(null)
+                            }}
+                            className="text-slate-400 hover:text-red-500 text-xs"
+                          >
+                            Clear
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>
+                      Recorded audio is uploaded the same way as a chosen file
                     </span>
                   </div>
                 )}
@@ -925,8 +1203,12 @@ export function DidForm() {
                     extension={form.extension_ooh} ivr_id={form.ivr_id_ooh}
                     voicemail_id={form.voicemail_id_ooh} ingroup={form.ingroup_ooh}
                     forward_number={form.forward_number_ooh}
+                    voice_ai={form.voice_ai_ooh} conf_id={form.conf_id_ooh}
+                    fax_did={form.fax_did_ooh} country_code={form.country_code_ooh}
                     extensions={extensions} ivrs={ivrs} ringGroups={ringGroups}
+                    voiceAiList={voiceAiList} conferencing={conferencing} phoneCountries={phoneCountries}
                     loadingIvrs={loadingIvrs} loadingRingGroups={loadingRingGroups}
+                    loadingVoiceAi={loadingVoiceAi} loadingConf={loadingConf}
                     onChange={(key, val) => set(`${key}_ooh` as keyof FormState, val)}
                   />
                 </div>
@@ -958,10 +1240,24 @@ export function DidForm() {
               </div>
             </div>
             <div>
+              <label style={LBL}>Enable SMS AI</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.sms_type && 'active')} style={{ flex: 1, ...(!form.sms_type ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('sms_type', 0)}>Off</button>
+                <button type="button" className={cn(Boolean(form.sms_type) && 'active')} style={{ flex: 1, ...(form.sms_type ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('sms_type', 1)}>On</button>
+              </div>
+            </div>
+            <div>
               <label style={LBL}>Default DID</label>
               <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
                 <button type="button" className={cn(!form.default_did && 'active')} style={{ flex: 1, ...(!form.default_did ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('default_did', 0)}>Off</button>
                 <button type="button" className={cn(Boolean(form.default_did) && 'active')} style={{ flex: 1, ...(form.default_did ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('default_did', 1)}>On</button>
+              </div>
+            </div>
+            <div>
+              <label style={LBL}>Exclusive For User</label>
+              <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                <button type="button" className={cn(!form.set_exclusive_for_user && 'active')} style={{ flex: 1, ...(!form.set_exclusive_for_user ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('set_exclusive_for_user', 0)}>No</button>
+                <button type="button" className={cn(Boolean(form.set_exclusive_for_user) && 'active')} style={{ flex: 1, ...(form.set_exclusive_for_user ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => set('set_exclusive_for_user', 1)}>Yes</button>
               </div>
             </div>
             <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />

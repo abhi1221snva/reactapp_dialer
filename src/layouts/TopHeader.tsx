@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Building2, Clock, Trash2, Wallet } from 'lucide-react'
+import { Bell, Menu, Phone, Target, User, LogOut, Camera, ChevronDown, Building2, Clock, Trash2, Coins } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../hooks/useAuth'
@@ -108,41 +108,47 @@ function LiveClock({ timezone }: { timezone?: string }) {
   )
 }
 
-// ─── Wallet balance badge ────────────────────────────────────────────────────
-function WalletBadge() {
+// ─── Credits remaining badge ─────────────────────────────────────────────────
+function CreditsBadge() {
   const navigate = useNavigate()
   const { data, isLoading } = useQuery({
-    queryKey: ['wallet-balance-header'],
-    queryFn: () => billingService.getWalletBalance(),
-    refetchInterval: 60_000, // refresh every 60s
+    queryKey: ['billing-credits'],
+    queryFn: billingService.getCredits,
+    refetchInterval: 60_000,
     staleTime: 30_000,
   })
 
-  const balance = (data?.data as Record<string, unknown>)?.data
-    ? ((data?.data as Record<string, unknown>).data as { balance: number }).balance
-    : null
+  const raw = data?.data?.data?.total
+  if (isLoading || raw === undefined || raw === null) return null
 
-  if (isLoading || balance === null || balance === undefined) return null
-
-  const dollars = balance.toFixed(2)
-  const isLow = balance < 5 // below $5
+  const total = Number(raw)
+  const bonus = Number(data?.data?.data?.bonus ?? 0)
+  const wallet = Number(data?.data?.data?.wallet ?? 0)
+  const formatted = total.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  const isLow = total < 10
 
   return (
     <button
       onClick={() => navigate('/billing')}
-      title="Wallet Balance — Click to manage billing"
+      title={`Credits left — Bonus: ${bonus.toFixed(2)} · Wallet: ${wallet.toFixed(2)}\nClick to manage billing`}
       className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer select-none transition-all duration-200 hover:scale-[1.03]"
       style={{
         background: isLow ? '#fef2f2' : '#f0fdf4',
         border: `1px solid ${isLow ? '#fecaca' : '#bbf7d0'}`,
       }}
     >
-      <Wallet size={13} className="flex-shrink-0" style={{ color: isLow ? '#ef4444' : '#16a34a' }} />
+      <Coins size={13} className="flex-shrink-0" style={{ color: isLow ? '#ef4444' : '#16a34a' }} />
       <span
         className="text-[12px] font-semibold tabular-nums"
         style={{ color: isLow ? '#dc2626' : '#15803d' }}
       >
-        ${dollars}
+        {formatted}
+      </span>
+      <span
+        className="text-[10px] font-medium uppercase tracking-wide"
+        style={{ color: isLow ? '#b91c1c' : '#15803d', opacity: 0.75 }}
+      >
+        credits
       </span>
     </button>
   )
@@ -287,8 +293,8 @@ export function TopHeader() {
           </>
         )}
 
-        {/* Wallet Balance — hidden for agents/associates (level < 7) */}
-        {user && user.level >= 7 && <WalletBadge />}
+        {/* Credits Left — hidden for agents/associates (level < 7) */}
+        {user && user.level >= 7 && <CreditsBadge />}
 
         {/* Live Clock */}
         <LiveClock timezone={user?.timezone} />

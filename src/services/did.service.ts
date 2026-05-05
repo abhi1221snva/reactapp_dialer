@@ -80,4 +80,13 @@ export const didService = {
 
   getDepartments: () =>
     api.post('/get-department-list', {}),
+
+  getPhoneCountries: () =>
+    api.post('/phone-country-list', {}),
+
+  getVoiceAiPrompts: () =>
+    api.get('/view-voice-ai'),
+
+  getConferencing: () =>
+    api.post('/conferencing', { start: 0, limit: 200 }),
 }

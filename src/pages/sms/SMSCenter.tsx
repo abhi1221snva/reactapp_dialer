@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Send, MessageSquare, Phone, Loader2 } from 'lucide-react'
+import { Send, MessageSquare, Phone, Loader2, MessageSquarePlus, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { smsService } from '../../services/sms.service'
 import { formatPhoneNumber, timeAgo } from '../../utils/format'
 import { cn } from '../../utils/cn'
@@ -22,6 +23,9 @@ export function SMSCenter() {
   const [selectedDidNumber, setSelectedDidNumber] = useState<string | null>(null)
   const [selectedContact, setSelectedContact] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState('')
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeTo, setComposeTo] = useState('')
+  const [composeBody, setComposeBody] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   void user
@@ -51,6 +55,36 @@ export function SMSCenter() {
       refetchConversations()
     },
   })
+
+  const composeMutation = useMutation({
+    mutationFn: (vars: { to: string; message: string }) =>
+      smsService.send({ from: selectedDidNumber!, to: vars.to, message: vars.message }),
+    onSuccess: (_, vars) => {
+      toast.success('Message sent')
+      setShowCompose(false)
+      setComposeTo('')
+      setComposeBody('')
+      setSelectedContact(vars.to)
+      refetchConversations()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send message'
+      toast.error(msg)
+    },
+  })
+
+  const handleCompose = () => {
+    const digits = composeTo.replace(/\D/g, '')
+    if (digits.length < 10 || digits.length > 15) {
+      toast.error('Enter a valid phone number (10–15 digits)')
+      return
+    }
+    if (!composeBody.trim()) {
+      toast.error('Message cannot be empty')
+      return
+    }
+    composeMutation.mutate({ to: digits, message: composeBody.trim() })
+  }
 
   // Refetch thread + conversations whenever a new inbound SMS Pusher event fires
   useEffect(() => {
@@ -86,6 +120,16 @@ export function SMSCenter() {
           <h1 className="text-xl font-bold text-slate-900">SMS Center</h1>
           <p className="text-sm text-slate-500">Manage your SMS conversations</p>
         </div>
+        <button
+          onClick={() => setShowCompose(true)}
+          disabled={!selectedDid}
+          title={selectedDid ? 'Send a message to a new number' : 'Select a number on the left first'}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:shadow-md"
+          style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+        >
+          <MessageSquarePlus size={16} />
+          New Message
+        </button>
       </div>
 
       {/* 3-column layout */}
@@ -192,6 +236,77 @@ export function SMSCenter() {
             ))}
           </div>
         </div>
+
+        {/* Compose new message modal */}
+        {showCompose && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onClick={() => setShowCompose(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-900">New Message</h2>
+                <button
+                  onClick={() => setShowCompose(false)}
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">From</label>
+                  <div className="px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-mono text-slate-700">
+                    {selectedDidNumber ? formatPhoneNumber(selectedDidNumber) : 'No number selected'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">To</label>
+                  <input
+                    type="tel"
+                    autoFocus
+                    value={composeTo}
+                    onChange={(e) => setComposeTo(e.target.value)}
+                    placeholder="+1 555 123 4567"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Country code optional — digits only will be sent</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Message</label>
+                  <textarea
+                    rows={4}
+                    value={composeBody}
+                    onChange={(e) => setComposeBody(e.target.value)}
+                    placeholder="Type your message…"
+                    className="w-full resize-none px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+                  />
+                </div>
+              </div>
+              <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setShowCompose(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCompose}
+                  disabled={composeMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm disabled:opacity-50 transition-all hover:shadow-md"
+                  style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+                >
+                  {composeMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Message thread */}
         <div className="flex-1 bg-white flex flex-col overflow-hidden">
