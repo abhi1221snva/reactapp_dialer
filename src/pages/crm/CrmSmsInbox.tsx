@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { crmService } from '../../services/crm.service'
+import { useNotificationStore } from '../../stores/notification.store'
 import type { SmsConversation, SmsMessage, SmsAgent } from '../../types/crm.types'
 import { formatPartialPhoneUS, formatPhoneNumber, toE164 } from '../../utils/format'
 
@@ -391,6 +392,7 @@ function AgentAssignDropdown({ agents, currentAgentId, onAssign }: {
 
 export function CrmSmsInbox() {
   const qc = useQueryClient()
+  const lastSmsAt = useNotificationStore((s) => s.lastSmsAt)
   const [activeId, setActiveId]           = useState<number | null>(null)
   const [statusFilter, setStatusFilter]   = useState<'open' | 'closed' | 'archived' | ''>('')
   const [agentFilter, setAgentFilter]     = useState<number | ''>('')
@@ -424,7 +426,7 @@ export function CrmSmsInbox() {
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(agentFilter  ? { agent_id: agentFilter as number } : {}),
     }).then(r => r.data.data),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000, // fallback polling; Pusher handles instant updates
   })
 
   const conversations: SmsConversation[] = convsData?.data ?? []
@@ -433,8 +435,17 @@ export function CrmSmsInbox() {
     queryKey: ['sms-messages', activeId],
     queryFn:  () => crmService.getSmsMessages(activeId!).then(r => r.data.data.messages as SmsMessage[]),
     enabled:  activeId != null,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000, // fallback polling; Pusher handles instant updates
   })
+
+  // Realtime: refetch conversations + messages instantly when Pusher fires
+  useEffect(() => {
+    if (!lastSmsAt) return
+    qc.invalidateQueries({ queryKey: ['sms-conversations'] })
+    if (activeId != null) {
+      qc.invalidateQueries({ queryKey: ['sms-messages', activeId] })
+    }
+  }, [lastSmsAt])
 
   const sendMsg = useMutation({
     mutationFn: () => crmService.sendSmsMessageFrom(activeId!, body, fromNumber || undefined),

@@ -17,6 +17,7 @@ export function usePusher() {
       cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER || 'mt1',
     })
 
+    // Generic channel (calls, legacy events)
     const channelName = import.meta.env.VITE_PUSHER_CHANNEL || 'my-channel'
     const eventName = import.meta.env.VITE_PUSHER_EVENT || 'my-event'
     const channel = pusher.subscribe(channelName)
@@ -47,11 +48,23 @@ export function usePusher() {
       }
     })
 
+    // SMS-specific channel: sms-{parent_id}
+    // Backend broadcasts here on every inbound SMS for this client
+    const parentId = user.parent_id ?? user.id
+    const smsChannelName = `sms-${parentId}`
+    const smsChannel = pusher.subscribe(smsChannelName)
+
+    smsChannel.bind('new-message', () => {
+      incrementSms()
+    })
+
     pusherRef.current = pusher
 
     return () => {
       channel.unbind_all()
       pusher.unsubscribe(channelName)
+      smsChannel.unbind_all()
+      pusher.unsubscribe(smsChannelName)
       pusher.disconnect()
     }
   }, [user?.id])
