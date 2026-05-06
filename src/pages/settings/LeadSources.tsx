@@ -25,6 +25,7 @@ interface LeadSourceItem {
   notify_email?: boolean
   notify_sms?: boolean
   notify_user_ids?: number[]
+  assign_user_ids?: number[]
   created_at?: string
   updated_at?: string
   [key: string]: unknown
@@ -195,6 +196,11 @@ function WebhookModal({
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
   const [userSearch, setUserSearch] = useState('')
 
+  // Assign users state
+  const [assignUserIds, setAssignUserIds] = useState<number[]>(source.assign_user_ids ?? [])
+  const [assignDropdownOpen, setAssignDropdownOpen] = useState(false)
+  const [assignSearch, setAssignSearch] = useState('')
+
   // Load all users (including admins) for notification dropdown
   const { data: usersData } = useQuery({
     queryKey: ['all-users-for-notify'],
@@ -213,6 +219,13 @@ function WebhookModal({
     setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  const filteredAssignUsers = allUsers.filter(u =>
+    `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(assignSearch.toLowerCase())
+  )
+  const toggleAssignUser = (id: number) => {
+    setAssignUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   const saveNotifyMutation = useMutation({
     mutationFn: () => leadSourceService.update(source.id, {
       source_title: source.source_title,
@@ -220,9 +233,10 @@ function WebhookModal({
       notify_email: notifyEmail,
       notify_sms: notifySms,
       notify_user_ids: selectedUserIds,
+      assign_user_ids: assignUserIds,
     }),
-    onSuccess: () => { toast.success('Notification settings saved'); onUpdated() },
-    onError: () => toast.error('Failed to save notification settings'),
+    onSuccess: () => { toast.success('Settings saved'); onUpdated() },
+    onError: () => toast.error('Failed to save settings'),
   })
 
   // Load configured fields for this source
@@ -274,7 +288,7 @@ function WebhookModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -449,12 +463,73 @@ function WebhookModal({
             </div>
           )}
 
+          {/* Assign Leads To dropdown — always visible */}
+          <div className="relative">
+            <label className="text-xs font-medium text-slate-600 mb-0.5 block">Assign Leads To</label>
+            <p className="text-[10px] text-slate-400 mb-1">Auto-assign incoming leads to selected users (round-robin)</p>
+            <button type="button" onClick={() => setAssignDropdownOpen(o => !o)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+            >
+              <span className={assignUserIds.length > 0 ? 'text-slate-800 text-xs' : 'text-slate-400 text-xs'}>
+                {assignUserIds.length > 0
+                  ? `${assignUserIds.length} user${assignUserIds.length > 1 ? 's' : ''} selected`
+                  : 'Select users to assign leads...'}
+              </span>
+              <ChevronDown size={14} className="text-slate-400" />
+            </button>
+
+            {/* Selected assign user chips */}
+            {assignUserIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {assignUserIds.map(uid => {
+                  const u = allUsers.find(x => x.id === uid)
+                  return u ? (
+                    <span key={uid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-medium">
+                      {u.first_name} {u.last_name}
+                      <button type="button" onClick={() => toggleAssignUser(uid)} className="hover:text-emerald-900">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ) : null
+                })}
+              </div>
+            )}
+
+            {assignDropdownOpen && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-hidden">
+                <div className="p-2 border-b border-slate-100">
+                  <input autoFocus value={assignSearch} onChange={e => setAssignSearch(e.target.value)}
+                    placeholder="Search users..."
+                    className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                <div className="overflow-y-auto max-h-44">
+                  {filteredAssignUsers.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-slate-400">No users found</p>
+                  ) : filteredAssignUsers.map(u => {
+                    const checked = assignUserIds.includes(u.id)
+                    return (
+                      <button key={u.id} type="button" onClick={() => toggleAssignUser(u.id)}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 transition-colors flex items-center gap-2 ${checked ? 'bg-indigo-50' : ''}`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                          {checked && <Check size={10} className="text-white" />}
+                        </div>
+                        <span className="text-slate-700">{u.first_name} {u.last_name}</span>
+                        <span className="text-slate-400 ml-auto">{u.email}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Save button */}
           <div className="flex justify-end">
             <button onClick={() => saveNotifyMutation.mutate()} disabled={saveNotifyMutation.isPending}
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
             >
-              {saveNotifyMutation.isPending ? 'Saving…' : 'Save Alert Settings'}
+              {saveNotifyMutation.isPending ? 'Saving…' : 'Save Settings'}
             </button>
           </div>
         </div>
