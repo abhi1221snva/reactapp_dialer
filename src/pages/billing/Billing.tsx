@@ -4,7 +4,7 @@ import {
   CreditCard, Wallet, Users, Plus, Minus as MinusIcon,
   Activity, Coins, History,
   FileText, Trash2, Star, ExternalLink,
-  Loader2, Search, X,
+  Loader2, Search, X, Zap, Save,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -14,6 +14,8 @@ import {
   type SubscriptionPlan,
   type PaymentMethod,
   type Invoice,
+  type ProviderMode,
+  type AutoRechargeSettings,
 } from '../../services/billing.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { Badge } from '../../components/ui/Badge'
@@ -21,8 +23,9 @@ import { formatDate, formatDateTime, timeAgo } from '../../utils/format'
 import { TopUpModal } from './TopUpModal'
 import { AddCardModal } from './AddCardModal'
 
-const TABS = ['Overview', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
-type Tab = typeof TABS[number]
+const ALL_TABS = ['Overview', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
+const BYOC_TABS = ['Overview', 'Payment Methods', 'Invoices'] as const
+type Tab = typeof ALL_TABS[number]
 
 const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'yellow' | 'red' | 'gray'> = {
   active: 'green',
@@ -116,6 +119,13 @@ export function Billing() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to remove card'),
   })
 
+  const { data: autoRechargeRes } = useQuery({
+    queryKey: ['billing-auto-recharge'],
+    queryFn: billingService.getAutoRecharge,
+    enabled: tab === 'Overview',
+    staleTime: 60_000,
+  })
+
   const { data: plansRes } = useQuery({
     queryKey: ['billing-plans'],
     queryFn: billingService.getPlans,
@@ -144,6 +154,9 @@ export function Billing() {
 
   const sub: Subscription | null = subRes?.data?.data?.subscription ?? null
   const seats = subRes?.data?.data?.seats ?? { purchased: 0, used: 0, available: 0 }
+  const providerMode: ProviderMode = subRes?.data?.data?.provider_mode ?? 'platform'
+  const isByoc = providerMode === 'byoc'
+  const TABS = isByoc ? BYOC_TABS : ALL_TABS
   const wallet = walletRes?.data?.data
   const credits = creditsRes?.data?.data ?? { bonus: '0', wallet: '0', total: '0' }
   const ledger: CreditTransaction[] = ledgerRes?.data?.data?.transactions ?? []
@@ -157,7 +170,9 @@ export function Billing() {
   return (
     <div className="p-6 w-full">
       <h1 className="text-2xl font-bold mb-1">Billing</h1>
-      <p className="text-gray-600 mb-6">Subscription, wallet, and credits.</p>
+      <p className="text-gray-600 mb-6">
+        {isByoc ? 'Subscription and invoices.' : 'Subscription, wallet, and credits.'}
+      </p>
 
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex gap-6">
@@ -273,37 +288,52 @@ export function Billing() {
             )}
           </div>
 
-          {/* Wallet + credits cards */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
-              <div className="flex items-center gap-2 mb-3">
-                <Wallet className="w-5 h-5 text-emerald-600" />
-                <h2 className="text-lg font-semibold">Wallet</h2>
+          {/* Wallet + credits cards — hidden for BYOC */}
+          {!isByoc ? (
+            <div className="space-y-4">
+              <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Wallet className="w-5 h-5 text-emerald-600" />
+                  <h2 className="text-lg font-semibold">Wallet</h2>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">
+                  ${Number(wallet?.balance ?? 0).toFixed(2)}
+                </p>
+                <p className="text-xs text-gray-500 mb-3">Recharge to add credits.</p>
+                <button
+                  onClick={() => setShowTopUp(true)}
+                  className="w-full bg-emerald-600 text-white text-sm py-2 rounded hover:bg-emerald-700"
+                >
+                  Recharge
+                </button>
               </div>
-              <p className="text-3xl font-bold text-gray-900">
-                ${Number(wallet?.balance ?? 0).toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mb-3">Recharge to add credits.</p>
-              <button
-                onClick={() => setShowTopUp(true)}
-                className="w-full bg-emerald-600 text-white text-sm py-2 rounded hover:bg-emerald-700"
-              >
-                Recharge
-              </button>
-            </div>
 
-            <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
-              <div className="flex items-center gap-2 mb-3">
-                <Coins className="w-5 h-5 text-amber-600" />
-                <h2 className="text-lg font-semibold">Credits</h2>
+              <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Coins className="w-5 h-5 text-amber-600" />
+                  <h2 className="text-lg font-semibold">Credits</h2>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">{Number(credits.total).toFixed(2)}</p>
+                <div className="text-xs text-gray-600 mt-1 space-y-0.5">
+                  <div>Bonus: <span className="font-medium">{Number(credits.bonus).toFixed(2)}</span></div>
+                  <div>Wallet: <span className="font-medium">{Number(credits.wallet).toFixed(2)}</span></div>
+                </div>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{Number(credits.total).toFixed(2)}</p>
-              <div className="text-xs text-gray-600 mt-1 space-y-0.5">
-                <div>Bonus: <span className="font-medium">{Number(credits.bonus).toFixed(2)}</span></div>
-                <div>Wallet: <span className="font-medium">{Number(credits.wallet).toFixed(2)}</span></div>
-              </div>
+
+              <AutoRechargeCard
+                settings={autoRechargeRes?.data?.data ?? null}
+                onSaved={() => qc.invalidateQueries({ queryKey: ['billing-auto-recharge'] })}
+              />
             </div>
-          </div>
+          ) : (
+            <div className="bg-blue-50 rounded-lg border border-blue-200 p-5">
+              <h3 className="font-semibold text-blue-900">BYOC Mode</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Your account uses your own provider credentials. Voice, SMS, and DID usage
+                is billed directly by your provider — no platform credits needed.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -634,6 +664,128 @@ function Metric({ label, value, icon: Icon }: { label: string; value: React.Reac
         {Icon && <Icon className="w-3.5 h-3.5" />} {label}
       </div>
       <div className="text-base font-semibold text-gray-900 mt-1">{value}</div>
+    </div>
+  )
+}
+
+function AutoRechargeCard({
+  settings,
+  onSaved,
+}: {
+  settings: AutoRechargeSettings | null
+  onSaved: () => void
+}) {
+  const [enabled, setEnabled] = useState(false)
+  const [threshold, setThreshold] = useState('')
+  const [amount, setAmount] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Sync local state when server data loads
+  useEffect(() => {
+    if (settings) {
+      setEnabled(settings.auto_recharge_enabled)
+      setThreshold(String(Number(settings.auto_recharge_threshold) || ''))
+      setAmount(String(Number(settings.auto_recharge_amount) || ''))
+    }
+  }, [settings])
+
+  const dirty =
+    settings !== null && (
+      enabled !== settings.auto_recharge_enabled ||
+      (enabled && (threshold !== String(Number(settings.auto_recharge_threshold) || '') ||
+        amount !== String(Number(settings.auto_recharge_amount) || '')))
+    )
+
+  const handleSave = async () => {
+    if (!enabled && !settings?.auto_recharge_enabled && !dirty) return
+    setSaving(true)
+    try {
+      await billingService.updateAutoRecharge({
+        auto_recharge_enabled: enabled,
+        auto_recharge_threshold: enabled ? threshold || '0' : '0',
+        auto_recharge_amount: enabled ? amount || '0' : '0',
+      })
+      toast.success('Auto-recharge settings saved.')
+      onSaved()
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Failed to save auto-recharge settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Zap className="w-5 h-5 text-violet-600" />
+          <h2 className="text-lg font-semibold">Auto-Recharge</h2>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => setEnabled(!enabled)}
+          className={
+            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors ' +
+            (enabled ? 'bg-violet-600' : 'bg-gray-200')
+          }
+        >
+          <span
+            className={
+              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform ' +
+              (enabled ? 'translate-x-6' : 'translate-x-1')
+            }
+          />
+        </button>
+      </div>
+
+      {enabled && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs font-medium text-gray-700">When balance falls below (credits)</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value.replace(/[^\d.]/g, ''))}
+              placeholder="50"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-gray-700">Recharge amount (USD)</span>
+            <div className="relative mt-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                placeholder="25"
+                className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+              />
+            </div>
+          </label>
+        </div>
+      )}
+
+      {dirty && (
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-3 w-full flex items-center justify-center gap-2 bg-violet-600 text-white text-sm py-2 rounded hover:bg-violet-700 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save
+        </button>
+      )}
+
+      <p className="text-xs text-gray-500 mt-3">
+        {enabled
+          ? 'Your default card will be charged automatically when your balance drops below the threshold.'
+          : 'Enable to automatically top up your balance when it runs low.'}
+      </p>
     </div>
   )
 }

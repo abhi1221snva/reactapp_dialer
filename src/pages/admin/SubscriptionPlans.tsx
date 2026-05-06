@@ -276,6 +276,19 @@ function GlobalSection() {
         <Field label="Low-balance threshold (credits)" value={merged.low_balance_threshold ?? ''} onChange={(v) => setField('low_balance_threshold', v)} />
         <CheckboxField label="Block calls when balance hits 0" checked={Boolean(merged.block_calls_on_zero_balance)} onChange={(c) => setField('block_calls_on_zero_balance', c as never)} />
       </div>
+
+      <div className="mt-6 pt-4 border-t border-slate-200">
+        <h3 className="text-sm font-semibold text-slate-700 mb-2">Provider Billing Mode</h3>
+        <CheckboxField
+          label="Shadow mode (log BYOC billing decisions without applying them)"
+          checked={Boolean(merged.billing_shadow_mode)}
+          onChange={(c) => setField('billing_shadow_mode', c as never)}
+        />
+        <p className="text-xs text-amber-700 mt-2 ml-6">
+          When disabled, BYOC clients will no longer be charged for voice/SMS/DID usage via platform credits.
+          Only disable after verifying shadow mode logs confirm correct provider classification.
+        </p>
+      </div>
       <div className="mt-4">
         <button
           disabled={!dirty || saveMut.isPending}

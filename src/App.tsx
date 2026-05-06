@@ -148,6 +148,7 @@ import { AdminDidPool } from './pages/admin/AdminDidPool'
 import { SubscriptionPlans } from './pages/admin/SubscriptionPlans'
 import { SystemEmailTemplates } from './pages/admin/SystemEmailTemplates'
 import { SystemMonitor } from './pages/admin/SystemMonitor'
+import { AdminBillingDashboard } from './pages/admin/AdminBillingDashboard'
 import { SwaggerDocs } from './pages/admin/SwaggerDocs'
 import { WorkforceDashboard } from './pages/workforce/WorkforceDashboard'
 import { ShiftManagement } from './pages/workforce/ShiftManagement'
@@ -194,7 +195,12 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 function RootRedirect() {
   const { isAuthenticated } = useAuthStore()
   const engine = useEngineStore(s => s.engine)
-  if (!isAuthenticated) return <AuthLayout><Login /></AuthLayout>
+  const host = window.location.hostname
+  if (host === 'balji.app' || host === 'www.balji.app') return <LandingPageBalji />
+  if (!isAuthenticated) {
+    // On portal.balji.app, show login directly
+    return <AuthLayout><Login /></AuthLayout>
+  }
   return <Navigate to={engine === 'crm' ? '/crm/dashboard' : '/dashboard'} replace />
 }
 
@@ -451,6 +457,7 @@ export default function App() {
           <Route path="/admin/clients" element={<AdminClients />} />
           <Route path="/admin/did-pool" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminDidPool /></RoleGuard>} />
           <Route path="/admin/subscription-plans" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><SubscriptionPlans /></RoleGuard>} />
+          <Route path="/admin/billing-dashboard" element={<RoleGuard minLevel={LEVELS.SUPERADMIN}><AdminBillingDashboard /></RoleGuard>} />
           <Route path="/admin/email-templates" element={<SystemEmailTemplates />} />
           <Route path="/admin/auth-events" element={<RoleGuard minLevel={LEVELS.MANAGER}><AuthEvents /></RoleGuard>} />
           <Route path="/admin/system-monitor" element={<SystemMonitor />} />

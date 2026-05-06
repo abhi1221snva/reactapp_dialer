@@ -42,9 +42,29 @@ export interface SeatSummary {
   available: number
 }
 
+export interface ProviderBillingProfile {
+  id: number
+  client_id: number
+  provider: 'twilio' | 'plivo' | 'sip_trunk'
+  ownership_type: 'platform_managed' | 'client_owned'
+  voice_billing: 'credit_deduct' | 'passthrough'
+  sms_billing: 'credit_deduct' | 'passthrough'
+  did_billing: 'credit_deduct' | 'passthrough'
+  margin_percent: number
+  custom_rates: Record<string, number> | null
+  notes: string | null
+  created_by: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProviderMode = 'platform' | 'byoc' | 'hybrid'
+
 export interface SubscriptionResponse {
   subscription: Subscription | null
   seats: SeatSummary
+  provider_mode: ProviderMode
+  billing_profiles: ProviderBillingProfile[]
 }
 
 export interface CreditBalance {
@@ -182,6 +202,13 @@ export const billingService = {
   // Invoices
   getInvoices: (limit = 25) =>
     api.get<Envelope<{ invoices: Invoice[] }>>('/billing/invoices', { params: { limit } }),
+
+  // Auto-recharge
+  getAutoRecharge: () =>
+    api.get<Envelope<AutoRechargeSettings>>('/billing/auto-recharge'),
+
+  updateAutoRecharge: (payload: AutoRechargeSettings) =>
+    api.put<Envelope<AutoRechargeSettings>>('/billing/auto-recharge', payload),
 }
 
 export interface PaymentMethod extends Record<string, unknown> {
@@ -208,6 +235,53 @@ export interface Invoice extends Record<string, unknown> {
   pdf_url: string | null
 }
 
+// ── Auto-recharge types ───────────────────────────────────────────────────────
+
+export interface AutoRechargeSettings {
+  auto_recharge_enabled: boolean
+  auto_recharge_threshold: string
+  auto_recharge_amount: string
+}
+
+// ── Admin types ──────────────────────────────────────────────────────────────
+
+export interface AutoRechargeLogEntry extends Record<string, unknown> {
+  id: number
+  client_id: number
+  amount: string
+  status: 'success' | 'failed' | 'cooldown_skipped'
+  stripe_payment_intent_id: string | null
+  failure_reason: string | null
+  balance_before: string
+  balance_after: string
+  created_at: string
+}
+
+export interface BillingDashboardData {
+  total_revenue_30d: string
+  active_clients: number
+  low_balance_clients: number
+  revenue_breakdown: {
+    voice_revenue: string | null
+    sms_count: string | null
+    did_revenue: string | null
+    sms_revenue: string | null
+  }
+  recent_auto_recharges: AutoRechargeLogEntry[]
+}
+
+export interface UsageSummaryRow extends Record<string, unknown> {
+  client_id: number
+  summary_date: string
+  call_minutes_out: string
+  call_minutes_in: string
+  sms_out_count: number
+  sms_in_count: number
+  did_charges: string
+  total_credits_used: string
+  total_credits_granted: string
+}
+
 // ── Admin service ─────────────────────────────────────────────────────────────
 
 export interface BillingSettings {
@@ -218,6 +292,7 @@ export interface BillingSettings {
   low_balance_threshold: string
   block_calls_on_zero_balance: boolean
   default_plan_code: string
+  billing_shadow_mode: boolean
 }
 
 export interface UsageRate {
@@ -287,4 +362,55 @@ export const adminBillingService = {
 
   syncPlanStripe: (id: number) =>
     api.post<Envelope<{ plan: SubscriptionPlan }>>(`/admin/billing/plans/${id}/sync-stripe`),
+
+  // ── Provider Billing Profiles ─────────────────────────────────────────
+  getProviderProfiles: (clientId: number) =>
+    api.get<Envelope<{ profiles: ProviderBillingProfile[]; provider_mode: ProviderMode; client_id: number }>>(
+      `/admin/billing/provider-profiles/${clientId}`,
+    ),
+
+  setProviderProfile: (clientId: number, payload: {
+    provider: 'twilio' | 'plivo' | 'sip_trunk'
+    ownership_type: 'platform_managed' | 'client_owned'
+    voice_billing?: 'credit_deduct' | 'passthrough'
+    sms_billing?: 'credit_deduct' | 'passthrough'
+    did_billing?: 'credit_deduct' | 'passthrough'
+    margin_percent?: number
+    custom_rates?: Record<string, number> | null
+    notes?: string | null
+  }) => api.post<Envelope<{ profile: ProviderBillingProfile; provider_mode: ProviderMode }>>(
+    `/admin/billing/provider-profiles/${clientId}`,
+    payload,
+  ),
+
+  deleteProviderProfile: (clientId: number, provider: string) =>
+    api.delete<Envelope<{ provider_mode: ProviderMode }>>(
+      `/admin/billing/provider-profiles/${clientId}/${provider}`,
+    ),
+
+  // ── Dashboard & Reports ─────────────────────────────────────────────────
+  getDashboard: () =>
+    api.get<Envelope<BillingDashboardData>>('/admin/billing/dashboard'),
+
+  getUsageReport: (params: { from?: string; to?: string; client_id?: number; page?: number; per_page?: number }) =>
+    api.get<Envelope<{
+      summaries: UsageSummaryRow[]
+      pagination: { page: number; per_page: number; total: number; last_page: number }
+      totals: { total_credits_used: string; total_credits_granted: string }
+    }>>('/admin/billing/reports/usage', {
+      params: Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      ),
+    }),
+
+  getRevenueReport: (params: { from?: string; to?: string }) =>
+    api.get<Envelope<{
+      period: { from: string; to: string }
+      totals: { total_debits: string; total_credits: string; net_revenue: string }
+      top_clients: Array<{ client_id: number; total_debits: string; total_credits: string }>
+    }>>('/admin/billing/reports/revenue', {
+      params: Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      ),
+    }),
 }
