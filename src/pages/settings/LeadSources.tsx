@@ -228,8 +228,6 @@ function WebhookModal({
 
   const saveNotifyMutation = useMutation({
     mutationFn: () => leadSourceService.update(source.id, {
-      source_title: source.source_title,
-      url: source.url || '',
       notify_email: notifyEmail,
       notify_sms: notifySms,
       notify_user_ids: selectedUserIds,
