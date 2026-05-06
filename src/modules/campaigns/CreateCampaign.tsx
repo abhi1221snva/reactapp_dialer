@@ -410,7 +410,7 @@ export function CreateCampaign() {
   const audioMessages: Array<{ ivr_id: string; ivr_desc: string }> =
     Array.isArray(amRaw) ? amRaw : Array.isArray(amRaw?.data) ? amRaw.data : []
 
-  const { data: promptsData } = useQuery({ queryKey: ['prompts-all'], queryFn: () => campaignService.getPrompts(), enabled: dialMode === 'outbound_ai' })
+  const { data: promptsData } = useQuery({ queryKey: ['prompts-all'], queryFn: () => campaignService.getPrompts(), enabled: dialMode === 'outbound_ai' || dialMode === 'predictive_dial' })
   const prompts: Array<{ id: number; title: string }> =
     (Array.isArray((promptsData as { data?: { data?: unknown[] } })?.data?.data) ? (promptsData as { data: { data: Array<{ id: number; title: string }> } }).data.data : [])
 
@@ -631,69 +631,71 @@ export function CreateCampaign() {
                     </h3>
                     <div style={{ height: 1, background: '#e5e7eb', marginTop: 8 }} />
                   </div>
-                  <div className="cpn-g3">
-                    <div>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                    <div style={{ flex: '1 1 0' }}>
                       <label style={LBL}>Call Ratio</label>
                       <select {...register('call_ratio')} className="cpn-fi">
                         <option value="">Select</option>
                         {PREDICTIVE_CALL_RATIO.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
-                    <div>
+                    <div style={{ flex: '1 1 0' }}>
                       <label style={LBL}>Duration (sec)</label>
                       <select {...register('duration')} className="cpn-fi">
                         <option value="">Select</option>
                         {PREDICTIVE_DURATION.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </div>
-                    <div>
+                    <div style={{ flex: noAgentAction && noAgentAction !== 1 ? '1 1 0' : '2 1 0' }}>
                       <label style={LBL}>No Agent Available</label>
                       <select {...register('no_agent_available_action', { setValueAs: v => v === '' ? null : Number(v) })} className="cpn-fi">
                         <option value="">Select</option>
                         <option value="1">Hang Up</option><option value="2">Voice Drop</option><option value="3">Inbound IVR</option>
-                        <option value="4">Extension</option><option value="5">Assistant AI</option>
+                        <option value="4">Extension</option><option value="5">Voice AI</option>
                       </select>
                     </div>
                     {noAgentAction && noAgentAction !== 1 && (
-                      <div className="cpn-reveal">
-                        <label style={LBL}>{noAgentAction === 2 ? 'Voice Drop Target' : noAgentAction === 3 ? 'IVR Menu' : noAgentAction === 4 ? 'Extension' : 'Assistant'}</label>
+                      <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                        <label style={LBL}>{noAgentAction === 2 ? 'Voice Drop Target' : noAgentAction === 3 ? 'IVR Menu' : noAgentAction === 4 ? 'Extension' : 'Voice AI Prompt'}</label>
                         <select {...register('no_agent_dropdown_action', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
                           <option value="">Select</option>
                           {noAgentAction === 2 && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
                           {noAgentAction === 3 && ivrList.map(ivr => <option key={ivr.ivr_id} value={ivr.ivr_id}>{ivr.ivr_desc}</option>)}
                           {noAgentAction === 4 && extensions.map(e => <option key={e.id} value={e.id}>{[e.first_name, e.last_name].filter(Boolean).join(' ') || e.extension}</option>)}
-                          {noAgentAction === 5 && <option value="123">Assistant</option>}
+                          {noAgentAction === 5 && prompts.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                         </select>
                       </div>
                     )}
-                    {amd === '1' && (
-                      <div className="cpn-reveal">
+                  </div>
+                  {amd === '1' && (
+                    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginTop: 16 }}>
+                      <div style={{ flex: '1 1 0' }}>
                         <label style={LBL}>AMD Drop Action</label>
                         <select {...register('amd_drop_action', { setValueAs: v => v === '' ? null : Number(v) })} className="cpn-fi">
                           <option value="">Select</option>
                           <option value="1">Hang Up</option><option value="2">Audio Message</option><option value="3">Voice Template</option>
                         </select>
                       </div>
-                    )}
-                    {amd === '1' && amdDropAction === 2 && (
-                      <div className="cpn-reveal">
-                        <label style={LBL}>Audio Message</label>
-                        <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
-                          <option value="">Select</option>
-                          {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
-                        </select>
-                      </div>
-                    )}
-                    {amd === '1' && amdDropAction === 3 && (
-                      <div className="cpn-reveal">
-                        <label style={LBL}>Voice Template</label>
-                        <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
-                          <option value="">Select</option>
-                          {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
-                        </select>
-                      </div>
-                    )}
-                  </div>
+                      {amdDropAction === 2 && (
+                        <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                          <label style={LBL}>Audio Message</label>
+                          <select {...register('audio_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                            <option value="">Select</option>
+                            {audioMessages.map(a => <option key={a.ivr_id} value={a.ivr_id}>{a.ivr_desc}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {amdDropAction === 3 && (
+                        <div style={{ flex: '1 1 0' }} className="cpn-reveal">
+                          <label style={LBL}>Voice Template</label>
+                          <select {...register('voice_message_amd', { setValueAs: v => v === '' ? null : v })} className="cpn-fi">
+                            <option value="">Select</option>
+                            {voiceTemplates.map(vt => <option key={vt.templete_id} value={vt.templete_id}>{vt.templete_name}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </section>
               )}
 

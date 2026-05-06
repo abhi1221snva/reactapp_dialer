@@ -18,6 +18,19 @@ export const smsService = {
       date: new Date().toISOString().slice(0, 19).replace('T', ' '),
     }),
 
+  // Send MMS — sends message with media file attachment
+  sendMms: (data: { from: string; to: string; message: string; mms_file: File }) => {
+    const formData = new FormData()
+    formData.append('from', data.from)
+    formData.append('to', data.to)
+    formData.append('message', data.message)
+    formData.append('date', new Date().toISOString().slice(0, 19).replace('T', ' '))
+    formData.append('mms_file', data.mms_file)
+    return api.post('/send-sms', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
   // List DIDs assigned to current user with SMS capability
   getDids: () =>
     api.get('/sms_did_list'),

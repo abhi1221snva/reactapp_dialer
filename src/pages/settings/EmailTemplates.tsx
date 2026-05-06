@@ -507,7 +507,6 @@ export function EmailTemplates() {
       setSelected(null)
       qc.invalidateQueries({ queryKey: ['dialer-email-templates'] })
     },
-    onError: () => toast.error('Failed to delete'),
   })
 
   const handleDelete = async (t: DialerEmailTemplate) => {
