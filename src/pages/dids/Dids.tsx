@@ -5,7 +5,7 @@ import {
   Plus, Pencil, Trash2, Phone, MessageSquare, Star,
   User, GitBranch, Users, Voicemail, ExternalLink,
   ArrowRight, Hash, Search, ChevronLeft, ChevronRight,
-  UserCheck, PhoneIncoming, Loader2, X,
+  UserCheck, PhoneIncoming, Loader2, X, ShoppingCart,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useDialerHeader } from '../../layouts/DialerLayout'
@@ -14,6 +14,7 @@ import { didService } from '../../services/did.service'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { cn } from '../../utils/cn'
 import { formatPhoneNumber } from '../../utils/format'
+import BuyDidModal from './BuyDid'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -276,11 +277,16 @@ export function Dids() {
   const navigate      = useNavigate()
   const qc            = useQueryClient()
   const clientId      = useAuthStore(s => s.user?.parent_id)
+  const userLevel     = useAuthStore(s => s.user?.level ?? 0)
   const { setToolbar } = useDialerHeader()
   const [search, setSearch]       = useState('')
   const [page, setPage]           = useState(1)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [showBuyDid, setShowBuyDid] = useState(false)
   const limit = 15
+
+  // Admin+ level (7+) can access Buy DID
+  const canBuyDid = userLevel >= 7
 
   // ── Lookup lists ──────────────────────────────────────────────────────────
   const { data: extensionsData } = useQuery({
@@ -350,6 +356,11 @@ export function Dids() {
         </div>
         <div className="lt-divider" />
         <div className="lt-right">
+          {canBuyDid && (
+            <button onClick={() => setShowBuyDid(true)} className="lt-b" style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)', color: '#fff', border: 'none' }}>
+              <ShoppingCart size={13} /> Buy DID
+            </button>
+          )}
           <button onClick={() => navigate('/dids/create')} className="lt-b lt-p">
             <Plus size={13} /> Add Number
           </button>
@@ -474,6 +485,18 @@ export function Dids() {
           </div>
         )}
       </div>
+
+      {/* Buy DID Modal — only rendered for admin+ */}
+      {canBuyDid && (
+        <BuyDidModal
+          isOpen={showBuyDid}
+          onClose={() => setShowBuyDid(false)}
+          onPurchaseComplete={() => {
+            qc.invalidateQueries({ queryKey: ['dids'] })
+            toast.success('DID list refreshed')
+          }}
+        />
+      )}
     </div>
   )
 }
