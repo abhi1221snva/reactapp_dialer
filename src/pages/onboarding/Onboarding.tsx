@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   CheckCircle2, Circle, Mail, Phone, Users, LayoutList,
-  PhoneCall, ArrowRight, Rocket, ChevronRight,
+  PhoneCall, ArrowRight, Rocket, ChevronRight, Globe, Server,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { onboardingService } from '../../services/agent.service'
+import { billingService, type ProviderSetupStatus } from '../../services/billing.service'
+import { ProviderSetupModal, ProviderModeBadge } from '../billing/ProviderSetupModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OnboardingStep {
@@ -141,6 +143,16 @@ export function Onboarding() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [marking, setMarking] = useState<string | null>(null)
+  const [showProviderSetup, setShowProviderSetup] = useState(false)
+
+  // Provider setup status
+  const { data: providerSetupRes } = useQuery({
+    queryKey: ['provider-setup'],
+    queryFn: billingService.getProviderSetup,
+    staleTime: 5 * 60_000,
+  })
+  const providerSetup: ProviderSetupStatus | null = providerSetupRes?.data?.data ?? null
+  const needsProviderSetup = providerSetup !== null && !providerSetup.provider_setup_completed
 
   const { data, isLoading, isError, refetch } = useQuery<OnboardingData>({
     queryKey: ['onboarding'],
@@ -243,6 +255,51 @@ export function Onboarding() {
         </div>
       </div>
 
+      {/* Provider setup card — shown before other steps if not completed */}
+      {needsProviderSetup && (
+        <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 p-5">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+              <Globe size={20} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide">VoIP Setup</span>
+              </div>
+              <p className="font-semibold text-sm text-slate-800 mb-1">Which VoIP setup would you like to use?</p>
+              <p className="text-xs text-slate-500 leading-relaxed">Choose Platform VoIP (recommended) or connect your own Twilio/Plivo account.</p>
+              <button
+                onClick={() => setShowProviderSetup(true)}
+                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+              >
+                Choose Provider <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Provider setup completed badge */}
+      {providerSetup && providerSetup.provider_setup_completed && (
+        <div className="rounded-2xl border bg-emerald-50 border-emerald-200 p-5">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 size={20} className="text-emerald-600" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-bold text-emerald-500 uppercase tracking-wide">VoIP Setup</span>
+                <CheckCircle2 size={14} className="text-emerald-500" />
+              </div>
+              <p className="font-semibold text-sm text-emerald-800 mb-1">VoIP Provider Configured</p>
+              <div className="flex items-center gap-2">
+                <ProviderModeBadge mode={providerSetup.provider_mode} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Steps list */}
       <div className="space-y-3">
         {steps.map(step => (
@@ -264,6 +321,17 @@ export function Onboarding() {
           </button>
         </p>
       )}
+
+      {/* Provider Setup Modal */}
+      <ProviderSetupModal
+        open={showProviderSetup}
+        onClose={() => setShowProviderSetup(false)}
+        onComplete={() => {
+          setShowProviderSetup(false)
+          qc.invalidateQueries({ queryKey: ['provider-setup'] })
+        }}
+        isFirstTime={true}
+      />
     </div>
   )
 }

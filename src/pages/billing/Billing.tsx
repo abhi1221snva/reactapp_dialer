@@ -4,7 +4,7 @@ import {
   CreditCard, Wallet, Users, Plus, Minus as MinusIcon,
   Activity, Coins, History,
   FileText, Trash2, Star, ExternalLink,
-  Loader2, Search, X, Zap, Save,
+  Loader2, Search, X, Zap, Save, Settings,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -15,6 +15,7 @@ import {
   type PaymentMethod,
   type Invoice,
   type ProviderMode,
+  type ProviderSetupStatus,
   type AutoRechargeSettings,
 } from '../../services/billing.service'
 import { DataTable, type Column } from '../../components/ui/DataTable'
@@ -22,6 +23,7 @@ import { Badge } from '../../components/ui/Badge'
 import { formatDate, formatDateTime, timeAgo } from '../../utils/format'
 import { TopUpModal } from './TopUpModal'
 import { AddCardModal } from './AddCardModal'
+import { ProviderSetupModal, ProviderModeBadge } from './ProviderSetupModal'
 
 const ALL_TABS = ['Overview', 'Wallet', 'Payment Methods', 'Invoices', 'Activity'] as const
 const BYOC_TABS = ['Overview', 'Payment Methods', 'Invoices'] as const
@@ -41,6 +43,7 @@ export function Billing() {
   const [tab, setTab] = useState<Tab>('Overview')
   const [showTopUp, setShowTopUp] = useState(false)
   const [showAddCard, setShowAddCard] = useState(false)
+  const [showProviderSetup, setShowProviderSetup] = useState(false)
   const [seatDraft, setSeatDraft] = useState<number | null>(null)
 
   // Activity tab — search / filters / pagination
@@ -63,6 +66,22 @@ export function Billing() {
     queryFn: billingService.getSubscription,
     staleTime: 60_000,
   })
+
+  // Provider setup status
+  const { data: providerSetupRes } = useQuery({
+    queryKey: ['provider-setup'],
+    queryFn: billingService.getProviderSetup,
+    staleTime: 60_000,
+  })
+  const providerSetup: ProviderSetupStatus | null = providerSetupRes?.data?.data ?? null
+  const needsProviderSetup = providerSetup !== null && !providerSetup.provider_setup_completed
+
+  // Auto-show provider setup modal for first-time users
+  useEffect(() => {
+    if (needsProviderSetup && !showProviderSetup) {
+      setShowProviderSetup(true)
+    }
+  }, [needsProviderSetup])
 
   const { data: walletRes } = useQuery({
     queryKey: ['billing-wallet'],
@@ -155,7 +174,7 @@ export function Billing() {
   const sub: Subscription | null = subRes?.data?.data?.subscription ?? null
   const seats = subRes?.data?.data?.seats ?? { purchased: 0, used: 0, available: 0 }
   const providerMode: ProviderMode = subRes?.data?.data?.provider_mode ?? 'platform'
-  const isByoc = providerMode === 'byoc'
+  const isByoc = providerMode === 'byoc' || providerMode === 'hybrid'
   const TABS = isByoc ? BYOC_TABS : ALL_TABS
   const wallet = walletRes?.data?.data
   const credits = creditsRes?.data?.data ?? { bonus: '0', wallet: '0', total: '0' }
@@ -169,7 +188,20 @@ export function Billing() {
 
   return (
     <div className="p-6 w-full">
-      <h1 className="text-2xl font-bold mb-1">Billing</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold">Billing</h1>
+        {providerSetup && (
+          <div className="flex items-center gap-2">
+            <ProviderModeBadge mode={providerMode} />
+            <button
+              onClick={() => setShowProviderSetup(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
+            >
+              <Settings size={13} /> Change
+            </button>
+          </div>
+        )}
+      </div>
       <p className="text-gray-600 mb-6">
         {isByoc ? 'Subscription and invoices.' : 'Subscription, wallet, and credits.'}
       </p>
@@ -288,8 +320,8 @@ export function Billing() {
             )}
           </div>
 
-          {/* Wallet + credits cards — hidden for BYOC */}
-          {!isByoc ? (
+          {/* Wallet + credits cards — hidden for BYOC/Hybrid */}
+          {providerMode === 'platform' ? (
             <div className="space-y-4">
               <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
                 <div className="flex items-center gap-2 mb-3">
@@ -326,12 +358,45 @@ export function Billing() {
               />
             </div>
           ) : (
-            <div className="bg-blue-50 rounded-lg border border-blue-200 p-5">
-              <h3 className="font-semibold text-blue-900">BYOC Mode</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                Your account uses your own provider credentials. Voice, SMS, and DID usage
-                is billed directly by your provider — no platform credits needed.
-              </p>
+            <div className="space-y-4">
+              <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <ProviderModeBadge mode={providerMode} />
+                </div>
+                <p className="text-sm text-emerald-800 leading-relaxed">
+                  {providerMode === 'byoc'
+                    ? 'Your account uses your own provider credentials. Voice, SMS, and DID usage is billed directly by your provider — no platform credits deducted.'
+                    : 'You\'re using a mix of platform and your own provider. Platform-managed resources still deduct credits.'}
+                </p>
+                {providerMode === 'byoc' && (
+                  <p className="text-xs text-emerald-600 mt-2">
+                    Trial credits remain available for platform DIDs, AI add-ons, and future platform services.
+                  </p>
+                )}
+                {providerSetup?.connected_providers && providerSetup.connected_providers.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-emerald-200 space-y-2">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase">Connected Providers</p>
+                    {providerSetup.connected_providers.map((cp) => (
+                      <div key={cp.provider} className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-emerald-900 capitalize">{cp.provider}</span>
+                        <span className="text-xs text-emerald-600">Passthrough</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Credits card — still shown for hybrid mode (platform DIDs use credits) */}
+              {providerMode === 'hybrid' && (
+                <div className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Coins className="w-5 h-5 text-amber-600" />
+                    <h2 className="text-lg font-semibold">Credits</h2>
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900">{Number(credits.total).toFixed(2)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Used for platform-managed DIDs and services.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -614,6 +679,20 @@ export function Billing() {
         open={showAddCard}
         onClose={() => setShowAddCard(false)}
         onSuccess={() => refetchPM()}
+      />
+
+      <ProviderSetupModal
+        open={showProviderSetup}
+        onClose={() => setShowProviderSetup(false)}
+        onComplete={() => {
+          setShowProviderSetup(false)
+          qc.invalidateQueries({ queryKey: ['billing-subscription'] })
+          qc.invalidateQueries({ queryKey: ['provider-setup'] })
+          qc.invalidateQueries({ queryKey: ['billing-wallet'] })
+          qc.invalidateQueries({ queryKey: ['billing-credits'] })
+        }}
+        isFirstTime={needsProviderSetup}
+        currentMode={providerMode}
       />
     </div>
   )

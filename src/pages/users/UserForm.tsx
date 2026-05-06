@@ -50,11 +50,12 @@ function mapExtType(val: string): string {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const USER_LEVELS = [
+const ALL_USER_LEVELS = [
   { value: 1, label: 'Agent' },
   { value: 3, label: 'Associate' },
   { value: 5, label: 'Manager' },
   { value: 7, label: 'Admin' },
+  { value: 9, label: 'Super Admin' },
 ]
 const CLI_SETTINGS = [
   { value: 0, label: 'Area Code' },
@@ -703,10 +704,15 @@ export function UserForm() {
                   <div style={{ ...FLEX_ROW, marginTop:12 }}>
                     <div style={FLEX1}>
                       <label style={LABEL}>User Role / Level</label>
-                      <select className="cpn-fi" value={form.user_level}
-                        onChange={e=>set('user_level',Number(e.target.value))}>
-                        {USER_LEVELS.map(l=><option key={l.value} value={l.value}>{l.label}</option>)}
-                      </select>
+                      {isEdit && form.user_level >= authLevel ? (
+                        <input className="cpn-fi" readOnly disabled
+                          value={ALL_USER_LEVELS.find(l => l.value === form.user_level)?.label ?? `Level ${form.user_level}`} />
+                      ) : (
+                        <select className="cpn-fi" value={form.user_level}
+                          onChange={e=>set('user_level',Number(e.target.value))}>
+                          {ALL_USER_LEVELS.filter(l => l.value < authLevel).map(l=><option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
+                      )}
                     </div>
                     <div style={FLEX1} />
                   </div>

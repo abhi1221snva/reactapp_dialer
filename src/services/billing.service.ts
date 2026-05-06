@@ -60,6 +60,39 @@ export interface ProviderBillingProfile {
 
 export type ProviderMode = 'platform' | 'byoc' | 'hybrid'
 
+// ── Provider Setup Types ──────────────────────────────────────────────────────
+
+export interface ConnectedProvider {
+  provider: 'twilio' | 'plivo'
+  voice_billing: 'credit_deduct' | 'passthrough'
+  sms_billing: 'credit_deduct' | 'passthrough'
+  did_billing: 'credit_deduct' | 'passthrough'
+  created_at: string | null
+}
+
+export interface ProviderSetupStatus {
+  provider_mode: ProviderMode
+  provider_setup_completed: boolean
+  provider_setup_completed_at: string | null
+  provider_mode_changed_at: string | null
+  connected_providers: ConnectedProvider[]
+  billing_profiles: ProviderBillingProfile[]
+  can_switch: boolean
+}
+
+export interface CredentialValidation {
+  valid: boolean
+  error?: string
+  account_name?: string
+  account_sid?: string
+  auth_id?: string
+  status?: string
+}
+
+export type TwilioCredentials = { account_sid: string; auth_token: string }
+export type PlivoCredentials = { auth_id: string; auth_token: string }
+export type ProviderCredentials = TwilioCredentials | PlivoCredentials
+
 export interface SubscriptionResponse {
   subscription: Subscription | null
   seats: SeatSummary
@@ -209,6 +242,36 @@ export const billingService = {
 
   updateAutoRecharge: (payload: AutoRechargeSettings) =>
     api.put<Envelope<AutoRechargeSettings>>('/billing/auto-recharge', payload),
+
+  // ── Provider Setup (Self-Service) ──────────────────────────────────────
+  getProviderSetup: () =>
+    api.get<Envelope<ProviderSetupStatus>>('/billing/provider-setup'),
+
+  choosePlatform: () =>
+    api.post<Envelope<ProviderSetupStatus>>('/billing/provider-setup/platform'),
+
+  validateCredentials: (provider: 'twilio' | 'plivo', credentials: ProviderCredentials) =>
+    api.post<Envelope<CredentialValidation>>('/billing/provider-setup/validate-credentials', {
+      provider,
+      credentials,
+    }),
+
+  setupByoc: (provider: 'twilio' | 'plivo', credentials: ProviderCredentials) =>
+    api.post<Envelope<ProviderSetupStatus>>('/billing/provider-setup/byoc', {
+      provider,
+      credentials,
+    }),
+
+  switchProviderMode: (payload: {
+    target_mode: 'platform' | 'byoc'
+    confirmed: boolean
+    provider?: 'twilio' | 'plivo'
+    credentials?: ProviderCredentials
+  }) =>
+    api.post<Envelope<ProviderSetupStatus>>('/billing/provider-setup/switch', payload),
+
+  disconnectProvider: (provider: 'twilio' | 'plivo') =>
+    api.delete<Envelope<ProviderSetupStatus>>(`/billing/provider-setup/${provider}`),
 }
 
 export interface PaymentMethod extends Record<string, unknown> {

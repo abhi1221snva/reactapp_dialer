@@ -1,0 +1,20 @@
+<svg width="100" height="36" viewBox="0 0 100 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon mark: abstract "B" shape with gradient -->
+  <defs>
+    <linearGradient id="balji-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="balji-text" x1="36" y1="8" x2="140" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square icon -->
+  <rect x="0" y="2" width="32" height="32" rx="8" fill="url(#balji-grad)"/>
+  <!-- Stylised "B" letterform inside the icon -->
+  <path d="M10 8h7.5c2.5 0 4.5 1.2 4.5 3.8 0 1.8-1 3-2.5 3.5v.1c2 .4 3.2 2 3.2 4 0 3-2.3 4.6-5.2 4.6H10V8zm4 6h3c1.2 0 2-.7 2-1.8 0-1-.7-1.7-2-1.7h-3v3.5zm0 6.5h3.5c1.5 0 2.3-.8 2.3-2s-.9-2-2.5-2H14v4z" fill="white" fill-opacity="0.95"/>
+  <!-- "balji" wordmark -->
+  <text x="40" y="26" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="800" letter-spacing="-0.5" fill="url(#balji-text)">balji</text>
+</svg>

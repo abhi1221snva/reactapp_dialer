@@ -5,13 +5,14 @@ import {
   Phone, Users, Radio, MessageSquare, Voicemail,
   UserPlus, PhoneOff, Activity, TrendingUp, TrendingDown,
   DollarSign, ArrowRight, Target, Award,
-  BarChart3,
+  BarChart3, Globe, Server,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid,
 } from 'recharts'
 import { dashboardService } from '../../services/dashboard.service'
+import { billingService, type ProviderSetupStatus } from '../../services/billing.service'
 import { PlanUsageWidget } from '../../components/widgets/PlanUsageWidget'
 import { useAuthStore } from '../../stores/auth.store'
 import { cn } from '../../utils/cn'
@@ -193,6 +194,15 @@ export function Dashboard() {
   const dateRange   = buildDateRange(days, today, daysAgo)
   const revRange    = buildDateRange(revDays, today, daysAgo)
 
+  // ── Provider Setup Check ──────────────────────────────────────────────────
+  const { data: providerSetupRes } = useQuery({
+    queryKey: ['provider-setup'],
+    queryFn: billingService.getProviderSetup,
+    staleTime: 5 * 60_000,
+  })
+  const providerSetup: ProviderSetupStatus | null = providerSetupRes?.data?.data ?? null
+  const needsProviderSetup = providerSetup !== null && !providerSetup.provider_setup_completed
+
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -292,6 +302,25 @@ export function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* ── Provider Setup Banner ──────────────────────────────────────────── */}
+      {needsProviderSetup && (
+        <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 p-5 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+            <Globe size={22} className="text-white" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-slate-900">Set up your VoIP provider</h3>
+            <p className="text-sm text-slate-600 mt-0.5">Choose between Platform VoIP or connect your own Twilio/Plivo account.</p>
+          </div>
+          <button
+            onClick={() => navigate('/billing')}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors flex-shrink-0"
+          >
+            Set Up Now <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
 
       {/* ── Primary KPI row ──────────────────────────────────────────────────── */}
       <div className={cn('grid grid-cols-2 gap-4', isSystemAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
