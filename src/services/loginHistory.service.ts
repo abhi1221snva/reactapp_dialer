@@ -69,6 +69,7 @@ export const loginHistoryService = {
     user_id?: number
     extension?: string
     ip?: string
+    search?: string
     lower_limit?: number
     upper_limit?: number
   }) => api.post<LoginHistoryResponse>('/login-history', params),
