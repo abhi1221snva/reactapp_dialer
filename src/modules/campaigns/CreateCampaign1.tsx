@@ -114,11 +114,11 @@ const campaignSchema = z.object({
   redirect_to_dropdown: z.string().or(z.number()).optional().nullable(),
   no_agent_available_action: z.number().int().optional().nullable(),
   no_agent_dropdown_action: z.string().or(z.number()).optional().nullable(),
-  disposition_id: z.array(z.number()).optional().default([]),
+  disposition_id: z.array(z.number()).min(1, 'At least one disposition is required'),
   crm_type: z.string().optional().default(''),
 }).superRefine((data, ctx) => {
-  if (data.dial_mode === 'super_power_dial' && (!data.group_id || data.group_id === '')) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Caller group required for Super Power Dial', path: ['group_id'] })
+  if (!data.group_id || data.group_id === '') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Caller group is required', path: ['group_id'] })
   }
   if (data.caller_id === 'custom' && (!data.custom_caller_id || data.custom_caller_id === '')) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Custom Caller ID is required', path: ['custom_caller_id'] })
@@ -323,7 +323,7 @@ export function CreateCampaign1() {
       title: '', description: '', status: 1, dial_mode: '',
       group_id: '', call_ratio: '', duration: '60', automated_duration: '',
       hopper_mode: 1, max_lead_temp: 100, min_lead_temp: 500, percentage_inc_dec: '',
-      caller_id: 'area_code', custom_caller_id: '', country_code: '', voip_configuration_id: '',
+      caller_id: 'area_code', custom_caller_id: '', country_code: '1', voip_configuration_id: '',
       call_transfer: 0, time_based_calling: 0, call_time_start: '09:00', call_time_end: '17:00',
       timezone: 'America/New_York', email: 0, sms: 0, send_crm: 0, send_report: 0,
       call_metric: '0', api: 1, amd: '0', amd_drop_action: null,
@@ -512,7 +512,7 @@ export function CreateCampaign1() {
       `}</style>
 
       {/* Hidden fields */}
-      <input type="hidden" {...register('hopper_mode')} />
+      {/* hopper_mode is now visible in Campaign Details */}
       <input type="hidden" {...register('max_lead_temp')} />
       <input type="hidden" {...register('min_lead_temp')} />
       <input type="hidden" {...register('percentage_inc_dec')} />
@@ -595,7 +595,7 @@ export function CreateCampaign1() {
                     <FieldError message={errors.dial_mode?.message} />
                   </div>
                   <div data-field-key="group_id">
-                    <label style={LBL}>Caller Group {dialMode === 'super_power_dial' && <span className="text-red-400">*</span>}</label>
+                    <label style={LBL}>Caller Group <span className="text-red-400">*</span></label>
                     <Controller name="group_id" control={control}
                       render={({ field }) => (
                         <SearchableSelect
@@ -611,12 +611,10 @@ export function CreateCampaign1() {
                     <FieldError message={errors.group_id?.message as string} />
                   </div>
                   <div>
-                    <label style={LBL}>Send Email</label>
-                    <select {...register('email', { valueAsNumber: true })} className="cpn-fi">
-                      <option value={0}>No</option>
-                      <option value={1}>With User Email</option>
-                      <option value={2}>With Campaign Email</option>
-                      <option value={3}>With System Email</option>
+                    <label style={LBL}>Hopper Mode</label>
+                    <select {...register('hopper_mode', { valueAsNumber: true })} className="cpn-fi">
+                      <option value={1}>Linear</option>
+                      <option value={2}>Random</option>
                     </select>
                   </div>
                 </div>
@@ -889,8 +887,8 @@ export function CreateCampaign1() {
                 </div>
                 {/* Row 2: Dispositions + Description */}
                 <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-                  <div style={{ flex: '1 1 0' }}>
-                    <label style={LBL}>Dispositions</label>
+                  <div style={{ flex: '1 1 0' }} data-field-key="disposition_id">
+                    <label style={LBL}>Dispositions <span className="text-red-400">*</span></label>
                     {dispositionsLoading ? (
                       <div className="flex items-center gap-2 text-xs text-slate-400 h-[36px]">
                         <div className="w-3.5 h-3.5 border border-slate-200 border-t-blue-500 rounded-full animate-spin flex-shrink-0" /> Loading…
@@ -900,6 +898,7 @@ export function CreateCampaign1() {
                         render={({ field }) => <DispositionMultiSelect dispositions={dispositions} selected={field.value ?? []} onChange={field.onChange} />}
                       />
                     )}
+                    <FieldError message={errors.disposition_id?.message} />
                   </div>
                   <div style={{ flex: '1 1 0' }}>
                     <label style={LBL}>Description <span className="text-slate-300 font-normal normal-case">optional</span></label>
@@ -1057,8 +1056,22 @@ export function CreateCampaign1() {
                     const v = Number(field.value)
                     return (
                       <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
-                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Off</button>
-                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>User Phone</button>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>Yes</button>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>No</button>
+                      </div>
+                    )
+                  }}
+                />
+              </div>
+              <div>
+                <label style={LBL}>Send Email</label>
+                <Controller name="email" control={control}
+                  render={({ field }) => {
+                    const v = Number(field.value)
+                    return (
+                      <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>Yes</button>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>No</button>
                       </div>
                     )
                   }}
@@ -1071,8 +1084,8 @@ export function CreateCampaign1() {
                     const v = Number(field.value)
                     return (
                       <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
-                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Off</button>
-                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>On</button>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>Yes</button>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>No</button>
                       </div>
                     )
                   }}
@@ -1085,8 +1098,8 @@ export function CreateCampaign1() {
                     const v = Number(field.value)
                     return (
                       <div className="cpn-toggle" style={{ width: '100%', display: 'flex' }}>
-                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>Off</button>
-                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>On</button>
+                        <button type="button" className={cn(v === 1 && 'active')} style={{ flex: 1, ...(v === 1 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(1)}>Yes</button>
+                        <button type="button" className={cn(v === 0 && 'active')} style={{ flex: 1, ...(v === 0 ? { background: 'rgb(143,174,243)', color: '#fff', borderColor: 'rgb(143,174,243)' } : {}) }} onClick={() => field.onChange(0)}>No</button>
                       </div>
                     )
                   }}
