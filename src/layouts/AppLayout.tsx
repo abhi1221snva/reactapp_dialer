@@ -49,9 +49,7 @@ export function AppLayout() {
   const { mobileSidebarOpen, closeMobileSidebar } = useUIStore()
   const { clearAuth } = useAuthStore()
   const { showWarning, remaining, dismissWarning } = useIdleTimeout({
-    timeout: 30 * 60 * 1000,      // 30 minutes
-    warningBefore: 5 * 60 * 1000,  // warn at 25 min
-    onTimeout: () => clearAuth(),
+    enabled: false,                 // disabled — calling system stays logged in
   })
 
   return (

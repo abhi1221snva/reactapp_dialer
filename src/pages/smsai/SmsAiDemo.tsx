@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import {
-  BrainCircuit, Wallet, ArrowRight, Radio, List, BarChart3, FileText,
+  BrainCircuit, Wallet, ArrowRight, Radio, List, BarChart3,
   DollarSign, Clock,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -93,7 +93,6 @@ export function SmsAiDemo() {
     { to: '/smsai/campaigns', label: 'Campaigns', icon: Radio, count: campaignCount, color: 'bg-indigo-50 text-indigo-600' },
     { to: '/smsai/lists', label: 'Lists', icon: List, color: 'bg-emerald-50 text-emerald-600' },
     { to: '/smsai/reports', label: 'Reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600' },
-    { to: '/smsai/templates', label: 'Templates', icon: FileText, color: 'bg-violet-50 text-violet-600' },
   ]
 
   return (

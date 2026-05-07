@@ -100,11 +100,6 @@ import { AiSettings } from './pages/ai/AiSettings'
 import { AiPrompts } from './pages/ai/AiPrompts'
 import { SMSCenter } from './pages/sms/SMSCenter'
 import { UpgradePage } from './pages/upgrade/UpgradePage'
-import { SmsAiDemo } from './pages/smsai/SmsAiDemo'
-import { SmsAiCampaigns } from './pages/smsai/SmsAiCampaigns'
-import { SmsAiLists } from './pages/smsai/SmsAiLists'
-import { SmsAiReports } from './pages/smsai/SmsAiReports'
-import { SmsAiTemplates } from './pages/smsai/SmsAiTemplates'
 import { TeamChat } from './pages/chat/TeamChat'
 import { AgentMonitoring } from './pages/monitoring/AgentMonitoring'
 import { Attendance } from './pages/attendance/Attendance'
@@ -390,13 +385,6 @@ export default function App() {
           {/* AI Tools */}
           <Route path="/ai/settings" element={<AiSettings />} />
           <Route path="/ai/prompts" element={<AiPrompts />} />
-
-          {/* SMS AI */}
-          <Route path="/smsai/demo" element={<SmsAiDemo />} />
-          <Route path="/smsai/campaigns" element={<SmsAiCampaigns />} />
-          <Route path="/smsai/lists" element={<SmsAiLists />} />
-          <Route path="/smsai/reports" element={<SmsAiReports />} />
-          <Route path="/smsai/templates" element={<SmsAiTemplates />} />
 
           {/* IVR */}
           <Route path="/ivr" element={<Ivr />} />
