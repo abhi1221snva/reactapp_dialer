@@ -234,7 +234,7 @@ export function TopHeader() {
       </button>
 
       {/* ── Engine segmented toggle (only shown for client 11) ── */}
-      {user?.parent_id === 11 && <div
+      {(user?.parent_id === 11 || user?.parent_id === 3) && <div
         className="flex items-center p-[3px] rounded-full gap-[2px] flex-shrink-0"
         style={{ background: '#e9ecf1' }}
       >
