@@ -18,7 +18,9 @@ import { useCounter } from '../../hooks/useCounter'
 import { AnimatedBg } from '../../components/public/AnimatedBg'
 import { PublicFooter } from '../../components/public/PublicFooter'
 
-const PORTAL = 'https://portal.balji.app'
+const PORTAL = (typeof window !== 'undefined' && window.location.hostname === 'balji.app') || (typeof window !== 'undefined' && window.location.hostname === 'www.balji.app')
+  ? 'https://portal.balji.app'
+  : ''
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Navbar — Landing page specific (scroll-to sections)

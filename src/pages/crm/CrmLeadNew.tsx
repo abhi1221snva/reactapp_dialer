@@ -43,6 +43,13 @@ import { RichEmailEditor }       from '../../components/crm/RichEmailEditor'
 import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import { confirmDelete }         from '../../utils/confirmDelete'
 import { formatPhoneNumber, formatPartialPhoneUS } from '../../utils/format'
+import {
+  NAME_MAX_LENGTH,
+  isNameField,
+  nameRule,
+  normalizeNamesInPayload,
+  sanitizeNameInput,
+} from '../../utils/nameValidation'
 import type { CrmLead, LeadStatus, CrmDocument, CrmLabel, EmailTemplate, SmsTemplate } from '../../types/crm.types'
 import { useUIStore }           from '../../stores/ui.store'
 
@@ -224,22 +231,28 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
   const editing    = editingProp    !== undefined ? editingProp    : editingLocal
   const setEditing = setEditingProp !== undefined ? setEditingProp : setEditingLocal
 
-  const { register, handleSubmit, reset, formState: { isDirty } } = useForm<Record<string, unknown>>({
+  const { register, handleSubmit, reset, formState: { isDirty, errors } } = useForm<Record<string, unknown>>({
     defaultValues: lead as Record<string, unknown>,
   })
 
   useEffect(() => { reset(lead as Record<string, unknown>) }, [lead, reset])
 
   const saveMut = useMutation({
-    mutationFn: (data: Record<string, unknown>) => leadService.update(leadId, data),
+    mutationFn: (data: Record<string, unknown>) => leadService.update(leadId, normalizeNamesInPayload(data)),
     onSuccess: () => {
       toast.success('Saved')
       setEditing(false)
       qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-activity', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-leads-search'] })
       onUpdated()
     },
-    onError: () => toast.error('Update failed'),
+    onError: (err: unknown) => {
+      const res = (err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response
+      const fieldErrs = res?.data?.errors
+      const firstMsg  = fieldErrs ? Object.values(fieldErrs).flat()[0] : null
+      toast.error(firstMsg || res?.data?.message || 'Update failed')
+    },
   })
 
   const lr = lead as Record<string, unknown>
@@ -331,6 +344,9 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
           <PhoneEditField key={key} fieldKey={key} label={label} icon={FIcon} register={register} defaultValue={String(raw ?? '')} />
         )
       }
+      const isName = isNameField(key)
+      const rhf = register(key, isName ? { validate: (v: unknown) => nameRule(label)(String(v ?? '')) } : {})
+      const fieldErr = errors?.[key]?.message
       return (
         <div key={key} className="flex flex-col gap-1 transition-all">
           <label className="flex items-center gap-1.5 text-[9px] font-bold text-indigo-500 uppercase tracking-wider leading-none pl-0.5">
@@ -339,10 +355,20 @@ function OverviewTab({ lead, leadId, leadFields, onUpdated, editingProp, setEdit
           </label>
           <input
             type={inputType}
-            {...register(key)}
-            className="w-full h-9 px-2.5 text-[12px] font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300"
+            {...rhf}
+            onChange={isName ? e => {
+              e.target.value = sanitizeNameInput(e.target.value)
+              rhf.onChange(e)
+            } : rhf.onChange}
+            maxLength={isName ? NAME_MAX_LENGTH : undefined}
+            className={`w-full h-9 px-2.5 text-[12px] font-semibold text-slate-800 bg-white border ${fieldErr ? 'border-red-400' : 'border-slate-300'} rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300`}
             placeholder={label}
           />
+          {fieldErr && (
+            <span className="text-[10px] text-red-500 flex items-center gap-1 mt-0.5">
+              <AlertCircle size={9} />{String(fieldErr)}
+            </span>
+          )}
         </div>
       )
     }

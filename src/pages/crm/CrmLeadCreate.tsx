@@ -17,6 +17,31 @@ import { scrollToFirstError } from '../../utils/publicFormValidation'
 import type { CrmLabel, CrmLead } from '../../types/crm.types'
 import { useAuthStore } from '../../stores/auth.store'
 import { LEVELS } from '../../utils/permissions'
+import {
+  NAME_MAX_LENGTH,
+  validateName,
+  normalizeNamesInPayload,
+  sanitizeNameInput,
+} from '../../utils/nameValidation'
+import { validateCompanyName, isCompanyField } from '../../utils/companyValidation'
+import { isNameField as isPersonNameField } from '../../utils/nameValidation'
+
+const nameField = (label: string) =>
+  z.string()
+    .optional()
+    .refine(v => validateName(v, label) === true, {
+      message: `${label}: only alphabets are allowed`,
+    })
+
+const companyField = (label: string) =>
+  z.string()
+    .optional()
+    .superRefine((v, ctx) => {
+      const result = validateCompanyName(v, label)
+      if (result !== true) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: result })
+      }
+    })
 
 const schema = z.object({
   lead_status:    z.string().min(1, 'Status is required'),
@@ -24,12 +49,16 @@ const schema = z.object({
   temperature:    z.string().optional(),
   assigned_to:    z.string().optional(),
   // Core lead fields — always editable regardless of crm_labels configuration
-  first_name:     z.string().optional(),
-  last_name:      z.string().optional(),
-  email:          z.string().optional(),
-  phone_number:   z.string().optional(),
-  city:           z.string().optional(),
-  state:          z.string().optional(),
+  first_name:        nameField('First Name'),
+  last_name:         nameField('Last Name'),
+  email:             z.string().optional(),
+  phone_number:      z.string().optional(),
+  city:              z.string().optional(),
+  state:             z.string().optional(),
+  legal_company_name: companyField('Legal Company Name'),
+  company_name:      companyField('Company Name'),
+  business_name:     companyField('Business Name'),
+  dba:               companyField('DBA'),
 })
 
 type FormData = z.infer<typeof schema>
@@ -54,8 +83,8 @@ const LEAD_TYPE_OPTIONS = [
 
 // ── Core fields (static — defined outside component so reference is stable) ──
 const CORE_FIELD_DEFS: { key: string; label: string; type?: string; placeholder?: string; span?: number; maxLength?: number }[] = [
-  { key: 'first_name',   label: 'First Name',    placeholder: 'First name',           span: 3 },
-  { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name',            span: 3 },
+  { key: 'first_name',   label: 'First Name',    placeholder: 'First name',           span: 3, maxLength: NAME_MAX_LENGTH },
+  { key: 'last_name',    label: 'Last Name',      placeholder: 'Last name',            span: 3, maxLength: NAME_MAX_LENGTH },
   { key: 'email',        label: 'Email',          type: 'email',  placeholder: 'Email address', span: 3 },
   { key: 'phone_number', label: 'Phone',          type: 'tel',    placeholder: '10-digit phone', span: 3 },
   { key: 'city',         label: 'City',           placeholder: 'City',                 span: 3 },
@@ -284,6 +313,7 @@ export function CrmLeadCreate() {
     onSuccess: (res) => {
       setApiError(null)
       toast.success('Lead created successfully')
+      qc.invalidateQueries({ queryKey: ['crm-leads-search'] })
       const newId = res.data?.data?.id ?? res.data?.id
       if (newId) navigate(`/crm/leads/${newId}`)
       else navigate('/crm/leads')
@@ -300,6 +330,7 @@ export function CrmLeadCreate() {
       setApiError(null)
       toast.success('Lead updated successfully')
       qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      qc.invalidateQueries({ queryKey: ['crm-leads-search'] })
       navigate(`/crm/leads/${leadId}`)
     },
     onError: (err) => {
@@ -353,18 +384,32 @@ export function CrmLeadCreate() {
         if (!strVal) continue
 
         let fieldError: string | null = null
+
+        // Pattern-detect company / business / DBA fields by key — covers
+        // tenant-customized labels like "legal_business_name", "dba_name", etc.
+        if (isCompanyField(field.field_key)) {
+          const result = validateCompanyName(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Pattern-detect person-name fields (catches custom keys not in core schema).
+        if (!fieldError && isPersonNameField(field.field_key)) {
+          const result = validateName(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
         switch (field.field_type) {
           case 'email':
-            if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(strVal))
+            if (!fieldError && !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(strVal))
               fieldError = `${field.label_name} must be a valid email address`
             break
           case 'phone_number':
           case 'phone':
-            if (strVal.replace(/\D/g, '').length !== 10)
+            if (!fieldError && strVal.replace(/\D/g, '').length !== 10)
               fieldError = `${field.label_name} must be exactly 10 digits`
             break
           case 'number':
-            if (isNaN(Number(strVal)))
+            if (!fieldError && isNaN(Number(strVal)))
               fieldError = `${field.label_name} must be a numeric value`
             break
         }
@@ -387,8 +432,11 @@ export function CrmLeadCreate() {
     // Don't send lead_source_id if none selected
     if (!payload.lead_source_id) delete payload.lead_source_id
 
-    if (isEdit) updateMutation.mutate(payload)
-    else createMutation.mutate(payload)
+    // Normalize whitespace in name fields ("Test     T" → "Test T")
+    const normalized = normalizeNamesInPayload(payload)
+
+    if (isEdit) updateMutation.mutate(normalized)
+    else createMutation.mutate(normalized)
   }
 
   const isPending     = createMutation.isPending || updateMutation.isPending
@@ -482,12 +530,19 @@ export function CrmLeadCreate() {
                       <div className="p-5 space-y-4">
                         {visibleCoreFields.length > 0 && (
                           <div className="grid grid-cols-4 gap-x-4 gap-y-4">
-                            {visibleCoreFields.map(f => (
+                            {visibleCoreFields.map(f => {
+                              const isName = f.key === 'first_name' || f.key === 'last_name'
+                              const rhf = register(f.key as keyof FormData)
+                              return (
                               <div key={f.key} data-field-key={f.key}>
                                 <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: errors[f.key as keyof FormData] ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 5 }}>{f.label}</label>
                                 <input
                                   type={f.type ?? 'text'}
-                                  {...register(f.key as keyof FormData)}
+                                  {...rhf}
+                                  onChange={isName ? (e => {
+                                    e.target.value = sanitizeNameInput(e.target.value)
+                                    rhf.onChange(e)
+                                  }) : rhf.onChange}
                                   className="crm-fi"
                                   placeholder={f.placeholder}
                                   maxLength={f.maxLength}
@@ -499,7 +554,7 @@ export function CrmLeadCreate() {
                                   </span>
                                 )}
                               </div>
-                            ))}
+                            )})}
                           </div>
                         )}
                         {personal.length > 0 && (

@@ -6,6 +6,12 @@ import toast from 'react-hot-toast'
 import { leadService } from '../../services/lead.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { formatPartialPhoneUS } from '../../utils/format'
+import {
+  NAME_MAX_LENGTH,
+  normalizeName,
+  sanitizeNameInput,
+  validateName,
+} from '../../utils/nameValidation'
 
 const DEFAULT_FORM = {
   first_name: '',
@@ -40,6 +46,12 @@ function validateForm(form: typeof DEFAULT_FORM): FormErrors {
       errors.phone_number = 'Phone number must be exactly 10 digits'
     }
   }
+
+  const fnRes = validateName(form.first_name, 'First Name')
+  if (fnRes !== true) errors.first_name = fnRes
+
+  const lnRes = validateName(form.last_name, 'Last Name')
+  if (lnRes !== true) errors.last_name = lnRes
 
   return errors
 }
@@ -92,7 +104,12 @@ export function LeadForm() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload = { ...form, phone_number: form.phone_number.replace(/\D/g, '') }
+      const payload = {
+        ...form,
+        phone_number: form.phone_number.replace(/\D/g, ''),
+        first_name: normalizeName(form.first_name),
+        last_name: normalizeName(form.last_name),
+      }
       if (isEdit) {
         return leadService.update(Number(id), payload as Record<string, unknown>)
       }
@@ -149,13 +166,29 @@ export function LeadForm() {
           <div className="grid grid-cols-2 gap-4">
             <div className="form-group">
               <label className="label">First Name</label>
-              <input className="input" value={form.first_name}
-                onChange={e => set('first_name', e.target.value)} placeholder="John" />
+              <input
+                className={`input${formErrors.first_name ? ' border-red-400 focus:ring-red-400' : ''}`}
+                value={form.first_name}
+                maxLength={NAME_MAX_LENGTH}
+                onChange={e => set('first_name', sanitizeNameInput(e.target.value))}
+                placeholder="John"
+              />
+              {formErrors.first_name && (
+                <p className="mt-1 text-xs text-red-500">{formErrors.first_name}</p>
+              )}
             </div>
             <div className="form-group">
               <label className="label">Last Name</label>
-              <input className="input" value={form.last_name}
-                onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
+              <input
+                className={`input${formErrors.last_name ? ' border-red-400 focus:ring-red-400' : ''}`}
+                value={form.last_name}
+                maxLength={NAME_MAX_LENGTH}
+                onChange={e => set('last_name', sanitizeNameInput(e.target.value))}
+                placeholder="Smith"
+              />
+              {formErrors.last_name && (
+                <p className="mt-1 text-xs text-red-500">{formErrors.last_name}</p>
+              )}
             </div>
           </div>
 
