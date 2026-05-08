@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthStore } from './stores/auth.store'
 import { useEngineStore } from './stores/engine.store'
@@ -8,6 +9,7 @@ import { usePresence } from './hooks/usePresence'
 // Layouts
 import { AuthLayout } from './layouts/AuthLayout'
 import { AppLayout } from './layouts/AppLayout'
+import { PublicLayout } from './components/public/PublicLayout'
 import { CrmLayout } from './layouts/CrmLayout'
 import { DialerLayout } from './layouts/DialerLayout'
 
@@ -167,6 +169,28 @@ import { MerchantApplications } from './pages/merchant/MerchantApplications'
 import { LandingPage } from './pages/public/LandingPage'
 import { LandingPageBalji } from './pages/public/LandingPageBalji'
 
+// Public sub-pages — code-split
+const AutoDialerPage = lazy(() => import('./pages/public/product/AutoDialerPage').then(m => ({ default: m.AutoDialerPage })))
+const CrmPipelinePage = lazy(() => import('./pages/public/product/CrmPipelinePage').then(m => ({ default: m.CrmPipelinePage })))
+const AnalyticsPage = lazy(() => import('./pages/public/product/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
+const AiInsightsPage = lazy(() => import('./pages/public/product/AiInsightsPage').then(m => ({ default: m.AiInsightsPage })))
+const MobileAppPage = lazy(() => import('./pages/public/product/MobileAppPage').then(m => ({ default: m.MobileAppPage })))
+const AboutPage = lazy(() => import('./pages/public/company/AboutPage').then(m => ({ default: m.AboutPage })))
+const CareersPage = lazy(() => import('./pages/public/company/CareersPage').then(m => ({ default: m.CareersPage })))
+const BlogPage = lazy(() => import('./pages/public/company/BlogPage').then(m => ({ default: m.BlogPage })))
+const PressPage = lazy(() => import('./pages/public/company/PressPage').then(m => ({ default: m.PressPage })))
+const PartnersPage = lazy(() => import('./pages/public/company/PartnersPage').then(m => ({ default: m.PartnersPage })))
+const DocumentationPage = lazy(() => import('./pages/public/resources/DocumentationPage').then(m => ({ default: m.DocumentationPage })))
+const ApiReferencePage = lazy(() => import('./pages/public/resources/ApiReferencePage').then(m => ({ default: m.ApiReferencePage })))
+const StatusPage = lazy(() => import('./pages/public/resources/StatusPage').then(m => ({ default: m.StatusPage })))
+const ChangelogPage = lazy(() => import('./pages/public/resources/ChangelogPage').then(m => ({ default: m.ChangelogPage })))
+const CommunityPage = lazy(() => import('./pages/public/resources/CommunityPage').then(m => ({ default: m.CommunityPage })))
+const PrivacyPolicyPage = lazy(() => import('./pages/public/legal/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })))
+const TermsOfServicePage = lazy(() => import('./pages/public/legal/TermsOfServicePage').then(m => ({ default: m.TermsOfServicePage })))
+const CookiePolicyPage = lazy(() => import('./pages/public/legal/CookiePolicyPage').then(m => ({ default: m.CookiePolicyPage })))
+const GdprPage = lazy(() => import('./pages/public/legal/GdprPage').then(m => ({ default: m.GdprPage })))
+const SecurityPage = lazy(() => import('./pages/public/legal/SecurityPage').then(m => ({ default: m.SecurityPage })))
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
@@ -222,6 +246,34 @@ export default function App() {
       <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
       <Route path="/website" element={<LandingPage />} />
       <Route path="/website_balji" element={<LandingPageBalji />} />
+
+      {/* Public sub-pages — wrapped in PublicLayout (Navbar + Footer + AnimatedBg) */}
+      <Route element={<Suspense fallback={<div className="min-h-screen" />}><PublicLayout /></Suspense>}>
+        {/* Product */}
+        <Route path="/product/auto-dialer" element={<AutoDialerPage />} />
+        <Route path="/product/crm-pipeline" element={<CrmPipelinePage />} />
+        <Route path="/product/analytics" element={<AnalyticsPage />} />
+        <Route path="/product/ai-insights" element={<AiInsightsPage />} />
+        <Route path="/product/mobile-app" element={<MobileAppPage />} />
+        {/* Company */}
+        <Route path="/company/about" element={<AboutPage />} />
+        <Route path="/company/careers" element={<CareersPage />} />
+        <Route path="/company/blog" element={<BlogPage />} />
+        <Route path="/company/press" element={<PressPage />} />
+        <Route path="/company/partners" element={<PartnersPage />} />
+        {/* Resources */}
+        <Route path="/resources/docs" element={<DocumentationPage />} />
+        <Route path="/resources/api" element={<ApiReferencePage />} />
+        <Route path="/resources/status" element={<StatusPage />} />
+        <Route path="/resources/changelog" element={<ChangelogPage />} />
+        <Route path="/resources/community" element={<CommunityPage />} />
+        {/* Legal */}
+        <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/legal/terms" element={<TermsOfServicePage />} />
+        <Route path="/legal/cookies" element={<CookiePolicyPage />} />
+        <Route path="/legal/gdpr" element={<GdprPage />} />
+        <Route path="/legal/security" element={<SecurityPage />} />
+      </Route>
 
       {/* ── Merchant Portal (account-based) ─────────────────────────────── */}
       {/* Static paths must come BEFORE the dynamic :leadToken catch-all */}
