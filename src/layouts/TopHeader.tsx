@@ -233,8 +233,8 @@ export function TopHeader() {
         <Menu size={18} />
       </button>
 
-      {/* ── Engine segmented toggle (only shown for client 11) ── */}
-      {(user?.parent_id === 11 || user?.parent_id === 3) && <div
+      {/* ── Engine segmented toggle (shown for client 11 & client 3) ── */}
+      {(Number(user?.parent_id) === 11 || Number(user?.parent_id) === 3) && <div
         className="flex items-center p-[3px] rounded-full gap-[2px] flex-shrink-0"
         style={{ background: '#e9ecf1' }}
       >
