@@ -41,6 +41,13 @@ import type { RichEmailEditorRef } from '../../components/crm/RichEmailEditor'
 import { ErrorBoundary } from '../../components/ui/ErrorBoundary'
 import { confirmDelete } from '../../utils/confirmDelete'
 import { formatPhoneNumber } from '../../utils/format'
+import {
+  NAME_MAX_LENGTH,
+  isNameField,
+  validateName,
+  sanitizeNameInput,
+  normalizeName,
+} from '../../utils/nameValidation'
 import type { CrmLead, LeadStatus, CrmDocument, Lender, LenderSubmission, LenderResponseStatus, LenderSubmissionStatus, MappedApiError, CrmLabel, EmailTemplate, SmsTemplate, FixSuggestion, ApplyLenderFixPayload, GroupedValidationState, LenderValidationResult, LenderSubmissionOutcome, SubmissionStatusRow, LenderOffer, StipType } from '../../types/crm.types'
 import { CRM_FIELD_LABELS, COMPUTED_FIELDS, autoLabel as sharedAutoLabel } from '../../constants/crmFieldLabels'
 import { useUIStore } from '../../stores/ui.store'
@@ -4074,6 +4081,9 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
   const [saving,  setSaving]  = useState(false)
+  const [draftError, setDraftError] = useState<string | null>(null)
+
+  const isName = isNameField(fieldKey)
 
   // Derive input type from fieldType if not explicitly set
   const resolvedType: 'text' | 'email' | 'tel' | 'textarea' | 'number' | 'date' | 'select' = (() => {
@@ -4092,17 +4102,24 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
     catch { return [] }
   })()
 
-  function startEdit() { setDraft(value ?? ''); setEditing(true) }
-  function cancel()    { setEditing(false) }
+  function startEdit() { setDraft(value ?? ''); setDraftError(null); setEditing(true) }
+  function cancel()    { setDraftError(null); setEditing(false) }
 
   async function save() {
-    if (draft === (value ?? '')) { setEditing(false); return }
+    const next = isName ? normalizeName(draft) : draft
+    if (isName) {
+      const result = validateName(next, label)
+      if (result !== true) { setDraftError(result); return }
+    }
+    if (next === (value ?? '')) { setEditing(false); return }
     setSaving(true)
     try {
-      await leadService.update(leadId, { [fieldKey]: draft })
+      await leadService.update(leadId, { [fieldKey]: next })
+      setDraftError(null)
       onUpdated(); toast.success(`${label} updated`)
+      setEditing(false)
     } catch { toast.error(`Failed to update ${label}`) }
-    finally { setSaving(false); setEditing(false) }
+    finally { setSaving(false) }
   }
 
   function renderDisplayValue() {
@@ -4121,7 +4138,8 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
       {readOnly ? (
         <span className="text-sm font-medium text-slate-800 flex-1 leading-tight break-all">{renderDisplayValue()}</span>
       ) : editing ? (
-        <div className="flex items-center gap-1 flex-1 min-w-0">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <div className="flex items-center gap-1 flex-1 min-w-0">
           {resolvedType === 'textarea' ? (
             <textarea autoFocus name={fieldKey} rows={2} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none resize-none bg-white" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel() }} />
           ) : resolvedType === 'select' ? (
@@ -4130,12 +4148,31 @@ function PropertyRow({ fieldKey, label, value, type = 'text', fieldType, options
               {parsedOptions.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           ) : (
-            <input autoFocus name={fieldKey} type={resolvedType} className="flex-1 text-xs border border-emerald-400 rounded-md px-2 py-1 outline-none bg-white min-w-0" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }} />
+            <input
+              autoFocus
+              name={fieldKey}
+              type={resolvedType}
+              maxLength={isName ? NAME_MAX_LENGTH : undefined}
+              className={`flex-1 text-xs border ${draftError ? 'border-red-400' : 'border-emerald-400'} rounded-md px-2 py-1 outline-none bg-white min-w-0`}
+              value={draft}
+              onChange={e => {
+                const v = isName ? sanitizeNameInput(e.target.value) : e.target.value
+                setDraft(v)
+                if (draftError) setDraftError(null)
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }}
+            />
           )}
           <button onMouseDown={e => { e.preventDefault(); save() }} disabled={saving} className="p-1 rounded bg-emerald-600 text-white flex-shrink-0 disabled:opacity-50">
             {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
           </button>
           <button onMouseDown={e => { e.preventDefault(); cancel() }} className="p-1 rounded bg-slate-100 text-slate-500 flex-shrink-0"><X size={10} /></button>
+          </div>
+          {draftError && (
+            <span className="text-[10px] text-red-500 flex items-center gap-1">
+              <AlertCircle size={9} />{draftError}
+            </span>
+          )}
         </div>
       ) : (
         <button onClick={startEdit} data-field-key={fieldKey} className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-emerald-700 transition-colors">

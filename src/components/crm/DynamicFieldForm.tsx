@@ -7,6 +7,7 @@ import { crmService } from '../../services/crm.service'
 import type { CrmLabel, FieldCondition } from '../../types/crm.types'
 import { buildFieldRules, parseFieldOptions } from '../../utils/fieldValidation'
 import { formatPartialPhoneUS, formatPhoneNumber } from '../../utils/format'
+import { NAME_MAX_LENGTH, isNameField, nameRule, sanitizeNameInput } from '../../utils/nameValidation'
 import AddressAutocomplete from '../ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
@@ -130,6 +131,38 @@ function SsnInput({ fieldKey, register, rules, defaultValue, placeholder }: {
         setDisplay(fmt)
         // Pass formatted value to react-hook-form
         e.target.value = fmt
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
+
+// ── Name Input component (alphabets + spaces only, max 50 chars) ────────────
+function NameInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  label: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const required = rules?.required
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    validate: nameRule(label, Boolean(required)),
+  })
+  return (
+    <input
+      type="text"
+      {...rest}
+      defaultValue={defaultValue}
+      className="crm-fi"
+      placeholder={placeholder}
+      maxLength={NAME_MAX_LENGTH}
+      onChange={e => {
+        e.target.value = sanitizeNameInput(e.target.value)
         rhfOnChange(e)
       }}
     />
@@ -302,6 +335,20 @@ function renderInput(
         rules={rules}
         defaultValue={defaultValue as string ?? ''}
         placeholder={ph || '(555) 555-5555'}
+      />
+    )
+  }
+
+  // ── Name (first_name / last_name) ─────────────────────────────────────────
+  if (isNameField(field_key) && (field_type === 'text' || field_type === undefined)) {
+    return (
+      <NameInput
+        fieldKey={field_key}
+        label={label_name}
+        register={register}
+        rules={rules}
+        defaultValue={defaultValue as string ?? ''}
+        placeholder={ph}
       />
     )
   }
