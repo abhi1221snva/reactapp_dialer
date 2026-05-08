@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileSearch, RefreshCw, Download, RotateCcw, UserPlus, X, ArrowDownLeft, ArrowUpRight, Paperclip, DollarSign, Mail } from 'lucide-react'
+import { FileSearch, RefreshCw, Download, RotateCcw, UserPlus, X, ArrowDownLeft, ArrowUpRight, Paperclip, DollarSign, Mail, CheckCircle, XCircle, FileText, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
@@ -587,80 +587,170 @@ function LenderEmailsTab() {
   const [search, setSearch] = useState('')
   const [dirFilter, setDirFilter] = useState('')
   const [offerFilter, setOfferFilter] = useState('')
+  const [aiStatusFilter, setAiStatusFilter] = useState('')
+  const [lenderFilter, setLenderFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [autoScan, setAutoScan] = useState(() => localStorage.getItem('lender-auto-scan') === 'true')
+  const [countdown, setCountdown] = useState(60)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const hasFilters = !!(search || dirFilter || offerFilter || aiStatusFilter || lenderFilter || dateFrom || dateTo)
+
+  const clearFilters = () => {
+    setSearch(''); setDirFilter(''); setOfferFilter(''); setAiStatusFilter('')
+    setLenderFilter(''); setDateFrom(''); setDateTo(''); setPage(1)
+  }
 
   const { data: statsData } = useQuery({
     queryKey: ['lender-email-stats'],
     queryFn: () => emailParserService.getLenderEmailStats(),
+    refetchInterval: autoScan ? 30000 : false,
   })
   const stats: LenderEmailStats | null = statsData?.data?.data ?? null
 
   const { data, isLoading } = useQuery({
-    queryKey: ['lender-email-conversations', page, search, dirFilter, offerFilter],
+    queryKey: ['lender-email-conversations', page, search, dirFilter, offerFilter, aiStatusFilter, lenderFilter, dateFrom, dateTo],
     queryFn: () => emailParserService.getLenderConversations({
       page,
       per_page: 20,
       search: search || undefined,
       offer_detected: offerFilter === 'yes' ? true : offerFilter === 'no' ? false : undefined,
+      direction: dirFilter || undefined,
+      ai_status: aiStatusFilter || undefined,
+      lender_id: lenderFilter ? Number(lenderFilter) : undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
     }),
+    refetchInterval: autoScan ? 30000 : false,
   })
 
   const scanMutation = useMutation({
     mutationFn: () => emailParserService.scanLenderEmails(),
     onSuccess: (res) => {
       const d = res?.data?.data ?? {}
-      toast.success(`Scan complete. ${d.conversations_logged ?? 0} new conversations logged.`)
+      if (!autoScan) {
+        toast.success(`Scan complete. ${d.conversations_logged ?? 0} new conversations logged.`)
+      }
       queryClient.invalidateQueries({ queryKey: ['lender-email-conversations'] })
       queryClient.invalidateQueries({ queryKey: ['lender-email-stats'] })
     },
-    onError: () => toast.error('Lender email scan failed'),
+    onError: () => {
+      if (!autoScan) toast.error('Lender email scan failed')
+    },
   })
+
+  const runAutoScan = useCallback(() => {
+    if (!scanMutation.isPending) {
+      scanMutation.mutate()
+      setCountdown(60)
+    }
+  }, [scanMutation])
+
+  useEffect(() => {
+    if (autoScan) {
+      runAutoScan()
+      intervalRef.current = setInterval(() => { runAutoScan() }, 60000)
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
+      }, 1000)
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (countdownRef.current) clearInterval(countdownRef.current)
+      intervalRef.current = null
+      countdownRef.current = null
+    }
+  }, [autoScan])
 
   const conversations: LenderConversation[] = data?.data?.data?.conversations ?? []
   const total = data?.data?.data?.total ?? 0
   const perPage = data?.data?.data?.per_page ?? 20
-
-  // Filter conversations by direction locally
-  const filtered = dirFilter
-    ? conversations.filter(c => c.direction === dirFilter)
-    : conversations
-
   const totalPages = Math.ceil(total / perPage)
+
+  // Build lender lookup from stats
+  const lenderMap: Record<number, string> = {}
+  if (stats) {
+    stats.by_lender.forEach(l => { lenderMap[l.lender_id] = l.lender_name })
+  }
+
+  const aiStatusBadge = (status: string | null) => {
+    switch (status) {
+      case 'approved':        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700"><CheckCircle size={10} /> Approved</span>
+      case 'declined':        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700"><XCircle size={10} /> Declined</span>
+      case 'needs_documents': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><FileText size={10} /> Needs Docs</span>
+      case 'under_review':    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700"><Clock size={10} /> Under Review</span>
+      default:                return <span className="text-slate-300 text-xs">—</span>
+    }
+  }
+
+  const statCards: { label: string; key: string; value: number; color: string; ringColor: string; icon: React.ElementType }[] = stats ? [
+    { label: 'Total Emails',     key: '',                value: stats.total_conversations, color: 'text-indigo-600',  ringColor: 'ring-indigo-400',  icon: Mail },
+    { label: 'Approved',         key: 'approved',        value: stats.approved,            color: 'text-emerald-600', ringColor: 'ring-emerald-400', icon: CheckCircle },
+    { label: 'Declined',         key: 'declined',        value: stats.declined,            color: 'text-rose-600',    ringColor: 'ring-rose-400',    icon: XCircle },
+    { label: 'Needs Documents',  key: 'needs_documents', value: stats.needs_documents,     color: 'text-amber-600',   ringColor: 'ring-amber-400',   icon: FileText },
+    { label: 'Under Review',     key: 'under_review',    value: stats.under_review,        color: 'text-violet-600',  ringColor: 'ring-violet-400',  icon: Clock },
+    { label: 'Offers Detected',  key: '',                value: stats.offers_detected,     color: 'text-sky-600',     ringColor: 'ring-sky-400',     icon: DollarSign },
+  ] : []
+
+  const handleStatClick = (key: string) => {
+    if (!key) return
+    setAiStatusFilter(prev => prev === key ? '' : key)
+    setPage(1)
+  }
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
+      {/* Stat Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border p-4">
-            <p className="text-xs text-slate-500 mb-1">Total Conversations</p>
-            <p className="text-2xl font-bold text-slate-800">{stats.total_conversations}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4">
-            <p className="text-xs text-slate-500 mb-1">Offers Detected</p>
-            <p className="text-2xl font-bold text-green-600">{stats.offers_detected}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4">
-            <p className="text-xs text-slate-500 mb-1">Inbound</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.inbound}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4">
-            <p className="text-xs text-slate-500 mb-1">Outbound</p>
-            <p className="text-2xl font-bold text-emerald-600">{stats.outbound}</p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {statCards.map(card => {
+            const isActive = card.key && aiStatusFilter === card.key
+            const Icon = card.icon
+            return (
+              <div
+                key={card.label}
+                onClick={() => handleStatClick(card.key)}
+                className={`bg-white rounded-xl border p-4 transition-all ${card.key ? 'cursor-pointer hover:shadow-md' : ''} ${isActive ? `ring-2 ${card.ringColor} shadow-md` : ''}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-slate-500">{card.label}</p>
+                  <Icon size={16} className={card.color} />
+                </div>
+                <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* Scan button + filters */}
+      {/* Action Buttons */}
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={() => scanMutation.mutate()}
-          disabled={scanMutation.isPending}
+          disabled={scanMutation.isPending || autoScan}
           className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
         >
           <RefreshCw size={16} className={scanMutation.isPending ? 'animate-spin' : ''} />
           {scanMutation.isPending ? 'Scanning...' : 'Scan Lender Emails'}
         </button>
+        <button
+          onClick={() => setAutoScan(prev => { const next = !prev; localStorage.setItem('lender-auto-scan', String(next)); return next })}
+          className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            autoScan
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          <span className={`inline-block w-2 h-2 rounded-full ${autoScan ? 'bg-green-300 animate-pulse' : 'bg-slate-400'}`} />
+          {autoScan ? `Auto Scan ON (${countdown}s)` : 'Auto Scan OFF'}
+        </button>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="flex items-center gap-3 flex-wrap">
         <input
           type="text"
           placeholder="Search subject, email, merchant..."
@@ -668,6 +758,17 @@ function LenderEmailsTab() {
           onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           className="px-3 py-2 border border-slate-300 rounded-lg text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
+        <select
+          value={aiStatusFilter}
+          onChange={(e) => { setAiStatusFilter(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">All Statuses</option>
+          <option value="approved">Approved</option>
+          <option value="declined">Declined</option>
+          <option value="needs_documents">Needs Documents</option>
+          <option value="under_review">Under Review</option>
+        </select>
         <select
           value={dirFilter}
           onChange={(e) => { setDirFilter(e.target.value); setPage(1) }}
@@ -686,27 +787,44 @@ function LenderEmailsTab() {
           <option value="yes">Offer Detected</option>
           <option value="no">No Offer</option>
         </select>
+        {stats && stats.by_lender.length > 0 && (
+          <select
+            value={lenderFilter}
+            onChange={(e) => { setLenderFilter(e.target.value); setPage(1) }}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">All Lenders</option>
+            {stats.by_lender.map(l => (
+              <option key={l.lender_id} value={l.lender_id}>{l.lender_name} ({l.count})</option>
+            ))}
+          </select>
+        )}
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          title="Date From"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          title="Date To"
+        />
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            className="inline-flex items-center gap-1 px-3 py-2 text-sm text-slate-600 hover:text-slate-800 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <X size={14} /> Clear Filters
+          </button>
+        )}
       </div>
 
-      {/* By Lender breakdown */}
-      {stats && stats.by_lender.length > 0 && (
-        <div className="bg-white rounded-xl border p-4">
-          <h4 className="text-sm font-semibold text-slate-700 mb-3">By Lender</h4>
-          <div className="flex flex-wrap gap-3">
-            {stats.by_lender.map(l => (
-              <div key={l.lender_id} className="flex items-center gap-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
-                  {l.lender_name}
-                </span>
-                <span className="text-sm font-medium text-slate-700">{l.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Table — full-width columns, scrollable, with expandable body */}
-      {filtered.length === 0 && !isLoading ? (
+      {/* Table */}
+      {conversations.length === 0 && !isLoading ? (
         <EmptyState icon={Mail} title="No lender conversations found" description="Scan your inbox to detect emails from known lenders mentioning your merchants" />
       ) : (
         <div className="bg-white rounded-xl border overflow-hidden">
@@ -715,52 +833,43 @@ function LenderEmailsTab() {
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
                   <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Date</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
                   <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Dir</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">From</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Lender</th>
                   <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Merchant</th>
                   <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Subject</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Attach</th>
                   <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Offer</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400"><RefreshCw size={16} className="animate-spin inline mr-2" />Loading...</td></tr>
-                ) : filtered.map(r => (
+                ) : conversations.map(r => (
                   <React.Fragment key={r.id}>
                     <tr
                       className={`hover:bg-slate-50 cursor-pointer transition-colors ${expandedId === r.id ? 'bg-indigo-50/40' : ''}`}
                       onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
                     >
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">{formatDate(r.conversation_date)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{aiStatusBadge(r.ai_response_status)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {r.direction === 'inbound' ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                            <ArrowDownLeft size={10} /> Inbound
+                            <ArrowDownLeft size={10} /> In
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
-                            <ArrowUpRight size={10} /> Outbound
+                            <ArrowUpRight size={10} /> Out
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{r.from_email}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-800">{r.detected_merchant_name || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{r.subject || '(no subject)'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {r.has_attachments ? (
-                          <span className="inline-flex items-center gap-1 text-sm text-slate-600">
-                            <Paperclip size={12} /> {r.attachment_count}
-                            {r.attachment_filenames && r.attachment_filenames.length > 0 && (
-                              <span className="text-xs text-slate-400 ml-1">({r.attachment_filenames.join(', ')})</span>
-                            )}
-                          </span>
-                        ) : <span className="text-slate-300 text-sm">—</span>}
-                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{(r.lender_id && lenderMap[r.lender_id]) || r.from_email}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-slate-800">{r.ai_merchant_name || r.detected_merchant_name || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 max-w-[250px] truncate">{r.subject || '(no subject)'}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {r.offer_detected ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                            <DollarSign size={11} /> Offer Detected
+                            <DollarSign size={11} /> Offer
                           </span>
                         ) : <span className="text-slate-300 text-sm">—</span>}
                       </td>
@@ -768,9 +877,43 @@ function LenderEmailsTab() {
                     {expandedId === r.id && (
                       <tr>
                         <td colSpan={7} className="px-0 py-0">
-                          <div className="border-t border-indigo-100 bg-slate-50/70 px-6 py-4">
+                          <div className="border-t border-indigo-100 bg-slate-50/70 px-6 py-4 space-y-3">
+                            {/* AI Analysis Card */}
+                            {(r.ai_response_status || r.ai_confidence !== null || r.ai_merchant_name) && (
+                              <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+                                <p className="text-xs font-semibold text-indigo-700 mb-2">AI Analysis</p>
+                                <div className="flex flex-wrap items-center gap-4 text-xs text-indigo-800">
+                                  {r.ai_response_status && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-slate-500">Status:</span> {aiStatusBadge(r.ai_response_status)}
+                                    </div>
+                                  )}
+                                  {r.ai_confidence !== null && (
+                                    <div>
+                                      <span className="text-slate-500">Confidence:</span>{' '}
+                                      <strong>{Math.round(r.ai_confidence * 100)}%</strong>
+                                    </div>
+                                  )}
+                                  {r.ai_merchant_name && (
+                                    <div>
+                                      <span className="text-slate-500">AI Merchant:</span>{' '}
+                                      <strong>{r.ai_merchant_name}</strong>
+                                      {r.detected_merchant_name && r.ai_merchant_name !== r.detected_merchant_name && (
+                                        <span className="ml-1 text-slate-400">(detected: {r.detected_merchant_name})</span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {r.submission_id && (
+                                    <div>
+                                      <span className="text-slate-500">Linked to Submission</span>{' '}
+                                      <strong>#{r.submission_id}</strong>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                             {/* Header meta */}
-                            <div className="flex items-start gap-6 mb-3 text-xs text-slate-500">
+                            <div className="flex items-start gap-6 text-xs text-slate-500">
                               <div><span className="font-semibold text-slate-600">From:</span> {r.from_email}</div>
                               <div><span className="font-semibold text-slate-600">To:</span> {r.to_email || '—'}</div>
                               <div><span className="font-semibold text-slate-600">Date:</span> {formatDate(r.conversation_date)}</div>
@@ -779,14 +922,14 @@ function LenderEmailsTab() {
                               )}
                             </div>
                             {r.subject && (
-                              <div className="mb-3">
+                              <div>
                                 <span className="text-xs font-semibold text-slate-600">Subject: </span>
                                 <span className="text-sm font-medium text-slate-800">{r.subject}</span>
                               </div>
                             )}
                             {/* Offer details */}
                             {r.offer_detected && r.offer_details && (
-                              <div className="mb-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                              <div className="p-3 rounded-lg bg-green-50 border border-green-200">
                                 <p className="text-xs font-semibold text-green-700 mb-1">Offer Details</p>
                                 <div className="flex flex-wrap gap-3 text-xs text-green-800">
                                   {!!r.offer_details.amount && <span>Amount: <strong>${Number(r.offer_details.amount).toLocaleString()}</strong></span>}
@@ -798,7 +941,7 @@ function LenderEmailsTab() {
                             )}
                             {/* Attachments */}
                             {r.has_attachments && r.attachment_filenames && r.attachment_filenames.length > 0 && (
-                              <div className="mb-3">
+                              <div>
                                 <span className="text-xs font-semibold text-slate-600">Attachments: </span>
                                 {r.attachment_filenames.map((f, i) => (
                                   <span key={i} className="inline-flex items-center gap-1 mr-2 px-2 py-0.5 rounded bg-slate-200 text-xs text-slate-700">
@@ -808,7 +951,7 @@ function LenderEmailsTab() {
                               </div>
                             )}
                             {/* Full email body */}
-                            <div className="mt-2">
+                            <div>
                               <p className="text-xs font-semibold text-slate-600 mb-1">Email Content</p>
                               <div className="bg-white rounded-lg border border-slate-200 p-4 max-h-[500px] overflow-y-auto">
                                 <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{r.body_preview || '(no body)'}</pre>

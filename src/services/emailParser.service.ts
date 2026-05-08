@@ -109,6 +109,10 @@ export interface LenderConversation {
   conversation_date: string
   activity_id: number | null
   note_id: number | null
+  ai_response_status: 'approved' | 'declined' | 'needs_documents' | 'under_review' | null
+  ai_confidence: number | null
+  ai_merchant_name: string | null
+  submission_id: number | null
   created_at: string
   updated_at: string
   [key: string]: unknown
@@ -120,6 +124,10 @@ export interface LenderEmailStats {
   inbound: number
   outbound: number
   by_lender: Array<{ lender_id: number; lender_name: string; count: number }>
+  approved: number
+  declined: number
+  needs_documents: number
+  under_review: number
   [key: string]: unknown
 }
 
@@ -207,6 +215,10 @@ export const emailParserService = {
     lender_id?: number
     offer_detected?: boolean
     search?: string
+    direction?: string
+    ai_status?: string
+    date_from?: string
+    date_to?: string
   }) => api.get('/lender-email/conversations', { params }),
 
   getLenderConversation: (id: number) =>

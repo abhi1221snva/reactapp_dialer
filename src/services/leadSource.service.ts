@@ -60,4 +60,8 @@ export const leadSourceService = {
   /** Rotate webhook secret — POST /lead-source/{id}/rotate-secret */
   rotateSecret: (id: number) =>
     api.post(`/lead-source/${id}/rotate-secret`),
+
+  /** Fetch paginated webhook audit logs — GET /lead-source/{sourceId}/webhook-logs */
+  getWebhookLogs: (sourceId: number, params: { page?: number; per_page?: number }) =>
+    api.get(`/lead-source/${sourceId}/webhook-logs`, { params }),
 }

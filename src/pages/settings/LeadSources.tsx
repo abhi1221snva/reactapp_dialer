@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Globe, Save, X, Settings2, Copy, RefreshCw, Webhook, Mail, MessageSquare, Bell, Check, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe, Save, X, Settings2, Copy, RefreshCw, Webhook, Mail, MessageSquare, Bell, Check, ChevronDown, FileText, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { DataTable, type Column } from '../../components/ui/DataTable'
@@ -552,6 +552,172 @@ function WebhookModal({
   )
 }
 
+// ─── Webhook Audit Modal ──────────────────────────────────────────────────────
+
+interface WebhookLogEntry {
+  id: number
+  lead_source_id: number
+  ip_address: string | null
+  request_headers: Record<string, string> | null
+  request_payload: Record<string, unknown> | null
+  response_status: string
+  response_code: number
+  response_body: Record<string, unknown> | null
+  lead_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+const statusBadge: Record<string, { color: string; bg: string; label: string }> = {
+  success:          { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', label: 'Success' },
+  error:            { color: 'text-red-700',     bg: 'bg-red-50 border-red-200',         label: 'Error' },
+  validation_error: { color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200',     label: 'Validation Error' },
+  duplicate:        { color: 'text-orange-700',   bg: 'bg-orange-50 border-orange-200',   label: 'Duplicate' },
+  rejected:         { color: 'text-slate-600',    bg: 'bg-slate-50 border-slate-200',     label: 'Rejected' },
+}
+
+function WebhookAuditModal({
+  source,
+  onClose,
+}: {
+  source: LeadSourceItem
+  onClose: () => void
+}) {
+  const [page, setPage] = useState(1)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const perPage = 15
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['webhook-audit-logs', source.id, page],
+    queryFn: () => leadSourceService.getWebhookLogs(source.id, { page, per_page: perPage }),
+  })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = data as any
+  const paginated = raw?.data?.data
+  const logs: WebhookLogEntry[] = Array.isArray(paginated?.data) ? paginated.data : []
+  const lastPage: number = paginated?.last_page ?? 1
+  const total: number = paginated?.total ?? 0
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+              <FileText size={15} className="text-violet-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 text-sm">{capFirst(source.source_title)} — Webhook Audit Logs</h3>
+              <p className="text-xs text-slate-400">{total} total log entries</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="btn-ghost p-1.5 text-slate-400 hover:text-slate-600">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading...</div>
+          ) : logs.length === 0 ? (
+            <div className="flex items-center justify-center py-16 text-sm text-slate-400">No webhook logs yet.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Date/Time</th>
+                  <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Status</th>
+                  <th className="text-left px-4 py-2.5 text-slate-500 font-medium">HTTP</th>
+                  <th className="text-left px-4 py-2.5 text-slate-500 font-medium">IP Address</th>
+                  <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Lead ID</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {logs.map(log => {
+                  const badge = statusBadge[log.response_status] ?? statusBadge.error
+                  const isExpanded = expandedId === log.id
+                  return (
+                    <tr key={log.id} className="group" >
+                      <td colSpan={5} className="p-0">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                          className="w-full text-left hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center">
+                            <span className="px-4 py-2.5 text-slate-600">{log.created_at ? formatDateTime(log.created_at) : '—'}</span>
+                            <span className="px-4 py-2.5">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${badge.bg} ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                            </span>
+                            <span className="px-4 py-2.5 font-mono text-slate-600">{log.response_code}</span>
+                            <span className="px-4 py-2.5 text-slate-500">{log.ip_address ?? '—'}</span>
+                            <span className="px-4 py-2.5 text-slate-600">{log.lead_id ?? '—'}</span>
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100 space-y-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1">Request Headers</p>
+                              <pre className="bg-white border border-slate-200 rounded-lg p-3 text-xs text-slate-700 overflow-x-auto max-h-32">
+                                {log.request_headers ? JSON.stringify(log.request_headers, null, 2) : '—'}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1">Request Payload</p>
+                              <pre className="bg-white border border-slate-200 rounded-lg p-3 text-xs text-slate-700 overflow-x-auto max-h-48">
+                                {log.request_payload ? JSON.stringify(log.request_payload, null, 2) : '—'}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1">Response Body</p>
+                              <pre className="bg-white border border-slate-200 rounded-lg p-3 text-xs text-slate-700 overflow-x-auto max-h-48">
+                                {log.response_body ? JSON.stringify(log.response_body, null, 2) : '—'}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {lastPage > 1 && (
+          <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-white">
+            <span className="text-xs text-slate-400">Page {page} of {lastPage}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(lastPage, p + 1))}
+                disabled={page >= lastPage}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export function LeadSources() {
@@ -561,6 +727,7 @@ export function LeadSources() {
   const [showModal, setShowModal]       = useState(false)
   const [editSource, setEditSource]     = useState<LeadSourceItem | null>(null)
   const [webhookSource, setWebhookSource] = useState<LeadSourceItem | null>(null)
+  const [auditSource, setAuditSource]   = useState<LeadSourceItem | null>(null)
   const { setToolbar } = useDialerHeader()
 
   useEffect(() => {
@@ -686,6 +853,12 @@ export function LeadSources() {
             onClick: () => navigate(`/settings/lead-sources/${row.id}/fields`),
           },
           {
+            label: 'Audit Logs',
+            icon: <FileText size={13} />,
+            variant: 'view' as const,
+            onClick: () => setAuditSource(row),
+          },
+          {
             label: 'Edit',
             icon: <Pencil size={13} />,
             variant: 'edit',
@@ -718,6 +891,13 @@ export function LeadSources() {
           onClose={() => setWebhookSource(null)}
           onRotated={handleRotated}
           onUpdated={() => qc.invalidateQueries({ queryKey: ['lead-sources'] })}
+        />
+      )}
+
+      {auditSource && (
+        <WebhookAuditModal
+          source={auditSource}
+          onClose={() => setAuditSource(null)}
         />
       )}
 

@@ -28,4 +28,5 @@ export const gmailService = {
   markAsRead:  (messageId: string) => api.post(`/gmail/mailbox/${messageId}/read`),
   markAsUnread:(messageId: string) => api.post(`/gmail/mailbox/${messageId}/unread`),
   getLabels:   ()                  => api.get('/gmail/mailbox/labels'),
+  classifyEmails: (messageIds: string[]) => api.post('/gmail/mailbox/classify', { message_ids: messageIds }),
 }

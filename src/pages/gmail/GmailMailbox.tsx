@@ -31,6 +31,15 @@ interface EmailSummary {
   labels: string[]
 }
 
+interface AiAnalysis {
+  email_type: string | null
+  category: string | null
+  priority: string | null
+  summary: string | null
+  sentiment: string | null
+  key_points: string[] | null
+}
+
 interface EmailDetail extends EmailSummary {
   cc: EmailAddress
   bcc: EmailAddress
@@ -43,6 +52,7 @@ interface EmailDetail extends EmailSummary {
     mime_type: string
     size: number
   }>
+  ai_analysis?: AiAnalysis | null
 }
 
 interface GmailLabel {
@@ -96,6 +106,14 @@ function avatarColor(seed: string): string {
   let h = 0
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0xffffffff
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+const EMAIL_TYPE_BADGES: Record<string, { label: string; bg: string; text: string }> = {
+  lender:          { label: 'Lender',    bg: '#e8f0fe', text: '#1a73e8' },
+  merchant:        { label: 'Merchant',  bg: '#e6f4ea', text: '#137333' },
+  acknowledgement: { label: 'Ack',       bg: '#f1f3f4', text: '#5f6368' },
+  newsletter:      { label: 'Newsletter',bg: '#fce8e6', text: '#c5221f' },
+  internal:        { label: 'Internal',  bg: '#fef7e0', text: '#ea8600' },
 }
 
 const FOLDERS = [
@@ -219,12 +237,19 @@ function EmailDetailPanel({
   const [showReply, setShowReply] = useState(false)
   const [replyBody, setReplyBody] = useState('')
 
-  const { data: email, isLoading } = useQuery({
+  const { data: emailData, isLoading } = useQuery({
     queryKey: ['gmail-email', messageId],
     queryFn: () => gmailService.getEmail(messageId),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    select: (res: any) => (res.data?.data?.email ?? res.data?.data) as EmailDetail,
+    select: (res: any) => {
+      const d = res.data?.data
+      const emailObj = (d?.email ?? d) as EmailDetail
+      const analysis = d?.ai_analysis as AiAnalysis | null | undefined
+      if (analysis) emailObj.ai_analysis = analysis
+      return emailObj
+    },
   })
+  const email = emailData
 
   useEffect(() => {
     if (email?.is_unread) {
@@ -353,6 +378,48 @@ function EmailDetailPanel({
           </div>
         </div>
 
+        {/* AI Analysis Panel */}
+        {email.ai_analysis && (
+          <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              {email.ai_analysis.email_type && EMAIL_TYPE_BADGES[email.ai_analysis.email_type] && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                  style={{ background: EMAIL_TYPE_BADGES[email.ai_analysis.email_type].bg, color: EMAIL_TYPE_BADGES[email.ai_analysis.email_type].text }}>
+                  {EMAIL_TYPE_BADGES[email.ai_analysis.email_type].label}
+                </span>
+              )}
+              {email.ai_analysis.priority && (
+                <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                  email.ai_analysis.priority === 'high' ? 'bg-red-100 text-red-700' :
+                  email.ai_analysis.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-green-100 text-green-700'
+                )}>
+                  {email.ai_analysis.priority.charAt(0).toUpperCase() + email.ai_analysis.priority.slice(1)} Priority
+                </span>
+              )}
+              {email.ai_analysis.sentiment && (
+                <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                  email.ai_analysis.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
+                  email.ai_analysis.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
+                  'bg-slate-100 text-slate-600'
+                )}>
+                  {email.ai_analysis.sentiment.charAt(0).toUpperCase() + email.ai_analysis.sentiment.slice(1)}
+                </span>
+              )}
+            </div>
+            {email.ai_analysis.summary && (
+              <p className="text-xs text-slate-600 mb-2">{email.ai_analysis.summary}</p>
+            )}
+            {email.ai_analysis.key_points && email.ai_analysis.key_points.length > 0 && (
+              <ul className="text-xs text-slate-500 list-disc list-inside space-y-0.5">
+                {email.ai_analysis.key_points.map((point, i) => (
+                  <li key={i}>{point}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {/* Body */}
         <div className="text-sm text-slate-800 leading-relaxed mb-6">
           {email.body_html ? (
@@ -446,7 +513,7 @@ function EmailDetailPanel({
 // ─── Email Row ────────────────────────────────────────────────────────────────
 
 function EmailRow({
-  email, selected, checked, onClick, onStar, onCheck,
+  email, selected, checked, onClick, onStar, onCheck, emailType,
 }: {
   email: EmailSummary
   selected: boolean
@@ -454,6 +521,7 @@ function EmailRow({
   onClick: () => void
   onStar: (e: React.MouseEvent) => void
   onCheck: (e: React.MouseEvent) => void
+  emailType?: string | null
 }) {
   const [hovered, setHovered] = useState(false)
   const bgColor = avatarColor(email.from.email)
@@ -498,11 +566,17 @@ function EmailRow({
         {email.from.name || email.from.email}
       </div>
 
-      {/* Subject + snippet */}
+      {/* Subject + badge + snippet */}
       <div className="flex-1 min-w-0 flex items-baseline gap-2 overflow-hidden">
         <span className={cn('text-sm shrink-0', email.is_unread ? 'font-semibold text-slate-900' : 'text-slate-800')}>
           {email.subject || '(No Subject)'}
         </span>
+        {emailType && EMAIL_TYPE_BADGES[emailType] && (
+          <span className="inline-flex items-center px-1.5 py-0 rounded-full shrink-0"
+            style={{ background: EMAIL_TYPE_BADGES[emailType].bg, color: EMAIL_TYPE_BADGES[emailType].text, fontSize: 10, lineHeight: '18px' }}>
+            {EMAIL_TYPE_BADGES[emailType].label}
+          </span>
+        )}
         <span className="text-sm text-slate-500 truncate">
           — {email.snippet}
         </span>
@@ -544,6 +618,7 @@ export function GmailMailbox() {
   const [checked, setChecked]         = useState<Set<string>>(new Set())
   const [selectAll, setSelectAll]     = useState(false)
   const [connecting, setConnecting]   = useState(false)
+  const [classifications, setClassifications] = useState<Record<string, string>>({})
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
 
@@ -591,6 +666,7 @@ export function GmailMailbox() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     select: (res: any) => (res.data?.data?.labels ?? []) as GmailLabel[],
     staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 
   // Email list
@@ -605,6 +681,7 @@ export function GmailMailbox() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     select: (res: any) => res.data?.data as EmailListResult,
     placeholderData: (prev: EmailListResult | undefined) => prev,
+    refetchInterval: 60_000,
   })
 
   const emails = localEmails ?? emailsData?.emails ?? []
@@ -617,6 +694,26 @@ export function GmailMailbox() {
       setSelectAll(false)
     }
   }, [emailsData])
+
+  // Classify visible emails (fire-and-forget)
+  useEffect(() => {
+    if (!emails.length) return
+    const unclassified = emails
+      .map(e => e.id)
+      .filter(id => !(id in classifications))
+      .slice(0, 15)
+    if (!unclassified.length) return
+    gmailService.classifyEmails(unclassified)
+      .then((res) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (res as any).data?.data?.classifications
+        if (data && typeof data === 'object') {
+          setClassifications(prev => ({ ...prev, ...data }))
+        }
+      })
+      .catch(() => {}) // non-critical
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emails.map(e => e.id).join(',')])
 
   const handleSearchInput = (val: string) => {
     setSearchInput(val)
@@ -989,6 +1086,7 @@ export function GmailMailbox() {
                     onClick={() => handleEmailSelect(email.id)}
                     onStar={e => handleStarToggle(e, email)}
                     onCheck={e => handleCheck(e, email.id)}
+                    emailType={classifications[email.id]}
                   />
                 ))
               )}

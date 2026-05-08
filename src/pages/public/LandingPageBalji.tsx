@@ -9,6 +9,9 @@ import {
   Smartphone, ExternalLink, TrendingUp,
   Activity, DollarSign, Layers,
   Mic, MicOff, Pause, Hash, StickyNote,
+  CreditCard, Briefcase, FileText, Building2, Receipt, Landmark,
+  Mail, MessageSquare, Plug, ChevronUp,
+  XCircle, CheckCircle2,
 } from 'lucide-react'
 import { useInView } from '../../hooks/useInView'
 import { useCounter } from '../../hooks/useCounter'
@@ -33,6 +36,7 @@ function Navbar() {
 
   const navLinks = [
     { label: 'Features', href: '#features' },
+    { label: 'Solutions', href: '#verticals' },
     { label: 'How It Works', href: '#how-it-works' },
     { label: 'Pricing', href: '#pricing' },
     { label: 'Mobile App', href: '#mobile-app' },
@@ -175,21 +179,21 @@ function Hero() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
-              <span className="text-[13px] font-medium text-gray-600">CPaaS Platform for Revenue-Based Financing</span>
+              <span className="text-[13px] font-medium text-gray-600">The #1 CPaaS Platform for Brokers &amp; ISOs</span>
             </div>
 
             <h1 className={`text-4xl sm:text-5xl lg:text-[3.5rem] xl:text-6xl font-extrabold tracking-tight leading-[1.08] mb-6 transition-all duration-700 delay-100 ${loaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
-              <span className="text-gray-900">The Smarter Way to </span>
               <span className="relative inline-block">
                 <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">
-                  Communicate & Close
+                  Close More Deals.
                 </span>
-                <div className="absolute -bottom-1 left-0 right-0 h-[3px] bg-gradient-to-r from-blue-600 to-emerald-500 rounded-full opacity-30" />
               </span>
+              <br />
+              <span className="text-gray-900">Faster.</span>
             </h1>
 
             <p className={`text-lg text-gray-500 leading-relaxed max-w-xl mb-10 transition-all duration-700 delay-200 ${loaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
-              Auto dialer, CRM pipeline, real-time analytics, and AI-powered collections &mdash; unified in one platform built for lending teams.
+              Auto dialer, CRM pipeline, real-time analytics, and AI-powered outreach &mdash; unified in one platform built for MCA brokers, equipment financing, SBA lenders, and ISOs.
             </p>
 
             <div className={`flex flex-col sm:flex-row items-start gap-4 mb-12 transition-all duration-700 delay-300 ${loaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
@@ -226,10 +230,10 @@ function Hero() {
           <div className={`relative transition-all duration-1000 delay-300 ${loaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
             <div className="absolute -inset-8 bg-gradient-to-br from-blue-100/30 via-transparent to-emerald-100/30 rounded-3xl blur-2xl pointer-events-none" />
             <div className="relative grid grid-cols-2 gap-3">
-              <LiveMetricCard icon={PhoneCall} label="Calls Today" value="1,284" change="+23% vs avg" color="blue" delay={500} />
-              <LiveMetricCard icon={Target} label="Deals Closed" value="47" change="+18% this week" color="emerald" delay={650} />
-              <LiveMetricCard icon={DollarSign} label="Revenue" value="$2.4M" change="+31% MoM" color="violet" delay={800} />
-              <LiveMetricCard icon={Users} label="Active Agents" value="128" change="98% online" color="amber" delay={950} />
+              <LiveMetricCard icon={PhoneCall} label="Live Calls" value="1,284" change="+23% vs avg" color="blue" delay={500} />
+              <LiveMetricCard icon={Target} label="Funded Today" value="47" change="+18% this week" color="emerald" delay={650} />
+              <LiveMetricCard icon={DollarSign} label="Pipeline Value" value="$2.4M" change="+31% MoM" color="violet" delay={800} />
+              <LiveMetricCard icon={Users} label="Agents Online" value="128" change="98% online" color="amber" delay={950} />
 
               {/* Live call activity card */}
               <div className={`col-span-2 bg-white/70 backdrop-blur-sm rounded-2xl border border-gray-100/80 p-5 shadow-sm ring-1 ring-gray-100 transition-all duration-700 delay-[1100ms] ${loaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
@@ -273,18 +277,29 @@ function Hero() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Social proof logos strip
+   Logo Marquee Ticker — CSS-animated infinite horizontal scroll
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function SocialProofStrip() {
-  const { ref, visible } = useInView()
+function LogoMarquee() {
+  const logos = [
+    'CapitalStack', 'FundingCircle', 'MerchantGrowth', 'ApexFunding', 'VelocityCapital',
+    'IronBridge Finance', 'BlueHarbor', 'SwiftFund', 'PinnacleISO', 'TridentCapital',
+    'SummitFunding', 'NorthStar MCA', 'OakTree Lending', 'PrimeRate ISO', 'FundVault',
+  ]
+
   return (
-    <section ref={ref} className="relative py-12 bg-white/50 border-y border-gray-100/50">
-      <div className={`max-w-5xl mx-auto px-4 text-center transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-8">Trusted by 500+ finance teams worldwide</p>
-        <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 opacity-40">
-          {['FinanceFlow', 'LendHub', 'CapitalPulse', 'FundVault', 'LoanBridge'].map(name => (
-            <span key={name} className="text-xl font-bold text-gray-400 tracking-tight">{name}</span>
+    <section className="relative py-10 bg-white/50 border-y border-gray-100/50 overflow-hidden">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest text-center mb-6">
+        Trusted by 1,200+ brokers &amp; ISOs nationwide
+      </p>
+      <div className="relative">
+        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+        <div className="flex gap-12 animate-marquee">
+          {[...logos, ...logos].map((name, i) => (
+            <span key={`${name}-${i}`} className="text-lg font-bold text-gray-300 tracking-tight whitespace-nowrap flex-shrink-0 select-none">
+              {name}
+            </span>
           ))}
         </div>
       </div>
@@ -298,16 +313,16 @@ function SocialProofStrip() {
 
 function StatsBar() {
   const { ref, visible } = useInView()
-  const c0 = useCounter(500, visible)
-  const c1 = useCounter(12, visible, 1500)
+  const c0 = useCounter(1200, visible)
+  const c1 = useCounter(25, visible, 1500)
   const c2 = useCounter(99, visible, 1800)
-  const c3 = useCounter(45, visible, 1200)
+  const c3 = useCounter(4, visible, 1200)
 
   const stats = [
-    { val: `${c0}+`, label: 'Finance Teams', icon: Users, color: 'from-blue-500 to-blue-600' },
-    { val: `${c1}M+`, label: 'Calls Made', icon: PhoneCall, color: 'from-indigo-500 to-indigo-600' },
+    { val: `${c0}+`, label: 'Brokers & ISOs', icon: Users, color: 'from-blue-500 to-blue-600' },
+    { val: `${c1}M+`, label: 'Calls Placed', icon: PhoneCall, color: 'from-indigo-500 to-indigo-600' },
     { val: `${c2}.99%`, label: 'Uptime', icon: Clock, color: 'from-emerald-500 to-emerald-600' },
-    { val: `${c3}+`, label: 'Countries', icon: Globe, color: 'from-violet-500 to-violet-600' },
+    { val: `$${c3}B+`, label: 'Funded', icon: DollarSign, color: 'from-violet-500 to-violet-600' },
   ]
 
   return (
@@ -342,10 +357,10 @@ function StatsBar() {
 
 const features = [
   { icon: Zap, title: 'Auto Dialer', desc: 'Progressive and preview modes that maximize connect rates. AI-paced dialing adapts to your team\'s capacity in real time.', iconBg: 'bg-amber-50 ring-amber-100', iconColor: 'text-amber-600', to: '/product/auto-dialer' },
-  { icon: Users, title: 'CRM Pipeline', desc: 'Track every borrower from application to funding. Custom stages, deal history, and 360-degree contact views.', iconBg: 'bg-blue-50 ring-blue-100', iconColor: 'text-blue-600', to: '/product/crm-pipeline' },
-  { icon: BarChart3, title: 'Revenue Analytics', desc: 'Real-time dashboards for portfolio performance, agent productivity, and collection forecasting.', iconBg: 'bg-emerald-50 ring-emerald-100', iconColor: 'text-emerald-600', to: '/product/analytics' },
-  { icon: Brain, title: 'AI-Powered Insights', desc: 'Sentiment analysis on every call. Smart repayment scoring and automated agent coaching suggestions.', iconBg: 'bg-violet-50 ring-violet-100', iconColor: 'text-violet-600', to: '/product/ai-insights' },
-  { icon: Megaphone, title: 'Multi-Channel Outreach', desc: 'Voice, SMS, and email unified in one workspace. Automated drip campaigns for payment reminders.', iconBg: 'bg-pink-50 ring-pink-100', iconColor: 'text-pink-600', to: '/product/auto-dialer' },
+  { icon: Users, title: 'CRM Pipeline', desc: 'Track every merchant from first contact to funding. Custom stages, deal history, and 360-degree contact views.', iconBg: 'bg-blue-50 ring-blue-100', iconColor: 'text-blue-600', to: '/product/crm-pipeline' },
+  { icon: BarChart3, title: 'Revenue Analytics', desc: 'Real-time dashboards for deal performance, agent productivity, and pipeline forecasting.', iconBg: 'bg-emerald-50 ring-emerald-100', iconColor: 'text-emerald-600', to: '/product/analytics' },
+  { icon: Brain, title: 'AI-Powered Insights', desc: 'Sentiment analysis on every call. Smart deal scoring and automated agent coaching suggestions.', iconBg: 'bg-violet-50 ring-violet-100', iconColor: 'text-violet-600', to: '/product/ai-insights' },
+  { icon: Megaphone, title: 'Multi-Channel Outreach', desc: 'Voice, SMS, and email unified in one workspace. Automated drip campaigns for merchant follow-ups.', iconBg: 'bg-pink-50 ring-pink-100', iconColor: 'text-pink-600', to: '/product/auto-dialer' },
   { icon: Shield, title: 'Compliance & Recording', desc: 'Every call recorded with full audit trails. Built-in TCPA compliance tools and consent management.', iconBg: 'bg-rose-50 ring-rose-100', iconColor: 'text-rose-600', to: '/legal/security' },
 ]
 
@@ -362,9 +377,9 @@ function Features() {
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
             Everything You Need to{' '}
-            <span className="bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">Finance Smarter</span>
+            <span className="bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">Close More Deals</span>
           </h2>
-          <p className="text-lg text-gray-500 leading-relaxed">A complete communications and CRM platform purpose-built for revenue-based financing.</p>
+          <p className="text-lg text-gray-500 leading-relaxed">A complete communications and CRM platform purpose-built for brokers and ISOs in business financing.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
@@ -382,6 +397,57 @@ function Features() {
                 Learn more <ChevronRight size={14} />
               </div>
             </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Built for Every Funding Vertical
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function FundingVerticals() {
+  const { ref, visible } = useInView()
+
+  const verticals = [
+    { icon: CreditCard, title: 'Merchant Cash Advance', desc: 'Reach merchants faster with automated dialing and fast-track MCA deals through your pipeline.', color: 'bg-blue-50 text-blue-600 ring-blue-100' },
+    { icon: Briefcase, title: 'Equipment Financing', desc: 'Manage complex equipment deals with multi-stage pipelines and document tracking.', color: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
+    { icon: Landmark, title: 'SBA Loans', desc: 'Stay organized through lengthy SBA processes with automated follow-ups and status tracking.', color: 'bg-violet-50 text-violet-600 ring-violet-100' },
+    { icon: LineChart, title: 'Lines of Credit', desc: 'Nurture merchant relationships with drip campaigns and renewal reminders.', color: 'bg-amber-50 text-amber-600 ring-amber-100' },
+    { icon: TrendingUp, title: 'Revenue-Based Financing', desc: 'Track revenue metrics and automate outreach for RBF-specific deal flows.', color: 'bg-pink-50 text-pink-600 ring-pink-100' },
+    { icon: Receipt, title: 'Invoice Factoring', desc: 'Streamline invoice verification and merchant communication with integrated workflows.', color: 'bg-rose-50 text-rose-600 ring-rose-100' },
+  ]
+
+  return (
+    <section id="verticals" ref={ref} className="relative py-24 lg:py-32">
+      <div className="absolute inset-0 bg-gradient-to-b from-white via-gray-50/30 to-white" />
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className={`text-center max-w-3xl mx-auto mb-16 lg:mb-20 transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm mb-6">
+            <Building2 size={14} className="text-emerald-600" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Solutions</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
+            Built for Every{' '}
+            <span className="bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">Funding Vertical</span>
+          </h2>
+          <p className="text-lg text-gray-500 leading-relaxed">Whatever product you broker, Balji adapts to your workflow.</p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
+          {verticals.map((v, i) => (
+            <div key={v.title}
+              className={`group p-7 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-xl hover:border-gray-200 hover:-translate-y-1 transition-all duration-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+              style={{ transitionDelay: `${i * 80}ms` }}
+            >
+              <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl ring-1 mb-5 transition-transform duration-300 group-hover:scale-110 ${v.color}`}>
+                <v.icon size={22} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2.5">{v.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">{v.desc}</p>
+            </div>
           ))}
         </div>
       </div>
@@ -413,7 +479,7 @@ function PlatformShowcase() {
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Product</span>
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-4">Built for Speed and Scale</h2>
-          <p className="text-lg text-gray-500 max-w-2xl mx-auto">A beautifully crafted workspace your finance team will love.</p>
+          <p className="text-lg text-gray-500 max-w-2xl mx-auto">A beautifully crafted workspace your brokerage team will love.</p>
         </div>
 
         <div className={`flex justify-center mb-10 transition-all duration-700 delay-100 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
@@ -456,10 +522,10 @@ function PlatformShowcase() {
               <div className="p-6 bg-gray-50/50 min-h-[420px]">
                 <div className="grid grid-cols-4 gap-4 mb-6">
                   {[
-                    { label: 'Total Revenue', val: '$2.4M', change: '+18%', color: 'text-emerald-600' },
+                    { label: 'Pipeline Value', val: '$2.4M', change: '+18%', color: 'text-emerald-600' },
                     { label: 'Active Deals', val: '284', change: '+12%', color: 'text-blue-600' },
                     { label: 'Calls Today', val: '1,847', change: '+23%', color: 'text-indigo-600' },
-                    { label: 'Collection Rate', val: '94.2%', change: '+5.3%', color: 'text-violet-600' },
+                    { label: 'Funding Rate', val: '94.2%', change: '+5.3%', color: 'text-violet-600' },
                   ].map(m => (
                     <div key={m.label} className="bg-white rounded-xl border border-gray-100 p-4">
                       <p className="text-[11px] font-medium text-gray-400 mb-1">{m.label}</p>
@@ -471,7 +537,7 @@ function PlatformShowcase() {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-2 bg-white rounded-xl border border-gray-100 p-5">
                     <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm font-semibold text-gray-900">Revenue Trend</span>
+                      <span className="text-sm font-semibold text-gray-900">Funding Trend</span>
                       <div className="flex gap-2 text-[10px]">
                         <span className="px-2 py-1 bg-gray-900 text-white rounded-md font-medium">Monthly</span>
                         <span className="px-2 py-1 text-gray-500 rounded-md font-medium">Weekly</span>
@@ -525,24 +591,24 @@ function PlatformShowcase() {
                 <div className="grid grid-cols-4 gap-3">
                   {[
                     { stage: 'New Leads', count: 48, value: '$1.2M', color: 'border-t-blue-400', items: [
-                      { name: 'TechFlow Inc.', amount: '$85K', time: '2h ago' },
-                      { name: 'DataBridge Co.', amount: '$120K', time: '4h ago' },
-                      { name: 'CloudNine LLC', amount: '$45K', time: '6h ago' },
+                      { name: 'FastServ Logistics', amount: '$85K', time: '2h ago' },
+                      { name: 'Metro Auto Parts', amount: '$120K', time: '4h ago' },
+                      { name: 'Sunrise Deli LLC', amount: '$45K', time: '6h ago' },
                     ]},
                     { stage: 'Qualified', count: 32, value: '$2.8M', color: 'border-t-indigo-400', items: [
-                      { name: 'PayScale Corp', amount: '$250K', time: '1d ago' },
-                      { name: 'Vertex Finance', amount: '$180K', time: '1d ago' },
-                      { name: 'LoanStar Ltd', amount: '$95K', time: '2d ago' },
+                      { name: 'BrightPath Medical', amount: '$250K', time: '1d ago' },
+                      { name: 'Harbor Construction', amount: '$180K', time: '1d ago' },
+                      { name: 'Coastal Dining Co', amount: '$95K', time: '2d ago' },
                     ]},
                     { stage: 'Proposal', count: 18, value: '$2.1M', color: 'border-t-violet-400', items: [
-                      { name: 'GreenField Cap', amount: '$320K', time: '3h ago' },
-                      { name: 'BlueSky Fund', amount: '$150K', time: '1d ago' },
-                      { name: 'Apex Lending', amount: '$200K', time: '2d ago' },
+                      { name: 'GreenField Trucking', amount: '$320K', time: '3h ago' },
+                      { name: 'BlueSky Retail', amount: '$150K', time: '1d ago' },
+                      { name: 'Apex Plumbing Co', amount: '$200K', time: '2d ago' },
                     ]},
                     { stage: 'Funded', count: 12, value: '$2.1M', color: 'border-t-emerald-400', items: [
-                      { name: 'NovaPay Inc.', amount: '$175K', time: '1h ago' },
-                      { name: 'SwiftCap LLC', amount: '$290K', time: '5h ago' },
-                      { name: 'FundMax Group', amount: '$340K', time: '1d ago' },
+                      { name: 'NovaPay Services', amount: '$175K', time: '1h ago' },
+                      { name: 'SwiftHaul LLC', amount: '$290K', time: '5h ago' },
+                      { name: 'PrimeFleet Group', amount: '$340K', time: '1d ago' },
                     ]},
                   ].map(col => (
                     <div key={col.stage} className={`bg-white rounded-xl border border-gray-100 border-t-2 ${col.color} overflow-hidden`}>
@@ -636,10 +702,10 @@ function PlatformShowcase() {
 
                   <div className="space-y-3">
                     <div className="bg-white rounded-xl border border-gray-100 p-4">
-                      <span className="text-sm font-semibold text-gray-900">Campaign: Q2 Collections</span>
+                      <span className="text-sm font-semibold text-gray-900">Campaign: MCA Outreach Q2</span>
                       <div className="mt-3 space-y-3">
                         {[
-                          { label: 'Total Contacts', val: '2,847' },
+                          { label: 'Total Merchants', val: '2,847' },
                           { label: 'Reached', val: '1,284' },
                           { label: 'Pending', val: '1,563' },
                           { label: 'Connect Rate', val: '68.4%' },
@@ -686,10 +752,10 @@ function PlatformShowcase() {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const steps = [
-  { icon: UserPlus, title: 'Import Borrowers', desc: 'Import leads from CSV, API, or web forms. Auto-deduplicate and enrich borrower data.', gradient: 'from-blue-500 to-cyan-400', bgLight: 'bg-blue-50', border: 'border-blue-100' },
-  { icon: PhoneCall, title: 'Start Outreach', desc: 'Launch automated campaigns. AI paces calls to maximize live connections with borrowers.', gradient: 'from-indigo-500 to-blue-400', bgLight: 'bg-indigo-50', border: 'border-indigo-100' },
-  { icon: LineChart, title: 'Track Portfolio', desc: 'Real-time dashboards show every metric. Coach agents with AI-powered insights.', gradient: 'from-emerald-500 to-teal-400', bgLight: 'bg-emerald-50', border: 'border-emerald-100' },
-  { icon: Target, title: 'Close Deals', desc: 'Move borrowers through your pipeline. Automated follow-ups ensure every deal gets funded.', gradient: 'from-emerald-600 to-green-400', bgLight: 'bg-green-50', border: 'border-green-100' },
+  { icon: UserPlus, title: 'Import Merchants', desc: 'Import leads from CSV, API, or web forms. Auto-deduplicate and enrich merchant data.', gradient: 'from-blue-500 to-cyan-400', bgLight: 'bg-blue-50', border: 'border-blue-100' },
+  { icon: PhoneCall, title: 'Launch Campaigns', desc: 'Start automated outreach campaigns. AI paces calls to maximize live connections with merchants.', gradient: 'from-indigo-500 to-blue-400', bgLight: 'bg-indigo-50', border: 'border-indigo-100' },
+  { icon: LineChart, title: 'Track Deals', desc: 'Real-time dashboards show every metric. Coach agents with AI-powered insights.', gradient: 'from-emerald-500 to-teal-400', bgLight: 'bg-emerald-50', border: 'border-emerald-100' },
+  { icon: Target, title: 'Fund & Close', desc: 'Move merchants through your pipeline. Automated follow-ups ensure every deal gets funded.', gradient: 'from-emerald-600 to-green-400', bgLight: 'bg-green-50', border: 'border-green-100' },
 ]
 
 function HowItWorks() {
@@ -703,7 +769,7 @@ function HowItWorks() {
             <PhoneCall size={14} className="text-indigo-600" />
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">How It Works</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-4">From Application to Funding in 4 Steps</h2>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-4">From Lead to Funded in 4 Steps</h2>
           <p className="text-lg text-gray-500 max-w-2xl mx-auto">Get up and running in minutes, not months.</p>
         </div>
 
@@ -741,6 +807,59 @@ function HowItWorks() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Integrations Section
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Integrations() {
+  const { ref, visible } = useInView()
+
+  const integrations = [
+    { name: 'Twilio', desc: 'Voice & SMS', icon: Phone, color: 'bg-red-50 text-red-600 ring-red-100' },
+    { name: 'Plivo', desc: 'Voice & SMS', icon: PhoneCall, color: 'bg-green-50 text-green-600 ring-green-100' },
+    { name: 'Stripe', desc: 'Payments', icon: CreditCard, color: 'bg-violet-50 text-violet-600 ring-violet-100' },
+    { name: 'Gmail', desc: 'Email', icon: Mail, color: 'bg-blue-50 text-blue-600 ring-blue-100' },
+    { name: 'Salesforce', desc: 'CRM Sync', icon: Globe, color: 'bg-cyan-50 text-cyan-600 ring-cyan-100' },
+    { name: 'Zapier', desc: 'Automation', icon: Zap, color: 'bg-orange-50 text-orange-600 ring-orange-100' },
+    { name: 'Slack', desc: 'Notifications', icon: MessageSquare, color: 'bg-purple-50 text-purple-600 ring-purple-100' },
+    { name: 'QuickBooks', desc: 'Accounting', icon: FileText, color: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
+  ]
+
+  return (
+    <section ref={ref} className="relative py-24 lg:py-32">
+      <div className="absolute inset-0 bg-gradient-to-b from-gray-50/80 via-white to-gray-50/50" />
+      <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className={`text-center max-w-3xl mx-auto mb-16 transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm mb-6">
+            <Plug size={14} className="text-indigo-600" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Integrations</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
+            Connects to Tools You{' '}
+            <span className="bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">Already Use</span>
+          </h2>
+          <p className="text-lg text-gray-500 leading-relaxed">Plug into your existing tech stack in minutes. No custom development required.</p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {integrations.map((int, i) => (
+            <div key={int.name}
+              className={`group p-5 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-lg hover:border-gray-200 hover:-translate-y-1 transition-all duration-500 text-center ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+              style={{ transitionDelay: `${i * 60}ms` }}
+            >
+              <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl ring-1 mb-4 transition-transform duration-300 group-hover:scale-110 ${int.color}`}>
+                <int.icon size={22} />
+              </div>
+              <h3 className="text-sm font-bold text-gray-900 mb-1">{int.name}</h3>
+              <p className="text-xs text-gray-400">{int.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Mobile App — Phone mockup with auto-toggle
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -749,7 +868,7 @@ function MobileApp() {
   const [activeView, setActiveView] = useState<'phone' | 'crm'>('phone')
   const mobileFeatures = [
     'Real-time lead notifications and call alerts',
-    'Full CRM access — view and update borrower records',
+    'Full CRM access — view and update merchant records',
     'One-tap dialing with call recording',
     'Dashboard analytics on the go',
     'Team chat and collaboration',
@@ -776,7 +895,7 @@ function MobileApp() {
               Your Platform, On The Go
             </h2>
             <p className="text-lg text-gray-500 max-w-lg mb-10">
-              Manage your portfolio, track calls, and close deals from anywhere with our native mobile apps for Android &amp; iOS.
+              Manage your deals, track calls, and close merchants from anywhere with our native mobile apps for Android &amp; iOS.
             </p>
 
             <ul className="space-y-4 mb-10">
@@ -880,13 +999,13 @@ function MobileApp() {
                           </div>
                           <div>
                             <p className="text-gray-900 font-semibold text-sm">David Alvarez</p>
-                            <p className="text-gray-400 text-[10px]">CapitalBridge Inc.</p>
+                            <p className="text-gray-400 text-[10px]">Metro Auto Parts</p>
                           </div>
                           <span className="ml-auto text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Qualified</span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px]">
                           <div className="bg-white rounded-lg p-2 border border-gray-100"><span className="text-gray-400">Phone</span><br/><span className="text-gray-700 font-medium">+1 (555) 317-4820</span></div>
-                          <div className="bg-white rounded-lg p-2 border border-gray-100"><span className="text-gray-400">Email</span><br/><span className="text-gray-700 font-medium">d.alvarez@cb.io</span></div>
+                          <div className="bg-white rounded-lg p-2 border border-gray-100"><span className="text-gray-400">Email</span><br/><span className="text-gray-700 font-medium">d.alvarez@map.io</span></div>
                           <div className="bg-white rounded-lg p-2 border border-gray-100"><span className="text-gray-400">Deal Size</span><br/><span className="text-gray-700 font-medium">$125,000</span></div>
                           <div className="bg-white rounded-lg p-2 border border-gray-100"><span className="text-gray-400">Stage</span><br/><span className="text-gray-700 font-medium">Proposal</span></div>
                         </div>
@@ -965,7 +1084,7 @@ function Pricing() {
             Simple, Transparent Pricing
           </h2>
           <p className={`text-lg text-gray-500 max-w-2xl mx-auto transition-all duration-700 delay-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
-            Start free, scale as you grow. No hidden fees, no contracts.
+            Start free, scale as your brokerage grows. No hidden fees, no contracts.
           </p>
         </div>
 
@@ -1003,7 +1122,7 @@ function Pricing() {
             </div>
             <div className="mb-6">
               <h3 className="text-xl font-bold text-gray-900 mb-2">Dialer + CRM</h3>
-              <p className="text-sm text-gray-500">The complete combo &mdash; dialer and CRM in one platform.</p>
+              <p className="text-sm text-gray-500">The complete combo &mdash; dialer and CRM in one platform for your ISO.</p>
             </div>
             <div className="flex items-baseline gap-1 mb-8">
               <span className="text-5xl font-extrabold text-gray-900">$29.99</span>
@@ -1038,25 +1157,25 @@ function Testimonials() {
 
   const testimonials = [
     {
-      name: 'Sarah Mitchell',
-      role: 'VP Collections, FinanceFlow',
-      initials: 'SM',
+      name: 'Mike Santoro',
+      role: 'CEO, Apex Funding Group (ISO)',
+      initials: 'MS',
       gradient: 'from-blue-500 to-indigo-600',
-      quote: 'Balji transformed our collections process. Our team went from 80 to 200+ calls per day with better recovery rates. The AI coaching feature is a game changer.',
+      quote: 'Balji transformed our operation. Our team went from 80 to 200+ calls per day with better connect rates. The AI coaching feature is a game changer for training new brokers.',
     },
     {
-      name: 'James Rodriguez',
-      role: 'Director, LendHub Solutions',
-      initials: 'JR',
+      name: 'Jessica Chen',
+      role: 'Managing Partner, BrightPath Capital',
+      initials: 'JC',
       gradient: 'from-emerald-500 to-teal-500',
-      quote: 'We evaluated 12 platforms. Balji was the only one that combined a real dialer with a CRM our finance team actually wanted to use.',
+      quote: 'We evaluated 12 platforms. Balji was the only one that combined a real dialer with a CRM our brokers actually wanted to use. Deal flow increased 40% in the first quarter.',
     },
     {
-      name: 'Emily Chen',
-      role: 'COO, CapitalPulse',
-      initials: 'EC',
+      name: 'David Alvarez',
+      role: 'ISO Owner, SwiftFund Solutions',
+      initials: 'DA',
       gradient: 'from-violet-500 to-purple-500',
-      quote: 'The real-time analytics alone paid for the platform in the first month. We identified bottlenecks we didn\'t know existed and improved collection rates by 34%.',
+      quote: 'The real-time analytics alone paid for the platform in the first month. We identified bottlenecks we didn\'t know existed and improved our funding rate by 34%.',
     },
   ]
 
@@ -1069,7 +1188,7 @@ function Testimonials() {
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Testimonials</span>
           </div>
           <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-4 transition-all duration-700 delay-100 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
-            Trusted by Finance Teams Everywhere
+            Trusted by Brokers &amp; ISOs Everywhere
           </h2>
         </div>
 
@@ -1106,6 +1225,156 @@ function Testimonials() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   FAQ — Expandable accordion
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function FAQ() {
+  const { ref, visible } = useInView()
+  const [open, setOpen] = useState<number | null>(null)
+
+  const faqs = [
+    {
+      q: 'How quickly can my team get set up?',
+      a: 'Most brokerages are up and running within 15 minutes. Import your merchant list, configure your campaigns, and start dialing. Our onboarding team is available 24/7 to help with migration from other platforms.',
+    },
+    {
+      q: 'Is Balji TCPA and DNC compliant?',
+      a: 'Yes. Balji includes built-in TCPA compliance tools, automatic DNC list scrubbing, consent management, and full call recording with audit trails. We help you stay compliant so you can focus on closing deals.',
+    },
+    {
+      q: 'How is my data secured?',
+      a: 'We are SOC 2 Type II certified and use AES-256 encryption at rest and TLS 1.3 in transit. All data is hosted in US-based data centers with 99.99% uptime SLA. Role-based access control ensures your team only sees what they need.',
+    },
+    {
+      q: 'Can I keep my existing phone numbers?',
+      a: 'Absolutely. We support number porting from any carrier and integrate directly with Twilio and Plivo. You can also provision new local and toll-free numbers instantly from within the platform.',
+    },
+    {
+      q: 'What integrations do you support?',
+      a: 'Balji integrates with Twilio, Plivo, Stripe, Gmail, Salesforce, Zapier, Slack, QuickBooks, and more. Our REST API and webhook system lets you connect to virtually any tool in your stack.',
+    },
+    {
+      q: 'Can I migrate from my current dialer or CRM?',
+      a: 'Yes. We offer free migration assistance for any brokerage switching from another platform. Our team will help you import merchants, call history, deal data, and recordings so nothing is lost.',
+    },
+    {
+      q: 'Do you offer volume discounts for larger ISOs?',
+      a: 'Yes. For teams of 10+ users we offer custom enterprise pricing with dedicated account management, custom SLAs, and priority support. Contact our sales team for a tailored quote.',
+    },
+    {
+      q: 'Is there a contract or commitment?',
+      a: 'No contracts, no commitments. All plans are month-to-month and you can cancel anytime. We also offer a 14-day free trial so you can experience the full platform risk-free.',
+    },
+  ]
+
+  return (
+    <section id="faq" ref={ref} className="relative py-24 lg:py-32">
+      <div className="absolute inset-0 bg-gradient-to-b from-white via-gray-50/30 to-white" />
+      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className={`text-center mb-16 transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm mb-6">
+            <MessageSquare size={14} className="text-indigo-600" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">FAQ</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
+            Frequently Asked Questions
+          </h2>
+          <p className="text-lg text-gray-500 leading-relaxed">Everything you need to know about getting started with Balji.</p>
+        </div>
+
+        <div className="space-y-3">
+          {faqs.map((faq, i) => (
+            <div key={i}
+              className={`bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden transition-all duration-500 hover:shadow-md ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+              style={{ transitionDelay: `${i * 50}ms` }}
+            >
+              <button
+                onClick={() => setOpen(open === i ? null : i)}
+                className="w-full flex items-center justify-between gap-4 p-6 text-left"
+              >
+                <span className="text-[15px] font-semibold text-gray-900">{faq.q}</span>
+                <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center transition-transform duration-300 ${open === i ? 'rotate-180' : ''}`}>
+                  <ChevronUp size={16} className="text-gray-500" />
+                </div>
+              </button>
+              <div className={`overflow-hidden transition-all duration-300 ${open === i ? 'max-h-60 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="px-6 pb-6 text-sm text-gray-500 leading-relaxed">
+                  {faq.a}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Why Balji — Before / After comparison strip
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function WhyBalji() {
+  const { ref, visible } = useInView()
+
+  const comparisons = [
+    { without: 'Spreadsheets & sticky notes to track deals', with: 'Visual pipeline with drag-and-drop deal stages' },
+    { without: 'Manual dialing — 40 calls/day per agent', with: 'Auto dialer — 200+ calls/day per agent' },
+    { without: 'No visibility into agent performance', with: 'Real-time dashboards & AI coaching' },
+    { without: 'Juggling 5+ tools that don\'t talk to each other', with: 'One platform: dialer, CRM, SMS, email, analytics' },
+    { without: 'Compliance anxiety & missed follow-ups', with: 'Built-in TCPA tools & automated follow-up sequences' },
+  ]
+
+  return (
+    <section ref={ref} className="relative py-24 lg:py-32">
+      <div className="absolute inset-0 bg-gradient-to-b from-gray-50/80 via-white to-gray-50/50" />
+      <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className={`text-center mb-16 transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm mb-6">
+            <Sparkles size={14} className="text-indigo-600" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Why Balji</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
+            The Difference is{' '}
+            <span className="bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">Night and Day</span>
+          </h2>
+        </div>
+
+        <div className={`bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className="grid grid-cols-2">
+            <div className="bg-gray-50 p-6 border-b border-r border-gray-200">
+              <div className="flex items-center gap-2">
+                <XCircle size={18} className="text-red-400" />
+                <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Without Balji</span>
+              </div>
+            </div>
+            <div className="bg-emerald-50/50 p-6 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-500" />
+                <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider">With Balji</span>
+              </div>
+            </div>
+          </div>
+          {comparisons.map((c, i) => (
+            <div key={i}
+              className={`grid grid-cols-2 transition-all duration-500 ${visible ? 'opacity-100' : 'opacity-0'}`}
+              style={{ transitionDelay: `${200 + i * 80}ms` }}
+            >
+              <div className={`p-5 border-r border-gray-200 ${i < comparisons.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                <p className="text-sm text-gray-400 leading-relaxed">{c.without}</p>
+              </div>
+              <div className={`p-5 bg-emerald-50/20 ${i < comparisons.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                <p className="text-sm text-gray-700 font-medium leading-relaxed">{c.with}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    CtaBanner
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1126,11 +1395,11 @@ function CtaBanner() {
             </div>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-4">
-              Ready to Transform Your<br className="hidden sm:inline" /> Financing Operations?
+              Ready to Transform Your<br className="hidden sm:inline" /> Business?
             </h2>
 
             <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-10">
-              Join hundreds of finance teams already using Balji to streamline collections, close more deals, and grow revenue faster.
+              Join 1,200+ brokers and ISOs already using Balji to close more deals, fund faster, and grow revenue.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -1160,7 +1429,7 @@ function CtaBanner() {
 
 export function LandingPageBalji() {
   useEffect(() => {
-    document.title = 'Balji — CPaaS Platform for Revenue-Based Financing'
+    document.title = 'Balji — The #1 CPaaS Platform for Brokers & ISOs'
     document.documentElement.style.scrollBehavior = 'smooth'
     return () => { document.documentElement.style.scrollBehavior = '' }
   }, [])
@@ -1170,18 +1439,24 @@ export function LandingPageBalji() {
       <AnimatedBg />
       <Navbar />
       <Hero />
-      <SocialProofStrip />
+      <LogoMarquee />
       <StatsBar />
       <Features />
+      <FundingVerticals />
       <PlatformShowcase />
       <HowItWorks />
+      <Integrations />
       <MobileApp />
       <Pricing />
       <Testimonials />
+      <WhyBalji />
+      <FAQ />
       <CtaBanner />
       <PublicFooter />
       <style>{`
         @keyframes waveform { 0% { transform: scaleY(0.4); } 100% { transform: scaleY(1); } }
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-marquee { animation: marquee 30s linear infinite; display: flex; width: max-content; }
       `}</style>
     </div>
   )
