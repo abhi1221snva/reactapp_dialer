@@ -148,7 +148,7 @@ function DialerMockup() {
                     {/* Campaign stats */}
                     <div className="space-y-3">
                       <div className="bg-white rounded-xl border border-gray-100 p-4">
-                        <span className="text-sm font-semibold text-gray-900">Campaign: Q2 Collections</span>
+                        <span className="text-sm font-semibold text-gray-900">Campaign: Q2 Outreach</span>
                         <div className="mt-3 space-y-3">
                           {[
                             { label: 'Total Contacts', val: '2,847' },
@@ -361,7 +361,7 @@ function FeaturesGrid() {
 
   const features = [
     { icon: Zap, title: 'Progressive Dialing', desc: 'Automatically dials the next contact when an agent becomes available. Maximizes talk time and eliminates manual dialing.', iconBg: 'bg-amber-50 ring-amber-100', iconColor: 'text-amber-600' },
-    { icon: Play, title: 'Preview Mode', desc: 'Agents review borrower details before each call. Perfect for high-value accounts requiring personalized outreach.', iconBg: 'bg-blue-50 ring-blue-100', iconColor: 'text-blue-600' },
+    { icon: Play, title: 'Preview Mode', desc: 'Agents review merchant details before each call. Perfect for high-value accounts requiring personalized outreach.', iconBg: 'bg-blue-50 ring-blue-100', iconColor: 'text-blue-600' },
     { icon: Brain, title: 'AI Pacing', desc: 'Machine learning optimizes call pacing based on agent availability, time zones, and historical connect rates.', iconBg: 'bg-violet-50 ring-violet-100', iconColor: 'text-violet-600' },
     { icon: Radio, title: 'Call Recording', desc: 'Every call recorded with full transcription. Searchable archives for compliance, training, and quality assurance.', iconBg: 'bg-emerald-50 ring-emerald-100', iconColor: 'text-emerald-600' },
     { icon: Voicemail, title: 'Voicemail Drop', desc: 'Pre-recorded messages dropped in one click. Agents save 30+ seconds per voicemail and move to the next call instantly.', iconBg: 'bg-pink-50 ring-pink-100', iconColor: 'text-pink-600' },
@@ -480,7 +480,7 @@ export function AutoDialerPage() {
         pill="Auto Dialer"
         pillIcon={Phone}
         title="Power Dialer Built for"
-        titleHighlight="Revenue Teams"
+        titleHighlight="High-Volume Teams"
         subtitle="Progressive and preview dialing modes with AI pacing, voicemail drops, and real-time campaign management. Maximize agent talk time and connect rates."
       />
       <DialerMockup />

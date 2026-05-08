@@ -435,7 +435,7 @@ export function PartnersPage() {
         pillIcon={Users}
         title="Grow Your Business with"
         titleHighlight="Balji"
-        subtitle="Join our partner ecosystem and earn recurring revenue by connecting finance teams with the industry's most powerful CPaaS platform."
+        subtitle="Join our partner ecosystem and earn recurring revenue by connecting brokers and ISOs with the industry's most powerful CPaaS platform."
       />
       <TiersSection />
       <BenefitsSection />

@@ -1,20 +1,60 @@
 <svg width="100" height="36" viewBox="0 0 100 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Icon mark: abstract "B" shape with gradient -->
   <defs>
-    <linearGradient id="balji-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#818cf8"/>
-      <stop offset="50%" stop-color="#6366f1"/>
+    <!-- Primary brand gradient — deep indigo to rich violet -->
+    <linearGradient id="bg" x1="0" y1="2" x2="32" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4338ca"/>
+      <stop offset="45%" stop-color="#4f46e5"/>
       <stop offset="100%" stop-color="#7c3aed"/>
     </linearGradient>
-    <linearGradient id="balji-text" x1="36" y1="8" x2="140" y2="28" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#e2e8f0"/>
-      <stop offset="100%" stop-color="#94a3b8"/>
+    <!-- Glass highlight overlay -->
+    <linearGradient id="glass" x1="16" y1="2" x2="16" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="white" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
     </linearGradient>
+    <!-- Wordmark accent for "ji" -->
+    <linearGradient id="ji" x1="0" y1="8" x2="0" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <!-- Subtle drop shadow -->
+    <filter id="ds">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#3730a3" flood-opacity="0.18"/>
+    </filter>
   </defs>
-  <!-- Rounded square icon -->
-  <rect x="0" y="2" width="32" height="32" rx="8" fill="url(#balji-grad)"/>
-  <!-- Stylised "B" letterform inside the icon -->
-  <path d="M10 8h7.5c2.5 0 4.5 1.2 4.5 3.8 0 1.8-1 3-2.5 3.5v.1c2 .4 3.2 2 3.2 4 0 3-2.3 4.6-5.2 4.6H10V8zm4 6h3c1.2 0 2-.7 2-1.8 0-1-.7-1.7-2-1.7h-3v3.5zm0 6.5h3.5c1.5 0 2.3-.8 2.3-2s-.9-2-2.5-2H14v4z" fill="white" fill-opacity="0.95"/>
-  <!-- "balji" wordmark -->
-  <text x="40" y="26" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="800" letter-spacing="-0.5" fill="url(#balji-text)">balji</text>
+
+  <!-- ── Icon: Squircle container ── -->
+  <rect x="0" y="2" width="32" height="32" rx="9" fill="url(#bg)" filter="url(#ds)"/>
+
+  <!-- Glass sheen (top half) -->
+  <rect x="1" y="3" width="30" height="15" rx="8" fill="url(#glass)"/>
+
+  <!-- ── B Monogram — geometric compound path with counter cut-outs ── -->
+  <path fill-rule="evenodd" fill="white" opacity="0.95" d="
+    M 8 6.5
+    H 17.5
+    C 22 6.5, 25 8.5, 25 11.5
+    C 25 14.5, 22 17, 18 17.5
+    C 23 18, 26.5 20, 26.5 24
+    C 26.5 27.5, 23 30, 18 30
+    H 8
+    Z
+    M 12 10
+    H 16
+    C 19.5 10, 21.5 11, 21.5 12
+    C 21.5 13, 19.5 14.5, 16 14.5
+    H 12
+    Z
+    M 12 21.5
+    H 17
+    C 20.5 21.5, 23 23, 23 24.5
+    C 23 26, 20.5 27, 17 27
+    H 12
+    Z
+  "/>
+
+  <!-- Subtle inner ring for depth -->
+  <rect x="1" y="3" width="30" height="30" rx="8" fill="none" stroke="white" stroke-width="0.5" opacity="0.08"/>
+
+  <!-- ── Wordmark ── -->
+  <text x="40" y="26" font-family="'Inter','SF Pro Display',system-ui,-apple-system,sans-serif" font-size="22" font-weight="800" letter-spacing="-0.5" fill="#0f172a">bal<tspan fill="url(#ji)">ji</tspan></text>
 </svg>

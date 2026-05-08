@@ -25,7 +25,7 @@ const quickStartCards = [
   {
     icon: Megaphone,
     title: 'First Campaign',
-    description: 'Import contacts, build your first outbound campaign, and start connecting with borrowers.',
+    description: 'Import contacts, build your first outbound campaign, and start connecting with merchants.',
     link: '#',
     iconBg: 'bg-emerald-50',
     iconColor: 'text-emerald-600',

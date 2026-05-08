@@ -146,7 +146,7 @@ function SentimentPanel() {
               <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Really Went</span>
             </h2>
             <p className="text-lg text-gray-500 leading-relaxed mb-8">
-              AI analyzes every conversation in real time, detecting borrower sentiment, key phrases, and intent signals. Spot issues before they become problems.
+              AI analyzes every conversation in real time, detecting merchant sentiment, key phrases, and intent signals. Spot issues before they become problems.
             </p>
             <div className="space-y-4">
               {[
@@ -327,7 +327,7 @@ function CoachingCards() {
       icon: Clock,
       title: 'Optimize Call Timing',
       agent: 'Emily Chen',
-      suggestion: 'Your connect rate is 42% below average. Data shows your best performing calls happen between 10am-12pm EST. Consider shifting your primary calling hours to match borrower availability patterns.',
+      suggestion: 'Your connect rate is 42% below average. Data shows your best performing calls happen between 10am-12pm EST. Consider shifting your primary calling hours to match merchant availability patterns.',
       metric: '31% more connections',
       priority: 'Medium',
       color: 'from-amber-500 to-orange-500',

@@ -25,7 +25,7 @@ const sections = [
       },
       {
         subtitle: 'Financial Data',
-        text: 'For revenue-based financing features, we may process transaction data, portfolio performance metrics, collection outcomes, and related financial information as directed by our customers.',
+        text: 'For business financing features, we may process transaction data, deal performance metrics, funding outcomes, and related financial information as directed by our customers.',
       },
     ],
   },

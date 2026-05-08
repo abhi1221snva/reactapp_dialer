@@ -146,12 +146,12 @@ function BarChartSection() {
               <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Month Over Month</span>
             </h2>
             <p className="text-lg text-gray-500 leading-relaxed mb-8">
-              Interactive charts that show your portfolio performance across every time period. Drill down into segments, agents, and campaigns.
+              Interactive charts that show your pipeline performance across every time period. Drill down into segments, agents, and campaigns.
             </p>
             <div className="space-y-4">
               {[
                 'Customizable date ranges and comparison periods',
-                'Drill-down from portfolio to individual deal level',
+                'Drill-down from pipeline to individual deal level',
                 'Export data to CSV, PDF, or integrate via API',
                 'Automated weekly and monthly report delivery',
               ].map(item => (
@@ -201,14 +201,14 @@ function DonutChartSection() {
           <div className={`transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm mb-6">
               <PieChart size={14} className="text-indigo-600" />
-              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Portfolio Distribution</span>
+              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Pipeline Distribution</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight mb-5">
               Understand Your{' '}
-              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Portfolio Mix</span>
+              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Pipeline Mix</span>
             </h2>
             <p className="text-lg text-gray-500 leading-relaxed mb-8">
-              Visualize portfolio distribution by industry, risk level, or funding stage. Spot concentration risks and diversification opportunities at a glance.
+              Visualize pipeline distribution by industry, risk level, or funding stage. Spot concentration risks and diversification opportunities at a glance.
             </p>
 
             {/* Legend */}
@@ -251,7 +251,7 @@ function DonutChartSection() {
                   {/* Center label */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-3xl font-extrabold text-gray-900">$3.63M</span>
-                    <span className="text-sm text-gray-400 font-medium">Total Portfolio</span>
+                    <span className="text-sm text-gray-400 font-medium">Total Pipeline</span>
                     <div className="flex items-center gap-1 mt-1">
                       <ArrowUpRight size={12} className="text-emerald-500" />
                       <span className="text-xs font-semibold text-emerald-600">+28% YoY</span>
@@ -312,7 +312,7 @@ function TrendLineSection() {
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Trend Analysis</span>
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
-            Collection Rate{' '}
+            Connect Rate{' '}
             <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Trending Upward</span>
           </h2>
           <p className="text-lg text-gray-500 leading-relaxed">Track key performance indicators over time to identify trends and optimize your operations.</p>
@@ -325,7 +325,7 @@ function TrendLineSection() {
             <div className="relative bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Collection Rate Trend</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">Connect Rate Trend</h3>
                   <p className="text-xs text-gray-400 mt-0.5">12-week rolling average</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -417,9 +417,9 @@ function MetricsGrid() {
   const metrics = [
     { icon: DollarSign, label: 'Total Revenue', value: '$3.63M', change: '+28%', up: true, color: 'from-emerald-500 to-emerald-600', bgLight: 'bg-emerald-50', textColor: 'text-emerald-600' },
     { icon: PhoneCall, label: 'Calls Completed', value: '42,847', change: '+34%', up: true, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50', textColor: 'text-blue-600' },
-    { icon: Target, label: 'Collection Rate', value: '92.4%', change: '+5.2%', up: true, color: 'from-indigo-500 to-indigo-600', bgLight: 'bg-indigo-50', textColor: 'text-indigo-600' },
-    { icon: Users, label: 'Active Borrowers', value: '1,284', change: '+18%', up: true, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
-    { icon: Clock, label: 'Avg. Resolution', value: '4.2 days', change: '-22%', up: true, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
+    { icon: Target, label: 'Connect Rate', value: '92.4%', change: '+5.2%', up: true, color: 'from-indigo-500 to-indigo-600', bgLight: 'bg-indigo-50', textColor: 'text-indigo-600' },
+    { icon: Users, label: 'Active Merchants', value: '1,284', change: '+18%', up: true, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
+    { icon: Clock, label: 'Avg. Close Time', value: '4.2 days', change: '-22%', up: true, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
     { icon: TrendingUp, label: 'Agent Productivity', value: '186/day', change: '+41%', up: true, color: 'from-pink-500 to-pink-600', bgLight: 'bg-pink-50', textColor: 'text-pink-600' },
   ]
 
@@ -435,7 +435,7 @@ function MetricsGrid() {
             KPIs That{' '}
             <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Drive Decisions</span>
           </h2>
-          <p className="text-lg text-gray-500 leading-relaxed">Real-time dashboards for the metrics that matter most to your financing operations.</p>
+          <p className="text-lg text-gray-500 leading-relaxed">Real-time dashboards for the metrics that matter most to your brokerage operations.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
@@ -488,7 +488,7 @@ export function AnalyticsPage() {
         pillIcon={BarChart3}
         title="Real-Time Dashboards for"
         titleHighlight="Smarter Decisions"
-        subtitle="Interactive charts, portfolio breakdowns, and trend analysis that give your team complete visibility into performance, revenue, and collections."
+        subtitle="Interactive charts, pipeline breakdowns, and trend analysis that give your team complete visibility into performance, revenue, and deal flow."
       />
       <BarChartSection />
       <DonutChartSection />

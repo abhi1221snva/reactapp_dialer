@@ -51,7 +51,7 @@ export function PublicFooter() {
           <div className="col-span-2">
             <img src="/balji-logo.svg" alt="Balji" className="h-8 mb-4" />
             <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
-              The complete CPaaS platform built for revenue-based financing teams. Auto dialer, CRM, analytics, and AI &mdash; all in one.
+              The complete CPaaS platform built for brokers and ISOs. Auto dialer, CRM, analytics, and AI &mdash; all in one.
             </p>
           </div>
 

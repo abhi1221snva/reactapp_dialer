@@ -255,7 +255,7 @@ export function SecurityPage() {
             </p>
             <p className="text-gray-600 leading-relaxed">
               Security is not just a feature at Balji -- it is foundational to everything we build. As a cloud
-              communications platform trusted by revenue-based financing teams, we understand the critical importance of
+              communications platform trusted by brokers and ISOs, we understand the critical importance of
               protecting sensitive financial and communication data. This page provides a comprehensive overview of our
               security architecture, compliance certifications, and the practices we follow to keep your data safe.
             </p>

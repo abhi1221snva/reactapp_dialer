@@ -22,8 +22,8 @@ const categories = [
 const featuredPost = {
   category: 'Product',
   categoryColor: 'bg-blue-50 text-blue-700 border-blue-200',
-  title: 'Introducing AI-Powered Call Coaching: Real-Time Feedback for Your Finance Team',
-  excerpt: 'Today we\'re launching our most requested feature yet. AI Call Coaching listens to live conversations and provides agents with real-time suggestions, objection handling tips, and compliance alerts -- all without interrupting the call. Early beta customers are seeing a 28% improvement in collection rates within the first 30 days.',
+  title: 'Introducing AI-Powered Call Coaching: Real-Time Feedback for Your Team',
+  excerpt: 'Today we\'re launching our most requested feature yet. AI Call Coaching listens to live conversations and provides agents with real-time suggestions, objection handling tips, and compliance alerts -- all without interrupting the call. Early beta customers are seeing a 28% improvement in close rates within the first 30 days.',
   author: 'Maria Santos',
   authorInitials: 'MS',
   authorGradient: 'from-pink-500 to-rose-600',
@@ -44,24 +44,24 @@ const posts = [
   {
     category: 'Customer Stories',
     categoryColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    title: 'How LendHub Increased Collection Rates by 41% with Balji',
-    excerpt: 'LendHub\'s VP of Operations shares how switching to Balji\'s unified platform eliminated tool sprawl and transformed their team\'s productivity.',
+    title: 'How CapitalBridge Increased Close Rates by 41% with Balji',
+    excerpt: 'CapitalBridge\'s VP of Operations shares how switching to Balji\'s unified platform eliminated tool sprawl and transformed their team\'s productivity.',
     date: 'April 14, 2026',
     readTime: '6 min read',
   },
   {
     category: 'Industry',
     categoryColor: 'bg-amber-50 text-amber-700 border-amber-200',
-    title: 'The State of Revenue-Based Financing in 2026: Trends and Predictions',
-    excerpt: 'RBF is growing 3x faster than traditional lending. We break down the market dynamics, regulatory shifts, and technology trends shaping the industry.',
+    title: 'The State of Business Financing in 2026: Trends and Predictions',
+    excerpt: 'Alternative business financing is growing 3x faster than traditional lending. We break down the market dynamics, regulatory shifts, and technology trends shaping the industry.',
     date: 'April 7, 2026',
     readTime: '10 min read',
   },
   {
     category: 'Product',
     categoryColor: 'bg-blue-50 text-blue-700 border-blue-200',
-    title: 'Multi-Channel Drip Campaigns: Automate Your Borrower Outreach',
-    excerpt: 'New in Balji: build automated sequences that combine voice, SMS, and email into cohesive borrower journeys with smart timing and personalization.',
+    title: 'Multi-Channel Drip Campaigns: Automate Your Merchant Outreach',
+    excerpt: 'New in Balji: build automated sequences that combine voice, SMS, and email into cohesive merchant journeys with smart timing and personalization.',
     date: 'March 31, 2026',
     readTime: '5 min read',
   },
@@ -69,7 +69,7 @@ const posts = [
     category: 'Engineering',
     categoryColor: 'bg-violet-50 text-violet-700 border-violet-200',
     title: 'Building Real-Time Sentiment Analysis for Financial Conversations',
-    excerpt: 'Our ML team shares the challenges and breakthroughs behind training NLP models that understand the nuances of lending and collections calls.',
+    excerpt: 'Our ML team shares the challenges and breakthroughs behind training NLP models that understand the nuances of business financing conversations.',
     date: 'March 24, 2026',
     readTime: '15 min read',
   },
@@ -263,7 +263,7 @@ export function BlogPage() {
         pillIcon={BookOpen}
         title="Insights, Updates &"
         titleHighlight="Industry Perspectives"
-        subtitle="Product announcements, engineering deep dives, customer success stories, and expert analysis on the future of revenue-based financing."
+        subtitle="Product announcements, engineering deep dives, customer success stories, and expert analysis on the future of business financing."
       />
       <FeaturedPostSection />
       <CategoryFilter active={activeCategory} onChange={setActiveCategory} />

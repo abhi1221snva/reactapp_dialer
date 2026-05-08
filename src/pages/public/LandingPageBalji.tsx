@@ -289,7 +289,8 @@ function LogoMarquee() {
 
   return (
     <section className="relative py-10 bg-white/50 border-y border-gray-100/50 overflow-hidden">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest text-center mb-6">
+      {/* Social proof text hidden until real data available */}
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest text-center mb-6 hidden">
         Trusted by 1,200+ brokers &amp; ISOs nationwide
       </p>
       <div className="relative">

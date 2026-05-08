@@ -9,8 +9,8 @@ interface PublicCtaProps {
 }
 
 export function PublicCta({
-  title = 'Ready to Transform Your Financing Operations?',
-  subtitle = 'Join hundreds of finance teams already using Balji to streamline collections, close more deals, and grow revenue faster.',
+  title = 'Ready to Transform Your Business?',
+  subtitle = 'Join hundreds of brokers and ISOs already using Balji to connect with merchants, close more deals, and grow revenue faster.',
 }: PublicCtaProps) {
   const { ref, visible } = useInView()
 

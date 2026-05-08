@@ -43,7 +43,7 @@ const sections = [
     icon: ShieldAlert,
     title: '4. Acceptable Use Policy',
     paragraphs: [
-      'You agree not to use the Services to: (a) transmit spam, unsolicited messages, or bulk communications in violation of applicable laws including the TCPA, CAN-SPAM Act, or equivalent regulations; (b) engage in fraudulent, deceptive, or misleading collection practices; (c) harass, threaten, or intimidate any person; (d) violate any applicable law, regulation, or third-party right.',
+      'You agree not to use the Services to: (a) transmit spam, unsolicited messages, or bulk communications in violation of applicable laws including the TCPA, CAN-SPAM Act, or equivalent regulations; (b) engage in fraudulent, deceptive, or misleading business practices; (c) harass, threaten, or intimidate any person; (d) violate any applicable law, regulation, or third-party right.',
       'You must not: (a) attempt to gain unauthorized access to the Services, other accounts, or computer systems or networks; (b) interfere with or disrupt the integrity or performance of the Services; (c) reverse engineer, decompile, or disassemble any portion of the Services; (d) use the Services to develop a competing product or service.',
       'Balji reserves the right to investigate and take appropriate action against any violation of this section, including without limitation, suspending or terminating your account, reporting the activity to law enforcement authorities, and pursuing civil remedies.',
     ],

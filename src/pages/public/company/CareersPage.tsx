@@ -169,7 +169,7 @@ function OpenPositionsSection() {
             <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Next Role</span>
           </h2>
           <p className="text-lg text-gray-500 leading-relaxed">
-            Join a fast-growing team that's reshaping how finance teams communicate and close deals.
+            Join a fast-growing team that's reshaping how brokers and ISOs communicate and close deals.
           </p>
         </div>
 
@@ -285,7 +285,7 @@ export function CareersPage() {
         pillIcon={Users}
         title="Build the Future of"
         titleHighlight="FinTech Communications"
-        subtitle="Join a passionate, remote-first team solving real problems for revenue-based financing teams worldwide. We're growing fast and looking for exceptional people."
+        subtitle="Join a passionate, remote-first team solving real problems for brokers and ISOs worldwide. We're growing fast and looking for exceptional people."
       />
       <BenefitsSection />
       <OpenPositionsSection />

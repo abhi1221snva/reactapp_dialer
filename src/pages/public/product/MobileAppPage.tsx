@@ -262,16 +262,16 @@ function PhoneMockupSection() {
               <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">In Your Pocket</span>
             </h2>
             <p className="text-lg text-gray-500 leading-relaxed mb-10">
-              Manage your portfolio, take calls, and close deals from anywhere with native apps for iOS and Android. Full functionality, zero compromises.
+              Manage your pipeline, take calls, and close deals from anywhere with native apps for iOS and Android. Full functionality, zero compromises.
             </p>
 
             {/* Feature checklist */}
             <ul className="space-y-4 mb-10">
               {[
-                'Full CRM access -- view and update borrower records on the go',
+                'Full CRM access -- view and update merchant records on the go',
                 'One-tap dialing with call recording and disposition',
                 'Real-time push notifications for new leads and tasks',
-                'Dashboard analytics with portfolio performance metrics',
+                'Dashboard analytics with pipeline performance metrics',
                 'Team chat and collaboration with @mentions',
                 'Offline mode -- sync when connection returns',
               ].map((feature, i) => (
@@ -416,7 +416,7 @@ function AppReviews() {
 
   const reviews = [
     { name: 'Lisa Park', role: 'Account Manager', stars: 5, review: 'Finally a finance CRM that works perfectly on mobile. I close deals from coffee shops now. The push notifications for hot leads are a game changer.', platform: 'iOS' },
-    { name: 'Mark Torres', role: 'Collections Lead', stars: 5, review: 'The mobile dialer is just as good as desktop. Call quality is excellent and having the full CRM context on screen during calls makes all the difference.', platform: 'Android' },
+    { name: 'Mark Torres', role: 'Sales Manager', stars: 5, review: 'The mobile dialer is just as good as desktop. Call quality is excellent and having the full CRM context on screen during calls makes all the difference.', platform: 'Android' },
     { name: 'Anna Kim', role: 'Team Lead', stars: 5, review: 'Our field team adopted this in a week. The offline mode is critical for us since we often visit clients in areas with poor connectivity.', platform: 'iOS' },
   ]
 
@@ -481,7 +481,7 @@ export function MobileAppPage() {
         pillIcon={Smartphone}
         title="Your Platform,"
         titleHighlight="In Your Pocket"
-        subtitle="Native iOS and Android apps with full CRM, dialer, analytics, and team collaboration. Manage your entire portfolio from anywhere."
+        subtitle="Native iOS and Android apps with full CRM, dialer, analytics, and team collaboration. Manage your entire pipeline from anywhere."
       />
       <PhoneMockupSection />
       <MobileFeatures />

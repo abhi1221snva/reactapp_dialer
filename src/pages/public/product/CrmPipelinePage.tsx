@@ -224,7 +224,7 @@ function ContactCardSection() {
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-1.5">
-                    {['Revenue Financing', 'SaaS', 'Series B', 'Q2 Target'].map(tag => (
+                    {['MCA', 'SaaS', 'Series B', 'Q2 Target'].map(tag => (
                       <span key={tag} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-[10px] font-medium text-gray-600">
                         <Tag size={9} />
                         {tag}
@@ -280,7 +280,7 @@ function ContactCardSection() {
               <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">360-Degree Contact View</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight mb-5">
-              Every Borrower Detail,{' '}
+              Every Merchant Detail,{' '}
               <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">One Click Away</span>
             </h2>
             <p className="text-lg text-gray-500 leading-relaxed mb-8">
@@ -289,7 +289,7 @@ function ContactCardSection() {
             <div className="space-y-4">
               {[
                 'Complete communication history across all channels',
-                'Custom fields tailored for revenue-based financing',
+                'Custom fields tailored for business financing workflows',
                 'AI-scored lead quality with risk assessment',
                 'Automated activity logging - no manual data entry',
                 'Quick-action buttons for call, email, and SMS',
@@ -318,9 +318,9 @@ function FeaturesGrid() {
 
   const features = [
     { icon: Target, title: 'Deal Tracking', desc: 'Drag-and-drop Kanban board with custom pipeline stages. Track every deal from application through funding with full audit trails.', iconBg: 'bg-blue-50 ring-blue-100', iconColor: 'text-blue-600' },
-    { icon: Users, title: 'Contact Management', desc: '360-degree borrower profiles with complete communication history, documents, and AI-generated summaries across every touchpoint.', iconBg: 'bg-indigo-50 ring-indigo-100', iconColor: 'text-indigo-600' },
-    { icon: Settings, title: 'Custom Fields', desc: 'Build the CRM around your workflow. Custom fields, deal stages, dispositions, and scoring criteria for revenue-based financing.', iconBg: 'bg-violet-50 ring-violet-100', iconColor: 'text-violet-600' },
-    { icon: Mail, title: 'Email Integration', desc: 'Bi-directional email sync with Gmail and Outlook. Send, receive, and track emails directly from borrower records.', iconBg: 'bg-emerald-50 ring-emerald-100', iconColor: 'text-emerald-600' },
+    { icon: Users, title: 'Contact Management', desc: '360-degree merchant profiles with complete communication history, documents, and AI-generated summaries across every touchpoint.', iconBg: 'bg-indigo-50 ring-indigo-100', iconColor: 'text-indigo-600' },
+    { icon: Settings, title: 'Custom Fields', desc: 'Build the CRM around your workflow. Custom fields, deal stages, dispositions, and scoring criteria for business financing.', iconBg: 'bg-violet-50 ring-violet-100', iconColor: 'text-violet-600' },
+    { icon: Mail, title: 'Email Integration', desc: 'Bi-directional email sync with Gmail and Outlook. Send, receive, and track emails directly from merchant records.', iconBg: 'bg-emerald-50 ring-emerald-100', iconColor: 'text-emerald-600' },
     { icon: CheckSquare, title: 'Task Management', desc: 'Assign follow-ups, set reminders, and track task completion. Automated task creation based on deal stage transitions.', iconBg: 'bg-amber-50 ring-amber-100', iconColor: 'text-amber-600' },
     { icon: Star, title: 'Lead Scoring', desc: 'AI-powered scoring based on engagement, financial signals, and communication patterns. Prioritize the deals most likely to fund.', iconBg: 'bg-pink-50 ring-pink-100', iconColor: 'text-pink-600' },
   ]
@@ -335,9 +335,9 @@ function FeaturesGrid() {
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight mb-5">
             A CRM Purpose-Built for{' '}
-            <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Financing Teams</span>
+            <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 bg-clip-text text-transparent">Brokers & ISOs</span>
           </h2>
-          <p className="text-lg text-gray-500 leading-relaxed">Not just another generic CRM. Every feature is designed around the revenue-based financing workflow.</p>
+          <p className="text-lg text-gray-500 leading-relaxed">Not just another generic CRM. Every feature is designed around the broker and ISO workflow.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
@@ -425,7 +425,7 @@ export function CrmPipelinePage() {
         pillIcon={Users}
         title="Track Every Deal from Application to"
         titleHighlight="Funding"
-        subtitle="A purpose-built CRM with drag-and-drop Kanban boards, 360-degree contact views, and intelligent deal tracking designed for revenue-based financing teams."
+        subtitle="A purpose-built CRM with drag-and-drop Kanban boards, 360-degree contact views, and intelligent deal tracking designed for brokers and ISOs."
       />
       <KanbanMockup />
       <ContactCardSection />

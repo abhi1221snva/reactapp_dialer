@@ -27,7 +27,7 @@ const endpointCategories = [
   {
     icon: Users,
     title: 'Leads',
-    description: 'Create, update, search, and manage borrower lead records.',
+    description: 'Create, update, search, and manage merchant lead records.',
     iconBg: 'bg-blue-50',
     iconColor: 'text-blue-600',
     endpoints: [
@@ -136,7 +136,7 @@ const lead = await client.leads.create({
 console.log('Lead created:', lead.id);
 
 // Launch a campaign with the new lead
-await client.campaigns.addContacts('camp_q2_collections', {
+await client.campaigns.addContacts('camp_q2_outreach', {
   leadIds: [lead.id],
   priority: 'high'
 });`

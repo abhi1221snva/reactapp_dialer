@@ -15,36 +15,36 @@ import { PublicCta } from '../../../components/public/PublicCta'
 const pressReleases = [
   {
     date: 'April 15, 2026',
-    title: 'Balji Launches AI Call Coaching for Revenue-Based Financing Teams',
-    description: 'New feature provides real-time, AI-driven coaching to collection agents during live calls, helping teams improve recovery rates by up to 28% in the first month.',
+    title: 'Balji Launches AI Call Coaching for Brokers & ISOs',
+    description: 'New feature provides real-time, AI-driven coaching to agents during live calls, helping teams improve close rates by up to 28% in the first month.',
     icon: Rocket,
     gradient: 'from-blue-500 to-indigo-600',
   },
   {
     date: 'January 22, 2026',
-    title: 'Balji Surpasses 500 Finance Team Customers Worldwide',
-    description: 'Milestone driven by rapid adoption in the revenue-based financing sector, with customers across 45+ countries processing over 12 million calls on the platform.',
+    title: 'Balji Surpasses 500 Brokerage Customers Worldwide',
+    description: 'Milestone driven by rapid adoption among brokers and ISOs, with customers across 45+ countries processing over 12 million calls on the platform.',
     icon: Globe,
     gradient: 'from-emerald-500 to-teal-600',
   },
   {
     date: 'September 8, 2025',
     title: 'Balji Achieves SOC 2 Type II Certification',
-    description: 'Independent audit confirms Balji meets the highest standards for security, availability, and confidentiality -- a critical milestone for enterprise finance customers.',
+    description: 'Independent audit confirms Balji meets the highest standards for security, availability, and confidentiality -- a critical milestone for enterprise customers.',
     icon: Award,
     gradient: 'from-violet-500 to-purple-600',
   },
   {
     date: 'May 3, 2025',
     title: 'Balji Raises $18M Series A Led by Accel Partners',
-    description: 'Funding will accelerate product development, expand the AI/ML team, and support international growth as demand from lending teams surges globally.',
+    description: 'Funding will accelerate product development, expand the AI/ML team, and support international growth as demand from brokers and ISOs surges globally.',
     icon: TrendingUp,
     gradient: 'from-amber-500 to-orange-600',
   },
   {
     date: 'November 15, 2024',
     title: 'Balji Launches Mobile Apps for iOS and Android',
-    description: 'Finance teams can now manage their full CRM pipeline, make calls, and track analytics on the go with native mobile applications available on both platforms.',
+    description: 'Brokers and ISOs can now manage their full CRM pipeline, make calls, and track analytics on the go with native mobile applications available on both platforms.',
     icon: Globe,
     gradient: 'from-pink-500 to-rose-600',
   },
@@ -74,14 +74,14 @@ const mediaKit = [
 const mediaCoverage = [
   {
     publication: 'TechCrunch',
-    headline: 'Balji raises $18M to build the CPaaS platform lending teams actually need',
+    headline: 'Balji raises $18M to build the CPaaS platform brokers actually need',
     date: 'May 2025',
     color: 'from-green-500 to-emerald-600',
     initials: 'TC',
   },
   {
     publication: 'Forbes FinTech',
-    headline: 'How AI-powered call coaching is transforming debt collection practices',
+    headline: 'How AI-powered call coaching is transforming business financing outreach',
     date: 'March 2026',
     color: 'from-blue-600 to-indigo-700',
     initials: 'FF',
@@ -95,7 +95,7 @@ const mediaCoverage = [
   },
   {
     publication: 'Fintech Times',
-    headline: 'Revenue-based financing platforms embrace purpose-built communication tools',
+    headline: 'Business financing platforms embrace purpose-built communication tools',
     date: 'November 2025',
     color: 'from-violet-500 to-purple-600',
     initials: 'FT',
@@ -287,7 +287,7 @@ export function PressPage() {
         pillIcon={Newspaper}
         title="Balji in the"
         titleHighlight="News"
-        subtitle="Press releases, media resources, and coverage of Balji's mission to transform communications for revenue-based financing teams."
+        subtitle="Press releases, media resources, and coverage of Balji's mission to transform communications for brokers and ISOs."
       />
       <PressReleasesSection />
       <MediaKitSection />
