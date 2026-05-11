@@ -50,6 +50,10 @@ export const listService = {
   bulkDelete: (ids: number[]) =>
     api.post('/bulk-delete-lists', { ids }),
 
+  // Export one or more lists to .xlsx (empty array → all lists)
+  exportExcel: (listIds: number[]) =>
+    api.post('/lists/export-excel', { list_ids: listIds }, { responseType: 'blob' }),
+
   // Paginated leads for a list — POST /list-data/{id}/content
   getLeads: (listId: number, params: { start: number; limit: number; search?: string; search_by?: string }) =>
     api.post(`/list-data/${listId}/content`, {

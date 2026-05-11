@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Pencil, Trash2, List, Search, X, RefreshCw } from 'lucide-react'
+import { Plus, Eye, Pencil, Trash2, List, Search, X, RefreshCw, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -77,6 +77,31 @@ export function Lists() {
     if (confirmed) bulkDeleteMutation.mutate(selectedIds)
   }
 
+  const exportMutation = useMutation({
+    mutationFn: (ids: number[]) => listService.exportExcel(ids),
+    onSuccess: (res) => {
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `lists-export-${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success(selectedIds.length > 0 ? `Exported ${selectedIds.length} list(s)` : 'Exported all lists')
+    },
+    onError: () => toast.error('Failed to export lists'),
+  })
+
+  const handleExport = () => {
+    if (exportMutation.isPending) return
+    // selectedIds → those lists; empty → backend exports all visible lists
+    exportMutation.mutate(selectedIds)
+  }
+
   useEffect(() => {
     setToolbar(
       <>
@@ -102,6 +127,19 @@ export function Lists() {
               {bulkDeleteMutation.isPending ? 'Deleting…' : `Delete (${selectedIds.length})`}
             </button>
           )}
+          <button
+            onClick={handleExport}
+            disabled={exportMutation.isPending}
+            className="lt-b"
+            title={selectedIds.length > 0 ? `Export ${selectedIds.length} selected list(s)` : 'Export all lists'}
+          >
+            <Download size={13} />
+            {exportMutation.isPending
+              ? 'Exporting…'
+              : selectedIds.length > 0
+                ? `Export Excel (${selectedIds.length})`
+                : 'Export Excel'}
+          </button>
           <button onClick={() => navigate('/lists/create')} className="lt-b lt-p">
             <Plus size={13} /> Add List
           </button>
