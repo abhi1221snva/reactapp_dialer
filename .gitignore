@@ -5,3 +5,18 @@ build
 .vscode
 .DS_Store
 *.local
+
+# Debug/test screenshots
+*.png
+*.jpg
+*.jpeg
+
+# Debug/test scripts
+screenshot*.mjs
+capture-*.cjs
+
+# Temp files
+2026-*
+
+# Claude
+.claude/
