@@ -248,6 +248,17 @@ export function Lists() {
               onClick: () => navigate(`/lists/${id}/leads`),
             },
             {
+              label: 'Download',
+              icon: <Download size={13} />,
+              variant: 'view',
+              onClick: () => {
+                toast.loading('Downloading…', { id: `dl-${id}` })
+                listService.downloadExcel(id, listName(row))
+                  .then(() => toast.success('Downloaded', { id: `dl-${id}` }))
+                  .catch(() => toast.error('Download failed', { id: `dl-${id}` }))
+              },
+            },
+            {
               label: 'Edit',
               icon: <Pencil size={13} />,
               variant: 'edit',
