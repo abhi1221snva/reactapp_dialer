@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, Search, X, RefreshCw, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, List, Pencil,
+  ChevronsLeft, ChevronsRight, List, Pencil, Download,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useDialerHeader } from '../../layouts/DialerLayout'
 import { listService } from '../../services/list.service'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
@@ -96,6 +97,7 @@ export function ListLeads() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [downloading, setDownloading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fetch list detail for name + campaign
@@ -213,6 +215,23 @@ export function ListLeads() {
             )}
           </div>
 
+          {/* Download Excel */}
+          <button
+            className="lt-b"
+            onClick={() => {
+              setDownloading(true)
+              listService.downloadExcel(listId, detailListName || undefined)
+                .then(() => toast.success('Excel downloaded'))
+                .catch(() => toast.error('Failed to download'))
+                .finally(() => setDownloading(false))
+            }}
+            disabled={downloading}
+            title="Download Excel"
+          >
+            <Download size={13} className={downloading ? 'animate-pulse' : ''} />
+            {downloading ? 'Downloading…' : 'Download Excel'}
+          </button>
+
           {/* Refresh */}
           <button
             className="lt-b"
@@ -230,7 +249,7 @@ export function ListLeads() {
         </div>
       </>
     )
-  }, [headerKey, search, total, isLoading, isFetching, detailListName, campaignName])
+  }, [headerKey, search, total, isLoading, isFetching, detailListName, campaignName, downloading])
 
   if (isLoading && !payload) return <PageLoader />
 

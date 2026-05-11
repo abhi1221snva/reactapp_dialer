@@ -59,6 +59,35 @@ export const listService = {
       ...(params.search_by ? { search_by: params.search_by } : {}),
     }),
 
+  // Download all leads for a list as Excel/CSV (sends excel=1 to skip pagination)
+  downloadExcel: (listId: number, listName?: string) =>
+    api.post(`/list-data/${listId}/content`, { excel: 1 }).then((res) => {
+      const payload = res?.data?.data
+      const headers: string[] = payload?.list_header ?? []
+      const rows: Record<string, unknown>[] = payload?.list_data ?? []
+      if (!rows.length) throw new Error('No data to export')
+
+      const csvRows = [
+        headers.join(','),
+        ...rows.map(row =>
+          headers.map(h => {
+            const val = row[h] !== undefined && row[h] !== null ? String(row[h]) : ''
+            return `"${val.replace(/"/g, '""')}"`
+          }).join(',')
+        ),
+      ].join('\n')
+
+      const blob = new Blob(['\uFEFF' + csvRows], { type: 'text/csv;charset=utf-8' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(listName ?? `list_${listId}`).replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    }),
+
   // Get list headers (all labels)
   getHeaders: (listId: number) =>
     api.post('/list-header', { id: listId, list_data: [0] }),

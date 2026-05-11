@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Pencil, Trash2, List, Search, X, RefreshCw } from 'lucide-react'
+import { Plus, Eye, Pencil, Trash2, List, Search, X, RefreshCw, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ServerDataTable, type Column } from '../../components/ui/ServerDataTable'
@@ -208,6 +208,17 @@ export function Lists() {
               icon: <Eye size={13} />,
               variant: 'view',
               onClick: () => navigate(`/lists/${id}/leads`),
+            },
+            {
+              label: 'Download',
+              icon: <Download size={13} />,
+              variant: 'view',
+              onClick: () => {
+                toast.loading('Downloading…', { id: `dl-${id}` })
+                listService.downloadExcel(id, listName(row))
+                  .then(() => toast.success('Downloaded', { id: `dl-${id}` }))
+                  .catch(() => toast.error('Download failed', { id: `dl-${id}` }))
+              },
             },
             {
               label: 'Edit',
