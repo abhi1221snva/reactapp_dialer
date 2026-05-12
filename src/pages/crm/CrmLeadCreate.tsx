@@ -508,6 +508,23 @@ export function CrmLeadCreate() {
   const isPending     = createMutation.isPending || updateMutation.isPending
   const currentStatus = (statuses ?? []).find(s => s.lead_title_url === leadStatus)
   const assignedAgent = (agents ?? []).find(a => String(a.id) === String(assignedTo))
+    || (assignedTo && existing?.assigned_name
+      ? { id: Number(assignedTo), name: existing.assigned_name }
+      : undefined)
+
+  // Include the currently assigned agent in the dropdown if they are not in the
+  // visibility-filtered users list (e.g. same-level or higher-level user).
+  const agentsList = useMemo(() => {
+    const list = agents ?? []
+    if (
+      existing?.assigned_to &&
+      existing?.assigned_name &&
+      !list.find(a => String(a.id) === String(existing.assigned_to))
+    ) {
+      return [{ id: Number(existing.assigned_to), name: existing.assigned_name }, ...list]
+    }
+    return list
+  }, [agents, existing])
 
   function goBack() {
     navigate(isEdit && leadId ? `/crm/leads/${leadId}` : '/crm/leads')
@@ -870,7 +887,7 @@ export function CrmLeadCreate() {
                               <span className="text-xs font-medium text-slate-400">— Unassigned —</span>
                             </button>
 
-                            {(agents ?? []).map(a => (
+                            {agentsList.map(a => (
                               <button
                                 key={a.id}
                                 type="button"
