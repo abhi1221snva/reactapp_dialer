@@ -25,6 +25,11 @@ import {
 } from '../../utils/nameValidation'
 import { validateCompanyName, isCompanyField } from '../../utils/companyValidation'
 import { isNameField as isPersonNameField } from '../../utils/nameValidation'
+import { isCurrencyField, validateCurrency, normalizeCurrencyInPayload } from '../../utils/currencyValidation'
+import { isCityField, validateCity } from '../../utils/cityValidation'
+import { isAddressField, validateAddress } from '../../utils/addressValidation'
+import { isDobField, validateDob } from '../../utils/dobValidation'
+import { validatePhone } from '../../utils/phoneValidation'
 
 const nameField = (label: string) =>
   z.string()
@@ -398,16 +403,45 @@ export function CrmLeadCreate() {
           if (result !== true) fieldError = result
         }
 
+        // Pattern-detect currency / money fields (avg_balance, revenue, amount).
+        // ID_28–ID_38: numeric only, ≥0, ≤ $9,999,999,999.99, ≤ 2dp.
+        if (!fieldError && isCurrencyField(field.field_key, field.label_name)) {
+          const result = validateCurrency(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Pattern-detect city / town fields. ID_53: letters + .-' only.
+        if (!fieldError && isCityField(field.field_key, field.label_name)) {
+          const result = validateCity(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Pattern-detect address fields. ID_49–ID_52: whitelist + XSS block.
+        if (!fieldError && isAddressField(field.field_key, field.label_name)) {
+          const result = validateAddress(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Pattern-detect DOB fields. ID_46–ID_48: age 18–120.
+        if (!fieldError && isDobField(field.field_key, field.label_name)) {
+          const result = validateDob(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
         switch (field.field_type) {
           case 'email':
             if (!fieldError && !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(strVal))
               fieldError = `${field.label_name} must be a valid email address`
             break
           case 'phone_number':
-          case 'phone':
-            if (!fieldError && strVal.replace(/\D/g, '').length !== 10)
-              fieldError = `${field.label_name} must be exactly 10 digits`
+          case 'phone': {
+            // ID_40–ID_45: strict NANP rules (area & exchange first digit 2-9).
+            if (!fieldError) {
+              const phoneResult = validatePhone(strVal, field.label_name)
+              if (phoneResult !== true) fieldError = phoneResult
+            }
             break
+          }
           case 'number':
             if (!fieldError && isNaN(Number(strVal)))
               fieldError = `${field.label_name} must be a numeric value`
@@ -433,7 +467,8 @@ export function CrmLeadCreate() {
     if (!payload.lead_source_id) delete payload.lead_source_id
 
     // Normalize whitespace in name fields ("Test     T" → "Test T")
-    const normalized = normalizeNamesInPayload(payload)
+    // and round currency fields to 2 decimal places ("100.129" → "100.13").
+    const normalized = normalizeCurrencyInPayload(normalizeNamesInPayload(payload))
 
     if (isEdit) updateMutation.mutate(normalized)
     else createMutation.mutate(normalized)

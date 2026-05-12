@@ -8,6 +8,12 @@ import type { CrmLabel, FieldCondition } from '../../types/crm.types'
 import { buildFieldRules, parseFieldOptions } from '../../utils/fieldValidation'
 import { formatPartialPhoneUS, formatPhoneNumber } from '../../utils/format'
 import { NAME_MAX_LENGTH, isNameField, nameRule, sanitizeNameInput } from '../../utils/nameValidation'
+import { isCompanyField, companyRule, sanitizeCompanyInput, COMPANY_NAME_MAX_LENGTH } from '../../utils/companyValidation'
+import { isCurrencyField, currencyRule, sanitizeCurrencyInput, CURRENCY_MAX_LENGTH } from '../../utils/currencyValidation'
+import { isCityField, cityRule, sanitizeCityInput, CITY_MAX_LENGTH } from '../../utils/cityValidation'
+import { isAddressField, addressRule, sanitizeAddressInput, ADDRESS_MAX_LENGTH } from '../../utils/addressValidation'
+import { isDobField, dobRule, dobMinIsoDate, dobMaxIsoDate } from '../../utils/dobValidation'
+import { phoneRule } from '../../utils/phoneValidation'
 import AddressAutocomplete from '../ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
@@ -169,9 +175,10 @@ function NameInput({ fieldKey, label, register, rules, defaultValue, placeholder
   )
 }
 
-// ── Phone Input component (auto-formats digits to (XXX) XXX-XXXX) ────────────
-function PhoneInput({ fieldKey, register, rules, defaultValue, placeholder }: {
+// ── Phone Input component (auto-formats to (NXX) NXX-XXXX, validates NANP) ──
+function PhoneInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
   fieldKey: string
+  label: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register: UseFormRegister<any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -179,14 +186,11 @@ function PhoneInput({ fieldKey, register, rules, defaultValue, placeholder }: {
   defaultValue: string
   placeholder: string
 }) {
+  const required = rules?.required
   const [display, setDisplay] = useState(() => formatPartialPhoneUS(defaultValue.replace(/\D/g, '')))
   const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
     ...rules,
-    validate: (val: string) => {
-      if (!val || val.trim() === '') return true
-      const digits = val.replace(/\D/g, '')
-      return digits.length === 10 || 'Phone number must be exactly 10 digits'
-    },
+    validate: phoneRule(label, Boolean(required)),
   })
 
   return (
@@ -202,6 +206,136 @@ function PhoneInput({ fieldKey, register, rules, defaultValue, placeholder }: {
         const fmt = formatPartialPhoneUS(e.target.value)
         setDisplay(fmt)
         e.target.value = fmt
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
+
+// ── Currency Input (digit + one dot, max value cap, ≤ 2dp, non-negative) ────
+function CurrencyInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  label: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const required = rules?.required
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    validate: currencyRule(label, Boolean(required)),
+  })
+  return (
+    <input
+      type="text"
+      {...rest}
+      defaultValue={defaultValue}
+      className="crm-fi"
+      placeholder={placeholder || '0.00'}
+      maxLength={CURRENCY_MAX_LENGTH}
+      inputMode="decimal"
+      onChange={e => {
+        e.target.value = sanitizeCurrencyInput(e.target.value)
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
+
+// ── City Input (letters + .-' only, ≥1 letter, max 50) ──────────────────────
+function CityInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  label: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const required = rules?.required
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    validate: cityRule(label, Boolean(required)),
+  })
+  return (
+    <input
+      type="text"
+      {...rest}
+      defaultValue={defaultValue}
+      className="crm-fi"
+      placeholder={placeholder}
+      maxLength={CITY_MAX_LENGTH}
+      onChange={e => {
+        e.target.value = sanitizeCityInput(e.target.value)
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
+
+// ── Address Input (whitelist letters/digits + , . - / # ', max 200) ─────────
+// Used as fallback when AddressAutocomplete is not appropriate (e.g. line2, apt).
+function AddressInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  label: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const required = rules?.required
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    validate: addressRule(label, Boolean(required)),
+  })
+  return (
+    <input
+      type="text"
+      {...rest}
+      defaultValue={defaultValue}
+      className="crm-fi"
+      placeholder={placeholder}
+      maxLength={ADDRESS_MAX_LENGTH}
+      onChange={e => {
+        e.target.value = sanitizeAddressInput(e.target.value)
+        rhfOnChange(e)
+      }}
+    />
+  )
+}
+
+// ── Company / Business / DBA Input (whitelist chars, ≥1 letter, max 100) ────
+function CompanyInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
+  fieldKey: string
+  label: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: UseFormRegister<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any
+  defaultValue: string
+  placeholder: string
+}) {
+  const required = rules?.required
+  const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
+    ...rules,
+    validate: companyRule(label, Boolean(required)),
+  })
+  return (
+    <input
+      type="text"
+      {...rest}
+      defaultValue={defaultValue}
+      className="crm-fi"
+      placeholder={placeholder}
+      maxLength={COMPANY_NAME_MAX_LENGTH}
+      onChange={e => {
+        e.target.value = sanitizeCompanyInput(e.target.value)
         rhfOnChange(e)
       }}
     />
@@ -276,12 +410,18 @@ function renderInput(
 
   // ── Date ───────────────────────────────────────────────────────────────────
   if (field_type === 'date') {
+    const isDob = isDobField(field_key, label_name)
+    const dobRules = isDob
+      ? { ...rules, validate: dobRule(label_name, Boolean(rules?.required)) }
+      : rules
     return (
       <input
         type="date"
-        {...register(field_key, rules)}
+        {...register(field_key, dobRules)}
         className={baseClass}
         defaultValue={defaultValue as string ?? ''}
+        min={isDob ? dobMinIsoDate() : undefined}
+        max={isDob ? dobMaxIsoDate() : undefined}
       />
     )
   }
@@ -327,10 +467,11 @@ function renderInput(
   }
 
   // ── Phone ──────────────────────────────────────────────────────────────────
-  if (field_type === 'phone_number' || field_type === 'phone') {
+  if (field_type === 'phone_number' || field_type === 'phone' || /\bphone\b/i.test(field_key)) {
     return (
       <PhoneInput
         fieldKey={field_key}
+        label={label_name}
         register={register}
         rules={rules}
         defaultValue={defaultValue as string ?? ''}
@@ -339,10 +480,71 @@ function renderInput(
     )
   }
 
-  // ── Name (first_name / last_name) ─────────────────────────────────────────
-  if (isNameField(field_key) && (field_type === 'text' || field_type === undefined)) {
+  const isTextish = field_type === 'text' || field_type === undefined
+
+  // ── Name (first_name / last_name / etc.) ─────────────────────────────────
+  if (isTextish && isNameField(field_key, label_name)) {
     return (
       <NameInput
+        fieldKey={field_key}
+        label={label_name}
+        register={register}
+        rules={rules}
+        defaultValue={defaultValue as string ?? ''}
+        placeholder={ph}
+      />
+    )
+  }
+
+  // ── Company / Business / DBA — whitelist chars, XSS / SQLi block ─────────
+  if (isTextish && isCompanyField(field_key)) {
+    return (
+      <CompanyInput
+        fieldKey={field_key}
+        label={label_name}
+        register={register}
+        rules={rules}
+        defaultValue={defaultValue as string ?? ''}
+        placeholder={ph}
+      />
+    )
+  }
+
+  // ── Currency / money — digit+dot, ≤ 2dp, non-negative, capped ────────────
+  // Pattern-based detection means tenant labels stored as field_type='text'
+  // (e.g. average_balance, monthly_revenue, requested_amount) are caught.
+  if (isTextish && isCurrencyField(field_key, label_name)) {
+    return (
+      <CurrencyInput
+        fieldKey={field_key}
+        label={label_name}
+        register={register}
+        rules={rules}
+        defaultValue={defaultValue as string ?? ''}
+        placeholder={ph}
+      />
+    )
+  }
+
+  // ── City / town — letters + .-' only ─────────────────────────────────────
+  if (isTextish && isCityField(field_key, label_name)) {
+    return (
+      <CityInput
+        fieldKey={field_key}
+        label={label_name}
+        register={register}
+        rules={rules}
+        defaultValue={defaultValue as string ?? ''}
+        placeholder={ph}
+      />
+    )
+  }
+
+  // ── Address fallback — only used when AddressAutocomplete isn't rendered ─
+  // (the main address branch is handled inline in the parent map below).
+  if (isTextish && isAddressField(field_key, label_name)) {
+    return (
+      <AddressInput
         fieldKey={field_key}
         label={label_name}
         register={register}
@@ -553,7 +755,7 @@ export function DynamicFieldForm({
                     {isAddressAutocompleteKey(label.field_key, label.label_name) && setValue ? (
                       <AddressAutocomplete
                         value={String(formValues?.[label.field_key] ?? '')}
-                        onChange={v => setValue(label.field_key, v)}
+                        onChange={v => setValue(label.field_key, sanitizeAddressInput(v))}
                         onPlaceSelect={(parsed: ParsedPlace) => {
                           const group = resolveAddressGroup(label.field_key, label.label_name)
                           if (group && setValue) {
