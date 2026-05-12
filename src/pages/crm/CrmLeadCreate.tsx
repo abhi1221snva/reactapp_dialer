@@ -204,6 +204,14 @@ export function CrmLeadCreate() {
   )
   const { personal, business, secondOwner } = useMemo(() => bucketFields(activeLeadFields), [activeLeadFields])
 
+  // Merge prefillData into defaultValues for DynamicFieldForm so dynamic fields
+  // (option_*, etc.) receive their values at registration time, not after.
+  const dynamicDefaults = useMemo(
+    () => (existing as Record<string, unknown> | undefined) ?? (prefillData as Record<string, unknown> | undefined) ?? {},
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [existing, prefillData],
+  )
+
   // Only show core fields that are NOT in crm_labels at all (active or inactive).
   // If a core field exists in crm_labels as inactive, it stays hidden.
   const visibleCoreFields = useMemo(
@@ -596,7 +604,7 @@ export function CrmLeadCreate() {
                           <DynamicFieldForm
                             register={register}
                             setValue={setValue}
-                            defaultValues={existing as Record<string, unknown> | undefined}
+                            defaultValues={dynamicDefaults}
                             labels={personal}
                             errors={errors}
                             formValues={watch() as Record<string, unknown>}
@@ -621,7 +629,7 @@ export function CrmLeadCreate() {
                         <DynamicFieldForm
                           register={register}
                           setValue={setValue}
-                          defaultValues={existing as Record<string, unknown> | undefined}
+                          defaultValues={dynamicDefaults}
                           labels={business}
                           errors={errors}
                           formValues={watch() as Record<string, unknown>}
@@ -666,7 +674,7 @@ export function CrmLeadCreate() {
                           <DynamicFieldForm
                             register={register}
                             setValue={setValue}
-                            defaultValues={existing as Record<string, unknown> | undefined}
+                            defaultValues={dynamicDefaults}
                             labels={secondOwner}
                             errors={errors}
                             formValues={watch() as Record<string, unknown>}
@@ -683,7 +691,7 @@ export function CrmLeadCreate() {
                     <DynamicFieldForm
                       register={register}
                       setValue={setValue}
-                      defaultValues={existing as Record<string, unknown> | undefined}
+                      defaultValues={dynamicDefaults}
                       labels={leadFields}
                       errors={errors}
                       formValues={watch() as Record<string, unknown>}
