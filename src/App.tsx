@@ -214,7 +214,11 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 function RootRedirect() {
   const { isAuthenticated } = useAuthStore()
   const engine = useEngineStore(s => s.engine)
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const host = window.location.hostname
+  if (!isAuthenticated) {
+    if (host === 'balji.app' || host === 'www.balji.app') return <Navigate to="/website_balji" replace />
+    return <Navigate to="/login" replace />
+  }
   return <Navigate to={engine === 'crm' ? '/crm/dashboard' : '/dashboard'} replace />
 }
 
