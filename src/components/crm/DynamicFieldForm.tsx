@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, AlertCircle } from 'lucide-react'
 import type { UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form'
@@ -113,13 +113,19 @@ function SsnInput({ fieldKey, register, rules, defaultValue, placeholder, watchV
   placeholder: string
   watchValue?: string
 }) {
-  const [display, setDisplay] = useState(() => formatSSN(defaultValue))
+  const [display, setDisplay] = useState(() => formatSSN(defaultValue || ''))
+  // Sync display when value changes externally (PDF prefill, edit mode, etc.)
   useEffect(() => {
-    if (watchValue !== undefined && watchValue !== display.replace(/\D/g, '')) {
-      setDisplay(formatSSN(watchValue))
+    const val = watchValue !== undefined && watchValue !== null && watchValue !== '' ? watchValue : defaultValue
+    if (val) {
+      const raw = String(val).replace(/\D/g, '')
+      const currentRaw = display.replace(/\D/g, '')
+      if (raw && raw !== currentRaw) {
+        setDisplay(formatSSN(raw))
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchValue])
+  }, [watchValue, defaultValue])
   const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
     ...rules,
     // Override validate to strip dashes before checking
@@ -195,17 +201,23 @@ function PhoneInput({ fieldKey, label, register, rules, defaultValue, placeholde
   watchValue?: string
 }) {
   const required = rules?.required
-  const [display, setDisplay] = useState(() => formatPartialPhoneUS(defaultValue.replace(/\D/g, '')))
+  const userTouched = useRef(false)
+  const [display, setDisplay] = useState(() => formatPartialPhoneUS((defaultValue || '').replace(/\D/g, '')))
+  // Sync display from external sources (PDF prefill, edit mode, setValue calls).
+  // Watches both defaultValue prop AND watchValue (live form value from watch()).
+  // Skips if user has manually typed in this field.
   useEffect(() => {
-    if (watchValue !== undefined) {
-      const raw = watchValue.replace(/\D/g, '')
+    if (userTouched.current) return
+    const val = watchValue !== undefined && watchValue !== null && watchValue !== '' ? String(watchValue) : (defaultValue || '')
+    if (val) {
+      const raw = val.replace(/\D/g, '')
       const currentRaw = display.replace(/\D/g, '')
-      if (raw !== currentRaw) {
+      if (raw && raw !== currentRaw) {
         setDisplay(formatPartialPhoneUS(raw))
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchValue])
+  }, [watchValue, defaultValue])
   const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
     ...rules,
     validate: phoneRule(label, Boolean(required)),
@@ -221,6 +233,7 @@ function PhoneInput({ fieldKey, label, register, rules, defaultValue, placeholde
       maxLength={14}
       inputMode="tel"
       onChange={e => {
+        userTouched.current = true
         const fmt = formatPartialPhoneUS(e.target.value)
         setDisplay(fmt)
         e.target.value = fmt
@@ -648,15 +661,11 @@ export function DynamicFieldForm({
 
   const allLabels = labelsProp ?? fetchedLabels ?? []
 
-  // Force controlled inputs (PhoneInput, SsnInput) to remount with correct
-  // values after defaultValues change (e.g. PDF prefill).
-  const [defaultsVersion, setDefaultsVersion] = useState(0)
-
-  // Populate existing values into the form (edit / prefill mode)
+  // Populate existing values into the form (edit / prefill mode).
+  // Controlled inputs (PhoneInput, SsnInput) sync via watchValue prop.
   useEffect(() => {
     if (!setValue || allLabels.length === 0) return
     const active = allLabels.filter(l => l.status === true || (l.status as unknown) == 1)
-    let changed = false
     active.forEach(label => {
       const val = defaultValues[label.field_key]
       if (val !== undefined && val !== null) {
@@ -665,10 +674,8 @@ export function DynamicFieldForm({
         } else {
           setValue(label.field_key, val !== '' ? String(val) : '')
         }
-        changed = true
       }
     })
-    if (changed) setDefaultsVersion(v => v + 1)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allLabels, defaultValues])
 
@@ -773,7 +780,7 @@ export function DynamicFieldForm({
                 const spanClass = isWide ? 'sm:col-span-2' : ''
 
                 return (
-                  <div key={`${label.id}-${defaultsVersion}`} className={`${spanClass}${fieldError ? ' field-has-error' : ''}`} data-field-key={label.field_key} id={`field-${label.field_key}`}>
+                  <div key={label.id} className={`${spanClass}${fieldError ? ' field-has-error' : ''}`} data-field-key={label.field_key} id={`field-${label.field_key}`}>
                     {!isCheckbox && (
                       <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: fieldError ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
                         {label.label_name}
