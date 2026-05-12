@@ -206,11 +206,25 @@ export function CrmLeadCreate() {
 
   // Merge prefillData into defaultValues for DynamicFieldForm so dynamic fields
   // (option_*, etc.) receive their values at registration time, not after.
-  const dynamicDefaults = useMemo(
-    () => (existing as Record<string, unknown> | undefined) ?? (prefillData as Record<string, unknown> | undefined) ?? {},
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [existing, prefillData],
-  )
+  // Also normalize date values from MM/DD/YYYY to YYYY-MM-DD for HTML date inputs.
+  const dynamicDefaults = useMemo(() => {
+    const base = (existing as Record<string, unknown> | undefined) ?? (prefillData as Record<string, unknown> | undefined) ?? {}
+    if (!leadFields || existing) return base
+    // Normalize dates for prefill data
+    const dateKeys = new Set(leadFields.filter(f => f.field_type === 'date').map(f => f.field_key))
+    // Also include core date fields
+    dateKeys.add('dob')
+    const normalized: Record<string, unknown> = { ...base }
+    for (const key of Object.keys(normalized)) {
+      const val = normalized[key]
+      if (dateKeys.has(key) && typeof val === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+        const [m, d, y] = val.split('/')
+        normalized[key] = `${y}-${m}-${d}`
+      }
+    }
+    return normalized
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing, prefillData, leadFields])
 
   // Only show core fields that are NOT in crm_labels at all (active or inactive).
   // If a core field exists in crm_labels as inactive, it stays hidden.
@@ -278,10 +292,19 @@ export function CrmLeadCreate() {
       ...leadFields.map(f => f.field_key),
     ])
 
+    const dateKeys = new Set(leadFields.filter(f => f.field_type === 'date').map(f => f.field_key))
+    dateKeys.add('dob')
+
     let filled = 0
     for (const [key, value] of Object.entries(prefillData)) {
       if (validKeys.has(key) && value) {
-        ;(setValue as (n: string, v: unknown) => void)(key, String(value))
+        let v = String(value)
+        // Normalize MM/DD/YYYY → YYYY-MM-DD for date inputs
+        if (dateKeys.has(key) && /^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+          const [m, d, y] = v.split('/')
+          v = `${y}-${m}-${d}`
+        }
+        ;(setValue as (n: string, v: unknown) => void)(key, v)
         filled++
       }
     }

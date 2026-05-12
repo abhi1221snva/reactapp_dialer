@@ -648,10 +648,15 @@ export function DynamicFieldForm({
 
   const allLabels = labelsProp ?? fetchedLabels ?? []
 
-  // Populate existing values into the form (edit mode)
+  // Force controlled inputs (PhoneInput, SsnInput) to remount with correct
+  // values after defaultValues change (e.g. PDF prefill).
+  const [defaultsVersion, setDefaultsVersion] = useState(0)
+
+  // Populate existing values into the form (edit / prefill mode)
   useEffect(() => {
     if (!setValue || allLabels.length === 0) return
     const active = allLabels.filter(l => l.status === true || (l.status as unknown) == 1)
+    let changed = false
     active.forEach(label => {
       const val = defaultValues[label.field_key]
       if (val !== undefined && val !== null) {
@@ -660,8 +665,10 @@ export function DynamicFieldForm({
         } else {
           setValue(label.field_key, val !== '' ? String(val) : '')
         }
+        changed = true
       }
     })
+    if (changed) setDefaultsVersion(v => v + 1)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allLabels, defaultValues])
 
@@ -766,7 +773,7 @@ export function DynamicFieldForm({
                 const spanClass = isWide ? 'sm:col-span-2' : ''
 
                 return (
-                  <div key={label.id} className={`${spanClass}${fieldError ? ' field-has-error' : ''}`} data-field-key={label.field_key} id={`field-${label.field_key}`}>
+                  <div key={`${label.id}-${defaultsVersion}`} className={`${spanClass}${fieldError ? ' field-has-error' : ''}`} data-field-key={label.field_key} id={`field-${label.field_key}`}>
                     {!isCheckbox && (
                       <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: fieldError ? '#ef4444' : '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 4 }}>
                         {label.label_name}
