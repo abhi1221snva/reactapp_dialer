@@ -103,7 +103,7 @@ function isPhoneField(fieldKey: string, fieldType: string): boolean {
 const parseOptions = parseFieldOptions
 
 // ── SSN Input component (auto-formats digits to XXX-XX-XXXX) ────────────────
-function SsnInput({ fieldKey, register, rules, defaultValue, placeholder }: {
+function SsnInput({ fieldKey, register, rules, defaultValue, placeholder, watchValue }: {
   fieldKey: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register: UseFormRegister<any>
@@ -111,8 +111,15 @@ function SsnInput({ fieldKey, register, rules, defaultValue, placeholder }: {
   rules: any
   defaultValue: string
   placeholder: string
+  watchValue?: string
 }) {
   const [display, setDisplay] = useState(() => formatSSN(defaultValue))
+  useEffect(() => {
+    if (watchValue !== undefined && watchValue !== display.replace(/\D/g, '')) {
+      setDisplay(formatSSN(watchValue))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchValue])
   const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
     ...rules,
     // Override validate to strip dashes before checking
@@ -176,7 +183,7 @@ function NameInput({ fieldKey, label, register, rules, defaultValue, placeholder
 }
 
 // ── Phone Input component (auto-formats to (NXX) NXX-XXXX, validates NANP) ──
-function PhoneInput({ fieldKey, label, register, rules, defaultValue, placeholder }: {
+function PhoneInput({ fieldKey, label, register, rules, defaultValue, placeholder, watchValue }: {
   fieldKey: string
   label: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,9 +192,20 @@ function PhoneInput({ fieldKey, label, register, rules, defaultValue, placeholde
   rules: any
   defaultValue: string
   placeholder: string
+  watchValue?: string
 }) {
   const required = rules?.required
   const [display, setDisplay] = useState(() => formatPartialPhoneUS(defaultValue.replace(/\D/g, '')))
+  useEffect(() => {
+    if (watchValue !== undefined) {
+      const raw = watchValue.replace(/\D/g, '')
+      const currentRaw = display.replace(/\D/g, '')
+      if (raw !== currentRaw) {
+        setDisplay(formatPartialPhoneUS(raw))
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchValue])
   const { onChange: rhfOnChange, ...rest } = register(fieldKey, {
     ...rules,
     validate: phoneRule(label, Boolean(required)),
@@ -347,6 +365,7 @@ function renderInput(
   label: CrmLabel,
   register: Props['register'],
   defaultValue: unknown,
+  watchValue?: unknown,
 ) {
   const { field_key, field_type, options, placeholder, label_name } = label
   const ph = placeholder || label_name
@@ -462,6 +481,7 @@ function renderInput(
         rules={rules}
         defaultValue={defaultValue as string ?? ''}
         placeholder={ph || 'XXX-XX-XXXX'}
+        watchValue={watchValue as string | undefined}
       />
     )
   }
@@ -476,6 +496,7 @@ function renderInput(
         rules={rules}
         defaultValue={defaultValue as string ?? ''}
         placeholder={ph || '(555) 555-5555'}
+        watchValue={watchValue as string | undefined}
       />
     )
   }
@@ -767,7 +788,7 @@ export function DynamicFieldForm({
                         }}
                         placeholder={label.placeholder || label.label_name}
                       />
-                    ) : renderInput(label, register, defaultValues[label.field_key])}
+                    ) : renderInput(label, register, defaultValues[label.field_key], formValues?.[label.field_key])}
                     {fieldError?.message && (
                       <span style={{ fontSize: 11, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
                         <AlertCircle size={11} />{String(fieldError.message)}
