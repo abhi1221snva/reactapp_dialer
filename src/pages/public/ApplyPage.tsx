@@ -14,6 +14,12 @@ import {
 } from '../../services/publicApp.service'
 import { formatPhoneNumber, formatPartialPhoneUS } from '../../utils/format'
 import { validateSection, scrollToFirstError, rulestoHtmlAttrs } from '../../utils/publicFormValidation'
+import { isNameField, sanitizeNameInput, NAME_MAX_LENGTH, normalizeNamesInPayload } from '../../utils/nameValidation'
+import { isCompanyField, sanitizeCompanyInput, COMPANY_NAME_MAX_LENGTH } from '../../utils/companyValidation'
+import { isCurrencyField, sanitizeCurrencyInput, CURRENCY_MAX_LENGTH } from '../../utils/currencyValidation'
+import { isAddressField, sanitizeAddressInput, ADDRESS_MAX_LENGTH } from '../../utils/addressValidation'
+import { isCityField, sanitizeCityInput, CITY_MAX_LENGTH } from '../../utils/cityValidation'
+import { isDobField, dobMinIsoDate, dobMaxIsoDate } from '../../utils/dobValidation'
 import AddressAutocomplete from '../../components/ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
 
@@ -148,7 +154,7 @@ function FormField({ f, value, onChange, error }: {
     if (isAddressAutocompleteKey(f.key, f.label)) return (
       <AddressAutocomplete
         value={value}
-        onChange={v => onChange(f.key, v)}
+        onChange={v => onChange(f.key, sanitizeAddressInput(v))}
         onPlaceSelect={(parsed: ParsedPlace) => {
           const group = resolveAddressGroup(f.key, f.label)
           if (group) {
@@ -176,6 +182,56 @@ function FormField({ f, value, onChange, error }: {
         style={base} />
     )
     const t = ({ email: 'email', date: 'date', number: 'number' } as Record<string, string>)[f.type] ?? 'text'
+    // DOB date fields: native date input with 18–120 year bounds enforced
+    // by the browser. validateDob also runs at submit. ID_46–ID_48.
+    if (t === 'date' && isDobField(f.key, f.label)) {
+      return <input type="date" value={value}
+        onChange={e => onChange(f.key, e.target.value)}
+        {...fb} {...dbAttrs}
+        min={dobMinIsoDate()} max={dobMaxIsoDate()}
+        placeholder={f.placeholder ?? ''} style={base} />
+    }
+    // Currency / money fields: only digits and one decimal point allowed at
+    // keystroke. Rejects letters, multiple dots, special chars. ID_28–ID_38.
+    if (t === 'text' && isCurrencyField(f.key, f.label)) {
+      return <input type="text" inputMode="decimal" value={value}
+        onChange={e => onChange(f.key, sanitizeCurrencyInput(e.target.value))}
+        {...fb} {...dbAttrs} maxLength={CURRENCY_MAX_LENGTH}
+        placeholder={f.placeholder ?? '0.00'} style={base} />
+    }
+    // City / town fields: letters + space/hyphen/apostrophe/period only. ID_53.
+    if (t === 'text' && isCityField(f.key, f.label)) {
+      return <input type="text" value={value}
+        onChange={e => onChange(f.key, sanitizeCityInput(e.target.value))}
+        {...fb} {...dbAttrs} maxLength={CITY_MAX_LENGTH}
+        placeholder={f.placeholder ?? ''} style={base} />
+    }
+    // Address fields not handled by AddressAutocomplete above (manual-typing
+    // fallback). Blocks XSS / SQLi at keystroke. ID_49–ID_52.
+    if (t === 'text' && isAddressField(f.key, f.label)) {
+      return <input type="text" value={value}
+        onChange={e => onChange(f.key, sanitizeAddressInput(e.target.value))}
+        {...fb} {...dbAttrs} maxLength={ADDRESS_MAX_LENGTH}
+        placeholder={f.placeholder ?? ''} style={base} />
+    }
+    // Person-name fields: block invalid chars at keystroke + cap length.
+    // Detected by key/label pattern so custom Owner2 / partner / affiliate
+    // first-name / last-name fields all inherit the same rule.
+    if (t === 'text' && isNameField(f.key, f.label)) {
+      return <input type="text" value={value}
+        onChange={e => onChange(f.key, sanitizeNameInput(e.target.value))}
+        {...fb} {...dbAttrs} maxLength={NAME_MAX_LENGTH}
+        placeholder={f.placeholder ?? ''} style={base} />
+    }
+    // Company / business / DBA fields: strip XSS / SQLi / special chars at
+    // keystroke. Pattern-based so tenant-customized keys (legal_business_name,
+    // dba_name, etc.) inherit the same rule without an explicit list.
+    if (t === 'text' && isCompanyField(f.key)) {
+      return <input type="text" value={value}
+        onChange={e => onChange(f.key, sanitizeCompanyInput(e.target.value))}
+        {...fb} {...dbAttrs} maxLength={COMPANY_NAME_MAX_LENGTH}
+        placeholder={f.placeholder ?? ''} style={base} />
+    }
     return <input type={t} value={value} onChange={e => onChange(f.key, e.target.value)}
       {...fb} {...dbAttrs} placeholder={ph[f.type] ?? f.placeholder ?? ''} style={base} />
   })()
@@ -698,7 +754,10 @@ export function ApplyPage() {
         delete payload['owner_2_signature_image']
       }
 
-      const res = await publicAppService.submitApplication(affiliateCode!, payload)
+      // Collapse "Test    T" → "Test T" for any first/last name field
+      // (pattern-detected — handles custom Owner2 / partner keys too).
+      const normalized = normalizeNamesInPayload(payload) as Record<string, string>
+      const res = await publicAppService.submitApplication(affiliateCode!, normalized)
       const out = (res.data as unknown as SubmitResult).lead_token
         ? (res.data as unknown as SubmitResult)
         : (res.data as { data: SubmitResult }).data

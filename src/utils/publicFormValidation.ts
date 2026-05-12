@@ -14,6 +14,13 @@
  */
 
 import type { PublicFormField, FieldValidationRule } from '../services/publicApp.service'
+import { isNameField, validateName } from './nameValidation'
+import { isCompanyField, validateCompanyName } from './companyValidation'
+import { isCurrencyField, validateCurrency } from './currencyValidation'
+import { isPhoneField, validatePhone } from './phoneValidation'
+import { isDobField, validateDob } from './dobValidation'
+import { isAddressField, validateAddress } from './addressValidation'
+import { isCityField, validateCity } from './cityValidation'
 
 export type SectionErrors = Record<string, string>
 
@@ -258,7 +265,10 @@ export function validateSection(
       }
       if (isEmpty) continue   // optional + empty — nullable/no-required rule
       const err = validateWithDbRules(f.validation_rules!, val, f.label)
-      if (err) errors[f.key] = err
+      if (err) {
+        errors[f.key] = err
+        continue
+      }
     } else {
       // ── Legacy path: type-based fallback ─────────────────────────────────
       if (f.required && isEmpty) {
@@ -267,7 +277,83 @@ export function validateSection(
       }
       if (isEmpty) continue
       const err = validateByType(effectiveType, val, f.label, f.options)
-      if (err) errors[f.key] = err
+      if (err) {
+        errors[f.key] = err
+        continue
+      }
+    }
+
+    // ── Person-name rules (alphabets + spaces/hyphens/apostrophes, length cap,
+    // SQL-injection / XSS payloads rejected). Applied on top of either path so
+    // any field detected as a name field (by key or label pattern) inherits the
+    // same rules — keeps Add Lead / Edit Lead / Affiliate / Merchant / Owner2
+    // consistent without hardcoding field keys.
+    if (!isEmpty && isNameField(f.key, f.label)) {
+      const nameErr = validateName(val, f.label)
+      if (nameErr !== true) errors[f.key] = nameErr
+      continue
+    }
+
+    // ── Company / business / DBA rules (whitelist chars, ≥1 letter, max 100,
+    // no triplet keystroke-mash). Mirrors FieldValidationService::isCompanyKey
+    // on the backend so XSS / SQLi payloads and pure-numeric / special-char
+    // junk are rejected before the request leaves the browser. Pattern-based
+    // key detection covers tenant-customized labels (legal_business_name,
+    // dba_name, etc.).
+    if (!isEmpty && isCompanyField(f.key)) {
+      const companyErr = validateCompanyName(val, f.label)
+      if (companyErr !== true) {
+        errors[f.key] = companyErr
+        continue
+      }
+    }
+
+    // ── Phone (US NANP) rules: 10 digits, area & exchange first digit must
+    // be 2-9. Rejects (000) 000-0000, (111) 111-1111, 0/1-prefixed numbers.
+    // ID_39–ID_45.
+    if (!isEmpty && isPhoneField(f.key, f.label, f.type)) {
+      const phoneErr = validatePhone(val, f.label)
+      if (phoneErr !== true) {
+        errors[f.key] = phoneErr
+        continue
+      }
+    }
+
+    // ── Date of Birth rules: must be valid past date, age 18-120. ID_46–ID_48.
+    if (!isEmpty && isDobField(f.key, f.label)) {
+      const dobErr = validateDob(val, f.label)
+      if (dobErr !== true) {
+        errors[f.key] = dobErr
+        continue
+      }
+    }
+
+    // ── Currency / money rules: numeric only, ≥0, ≤ $9,999,999,999.99,
+    // ≤ 2dp. Pattern-based key detection covers balance, amount, revenue,
+    // deposit, funding, etc. ID_28–ID_38.
+    if (!isEmpty && isCurrencyField(f.key, f.label)) {
+      const currencyErr = validateCurrency(val, f.label)
+      if (currencyErr !== true) {
+        errors[f.key] = currencyErr
+        continue
+      }
+    }
+
+    // ── Address rules: whitelist letters/digits/spaces/, . - / # ', ≥1
+    // letter, max 200. Blocks XSS / SQLi payloads. ID_49–ID_52.
+    if (!isEmpty && isAddressField(f.key, f.label)) {
+      const addrErr = validateAddress(val, f.label)
+      if (addrErr !== true) {
+        errors[f.key] = addrErr
+        continue
+      }
+    }
+
+    // ── City rules: letters + space/hyphen/apostrophe/period, ≥1 letter,
+    // max 50. Rejects pure-numeric input. ID_53.
+    if (!isEmpty && isCityField(f.key, f.label)) {
+      const cityErr = validateCity(val, f.label)
+      if (cityErr !== true) errors[f.key] = cityErr
     }
   }
 

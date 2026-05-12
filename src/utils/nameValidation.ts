@@ -20,16 +20,33 @@ const NAME_PATTERN = /^[A-Za-z][A-Za-z'-]*(?: [A-Za-z'-]+)*$/
 /** Rejects 3+ consecutive identical letters (e.g. "eeee", "aaaa") — keystroke-mash guard. */
 const REPEATED_CHAR_PATTERN = /([A-Za-z])\1{2,}/i
 
-/** Set of field keys treated as person-name fields. */
-const NAME_KEYS = new Set([
-  'first_name',
-  'last_name',
-  'second_owner_first_name',
-  'second_owner_last_name',
-])
+/**
+ * Pattern-based detection of person-name fields. Matches both the
+ * key (e.g. `first_name`, `firstName`, `second_owner_first_name`,
+ * `partner_last_name`) and the human label (e.g. "First Name",
+ * "Last Name", "Owner 2 First Name").
+ *
+ * Pattern-based instead of a hardcoded list so tenants who add
+ * new EAV fields (or admin-renamed fields like `owner_first_name`)
+ * inherit the same validation automatically. Anything containing
+ * the tokens `firstname`/`lastname` (with or without separator)
+ * is treated as a name field.
+ */
+const NAME_KEY_PATTERN = /(?:^|[_\s-])(?:first|last)[_\s-]?name(?:$|[_\s-])/i
+const NAME_LABEL_PATTERN = /\b(?:first|last)\s*name\b/i
 
-export function isNameField(fieldKey: string): boolean {
-  return NAME_KEYS.has(fieldKey)
+/**
+ * Returns true if the given field key/label looks like a person-name field.
+ * Accepts either a key, a label, or both — useful for callers that only
+ * have one of the two available.
+ */
+export function isNameField(fieldKeyOrLabel: string, label?: string): boolean {
+  if (NAME_KEY_PATTERN.test(fieldKeyOrLabel)) return true
+  if (label && NAME_LABEL_PATTERN.test(label)) return true
+  // Bare key without separator (e.g. "firstname") and bare label fallback
+  if (/^(?:first|last)name$/i.test(fieldKeyOrLabel)) return true
+  if (NAME_LABEL_PATTERN.test(fieldKeyOrLabel)) return true
+  return false
 }
 
 /** Trim leading/trailing whitespace and collapse multiple spaces to one. */
