@@ -234,7 +234,7 @@ export function TopHeader() {
       </button>
 
       {/* ── Engine segmented toggle (shown for client 11 & client 3) ── */}
-      {(Number(user?.parent_id) === 11 || Number(user?.parent_id) === 3) && <div
+      {(Number(user?.parent_id) === 11 || Number(user?.parent_id) === 3 || Number(user?.parent_id) === 158) && <div
         className="flex items-center p-[3px] rounded-full gap-[2px] flex-shrink-0"
         style={{ background: '#e9ecf1' }}
       >
