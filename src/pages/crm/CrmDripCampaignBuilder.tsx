@@ -144,8 +144,8 @@ export function CrmDripCampaignBuilder() {
         return r
       })
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['drip-campaigns'] })
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['drip-campaigns'] })
       toast.success(isEdit ? 'Campaign updated' : 'Campaign created')
       navigate('/crm/drip-campaigns')
     },

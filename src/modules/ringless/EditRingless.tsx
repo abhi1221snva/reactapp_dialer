@@ -309,8 +309,8 @@ export function EditRingless() {
       if (data.caller_id !== 'custom') delete payload.custom_caller_id
       return ringlessService.update(payload)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ringless-campaigns'] })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['ringless-campaigns'] })
       toast.success('Campaign updated successfully')
       navigate(`/ringless/${campaignId}/manage-lists`)
     },

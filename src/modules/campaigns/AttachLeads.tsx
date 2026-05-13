@@ -77,9 +77,9 @@ export function AttachLeads() {
   // ── Assign existing lists to campaign ──
   const assignMutation = useMutation({
     mutationFn: () => campaignService.assignLists(campaignId, selectedListIds),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Lists assigned to campaign successfully')
-      queryClient.invalidateQueries({ queryKey: ['campaign-lists', campaignId] })
+      await queryClient.invalidateQueries({ queryKey: ['campaign-lists', campaignId] })
       navigate(`/campaigns/${campaignId}/add-review`)
     },
     onError: (err: unknown) => {
@@ -109,9 +109,9 @@ export function AttachLeads() {
     setStep('mapping')
   }
 
-  const handleImported = (_result: ImportResult) => {
+  const handleImported = async (_result: ImportResult) => {
     toast.success('Leads imported successfully')
-    queryClient.invalidateQueries({ queryKey: ['campaign-lists', campaignId] })
+    await queryClient.invalidateQueries({ queryKey: ['campaign-lists', campaignId] })
     navigate(`/campaigns/${campaignId}/add-review`)
   }
 

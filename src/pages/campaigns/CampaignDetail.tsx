@@ -132,9 +132,9 @@ export function CampaignDetail() {
 
   const copyMutation = useMutation({
     mutationFn: () => campaignService.copy(Number(id)),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Campaign duplicated')
-      qc.invalidateQueries({ queryKey: ['campaigns'] })
+      await qc.invalidateQueries({ queryKey: ['campaigns'] })
       navigate('/campaigns')
     },
     onError: () => toast.error('Failed to duplicate'),

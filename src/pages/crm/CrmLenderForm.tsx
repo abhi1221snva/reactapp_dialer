@@ -473,9 +473,9 @@ export function CrmLenderForm() {
         ? crmService.updateLender(Number(id), lenderPayload)
         : crmService.createLender(lenderPayload)
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success(isEdit ? 'Lender updated' : 'Lender created')
-      qc.invalidateQueries({ queryKey: ['lenders'] })
+      await qc.invalidateQueries({ queryKey: ['lenders'] })
       navigate('/crm/lenders')
     },
     onError: () => toast.error('Failed to save lender'),

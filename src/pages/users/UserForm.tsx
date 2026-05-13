@@ -420,14 +420,16 @@ export function UserForm() {
       Object.keys(p).forEach(k => p[k]===undefined && delete p[k])
       return userService.create(p)
     },
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       const data = (res as {data?:{success?:boolean|string;message?:string}|null})?.data
       if (!data||data.success===false||data.success==='false') { toast.error((data as {message?:string}|null)?.message||'Failed to save'); return }
       toast.success(isEdit?'Extension updated':'Extension created')
-      qc.invalidateQueries({ queryKey:['users'] })
+      await qc.invalidateQueries({ queryKey:['users'] })
       if (isEdit) {
-        qc.invalidateQueries({ queryKey:['user',id] })
-        qc.invalidateQueries({ queryKey:['user-view'] })
+        await Promise.all([
+          qc.invalidateQueries({ queryKey:['user',id] }),
+          qc.invalidateQueries({ queryKey:['user-view'] }),
+        ])
       }
       navigate('/users')
     },

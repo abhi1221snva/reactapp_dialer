@@ -139,12 +139,14 @@ export function EditMapping() {
         })
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('List updated successfully.')
       setDirty(false)
-      qc.invalidateQueries({ queryKey: ['lists'] })
-      qc.invalidateQueries({ queryKey: ['list-mapping', listId] })
-      qc.invalidateQueries({ queryKey: ['list-detail', String(listId)] })
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['lists'] }),
+        qc.invalidateQueries({ queryKey: ['list-mapping', listId] }),
+        qc.invalidateQueries({ queryKey: ['list-detail', String(listId)] }),
+      ])
       navigate(`/lists/${listId}`)
     },
     onError: (err: Error) => {

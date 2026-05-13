@@ -603,8 +603,8 @@ export function EditCampaign() {
       }
       return campaignService.update(payload)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] })
       toast.success('Campaign updated')
       navigate(`/campaigns/${campaignId}/attach-leads`)
     },

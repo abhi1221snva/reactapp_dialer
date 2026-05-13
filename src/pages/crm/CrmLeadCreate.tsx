@@ -346,32 +346,32 @@ export function CrmLeadCreate() {
 
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => leadService.create(data),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       setApiError(null)
       toast.success('Lead created successfully')
-      qc.invalidateQueries({ queryKey: ['crm-leads-search'] })
+      await qc.invalidateQueries({ queryKey: ['crm-leads-search'] })
       const newId = res.data?.data?.id ?? res.data?.id
       if (newId) navigate(`/crm/leads/${newId}`)
       else navigate('/crm/leads')
     },
     onError: (err) => {
-      handleApiError(err)
-      setApiError(null)
+      const msg = handleApiError(err)
+      setApiError(msg)
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => leadService.update(leadId!, data),
-    onSuccess: () => {
+    onSuccess: async () => {
       setApiError(null)
       toast.success('Lead updated successfully')
-      qc.invalidateQueries({ queryKey: ['crm-lead', leadId] })
+      await qc.refetchQueries({ queryKey: ['crm-lead', leadId] })
       qc.invalidateQueries({ queryKey: ['crm-leads-search'] })
       navigate(`/crm/leads/${leadId}`)
     },
     onError: (err) => {
-      handleApiError(err)
-      setApiError(null)
+      const msg = handleApiError(err)
+      setApiError(msg)
     },
   })
 
