@@ -604,11 +604,24 @@ export function CrmLeadNew() {
     staleTime: 5 * 60_000,
   })
 
-  const { data: users = [] } = useQuery({
+  const { data: rawUsers = [] } = useQuery({
     queryKey: ['crm-users'],
     queryFn: () => crmService.getUsers(),
     staleTime: 5 * 60_000,
   })
+
+  // Ensure the currently assigned user appears in the dropdown even if
+  // visibility rules would hide them (e.g. same-level or higher-level user).
+  const users = useMemo(() => {
+    if (
+      lead?.assigned_to &&
+      lead?.assigned_name &&
+      !rawUsers.find(u => String(u.id) === String(lead.assigned_to))
+    ) {
+      return [{ id: Number(lead.assigned_to), name: lead.assigned_name }, ...rawUsers]
+    }
+    return rawUsers
+  }, [rawUsers, lead])
 
   const assignMut = useMutation({
     mutationFn: (userId: number | null) => leadService.update(leadId, { assigned_to: userId }),

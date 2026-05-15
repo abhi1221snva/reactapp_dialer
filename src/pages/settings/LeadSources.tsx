@@ -26,6 +26,7 @@ interface LeadSourceItem {
   notify_sms?: boolean
   notify_user_ids?: number[]
   assign_user_ids?: number[]
+  assign_method?: 'round_robin' | 'sequential'
   created_at?: string
   updated_at?: string
   [key: string]: unknown
@@ -198,6 +199,7 @@ function WebhookModal({
 
   // Assign users state
   const [assignUserIds, setAssignUserIds] = useState<number[]>(source.assign_user_ids ?? [])
+  const [assignMethod, setAssignMethod] = useState<'round_robin' | 'sequential'>(source.assign_method ?? 'round_robin')
   const [assignDropdownOpen, setAssignDropdownOpen] = useState(false)
   const [assignSearch, setAssignSearch] = useState('')
 
@@ -232,6 +234,7 @@ function WebhookModal({
       notify_sms: notifySms,
       notify_user_ids: selectedUserIds,
       assign_user_ids: assignUserIds,
+      assign_method: assignMethod,
     }),
     onSuccess: () => { toast.success('Settings saved'); onUpdated() },
     onError: () => toast.error('Failed to save settings'),
@@ -464,7 +467,36 @@ function WebhookModal({
           {/* Assign Leads To dropdown — always visible */}
           <div className="relative">
             <label className="text-xs font-medium text-slate-600 mb-0.5 block">Assign Leads To</label>
-            <p className="text-[10px] text-slate-400 mb-1">Auto-assign incoming leads to selected users (round-robin)</p>
+            <p className="text-[10px] text-slate-400 mb-1">Auto-assign incoming leads to selected users</p>
+
+            {/* Assignment mode selector — only show when 2+ users */}
+            {assignUserIds.length > 1 && (
+              <div className="flex items-center gap-0 mb-2 rounded-lg border border-slate-200 overflow-hidden w-fit">
+                <button
+                  type="button"
+                  onClick={() => setAssignMethod('sequential')}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    assignMethod === 'sequential'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Sequential
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignMethod('round_robin')}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    assignMethod === 'round_robin'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Round Robin
+                </button>
+              </div>
+            )}
+
             <button type="button" onClick={() => setAssignDropdownOpen(o => !o)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
             >
