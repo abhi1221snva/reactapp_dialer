@@ -29,6 +29,7 @@ interface ProfileForm {
   mobile: string
   extension: string
   timezone: string
+  dialer_mode: string
 }
 
 interface PasswordForm {
@@ -99,6 +100,7 @@ function ProfileInfoSection({ user, avatarFile, onNameChange }: ProfileInfoProps
     mobile:     user?.mobile     || user?.phone || '',
     extension:  user?.extension  || '',
     timezone:   'UTC',
+    dialer_mode: user?.dialer_mode === 'extension' ? '1' : user?.dialer_mode === 'mobile_app' ? '3' : '2',
   })
 
   const { data: profileData, isLoading } = useQuery({
@@ -119,6 +121,7 @@ function ProfileInfoSection({ user, avatarFile, onNameChange }: ProfileInfoProps
         mobile:     formatPhoneNumber(p.mobile || p.phone || f.mobile || ''),
         extension:  p.extension || f.extension,
         timezone:   p.timezone  || 'UTC',
+        dialer_mode: p.dialer_mode ? String(p.dialer_mode) : f.dialer_mode,
       }))
       onNameChange?.(firstName, lastName)
     }
@@ -172,6 +175,7 @@ function ProfileInfoSection({ user, avatarFile, onNameChange }: ProfileInfoProps
     fd.append('phone_number', form.mobile.replace(/\D/g, '')) // backend expects digits only
     fd.append('extension',    form.extension)
     fd.append('timezone',     form.timezone)
+    fd.append('dialer_mode',  form.dialer_mode)
     updateMutation.mutate(fd)
   }
 
@@ -281,6 +285,29 @@ function ProfileInfoSection({ user, avatarFile, onNameChange }: ProfileInfoProps
                   <option key={tz.value} value={tz.value}>{tz.label}</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Row 4: Dialing Mode */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="form-group">
+              <label className="label flex items-center gap-1.5">
+                <Phone size={11} className="text-slate-400" />Dialing Mode
+              </label>
+              <select
+                className="input"
+                value={form.dialer_mode}
+                onChange={(e) => setForm((f) => ({ ...f, dialer_mode: e.target.value }))}
+              >
+                <option value="2">WebPhone</option>
+                <option value="3">Mobile App</option>
+                <option value="1">Desk Phone</option>
+              </select>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {form.dialer_mode === '1' ? 'Calls ring your desk phone (primary extension)' :
+                 form.dialer_mode === '3' ? 'Calls ring your mobile app (WebRTC)' :
+                 'Calls ring your browser WebPhone (WebRTC)'}
+              </p>
             </div>
           </div>
         </div>
