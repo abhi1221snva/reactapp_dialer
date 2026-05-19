@@ -28,6 +28,19 @@ import { isNameField as isPersonNameField } from '../../utils/nameValidation'
 import { isCurrencyField, validateCurrency, normalizeCurrencyInPayload } from '../../utils/currencyValidation'
 import { isCityField, validateCity } from '../../utils/cityValidation'
 import { isAddressField, validateAddress } from '../../utils/addressValidation'
+import { isStateField, validateState, normalizeStatesInPayload } from '../../utils/stateValidation'
+import { isSsnField, validateSsn, normalizeSsnsInPayload } from '../../utils/ssnValidation'
+import { isEinField, validateEin, normalizeEinsInPayload } from '../../utils/einValidation'
+import { isZipField, validateZip } from '../../utils/zipValidation'
+import { isCreditScoreField, validateCreditScore } from '../../utils/creditScoreValidation'
+import { isOwnershipField, validateOwnership, validateOwnershipSum } from '../../utils/ownershipValidation'
+import {
+  isCountryField, validateCountry,
+  isIndustryField, validateIndustry,
+  isEntityTypeField, validateEntityType,
+  isUseOfFundsField, validateUseOfFunds,
+} from '../../utils/textNameValidation'
+import { isBusinessDateField, validateBusinessDate } from '../../utils/businessDateValidation'
 import { isDobField, validateDob } from '../../utils/dobValidation'
 import { validatePhone } from '../../utils/phoneValidation'
 
@@ -453,6 +466,74 @@ export function CrmLeadCreate() {
           if (result !== true) fieldError = result
         }
 
+        // Pattern-detect state fields. ID_73–ID_78: letters-only blocks
+        // numerics, special chars, XSS payloads, and SQLi patterns.
+        if (!fieldError && isStateField(field.field_key, field.label_name)) {
+          const result = validateState(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // SSN (ID_81–87, 148–149): 9 digits, format + area/group/serial rules.
+        if (!fieldError && isSsnField(field.field_key, field.label_name)) {
+          const result = validateSsn(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // EIN (ID_122–126): exactly 9 digits, no alpha/special, no all-zero.
+        if (!fieldError && isEinField(field.field_key, field.label_name)) {
+          const result = validateEin(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // ZIP (ID_79, 80, 114–116, 154): 5 digits or 5+4, no all-zero.
+        if (!fieldError && isZipField(field.field_key, field.label_name)) {
+          const result = validateZip(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Credit Score (ID_88–92, 145–147): integer in [300, 900].
+        if (!fieldError && isCreditScoreField(field.field_key, field.label_name)) {
+          const result = validateCreditScore(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Ownership Percentage (ID_93–101, 140–144): 0–100, ≤2 decimal places.
+        if (!fieldError && isOwnershipField(field.field_key, field.label_name)) {
+          const result = validateOwnership(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Country (ID_133, 134): letters + safe separators only.
+        if (!fieldError && isCountryField(field.field_key, field.label_name)) {
+          const result = validateCountry(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Industry (ID_117, 118): ≥1 letter, whitelisted chars.
+        if (!fieldError && isIndustryField(field.field_key, field.label_name)) {
+          const result = validateIndustry(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Entity Type (ID_127, 128): ≥1 letter, whitelisted chars.
+        if (!fieldError && isEntityTypeField(field.field_key, field.label_name)) {
+          const result = validateEntityType(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Use of Funds (ID_130, 131): ≥1 letter, whitelisted chars.
+        if (!fieldError && isUseOfFundsField(field.field_key, field.label_name)) {
+          const result = validateUseOfFunds(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
+        // Business Start / Established / Incorporation date (ID_119, 121):
+        // must be a real date in [1800-01-01, today].
+        if (!fieldError && isBusinessDateField(field.field_key, field.label_name)) {
+          const result = validateBusinessDate(strVal, field.label_name)
+          if (result !== true) fieldError = result
+        }
+
         // Pattern-detect DOB fields. ID_46–ID_48: age 18–120.
         if (!fieldError && isDobField(field.field_key, field.label_name)) {
           const result = validateDob(strVal, field.label_name)
@@ -485,9 +566,23 @@ export function CrmLeadCreate() {
         }
       }
 
+      // Cross-field: total ownership across all owners must not exceed 100%
+      // (ID_98, 99, 101, 144).
+      const sumResult = validateOwnershipSum(payload)
+      if (sumResult !== true) {
+        // Surface the error on the first ownership field we can find
+        const ownershipKey = activeFields.find(f => isOwnershipField(f.field_key, f.label_name))?.field_key
+        if (ownershipKey) {
+          setError(ownershipKey as keyof FormData, { type: 'manual', message: sumResult })
+          errorKeys.push(ownershipKey)
+        }
+        toast.error(sumResult)
+      }
+
       if (errorKeys.length > 0) {
         setFormErrorCount(errorKeys.length)
         scrollToFirstError(errorKeys, formScrollRef.current)
+        toast.error(`Please fix ${errorKeys.length} error${errorKeys.length > 1 ? 's' : ''} before saving`)
         return
       }
     }
@@ -497,9 +592,17 @@ export function CrmLeadCreate() {
     // Don't send lead_source_id if none selected
     if (!payload.lead_source_id) delete payload.lead_source_id
 
-    // Normalize whitespace in name fields ("Test     T" → "Test T")
-    // and round currency fields to 2 decimal places ("100.129" → "100.13").
-    const normalized = normalizeCurrencyInPayload(normalizeNamesInPayload(payload))
+    // Normalize whitespace in name fields ("Test     T" → "Test T"),
+    // round currency fields to 2 decimal places ("100.129" → "100.13"),
+    // normalize state fields ("ny" → "NY", "new york" → "New York"),
+    // strip hyphens from SSN / EIN before persisting (XXX-XX-XXXX → XXXXXXXXX).
+    const normalized = normalizeEinsInPayload(
+      normalizeSsnsInPayload(
+        normalizeStatesInPayload(
+          normalizeCurrencyInPayload(normalizeNamesInPayload(payload))
+        )
+      )
+    )
 
     if (isEdit) updateMutation.mutate(normalized)
     else createMutation.mutate(normalized)

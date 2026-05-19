@@ -13,6 +13,12 @@ import { isCurrencyField, currencyRule, sanitizeCurrencyInput, CURRENCY_MAX_LENG
 import { isCityField, cityRule, sanitizeCityInput, CITY_MAX_LENGTH } from '../../utils/cityValidation'
 import { isAddressField, addressRule, sanitizeAddressInput, ADDRESS_MAX_LENGTH } from '../../utils/addressValidation'
 import { isDobField, dobRule, dobMinIsoDate, dobMaxIsoDate } from '../../utils/dobValidation'
+import {
+  isBusinessDateField,
+  businessDateRule,
+  businessDateMinIso,
+  businessDateMaxIso,
+} from '../../utils/businessDateValidation'
 import { phoneRule } from '../../utils/phoneValidation'
 import AddressAutocomplete from '../ui/AddressAutocomplete'
 import { isAddressAutocompleteKey, resolveAddressGroup, type ParsedPlace } from '../../utils/addressFieldMapping'
@@ -443,17 +449,22 @@ function renderInput(
   // ── Date ───────────────────────────────────────────────────────────────────
   if (field_type === 'date') {
     const isDob = isDobField(field_key, label_name)
-    const dobRules = isDob
+    const isBusinessDate = !isDob && isBusinessDateField(field_key, label_name)
+    const dateRules = isDob
       ? { ...rules, validate: dobRule(label_name, Boolean(rules?.required)) }
-      : rules
+      : isBusinessDate
+        ? { ...rules, validate: businessDateRule(label_name, Boolean(rules?.required)) }
+        : rules
+    const min = isDob ? dobMinIsoDate() : isBusinessDate ? businessDateMinIso() : undefined
+    const max = isDob ? dobMaxIsoDate() : isBusinessDate ? businessDateMaxIso() : undefined
     return (
       <input
         type="date"
-        {...register(field_key, dobRules)}
+        {...register(field_key, dateRules)}
         className={baseClass}
         defaultValue={defaultValue as string ?? ''}
-        min={isDob ? dobMinIsoDate() : undefined}
-        max={isDob ? dobMaxIsoDate() : undefined}
+        min={min}
+        max={max}
       />
     )
   }
