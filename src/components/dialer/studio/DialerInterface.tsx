@@ -505,36 +505,52 @@ export function DialerInterface({ campaign, allCampaigns, webphoneOk, isAutoDial
       // Use isInConference as the primary signal — phoneInCall can briefly
       // flicker to false during WebPhone re-renders, causing a spurious
       // Path A originate that re-rings the agent while already in conference.
+      // IMPORTANT: Never fall back to campaignDialNext here — that would
+      // re-ring the agent and create a duplicate session.
       if (isInConference.current) {
-        const res = await campaignDialerService.nextCustomer(campaign.id)
-        const raw = res.data as Record<string, unknown>
+        try {
+          const res = await campaignDialerService.nextCustomer(campaign.id)
+          const raw = res.data as Record<string, unknown>
 
-        if (raw?.status === 'no_more_leads') {
-          toast('No more leads in this campaign', { icon: 'ℹ️' })
-          return
-        }
+          if (raw?.status === 'no_more_leads') {
+            toast('No more leads in this campaign', { icon: 'ℹ️' })
+            return
+          }
 
-        if (raw?.success) {
-          const storeLead = parseApiLead(raw)
-          setActiveLead(storeLead)
-          setCallState('ringing')
-          useDialerStore.setState({ callDuration: 0 })
+          if (raw?.success) {
+            const storeLead = parseApiLead(raw)
+            setActiveLead(storeLead)
+            setCallState('ringing')
+            useDialerStore.setState({ callDuration: 0 })
 
-          addCallLog({
-            id:            `${Date.now()}`,
-            lead_name:     [storeLead.first_name, storeLead.last_name].filter(Boolean).join(' ') || 'Unknown',
-            phone_number:  storeLead.phone_number,
-            status:        'no_answer',
-            duration:      0,
-            campaign_name: campaign.name,
-            started_at:    new Date().toISOString(),
-            lead_id:       storeLead.lead_id ?? storeLead.id,
-            campaign_id:   campaign.id,
-          })
+            addCallLog({
+              id:            `${Date.now()}`,
+              lead_name:     [storeLead.first_name, storeLead.last_name].filter(Boolean).join(' ') || 'Unknown',
+              phone_number:  storeLead.phone_number,
+              status:        'no_answer',
+              duration:      0,
+              campaign_name: campaign.name,
+              started_at:    new Date().toISOString(),
+              lead_id:       storeLead.lead_id ?? storeLead.id,
+              campaign_id:   campaign.id,
+            })
 
-          toast.success('Dialing next lead...', { duration: 3000 })
-        } else {
-          toast.error(String(raw?.message || 'Failed to dial next lead'))
+            toast.success('Dialing next lead...', { duration: 3000 })
+          } else {
+            // Backend rejected — conference session lost
+            toast.error(
+              'Backend lost the conference session. End Campaign and Start Dial again to recover.',
+              { duration: 10000 },
+            )
+            isInConference.current = false
+          }
+        } catch {
+          // 422 or network error from /next-customer — same recovery path
+          toast.error(
+            'Backend lost the conference session. End Campaign and Start Dial again to recover.',
+            { duration: 10000 },
+          )
+          isInConference.current = false
         }
         return
       }
