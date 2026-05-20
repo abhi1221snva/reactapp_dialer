@@ -27,6 +27,7 @@
     "axios": "^1.6.5",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
+    "framer-motion": "^12.39.0",
     "lucide-react": "^0.312.0",
     "puppeteer-core": "^24.42.0",
     "pusher-js": "^8.4.0",
