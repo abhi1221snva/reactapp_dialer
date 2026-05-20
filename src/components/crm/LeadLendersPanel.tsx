@@ -20,6 +20,13 @@ import { SubmissionResultSummary } from './SubmissionResultSummary'
 import { ApiLogDrawer } from './ApiLogDrawer'
 import type { ApiLog as DrawerApiLog } from './ApiLogDrawer'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { validateSsn, sanitizeSsnInput } from '../../utils/ssnValidation'
+import { validateEin, sanitizeEinInput } from '../../utils/einValidation'
+import { validateZip, sanitizeZipInput } from '../../utils/zipValidation'
+import { validateDob, dobMaxIsoDate, dobMinIsoDate } from '../../utils/dobValidation'
+import { validateState, sanitizeStateInput } from '../../utils/stateValidation'
+import { validateBusinessDate, businessDateMaxIso, businessDateMinIso } from '../../utils/businessDateValidation'
+import { validateCurrency, sanitizeCurrencyInput } from '../../utils/currencyValidation'
 import type {
   CrmLead, CrmDocument, Lender, LenderSubmission, LenderResponseStatus,
   LenderSubmissionStatus, MappedApiError, EmailTemplate,
@@ -232,16 +239,95 @@ function QuickFixModal({
   }
   const label = (key: string) => LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
-  // Simple inline validation based on fix_type
-  const validate = (val: string, fixType: string): string | null => {
+  // Detect the field "kind" from fix_type or field name — drives validation + input props
+  type FieldKind = 'ssn' | 'ein' | 'zip' | 'state' | 'dob' | 'business_date' | 'currency' | 'phone' | 'address' | 'other'
+  const detectKind = (fixType: string, field: string): FieldKind => {
+    const k = (field || '').toLowerCase()
+    if (fixType === 'ssn' || /^ssn$|owner.*ssn|social/.test(k)) return 'ssn'
+    if (fixType === 'ein' || /ein|tax_?id|federal_?id|fein/.test(k)) return 'ein'
+    if (fixType === 'zip' || /zip|postal/.test(k)) return 'zip'
+    if (fixType === 'state_code' || /(^|_)state(_|$)/.test(k)) return 'state'
+    if (/business.*(date|inception)|inception|business_start/.test(k)) return 'business_date'
+    if (fixType === 'date' || /dob|date_of_birth|^date$/.test(k)) return 'dob'
+    if (fixType === 'currency' || /revenue|amount|balance|sales|monthly|annual/.test(k)) return 'currency'
+    if (fixType === 'phone' || /phone|mobile|cell/.test(k)) return 'phone'
+    if (/address|street|line1/.test(k)) return 'address'
+    return 'other'
+  }
+
+  // Extract a lender-imposed max length from the API error message
+  // e.g. "length must be between 0 and 50" → 50
+  const lenderMaxFromMessage = (msg?: string): number | undefined => {
+    if (!msg) return undefined
+    const m = msg.match(/length must be between \d+ and (\d+)/i)
+            ?? msg.match(/must be a (?:numeric )?string of length (\d+)/i)
+            ?? msg.match(/exactly (\d+) digits?/i)
+            ?? msg.match(/max(?:imum)? (?:of )?(\d+) (?:chars?|characters?)/i)
+    return m ? parseInt(m[1], 10) : undefined
+  }
+
+  // Concrete example string per field kind (used as placeholder)
+  const exampleFor = (kind: FieldKind): string => {
+    switch (kind) {
+      case 'ssn':           return 'e.g. 123-45-6789'
+      case 'ein':           return 'e.g. 12-3456789'
+      case 'zip':           return 'e.g. 10001'
+      case 'state':         return 'e.g. NY'
+      case 'dob':           return 'e.g. 1985-06-15'
+      case 'business_date': return 'e.g. 2018-04-22'
+      case 'currency':      return 'e.g. 15000'
+      case 'phone':         return 'e.g. 5551234567'
+      case 'address':       return 'e.g. 742 Evergreen Terrace'
+      default:              return ''
+    }
+  }
+
+  // HTML input attributes per kind
+  type InputAttrs = {
+    type?: string
+    inputMode?: 'numeric' | 'decimal' | 'text'
+    maxLength?: number
+    min?: string
+    max?: string
+    uppercase?: boolean
+    sanitize?: (v: string) => string
+  }
+  const inputAttrsFor = (kind: FieldKind, lenderMax?: number): InputAttrs => {
+    switch (kind) {
+      case 'ssn':           return { inputMode: 'numeric', maxLength: 11, sanitize: sanitizeSsnInput }
+      case 'ein':           return { inputMode: 'numeric', maxLength: 10, sanitize: sanitizeEinInput }
+      case 'zip':           return { inputMode: 'numeric', maxLength: lenderMax ?? 10, sanitize: sanitizeZipInput }
+      case 'state':         return { maxLength: lenderMax ?? 2, uppercase: true, sanitize: sanitizeStateInput }
+      case 'dob':           return { type: 'date', min: dobMinIsoDate(), max: dobMaxIsoDate() }
+      case 'business_date': return { type: 'date', min: businessDateMinIso(), max: businessDateMaxIso() }
+      case 'currency':      return { inputMode: 'decimal', sanitize: sanitizeCurrencyInput }
+      case 'phone':         return { inputMode: 'numeric', maxLength: 14 }
+      case 'address':       return { maxLength: lenderMax }
+      default:              return {}
+    }
+  }
+
+  // Inline validation routed to the project's existing validator utilities
+  const validate = (val: string, fixType: string, field: string, lbl: string, lenderMax?: number): string | null => {
+    const kind = detectKind(fixType, field)
     if (!val.trim()) return 'This field is required'
     const v = val.trim()
-    if (fixType === 'zip' && !/^\d{5}$/.test(v)) return 'Must be exactly 5 digits'
-    if ((fixType === 'ein' || fixType === 'ssn') && !/^\d{9}$/.test(v.replace(/[-\s]/g, ''))) return 'Must be exactly 9 digits'
-    if (fixType === 'phone' && !/^\d{10,11}$/.test(v.replace(/[-\s().+]/g, ''))) return 'Must be 10-11 digits'
-    if (fixType === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v) && !/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return 'Use YYYY-MM-DD format (e.g. 1985-06-15)'
-    if (fixType === 'state_code' && !/^[A-Z]{2}$/i.test(v)) return 'Must be 2-letter state code (e.g. NY, CA)'
-    return null
+    const toMsg = (r: true | string) => (r === true ? null : r)
+    switch (kind) {
+      case 'ssn':           return toMsg(validateSsn(v, lbl, true))
+      case 'ein':           return toMsg(validateEin(v, lbl, true))
+      case 'zip':           return toMsg(validateZip(v, lbl, true))
+      case 'state':         return toMsg(validateState(v, lbl, true))
+      case 'dob':           return toMsg(validateDob(v, lbl, true))
+      case 'business_date': return toMsg(validateBusinessDate(v, lbl, true))
+      case 'currency':      return toMsg(validateCurrency(v, lbl, true))
+      case 'phone':         return /^\d{10,11}$/.test(v.replace(/[-\s().+]/g, '')) ? null : 'Must be 10-11 digits'
+      case 'address': {
+        if (lenderMax && v.length > lenderMax) return `Maximum ${lenderMax} characters (currently ${v.length})`
+        return null
+      }
+      default:              return null
+    }
   }
 
   const getChangedFields = (): Record<string, string> => {
@@ -361,12 +447,24 @@ function QuickFixModal({
           )}
           {fixable.map(err => {
             const val = values[err.field] ?? ''
-            const vErr = validate(val, err.fix_type)
+            const lbl = err.label || label(err.field)
+            const kind = detectKind(err.fix_type, err.field)
+            const lenderMax = lenderMaxFromMessage(err.message)
+            const attrs = inputAttrsFor(kind, lenderMax)
+            const example = exampleFor(kind)
+            const vErr = validate(val, err.fix_type, err.field, lbl, lenderMax)
             const changed = val !== String(leadData[err.field] ?? '')
+            const handleChange = (raw: string) => {
+              let next = raw
+              if (attrs.sanitize) next = attrs.sanitize(next)
+              if (attrs.uppercase) next = next.toUpperCase()
+              if (attrs.maxLength && next.length > attrs.maxLength) next = next.slice(0, attrs.maxLength)
+              setValues(prev => ({ ...prev, [err.field]: next }))
+            }
             return (
               <div key={err.field}>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {err.label || label(err.field)}
+                  {lbl}
                   {err.expected && (
                     <span className="ml-1.5 text-[10px] font-normal text-amber-600">
                       ({err.expected})
@@ -374,9 +472,13 @@ function QuickFixModal({
                   )}
                 </label>
                 <input
-                  type="text"
+                  type={attrs.type ?? 'text'}
+                  inputMode={attrs.inputMode}
+                  maxLength={attrs.maxLength}
+                  min={attrs.min}
+                  max={attrs.max}
                   value={val}
-                  onChange={e => setValues(prev => ({ ...prev, [err.field]: e.target.value }))}
+                  onChange={e => handleChange(e.target.value)}
                   className={`w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors ${
                     vErr
                       ? 'border-red-300 bg-red-50'
@@ -384,7 +486,7 @@ function QuickFixModal({
                         ? 'border-emerald-300 bg-emerald-50'
                         : 'border-slate-200'
                   }`}
-                  placeholder={err.expected || label(err.field)}
+                  placeholder={example || err.expected || lbl}
                 />
                 <div className="flex items-center justify-between mt-0.5">
                   {vErr ? (
@@ -395,11 +497,19 @@ function QuickFixModal({
                     <p className="text-[10px] text-amber-500">Needs correction</p>
                   )}
                   {String(leadData[err.field] ?? '') !== '' && (
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[10px] text-slate-400 truncate ml-2">
                       Current: <span className="font-medium text-slate-500">{String(leadData[err.field])}</span>
                     </p>
                   )}
                 </div>
+                {example && (
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Expected format: <span className="font-medium text-slate-600">{example.replace(/^e\.g\. /, '')}</span>
+                    {lenderMax && kind !== 'state' && kind !== 'zip' && kind !== 'ssn' && kind !== 'ein' && (
+                      <span className="text-slate-400"> · max {lenderMax} chars</span>
+                    )}
+                  </p>
+                )}
                 {err.message && (
                   <p className="text-[10px] text-slate-400 mt-0.5 italic">{err.message}</p>
                 )}
