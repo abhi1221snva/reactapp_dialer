@@ -168,6 +168,7 @@ import { MerchantLogin } from './pages/merchant/MerchantLogin'
 import { MerchantApplications } from './pages/merchant/MerchantApplications'
 import { LandingPage } from './pages/public/LandingPage'
 import { LandingPageBalji } from './pages/public/LandingPageBalji'
+import { LandingPageCRMLink } from './pages/public/LandingPageCRMLink'
 
 // Public sub-pages — code-split
 const AutoDialerPage = lazy(() => import('./pages/public/product/AutoDialerPage').then(m => ({ default: m.AutoDialerPage })))
@@ -245,6 +246,7 @@ export default function App() {
       <Route path="/apply/:affiliateCode" element={<ApplyPage />} />
       <Route path="/website" element={<LandingPage />} />
       <Route path="/website_balji" element={<LandingPageBalji />} />
+      <Route path="/website_crmlink" element={<LandingPageCRMLink />} />
 
       {/* Public sub-pages — wrapped in PublicLayout (Navbar + Footer + AnimatedBg) */}
       <Route element={<Suspense fallback={<div className="min-h-screen" />}><PublicLayout /></Suspense>}>
