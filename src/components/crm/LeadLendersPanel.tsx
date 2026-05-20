@@ -266,18 +266,20 @@ function QuickFixModal({
     return m ? parseInt(m[1], 10) : undefined
   }
 
-  // Concrete example string per field kind (used as placeholder)
+  // Concrete example string per field kind (used as the input placeholder
+  // and the "Expected format:" hint line — no "e.g. " prefix on the
+  // placeholder so browsers render it as a clean format example).
   const exampleFor = (kind: FieldKind): string => {
     switch (kind) {
-      case 'ssn':           return 'e.g. 123-45-6789'
-      case 'ein':           return 'e.g. 12-3456789'
-      case 'zip':           return 'e.g. 10001'
-      case 'state':         return 'e.g. NY'
-      case 'dob':           return 'e.g. 1985-06-15'
-      case 'business_date': return 'e.g. 2018-04-22'
-      case 'currency':      return 'e.g. 15000'
-      case 'phone':         return 'e.g. 5551234567'
-      case 'address':       return 'e.g. 742 Evergreen Terrace'
+      case 'ssn':           return '123-45-6789'
+      case 'ein':           return '12-3456789'
+      case 'zip':           return '10001'
+      case 'state':         return 'NY'
+      case 'dob':           return '1985-06-15'
+      case 'business_date': return '2018-04-22'
+      case 'currency':      return '15000'
+      case 'phone':         return '5551234567'
+      case 'address':       return '742 Evergreen Terrace'
       default:              return ''
     }
   }
@@ -307,7 +309,11 @@ function QuickFixModal({
     }
   }
 
-  // Inline validation routed to the project's existing validator utilities
+  // Inline validation routed to the project's existing validator utilities.
+  // Note: in the lender-fix context most APIs (OnDeck etc.) want a strict
+  // 2-letter US state code — the global validateState is intentionally
+  // lenient (accepts full names like "California") so we add a strict
+  // inline check here instead of using it for state fields.
   const validate = (val: string, fixType: string, field: string, lbl: string, lenderMax?: number): string | null => {
     const kind = detectKind(fixType, field)
     if (!val.trim()) return 'This field is required'
@@ -317,11 +323,11 @@ function QuickFixModal({
       case 'ssn':           return toMsg(validateSsn(v, lbl, true))
       case 'ein':           return toMsg(validateEin(v, lbl, true))
       case 'zip':           return toMsg(validateZip(v, lbl, true))
-      case 'state':         return toMsg(validateState(v, lbl, true))
+      case 'state':         return /^[A-Za-z]{2}$/.test(v) ? null : `${lbl} must be a 2-letter US state code (e.g. NY, CA, TX) — got "${v}"`
       case 'dob':           return toMsg(validateDob(v, lbl, true))
       case 'business_date': return toMsg(validateBusinessDate(v, lbl, true))
       case 'currency':      return toMsg(validateCurrency(v, lbl, true))
-      case 'phone':         return /^\d{10,11}$/.test(v.replace(/[-\s().+]/g, '')) ? null : 'Must be 10-11 digits'
+      case 'phone':         return /^\d{10,11}$/.test(v.replace(/[-\s().+]/g, '')) ? null : `${lbl} must be 10-11 digits`
       case 'address': {
         if (lenderMax && v.length > lenderMax) return `Maximum ${lenderMax} characters (currently ${v.length})`
         return null
@@ -504,7 +510,10 @@ function QuickFixModal({
                 </div>
                 {example && (
                   <p className="text-[10px] text-slate-500 mt-0.5">
-                    Expected format: <span className="font-medium text-slate-600">{example.replace(/^e\.g\. /, '')}</span>
+                    Expected format: <span className="font-medium text-slate-600">{example}</span>
+                    {(kind === 'dob' || kind === 'business_date') && (
+                      <span className="text-slate-400"> · use the calendar or type YYYY-MM-DD</span>
+                    )}
                     {lenderMax && kind !== 'state' && kind !== 'zip' && kind !== 'ssn' && kind !== 'ein' && (
                       <span className="text-slate-400"> · max {lenderMax} chars</span>
                     )}
